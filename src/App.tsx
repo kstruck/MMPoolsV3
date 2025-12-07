@@ -6,7 +6,7 @@ import { LandingPage } from './components/LandingPage';
 import { Logo } from './components/Logo';
 import { createNewPool, getTeamLogo } from './constants';
 import type { GameState, Scores, PlayerDetails, User } from './types';
-import { calculateWinners, generateRandomAxis, getLastDigit } from './services/gameLogic';
+import { calculateWinners, generateRandomAxis, calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X } from 'lucide-react';
@@ -79,7 +79,6 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
 
   const [pools, setPools] = useState<GameState[]>(() => {
@@ -218,7 +217,13 @@ const App: React.FC = () => {
     setTimeout(() => { setIsSimulating(false); setSimMessage(null); }, 13000);
   };
 
-
+  const handleOpenAuth = () => {
+    if (user) {
+      window.location.hash = '#admin';
+      return;
+    }
+    setShowAuthModal(true);
+  };
 
   const sanitize = (n: any) => {
     if (n === null || n === undefined) return 0;
@@ -385,6 +390,10 @@ const App: React.FC = () => {
     const finalData = getQuarterData('final');
     const homeLogo = getTeamLogo(currentPool.homeTeam);
     const awayLogo = getTeamLogo(currentPool.awayTeam);
+    const homePredictions = calculateScenarioWinners(currentPool, 'home');
+    const awayPredictions = calculateScenarioWinners(currentPool, 'away');
+    const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
+    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
     const isAdmin = user && user.id === currentPool.ownerId;
 
     return (
@@ -436,7 +445,51 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Payout Cards */}
+        {/* INFO & PAYOUTS ROW */}
+        <div className="max-w-[1400px] mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 1. Grid Owner */}
+          <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
+            <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
+            <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
+            <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{currentPool.paymentInstructions}</p></div>
+          </div>
+          {/* 2. Scoreboard */}
+          <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-slate-800/20 rounded-full blur-2xl"></div>
+            <div className="p-4 border-b border-slate-800 text-center"><h3 className="text-white font-bold">Game Scoreboard</h3></div>
+            <div className="p-4">
+              <div className="grid grid-cols-6 gap-2 text-center text-sm mb-2 text-slate-500 font-bold uppercase text-[10px]"><div className="col-span-2 text-left pl-2">Team</div><div>1</div><div>2</div><div>3</div><div>4</div><div>T</div></div>
+              <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.half?.away) - sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.q3?.away) - sanitize(currentPool.scores.half?.away)}</div><div>{sanitize(currentPool.scores.final?.away) - sanitize(currentPool.scores.q3?.away)}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
+              <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.half?.home) - sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.q3?.home) - sanitize(currentPool.scores.half?.home)}</div><div>{sanitize(currentPool.scores.final?.home) - sanitize(currentPool.scores.q3?.home)}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
+            </div>
+          </div>
+          {/* 3. Payout Structure */}
+          <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
+            <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
+            <div className="space-y-3">
+              {Object.entries(currentPool.payouts).map(([key, percent]) => {
+                const effectivePot = Math.max(0, totalPot - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
+                const amount = (effectivePot * (percent as number)) / 100;
+                const label = key === 'q1' ? '1st Quarter' : key === 'half' ? '2nd Quarter' : key === 'q3' ? '3rd Quarter' : 'Final Score';
+                return (<div key={key} className="flex justify-between items-center text-sm"><span className="text-slate-400 font-bold">{label}:</span><span className="text-white font-mono font-bold">${amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}</span></div>);
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* WHAT IF SCENARIOS */}
+        <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 xl:grid-cols-2 gap-8 items-start mb-8">
+          <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-indigo-400 font-bold">{currentPool.awayTeam}</span> score next...</h3></div>
+            <div className="bg-black/50 p-4 space-y-4">{awayPredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-indigo-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+          </div>
+          <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-rose-400 font-bold">{currentPool.homeTeam}</span> score next...</h3></div>
+            <div className="bg-black/50 p-4 space-y-4">{homePredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-rose-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+          </div>
+        </div>
+
+        {/* BOTTOM Payout Cards */}
         <div className="max-w-[1400px] mx-auto px-4 mb-20">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
