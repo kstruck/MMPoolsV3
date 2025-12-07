@@ -334,9 +334,16 @@ const App: React.FC = () => {
   if (route.view === 'admin-dashboard' || route.view === 'admin-editor') {
     if (!user) {
       return (
-        <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-          <Auth onLogin={() => window.location.hash = '#admin'} />
-        </div>
+        <>
+          <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+            {/* This triggers if they go directly to #admin without being logged in */}
+            <div className="text-center">
+              <p className="mb-4 text-slate-400">Please sign in to access the dashboard.</p>
+              <button onClick={() => handleOpenAuth('login')} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In</button>
+            </div>
+          </div>
+          <AuthModal />
+        </>
       );
     }
     if (route.view === 'admin-editor' && currentPool) {
