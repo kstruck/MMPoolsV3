@@ -357,10 +357,8 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 pb-20">
         <Header user={user} onLogout={() => authService.logout().then(() => window.location.reload())} onOpenAuth={() => setShowAuthModal(true)} />
-        {/* Lazy load SuperAdmin to avoid circular deps or bundle size if not needed */}
-        {React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })))}
         <React.Suspense fallback={<div className="text-white p-10">Loading...</div>}>
-          <SuperAdminWrapper />
+          <SuperAdmin />
         </React.Suspense>
       </div>
     );
