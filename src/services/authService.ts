@@ -6,7 +6,7 @@ import {
   User as FirebaseUser
 } from "firebase/auth";
 import { auth } from "../firebase";
-import { User } from "../types";
+import type { User } from "../types";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -17,7 +17,7 @@ const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
     id: firebaseUser.uid,
     name: firebaseUser.displayName || "Unknown User",
     email: firebaseUser.email || "",
-    picture: firebaseUser.photoURL || undefined
+    picture: firebaseUser.photoURL || undefined // Allows undefined/null per your types
   };
 };
 
