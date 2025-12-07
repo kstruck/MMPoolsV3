@@ -48,12 +48,10 @@ export const authService = {
     }
   },
 
-  // Mock methods for backward compatibility with Auth.tsx form
-  // These are required so the build doesn't fail when Auth.tsx calls them with args
+  // Mock methods for backward compatibility (optional, can be removed if unused)
   register: async (_name: string, _email: string, _password: string): Promise<User> => {
-    throw new Error("Please use Google Login");
+    throw new Error("Use Google Login");
   },
-
   login: async (email: string, _password?: string): Promise<User> => {
     // Handle Demo Login specifically
     if (email === 'admin@test.com') {
@@ -62,7 +60,7 @@ export const authService = {
       localStorage.setItem('sbSquaresUser', JSON.stringify(demoUser));
       return demoUser;
     }
-    throw new Error("Please use Google Login");
+    throw new Error("Use Google Login");
   },
 
   // Listener for Auth State
