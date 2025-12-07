@@ -44,6 +44,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Players Tab State
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
+  const [editingPlayer, setEditingPlayer] = useState<{ originalName: string, name: string, email: string, phone: string, notes: string } | null>(null);
+
+  const updatePlayerDetails = (originalName: string, newDetails: { name: string, email: string, phone: string, notes: string }) => {
+    const newSquares = gameState.squares.map(sq => {
+      if (sq.owner === originalName) {
+        return {
+          ...sq,
+          owner: newDetails.name,
+          playerDetails: {
+            ...sq.playerDetails,
+            email: newDetails.email,
+            phone: newDetails.phone,
+            notes: newDetails.notes
+          }
+        };
+      }
+      return sq;
+    });
+    updateConfig({ squares: newSquares });
+    setEditingPlayer(null);
+    setExpandedPlayer(null); // Close expanded view to refresh
+  };
+
 
   // Helper to safely update nested score state
   const handleScoreChange = (period: keyof Scores, team: 'home' | 'away', value: string) => {
@@ -533,6 +556,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           {player.contact?.email && (
                             <a href={`mailto:${player.contact.email}?subject=${encodeURIComponent(gameState.name)} Payment Reminder`} onClick={(e) => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Email Player"><Mail size={16} /></a>
                           )}
+                          <button onClick={(e) => { e.stopPropagation(); setEditingPlayer({ originalName: player.name, name: player.name, email: player.contact?.email || '', phone: player.contact?.phone || '', notes: player.contact?.notes || '' }) }} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Edit Player"><Settings size={16} /></button>
                           <div className={`transition-transform duration-200 ${expandedPlayer === player.name ? 'rotate-180' : ''}`}><ArrowRight size={16} className="text-slate-600 rotate-90" /></div>
                         </div>
                       </div>
@@ -586,6 +610,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               )}
             </div>
+
+            {/* EDIT PLAYER MODAL */}
+            {editingPlayer && (
+              <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl shadow-2xl max-w-md w-full">
+                  <h3 className="text-xl font-bold text-white mb-4">Edit Player Details</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Name</label>
+                      <input type="text" value={editingPlayer.name} onChange={(e) => setEditingPlayer({ ...editingPlayer, name: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Email</label>
+                      <input type="email" value={editingPlayer.email} onChange={(e) => setEditingPlayer({ ...editingPlayer, email: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Phone</label>
+                      <input type="text" value={editingPlayer.phone} onChange={(e) => setEditingPlayer({ ...editingPlayer, phone: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Notes</label>
+                      <textarea value={editingPlayer.notes} onChange={(e) => setEditingPlayer({ ...editingPlayer, notes: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500 h-24 resize-none" />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-4">
+                      <button onClick={() => setEditingPlayer(null)} className="px-4 py-2 text-slate-300 hover:text-white font-bold">Cancel</button>
+                      <button onClick={() => updatePlayerDetails(editingPlayer.originalName, editingPlayer)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold">Save Changes</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
       </div>

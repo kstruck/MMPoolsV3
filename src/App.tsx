@@ -210,12 +210,31 @@ const App: React.FC = () => {
     const limit = Number(currentPool.maxSquaresPerPlayer) || 10;
     if (currentOwned + ids.length > limit) return { success: false, message: `Limit exceeded. Max ${limit}.` };
     const newSquares = [...currentPool.squares];
+    const squaresInitials: string[] = [];
     ids.forEach(id => {
       if (!newSquares[id].owner) {
         newSquares[id] = { ...newSquares[id], owner: normalizedName, playerDetails: details, isPaid: false };
+        squaresInitials.push(`#${id} (${normalizedName})`);
       }
     });
+
     updatePool(currentPool.id, { squares: newSquares });
+
+    // Send Email Confirmation
+    if (currentPool.emailConfirmation === 'Email Confirmation' && details.email) {
+      // Import emailService dynamically or use the imported one
+      import('./services/emailService').then(({ emailService }) => {
+        emailService.sendConfirmation(
+          currentPool.name,
+          squaresInitials,
+          details.email!, // validated in Grid.tsx
+          normalizedName,
+          currentPool.contactEmail,
+          currentPool.id
+        ).then(() => console.log('Email sent')).catch(err => console.error('Email failed', err));
+      });
+    }
+
     return { success: true };
   };
 
@@ -454,9 +473,9 @@ const App: React.FC = () => {
             <div className="absolute top-0 right-0 w-32 h-32 bg-slate-800/20 rounded-full blur-2xl"></div>
             <div className="p-4 border-b border-slate-800 text-center"><h3 className="text-white font-bold">Game Scoreboard</h3></div>
             <div className="p-4">
-              <div className="grid grid-cols-6 gap-2 text-center text-sm mb-2 text-slate-500 font-bold uppercase text-[10px]"><div className="col-span-2 text-left pl-2">Team</div><div>1</div><div>2</div><div>3</div><div>4</div><div>T</div></div>
-              <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.half?.away) - sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.q3?.away) - sanitize(currentPool.scores.half?.away)}</div><div>{sanitize(currentPool.scores.final?.away) - sanitize(currentPool.scores.q3?.away)}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
-              <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.half?.home) - sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.q3?.home) - sanitize(currentPool.scores.half?.home)}</div><div>{sanitize(currentPool.scores.final?.home) - sanitize(currentPool.scores.q3?.home)}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
+              <div className="grid grid-cols-7 gap-2 text-center text-sm mb-2 text-slate-500 font-bold uppercase text-[10px]"><div className="col-span-2 text-left pl-2">Team</div><div>1</div><div>2</div><div>3</div><div>4</div><div>T</div></div>
+              <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.half?.away) - sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.q3?.away) - sanitize(currentPool.scores.half?.away)}</div><div>{sanitize(currentPool.scores.final?.away) - sanitize(currentPool.scores.q3?.away)}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
+              <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.half?.home) - sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.q3?.home) - sanitize(currentPool.scores.half?.home)}</div><div>{sanitize(currentPool.scores.final?.home) - sanitize(currentPool.scores.q3?.home)}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
             </div>
           </div>
           {/* 3. Payout Structure */}
