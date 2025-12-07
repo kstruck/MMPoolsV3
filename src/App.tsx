@@ -79,6 +79,7 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
 
   const [pools, setPools] = useState<GameState[]>(() => {
@@ -143,11 +144,21 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentPool?.gameId, currentPool?.id, isSimulating]);
 
+  // --- DATA CALCULATIONS (Moved Top Level) ---
   const winners = useMemo(() => {
     if (!currentPool) return [];
     return calculateWinners(currentPool);
   }, [currentPool]);
 
+  const homeLogo = currentPool ? getTeamLogo(currentPool.homeTeam) : null;
+  const awayLogo = currentPool ? getTeamLogo(currentPool.awayTeam) : null;
+  const homePredictions = currentPool ? calculateScenarioWinners(currentPool, 'home') : [];
+  const awayPredictions = currentPool ? calculateScenarioWinners(currentPool, 'away') : [];
+  const squaresRemaining = currentPool ? 100 - currentPool.squares.filter(s => s.owner).length : 0;
+  const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
+  const isAdmin = user && currentPool && user.id === currentPool.ownerId;
+
+  // --- HELPERS ---
   const updatePool = (id: string, updates: Partial<GameState>) => {
     setPools(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   };
@@ -164,29 +175,6 @@ const App: React.FC = () => {
 
   const handleDeletePool = (id: string) => {
     setPools(pools.filter(p => p.id !== id));
-  };
-
-  const openShare = (id?: string) => {
-    if (!id) return;
-    setShareUrl(`${window.location.origin}${window.location.pathname}#pool/${id}`);
-    setShowShareModal(true);
-  };
-
-  const handleClaimSquares = (ids: number[], name: string, details: PlayerDetails): { success: boolean; message?: string } => {
-    if (!currentPool) return { success: false };
-    const normalizedName = name.trim();
-    if (!normalizedName) return { success: false, message: 'Name required' };
-    const currentOwned = currentPool.squares.filter(s => s.owner && s.owner.toLowerCase() === normalizedName.toLowerCase()).length;
-    const limit = Number(currentPool.maxSquaresPerPlayer) || 10;
-    if (currentOwned + ids.length > limit) return { success: false, message: `Limit exceeded. Max ${limit}.` };
-    const newSquares = [...currentPool.squares];
-    ids.forEach(id => {
-      if (!newSquares[id].owner) {
-        newSquares[id] = { ...newSquares[id], owner: normalizedName, playerDetails: details, isPaid: false };
-      }
-    });
-    updatePool(currentPool.id, { squares: newSquares });
-    return { success: true };
   };
 
   const handleRunSimulation = (poolId: string) => {
@@ -215,6 +203,29 @@ const App: React.FC = () => {
       setTimeout(() => { updateScores(poolId, step.scores); setSimMessage(step.msg); }, step.delay);
     });
     setTimeout(() => { setIsSimulating(false); setSimMessage(null); }, 13000);
+  };
+
+  const openShare = (id?: string) => {
+    if (!id) return;
+    setShareUrl(`${window.location.origin}${window.location.pathname}#pool/${id}`);
+    setShowShareModal(true);
+  };
+
+  const handleClaimSquares = (ids: number[], name: string, details: PlayerDetails): { success: boolean; message?: string } => {
+    if (!currentPool) return { success: false };
+    const normalizedName = name.trim();
+    if (!normalizedName) return { success: false, message: 'Name required' };
+    const currentOwned = currentPool.squares.filter(s => s.owner && s.owner.toLowerCase() === normalizedName.toLowerCase()).length;
+    const limit = Number(currentPool.maxSquaresPerPlayer) || 10;
+    if (currentOwned + ids.length > limit) return { success: false, message: `Limit exceeded. Max ${limit}.` };
+    const newSquares = [...currentPool.squares];
+    ids.forEach(id => {
+      if (!newSquares[id].owner) {
+        newSquares[id] = { ...newSquares[id], owner: normalizedName, playerDetails: details, isPaid: false };
+      }
+    });
+    updatePool(currentPool.id, { squares: newSquares });
+    return { success: true };
   };
 
   const handleOpenAuth = () => {
@@ -272,6 +283,11 @@ const App: React.FC = () => {
     if (reverseWinnerName) amount = amount / 2;
     return { home, away, qPointsHome, qPointsAway, winnerName, reverseWinnerName, amount, isLocked };
   };
+
+  const q1Data = getQuarterData('q1');
+  const halfData = getQuarterData('half');
+  const q3Data = getQuarterData('q3');
+  const finalData = getQuarterData('final');
 
   // --- RENDER SWITCH ---
   if (route.view === 'home') {
@@ -383,18 +399,6 @@ const App: React.FC = () => {
 
   if (route.view === 'pool') {
     if (!currentPool) return <div className="text-white p-10">Pool Not Found</div>;
-
-    const q1Data = getQuarterData('q1');
-    const halfData = getQuarterData('half');
-    const q3Data = getQuarterData('q3');
-    const finalData = getQuarterData('final');
-    const homeLogo = getTeamLogo(currentPool.homeTeam);
-    const awayLogo = getTeamLogo(currentPool.awayTeam);
-    const homePredictions = calculateScenarioWinners(currentPool, 'home');
-    const awayPredictions = calculateScenarioWinners(currentPool, 'away');
-    const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
-    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
-    const isAdmin = user && user.id === currentPool.ownerId;
 
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative">
