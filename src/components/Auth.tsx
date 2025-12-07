@@ -4,10 +4,11 @@ import { Mail, Lock, User, Chrome, ArrowRight, Loader2, KeyRound, AlertCircle } 
 
 interface AuthProps {
   onLogin: () => void;
+  defaultIsRegistering?: boolean;
 }
 
-export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const [isRegistering, setIsRegistering] = useState(false);
+export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = false }) => {
+  const [isRegistering, setIsRegistering] = useState(defaultIsRegistering);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

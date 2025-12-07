@@ -34,13 +34,13 @@ const ShareModal: React.FC<{ isOpen: boolean; onClose: () => void; shareUrl: str
   );
 };
 
-const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void; initialMode?: 'login' | 'register' }> = ({ isOpen, onClose, initialMode = 'login' }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
       <div className="w-full max-w-md relative">
         <button onClick={onClose} className="absolute -top-12 right-0 text-slate-400 hover:text-white transition-colors p-2"><X size={24} /></button>
-        <Auth onLogin={() => { onClose(); window.location.hash = '#admin'; }} />
+        <Auth onLogin={() => { onClose(); window.location.hash = '#admin'; }} defaultIsRegistering={initialMode === 'register'} />
       </div>
     </div>
   );
@@ -79,6 +79,7 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
 
@@ -272,8 +273,15 @@ const App: React.FC = () => {
   if (route.view === 'home') {
     return (
       <>
-        <LandingPage onLogin={() => setShowAuthModal(true)} onSignup={() => setShowAuthModal(true)} onBrowse={() => window.location.hash = '#browse'} isLoggedIn={!!user} />
-        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+        <>
+          <LandingPage
+            onLogin={() => { setAuthMode('login'); setShowAuthModal(true); }}
+            onSignup={() => { setAuthMode('register'); setShowAuthModal(true); }}
+            onBrowse={() => window.location.hash = '#browse'}
+            isLoggedIn={!!user}
+          />
+          <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+        </>
       </>
     );
   }
@@ -285,17 +293,17 @@ const App: React.FC = () => {
           <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
             <div className="text-center">
               <p className="mb-4 text-slate-400">Please sign in to access the dashboard.</p>
-              <button onClick={() => setShowAuthModal(true)} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In</button>
+              <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In</button>
             </div>
           </div>
-          <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+          <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
         </>
       );
     }
     const userPools = pools.filter(p => p.ownerId === user.id);
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-        <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
+        <Header user={user} onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }} onLogout={authService.logout} />
         <main className="max-w-5xl mx-auto p-6">
           <div className="flex justify-between items-end mb-8">
             <div><h2 className="text-3xl font-bold text-white">Dashboard</h2><p className="text-slate-400">Manage your pools</p></div>
@@ -401,7 +409,14 @@ const App: React.FC = () => {
             <h1 className="text-3xl font-bold text-white mb-1">{currentPool.name}</h1>
             <p className="text-slate-400 text-sm font-medium">{squaresRemaining} Squares Remaining</p>
           </div>
-          <button onClick={() => openShare(currentPool.id)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Share</button>
+          <div className="flex gap-2">
+            {!user && (
+              <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="hidden md:block bg-indigo-900/50 hover:bg-indigo-800 text-indigo-200 border border-indigo-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors">
+                Sign In
+              </button>
+            )}
+            <button onClick={() => openShare(currentPool.id)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Share</button>
+          </div>
         </div>
 
         {/* Sim Banner */}
@@ -530,7 +545,7 @@ const App: React.FC = () => {
             ))}
           </div>
         </div>
-        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
       </div >
     );
   }
