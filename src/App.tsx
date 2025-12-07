@@ -11,6 +11,9 @@ import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X } from 'lucide-react';
 
+// Lazy load SuperAdmin
+const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
+
 // --- SHARED COMPONENTS ---
 
 const ShareModal: React.FC<{ isOpen: boolean; onClose: () => void; shareUrl: string }> = ({ isOpen, onClose, shareUrl }) => {
@@ -129,6 +132,7 @@ const App: React.FC = () => {
       const parts = hash.split('/');
       return parts.length === 2 ? { view: 'admin-editor', id: parts[1] } : { view: 'admin-dashboard', id: null };
     }
+    if (hash.startsWith('#super-admin')) return { view: 'super-admin', id: null };
     if (hash.startsWith('#pool')) return { view: 'pool', id: hash.split('/')[1] };
     if (hash.startsWith('#browse')) return { view: 'browse', id: null };
     return { view: 'home', id: null };
@@ -150,22 +154,45 @@ const App: React.FC = () => {
     return calculateWinners(currentPool);
   }, [currentPool]);
 
-  const updatePool = (id: string, updates: Partial<GameState>) => {
-    setPools(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  // --- ACTIONS ---
+  const addNewPool = async (p: GameState) => {
+    const { dbService } = await import('./services/dbService');
+    await dbService.createPool(p);
   };
 
-  const updateScores = (id: string, scoreUpdates: Partial<Scores>) => {
-    setPools(prev => prev.map(p => p.id === id ? { ...p, scores: { ...p.scores, ...scoreUpdates } } : p));
+  const updatePool = async (id: string, updates: Partial<GameState>) => {
+    const { dbService } = await import('./services/dbService');
+    await dbService.updatePool(id, updates);
   };
 
-  const handleCreatePool = () => {
+  const updateScores = async (id: string, scoreUpdates: Partial<Scores>) => {
+    const { dbService } = await import('./services/dbService');
+    // We need to fetch current pool state really or structurally update deep object
+    // For now, assume simple shallow merge of scores is tricky in Firestore without dot notation
+    // But let's try a direct update. Note: Firestore map updates work with dot notation "scores.current"
+    // However, dbService.updatePool expects Partial<GameState>.
+    // To properly update nested scores in Firestore, we should use dot notation keys in updatePool impl,
+    // For now, let's just do a full pool object read-modify-write if needed or use dbService helper.
+    // Simplest: pass 'scores' object fully merged if possible, or update implementation of dbService.
+    // For this step, let's keep it simple:
+    await dbService.updatePool(id, { scores: { ...currentPool?.scores, ...scoreUpdates } as Scores });
+  };
+
+  const deletePool = async (id: string) => {
+    if (!confirm('Are you sure? This cannot be undone.')) return;
+    const { dbService } = await import('./services/dbService');
+    await dbService.deletePool(id);
+    window.location.hash = '';
+  };
+
+  const handleCreatePool = async () => {
     const newPool = createNewPool(`Pool #${pools.length + 1}`, user?.id);
-    setPools([...pools, newPool]);
+    await addNewPool(newPool); // Now creates in DB
     window.location.hash = `#admin/${newPool.id}`;
   };
 
   const handleDeletePool = (id: string) => {
-    setPools(pools.filter(p => p.id !== id));
+    deletePool(id);
   };
 
   const handleRunSimulation = (poolId: string) => {
@@ -323,6 +350,19 @@ const App: React.FC = () => {
           <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
         </>
       </>
+    );
+  }
+
+  if (route.view === 'super-admin') {
+    return (
+      <div className="min-h-screen bg-slate-950 pb-20">
+        <Header user={user} onLogout={() => authService.logout().then(() => window.location.reload())} onOpenAuth={() => setShowAuthModal(true)} />
+        {/* Lazy load SuperAdmin to avoid circular deps or bundle size if not needed */}
+        {React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })))}
+        <React.Suspense fallback={<div className="text-white p-10">Loading...</div>}>
+          <SuperAdminWrapper />
+        </React.Suspense>
+      </div>
     );
   }
 
