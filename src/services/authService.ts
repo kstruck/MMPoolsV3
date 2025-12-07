@@ -3,7 +3,7 @@ import {
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
-  User as FirebaseUser
+  type User as FirebaseUser
 } from "firebase/auth";
 import { auth } from "../firebase";
 import type { User } from "../types";
@@ -22,7 +22,7 @@ const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
 };
 
 export const authService = {
-  // Get current user synchronously (might be null on initial load before auth check completes)
+  // Get current user synchronously
   getCurrentUser: (): User | null => {
     return mapUser(auth.currentUser);
   },
@@ -42,20 +42,18 @@ export const authService = {
   logout: async () => {
     try {
       await signOut(auth);
-      window.location.reload(); // Refresh to clear app state
+      window.location.reload();
     } catch (error) {
       console.error("Logout Error", error);
     }
   },
 
-  // Mock methods for backward compatibility (optional, can be removed if unused)
+  // Mock methods for backward compatibility
   register: async (_name: string, _email: string, _password: string): Promise<User> => {
     throw new Error("Use Google Login");
   },
   login: async (email: string, _password?: string): Promise<User> => {
-    // Handle Demo Login specifically
     if (email === 'admin@test.com') {
-      // Create a fake session for demo purposes
       const demoUser: User = { id: 'demo_admin', name: 'Demo Admin', email: 'admin@test.com' };
       localStorage.setItem('sbSquaresUser', JSON.stringify(demoUser));
       return demoUser;
@@ -66,7 +64,6 @@ export const authService = {
   // Listener for Auth State
   onAuthStateChanged: (callback: (user: User | null) => void) => {
     return onAuthStateChanged(auth, (firebaseUser) => {
-      // Check for Demo User override first
       const demoUser = localStorage.getItem('sbSquaresUser');
       if (demoUser && !firebaseUser) {
         callback(JSON.parse(demoUser));
