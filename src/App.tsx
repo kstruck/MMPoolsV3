@@ -412,7 +412,6 @@ const App: React.FC = () => {
 
   // Browse Public Pools (Formerly Home)
   if (route.view === 'browse') {
-    const publicPools = pools.filter(p => p.isPublic);
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
         <Header />
