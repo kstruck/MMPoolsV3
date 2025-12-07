@@ -79,7 +79,9 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
+
   const [pools, setPools] = useState<GameState[]>(() => {
     try {
       const saved = localStorage.getItem('sbSquaresPools');
@@ -142,6 +144,12 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentPool?.gameId, currentPool?.id, isSimulating]);
 
+  // Recalculate winners whenever the pool changes
+  const winners = useMemo(() => {
+    if (!currentPool) return [];
+    return calculateWinners(currentPool);
+  }, [currentPool]);
+
   const updatePool = (id: string, updates: Partial<GameState>) => {
     setPools(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   };
@@ -185,7 +193,7 @@ const App: React.FC = () => {
 
   const handleRunSimulation = (poolId: string) => {
     setIsSimulating(true);
-    setSimMessage("Simulation Started...");
+    setSimMessage("Simulation Started: Filling Grid...");
     setPools(prev => prev.map(p => {
       if (p.id !== poolId) return p;
       const filledSquares = p.squares.map((s) => s.owner ? s : { ...s, owner: `SimBot`, isPaid: true });
@@ -209,6 +217,14 @@ const App: React.FC = () => {
       setTimeout(() => { updateScores(poolId, step.scores); setSimMessage(step.msg); }, step.delay);
     });
     setTimeout(() => { setIsSimulating(false); setSimMessage(null); }, 13000);
+  };
+
+  const handleOpenAuth = () => {
+    if (user) {
+      window.location.hash = '#admin';
+      return;
+    }
+    setShowAuthModal(true);
   };
 
   const sanitize = (n: any) => {
@@ -331,7 +347,7 @@ const App: React.FC = () => {
           updateConfig={(updates) => updatePool(currentPool.id, updates)}
           updateScores={(scores) => updateScores(currentPool.id, scores)}
           generateNumbers={() => updatePool(currentPool.id, { axisNumbers: { home: generateRandomAxis(), away: generateRandomAxis() } })}
-          resetGame={() => {/* */ }}
+          resetGame={() => { const fresh = createNewPool(currentPool.name, user.id); updatePool(currentPool.id, { ...fresh, id: currentPool.id }); }}
           onBack={() => window.location.hash = '#admin'}
           onShare={() => openShare(currentPool.id)}
         />
@@ -341,6 +357,7 @@ const App: React.FC = () => {
   }
 
   if (route.view === 'browse') {
+    const publicPools = pools.filter(p => p.isPublic);
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
         <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
@@ -353,7 +370,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="space-y-4">
-            {pools.filter(p => p.isPublic).map(pool => (
+            {publicPools.map(pool => (
               <div key={pool.id} onClick={() => window.location.hash = `#pool/${pool.id}`} className="bg-slate-800 border border-slate-700 p-6 rounded-xl flex justify-between items-center cursor-pointer hover:border-indigo-500">
                 <div><h3 className="text-xl font-bold text-white">{pool.name}</h3><p className="text-sm text-slate-400">{pool.awayTeam} vs {pool.homeTeam}</p></div>
                 <ArrowRight size={20} />
@@ -373,8 +390,13 @@ const App: React.FC = () => {
     const halfData = getQuarterData('half');
     const q3Data = getQuarterData('q3');
     const finalData = getQuarterData('final');
+
     const homeLogo = getTeamLogo(currentPool.homeTeam);
     const awayLogo = getTeamLogo(currentPool.awayTeam);
+    const homePredictions = calculateScenarioWinners(currentPool, 'home');
+    const awayPredictions = calculateScenarioWinners(currentPool, 'away');
+    const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
+    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
     const isAdmin = user && user.id === currentPool.ownerId;
 
     return (
