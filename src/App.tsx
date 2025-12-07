@@ -9,6 +9,7 @@ import type { GameState, Scores, PlayerDetails, User } from './types';
 import { calculateWinners, generateRandomAxis, calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
+import { dbService } from './services/dbService';
 import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X, Shield } from 'lucide-react';
 
 // Lazy load SuperAdmin
@@ -91,26 +92,7 @@ const App: React.FC = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
 
-  const [pools, setPools] = useState<GameState[]>(() => {
-    try {
-      const saved = localStorage.getItem('sbSquaresPools');
-      if (!saved) return [];
-      const parsed = JSON.parse(saved);
-      const ensureFields = (p: any) => ({
-        ...createNewPool(p.name || 'Pool', p.ownerId),
-        ...p,
-        id: p.id || Math.random().toString(36).substring(2, 9),
-        isPublic: p.isPublic !== undefined ? p.isPublic : true,
-        ruleVariations: p.ruleVariations ? { ...createNewPool().ruleVariations, ...p.ruleVariations } : createNewPool().ruleVariations,
-        scoreEvents: p.scoreEvents || [],
-        scoreChangePayoutAmount: p.scoreChangePayoutAmount ?? 5,
-        scores: { ...createNewPool().scores, ...p.scores }
-      });
-      if (!Array.isArray(parsed) && typeof parsed === 'object') return [ensureFields(parsed)];
-      if (Array.isArray(parsed)) return parsed.map(ensureFields);
-      return [];
-    } catch { return []; }
-  });
+  const [pools, setPools] = useState<GameState[]>([]);
 
   const [isSimulating, setIsSimulating] = useState(false);
   const [simMessage, setSimMessage] = useState<string | null>(null);
@@ -124,13 +106,20 @@ const App: React.FC = () => {
   useEffect(() => {
     return authService.onAuthStateChanged((u) => {
       setUser(u);
-      if (u) setShowAuthModal(false);
+      if (u) {
+        setShowAuthModal(false);
+        dbService.saveUser(u); // Sync user to Firestore
+      }
     });
   }, []);
 
+  // Real-time subscription to pools
   useEffect(() => {
-    localStorage.setItem('sbSquaresPools', JSON.stringify(pools));
-  }, [pools]);
+    const unsubscribe = dbService.subscribeToPools((updatedPools) => {
+      setPools(updatedPools);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const route = useMemo(() => {
     if (hash.startsWith('#admin')) {
@@ -161,17 +150,14 @@ const App: React.FC = () => {
 
   // --- ACTIONS ---
   const addNewPool = async (p: GameState) => {
-    const { dbService } = await import('./services/dbService');
     await dbService.createPool(p);
   };
 
   const updatePool = async (id: string, updates: Partial<GameState>) => {
-    const { dbService } = await import('./services/dbService');
     await dbService.updatePool(id, updates);
   };
 
   const updateScores = async (id: string, scoreUpdates: Partial<Scores>) => {
-    const { dbService } = await import('./services/dbService');
     // We need to fetch current pool state really or structurally update deep object
     // For now, assume simple shallow merge of scores is tricky in Firestore without dot notation
     // But let's try a direct update. Note: Firestore map updates work with dot notation "scores.current"
@@ -185,7 +171,6 @@ const App: React.FC = () => {
 
   const deletePool = async (id: string) => {
     if (!confirm('Are you sure? This cannot be undone.')) return;
-    const { dbService } = await import('./services/dbService');
     await dbService.deletePool(id);
     window.location.hash = '';
   };
@@ -422,7 +407,7 @@ const App: React.FC = () => {
   if (route.view === 'admin-editor') {
     if (!user) return <AuthModal isOpen={true} onClose={() => window.location.hash = '#'} />;
     if (!currentPool) return <div className="text-white p-10">Pool Not Found</div>;
-    if (currentPool.ownerId && currentPool.ownerId !== user.id) return <div className="text-white p-10">Unauthorized</div>;
+    if (currentPool.ownerId && currentPool.ownerId !== user.id && user.email !== 'kstruck@gmail.com') return <div className="text-white p-10">Unauthorized</div>;
 
     return (
       <>

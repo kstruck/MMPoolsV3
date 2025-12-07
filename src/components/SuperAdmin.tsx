@@ -63,7 +63,8 @@ export const SuperAdmin: React.FC = () => {
                                     <td className="p-4 text-white font-bold">{pool.name}</td>
                                     <td className="p-4 text-slate-400 font-mono text-xs">{pool.ownerId || 'Anonymous'}</td>
                                     <td className="p-4 text-slate-300">{pool.squares.filter(s => s.owner).length}/100</td>
-                                    <td className="p-4">
+                                    <td className="p-4 flex gap-2">
+                                        <button onClick={() => window.location.hash = `#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 mr-2 font-bold text-xs uppercase border border-indigo-500/30 px-2 py-1 rounded">Manage</button>
                                         <button onClick={() => handleDelete(pool.id)} className="text-rose-400 hover:text-rose-300"><Trash2 size={18} /></button>
                                     </td>
                                 </tr>
