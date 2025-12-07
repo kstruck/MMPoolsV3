@@ -12,15 +12,13 @@ import { fetchGameScore } from './services/scoreService';
 import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X } from 'lucide-react';
 
 const App: React.FC = () => {
-  // --- STATE ---
+  // --- Routing & State ---
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [shareUrl, setShareUrl] = useState('');
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simMessage, setSimMessage] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
-  // --- DATA ---
   const [pools, setPools] = useState<GameState[]>(() => {
     try {
       const saved = localStorage.getItem('sbSquaresPools');
@@ -39,12 +37,16 @@ const App: React.FC = () => {
       if (!Array.isArray(parsed) && typeof parsed === 'object') return [ensureFields(parsed)];
       if (Array.isArray(parsed)) return parsed.map(ensureFields);
       return [];
-    } catch {
+    } catch (e) {
       return [];
     }
   });
 
-  // --- EFFECTS ---
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simMessage, setSimMessage] = useState<string | null>(null);
+
   useEffect(() => {
     const handleHashChange = () => setHash(window.location.hash);
     window.addEventListener('hashchange', handleHashChange);
@@ -63,7 +65,6 @@ const App: React.FC = () => {
     localStorage.setItem('sbSquaresPools', JSON.stringify(pools));
   }, [pools]);
 
-  // --- ROUTING ---
   const route = useMemo(() => {
     if (hash.startsWith('#admin')) {
       const parts = hash.split('/');
@@ -85,24 +86,20 @@ const App: React.FC = () => {
     return pools.find(p => p.id === route.id) || null;
   }, [pools, route.id]);
 
-  // --- POLLING ---
   useEffect(() => {
     if (!currentPool?.gameId || isSimulating) return;
-
-    fetchGameScore(currentPool).then(result => {
-      if (result) updateScores(currentPool.id, result.scores);
-    });
-
+    fetchGameScore(currentPool).then(result => { if (result) updateScores(currentPool.id, result.scores); });
     const interval = setInterval(() => {
-      fetchGameScore(currentPool).then(result => {
-        if (result) updateScores(currentPool.id, result.scores);
-      });
+      fetchGameScore(currentPool).then(result => { if (result) updateScores(currentPool.id, result.scores); });
     }, 60000);
-
     return () => clearInterval(interval);
   }, [currentPool?.gameId, currentPool?.id, isSimulating]);
 
-  // --- ACTIONS ---
+  const winners = useMemo(() => {
+    if (!currentPool) return [];
+    return calculateWinners(currentPool);
+  }, [currentPool]);
+
   const updatePool = (id: string, updates: Partial<GameState>) => {
     setPools(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   };
@@ -110,44 +107,23 @@ const App: React.FC = () => {
   const updateScores = (id: string, scoreUpdates: Partial<Scores>) => {
     setPools(prevPools => prevPools.map(pool => {
       if (pool.id !== id) return pool;
-      return {
-        ...pool,
-        scores: { ...pool.scores, ...scoreUpdates }
-      };
+      return { ...pool, scores: { ...pool.scores, ...scoreUpdates } };
     }));
   };
 
   const handleClaimSquares = (ids: number[], name: string, details: PlayerDetails): { success: boolean; message?: string } => {
     if (!currentPool) return { success: false };
-
     const normalizedName = name.trim();
     if (!normalizedName) return { success: false, message: 'Name required' };
-
-    const currentOwned = currentPool.squares.filter(
-      s => s.owner && s.owner.toLowerCase() === normalizedName.toLowerCase()
-    ).length;
-
+    const currentOwned = currentPool.squares.filter(s => s.owner && s.owner.toLowerCase() === normalizedName.toLowerCase()).length;
     const limit = Number(currentPool.maxSquaresPerPlayer) || 10;
-
-    if (currentOwned + ids.length > limit) {
-      return {
-        success: false,
-        message: `Limit exceeded. You already own ${currentOwned}. Max allowed is ${limit}.`
-      };
-    }
-
+    if (currentOwned + ids.length > limit) return { success: false, message: `Limit exceeded. Max ${limit}.` };
     const newSquares = [...currentPool.squares];
     ids.forEach(id => {
       if (!newSquares[id].owner) {
-        newSquares[id] = {
-          ...newSquares[id],
-          owner: normalizedName,
-          playerDetails: details,
-          isPaid: false
-        };
+        newSquares[id] = { ...newSquares[id], owner: normalizedName, playerDetails: details, isPaid: false };
       }
     });
-
     updatePool(currentPool.id, { squares: newSquares });
     return { success: true };
   };
@@ -159,49 +135,35 @@ const App: React.FC = () => {
   };
 
   const handleDeletePool = (id: string) => {
-    const newPools = pools.filter(p => p.id !== id);
-    setPools(newPools);
+    setPools(pools.filter(p => p.id !== id));
   };
 
   const handleRunSimulation = (poolId: string) => {
     setIsSimulating(true);
     setSimMessage("Simulation Started: Filling Grid...");
-
     setPools(prev => prev.map(p => {
       if (p.id !== poolId) return p;
       const filledSquares = p.squares.map((s) => s.owner ? s : { ...s, owner: `SimBot`, isPaid: true });
       const newHomeAxis = p.axisNumbers ? p.axisNumbers.home : generateRandomAxis();
       const newAwayAxis = p.axisNumbers ? p.axisNumbers.away : generateRandomAxis();
-
       return {
         ...p,
-        squares: filledSquares,
-        isLocked: true,
-        lockGrid: true,
+        squares: filledSquares, isLocked: true, lockGrid: true,
         axisNumbers: { home: newHomeAxis, away: newAwayAxis },
         scores: { current: { home: 0, away: 0 }, q1: null, half: null, q3: null, final: null },
         gameId: undefined
       };
     }));
-
     const sequence = [
-      { delay: 3000, scores: { current: { home: 7, away: 0 }, q1: { home: 7, away: 0 } }, msg: "End of 1st Quarter" },
-      { delay: 6000, scores: { current: { home: 7, away: 3 }, half: { home: 7, away: 3 } }, msg: "Halftime Score" },
-      { delay: 9000, scores: { current: { home: 14, away: 3 }, q3: { home: 14, away: 3 } }, msg: "End of 3rd Quarter" },
-      { delay: 12000, scores: { current: { home: 14, away: 10 }, final: { home: 14, away: 10 } }, msg: "Final Score" }
+      { delay: 3000, scores: { current: { home: 7, away: 0 }, q1: { home: 7, away: 0 } }, msg: "End of 1st" },
+      { delay: 6000, scores: { current: { home: 7, away: 3 }, half: { home: 7, away: 3 } }, msg: "Halftime" },
+      { delay: 9000, scores: { current: { home: 14, away: 3 }, q3: { home: 14, away: 3 } }, msg: "End of 3rd" },
+      { delay: 12000, scores: { current: { home: 14, away: 10 }, final: { home: 14, away: 10 } }, msg: "Final" }
     ];
-
     sequence.forEach(step => {
-      setTimeout(() => {
-        updateScores(poolId, step.scores);
-        setSimMessage(step.msg);
-      }, step.delay);
+      setTimeout(() => { updateScores(poolId, step.scores); setSimMessage(step.msg); }, step.delay);
     });
-
-    setTimeout(() => {
-      setIsSimulating(false);
-      setSimMessage(null);
-    }, 13000);
+    setTimeout(() => { setIsSimulating(false); setSimMessage(null); }, 13000);
   };
 
   const openShare = (id?: string) => {
@@ -210,15 +172,12 @@ const App: React.FC = () => {
     setShowShareModal(true);
   };
 
-  const handleOpenAuth = () => {
-    if (user) {
-      window.location.hash = '#admin';
-      return;
-    }
+  const handleOpenAuth = (mode: 'login' | 'signup') => {
+    if (user) { window.location.hash = '#admin'; return; }
+    setAuthMode(mode);
     setShowAuthModal(true);
   };
 
-  // --- HELPERS ---
   const sanitize = (n: any) => {
     if (n === null || n === undefined) return 0;
     const val = parseInt(n);
@@ -227,44 +186,28 @@ const App: React.FC = () => {
 
   const getQuarterData = (period: 'q1' | 'half' | 'q3' | 'final') => {
     if (!currentPool) return { home: 0, away: 0, qPointsHome: 0, qPointsAway: 0, winnerName: '', reverseWinnerName: null, amount: 0, isLocked: false };
-
     const isFinal = !!currentPool.scores[period];
     const lockedScore = currentPool.scores[period];
     const liveScore = currentPool.scores.current;
-
     const home = sanitize(lockedScore?.home) || sanitize(liveScore?.home) || 0;
     const away = sanitize(lockedScore?.away) || sanitize(liveScore?.away) || 0;
-
     let prevHome = 0, prevAway = 0;
-    if (period === 'half') {
-      prevHome = sanitize(currentPool.scores.q1?.home);
-      prevAway = sanitize(currentPool.scores.q1?.away);
-    } else if (period === 'q3') {
-      prevHome = sanitize(currentPool.scores.half?.home);
-      prevAway = sanitize(currentPool.scores.half?.away);
-    } else if (period === 'final') {
-      prevHome = sanitize(currentPool.scores.q3?.home);
-      prevAway = sanitize(currentPool.scores.q3?.away);
-    }
-
+    if (period === 'half') { prevHome = sanitize(currentPool.scores.q1?.home); prevAway = sanitize(currentPool.scores.q1?.away); }
+    else if (period === 'q3') { prevHome = sanitize(currentPool.scores.half?.home); prevAway = sanitize(currentPool.scores.half?.away); }
+    else if (period === 'final') { prevHome = sanitize(currentPool.scores.q3?.home); prevAway = sanitize(currentPool.scores.q3?.away); }
     const qPointsHome = home - prevHome;
     const qPointsAway = away - prevAway;
-
     let winnerName = "TBD";
     let reverseWinnerName: string | null = null;
     let isLocked = isFinal;
-
     if (currentPool.axisNumbers) {
       const hD = getLastDigit(home);
       const aD = getLastDigit(away);
       const row = currentPool.axisNumbers.home.indexOf(hD);
       const col = currentPool.axisNumbers.away.indexOf(aD);
-
       if (row !== -1 && col !== -1) {
-        const sqId = row * 10 + col;
-        winnerName = currentPool.squares[sqId].owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
+        winnerName = currentPool.squares[row * 10 + col].owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
       }
-
       if (currentPool.ruleVariations.reverseWinners) {
         const rRow = currentPool.axisNumbers.home.indexOf(aD);
         const rCol = currentPool.axisNumbers.away.indexOf(hD);
@@ -276,17 +219,13 @@ const App: React.FC = () => {
         }
       }
     }
-
     const totalPot = currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare;
-    const payoutPct = currentPool.payouts[period];
     let distributablePot = Math.max(0, totalPot - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
-    let amount = (distributablePot * payoutPct) / 100;
+    let amount = (distributablePot * currentPool.payouts[period]) / 100;
     if (reverseWinnerName) amount = amount / 2;
-
     return { home, away, qPointsHome, qPointsAway, winnerName, reverseWinnerName, amount, isLocked };
   };
 
-  // --- SUB-COMPONENTS ---
   const AuthModalComponent = () => {
     if (!showAuthModal) return null;
     return (
@@ -338,8 +277,8 @@ const App: React.FC = () => {
             </div>
           ) : (
             <div className="flex gap-2">
-              <button onClick={() => handleOpenAuth()} className="text-xs font-bold text-slate-300 hover:text-white px-3 py-1.5 transition-colors">Sign In</button>
-              <button onClick={() => handleOpenAuth()} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">Register</button>
+              <button onClick={() => handleOpenAuth('login')} className="text-xs font-bold text-slate-300 hover:text-white px-3 py-1.5 transition-colors">Sign In</button>
+              <button onClick={() => handleOpenAuth('signup')} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">Register</button>
             </div>
           )}
         </div>
@@ -347,29 +286,29 @@ const App: React.FC = () => {
     </header>
   );
 
-  // --- RENDER LOGIC ---
+  // --- VIEW RENDERING ---
 
   if (route.view === 'home') {
     return (
-      <React.Fragment>
-        <LandingPage onLogin={() => handleOpenAuth()} onSignup={() => handleOpenAuth()} onBrowse={() => window.location.hash = '#browse'} isLoggedIn={!!user} />
+      <>
+        <LandingPage onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('signup')} onBrowse={() => window.location.hash = '#browse'} isLoggedIn={!!user} />
         <AuthModalComponent />
-      </React.Fragment>
+      </>
     );
   }
 
   if (route.view === 'admin-dashboard') {
     if (!user) {
       return (
-        <React.Fragment>
+        <>
           <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
             <div className="text-center">
               <p className="mb-4 text-slate-400">Please sign in to access the dashboard.</p>
-              <button onClick={() => handleOpenAuth()} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In</button>
+              <button onClick={() => handleOpenAuth('login')} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In</button>
             </div>
           </div>
           <AuthModalComponent />
-        </React.Fragment>
+        </>
       );
     }
     const userPools = pools.filter(p => p.ownerId === user.id);
@@ -422,7 +361,7 @@ const App: React.FC = () => {
       return <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">Unauthorized</div>;
     }
     return (
-      <React.Fragment>
+      <>
         <AdminPanel
           gameState={currentPool}
           updateConfig={(updates) => updatePool(currentPool.id, updates)}
@@ -433,7 +372,7 @@ const App: React.FC = () => {
           onShare={() => openShare(currentPool.id)}
         />
         <ShareModalComponent />
-      </React.Fragment>
+      </>
     );
   }
 
@@ -448,7 +387,6 @@ const App: React.FC = () => {
               Public Grids
             </h2>
             <p className="text-slate-400 text-lg">Browse active pools open to the public.</p>
-
             <div className="mt-8 max-w-md mx-auto relative">
               <input type="text" placeholder="Search for a pool..." className="w-full bg-slate-800 border border-slate-700 rounded-full py-3 px-6 pl-12 text-white outline-none focus:ring-2 focus:ring-indigo-500" />
               <Search className="absolute left-4 top-3.5 text-slate-500" size={20} />
