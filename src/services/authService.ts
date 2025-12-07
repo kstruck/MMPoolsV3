@@ -1,86 +1,76 @@
-import type { User } from '../types';
+import {
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser
+} from "firebase/auth";
+import { auth } from "../firebase";
+import { User } from "../types";
 
-const USER_KEY = 'sbSquaresUser';
+const googleProvider = new GoogleAuthProvider();
+
+// Map Firebase User to our App User type
+const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
+  if (!firebaseUser) return null;
+  return {
+    id: firebaseUser.uid,
+    name: firebaseUser.displayName || "Unknown User",
+    email: firebaseUser.email || "",
+    picture: firebaseUser.photoURL || undefined
+  };
+};
 
 export const authService = {
-  // Check if user is logged in
+  // Get current user synchronously (might be null on initial load before auth check completes)
   getCurrentUser: (): User | null => {
+    return mapUser(auth.currentUser);
+  },
+
+  // Login with Google
+  loginWithGoogle: async (): Promise<User | null> => {
     try {
-      const stored = localStorage.getItem(USER_KEY);
-      return stored ? JSON.parse(stored) : null;
-    } catch (e) {
-      return null;
+      const result = await signInWithPopup(auth, googleProvider);
+      return mapUser(result.user);
+    } catch (error) {
+      console.error("Google Sign-In Error", error);
+      throw error;
     }
   },
 
-  // Mock Registration
-  register: async (name: string, email: string, _password: string): Promise<User> => {
-    // In a real app, verify email/password requirements
-    const newUser: User = {
-      id: 'user_' + Math.random().toString(36).substring(2, 9),
-      name,
-      email,
-      picture: `https://api.dicebear.com/7.x/initials/svg?seed=${name}`
-    };
-
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    localStorage.setItem(USER_KEY, JSON.stringify(newUser));
-    return newUser;
+  // Logout
+  logout: async () => {
+    try {
+      await signOut(auth);
+      window.location.reload(); // Refresh to clear app state
+    } catch (error) {
+      console.error("Logout Error", error);
+    }
   },
 
-  // Mock Login
-  login: async (email: string, _password: string): Promise<User> => {
-    // In a real app, check credentials against DB
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    // Fix: Use consistent ID for demo admin so ownership persists
-    const isDemoAdmin = email === 'admin@test.com';
-    const userId = isDemoAdmin ? 'user_demo_admin_123' : 'user_' + Math.random().toString(36).substring(2, 9);
-
-    const user: User = {
-      id: userId,
-      name: email.split('@')[0],
-      email,
-      picture: `https://api.dicebear.com/7.x/initials/svg?seed=${email}`
-    };
-
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-    return user;
+  // Mock methods for backward compatibility (optional, can be removed if unused)
+  register: async () => { throw new Error("Use Google Login"); },
+  login: async (email: string) => {
+    // Handle Demo Login specifically
+    if (email === 'admin@test.com') {
+      // Create a fake session for demo purposes
+      const demoUser = { id: 'demo_admin', name: 'Demo Admin', email: 'admin@test.com' };
+      localStorage.setItem('sbSquaresUser', JSON.stringify(demoUser));
+      return demoUser;
+    }
+    throw new Error("Use Google Login");
   },
 
-  // Mock Google Login
-  loginWithGoogle: async (): Promise<User> => {
-    // In a real app, this would use the Google Identity Services SDK
-    // window.google.accounts.id.initialize(...)
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const googleUser: User = {
-      id: 'google_' + Math.random().toString(36).substring(2, 9),
-      name: 'Google User',
-      email: 'user@gmail.com',
-      picture: 'https://lh3.googleusercontent.com/a/default-user=s96-c' // Generic google avatar
-    };
-
-    localStorage.setItem(USER_KEY, JSON.stringify(googleUser));
-    return googleUser;
-  },
-
-  logout: () => {
-    localStorage.removeItem(USER_KEY);
-    // Trigger an event or page reload if needed, but App.tsx listens to state usually via a callback
-    // For this simple mock, we rely on the caller to update state or reload
-    window.location.reload();
-  },
-
-  // Observer pattern for auth state changes
+  // Listener for Auth State
   onAuthStateChanged: (callback: (user: User | null) => void) => {
-    const handler = () => {
-      callback(authService.getCurrentUser());
-    };
-    window.addEventListener('storage', handler);
-    return () => window.removeEventListener('storage', handler);
+    return onAuthStateChanged(auth, (firebaseUser) => {
+      // Check for Demo User override first
+      const demoUser = localStorage.getItem('sbSquaresUser');
+      if (demoUser && !firebaseUser) {
+        callback(JSON.parse(demoUser));
+      } else {
+        callback(mapUser(firebaseUser));
+      }
+    });
   }
 };

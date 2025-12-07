@@ -71,7 +71,7 @@ export interface GameState {
   homeTeam: string; // Row Team
   awayTeam: string; // Column Team
   gameId?: string; // ESPN Game ID for automated tracking
-  
+
   costPerSquare: number;
   maxSquaresPerPlayer: number;
   lockGrid: boolean; // Alias for isLocked logic in UI, mapped to isLocked
@@ -120,7 +120,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  picture?: string;
+  picture?: string | null; // Allow null for Firebase compatibility
 }
 
 export interface Winner {
