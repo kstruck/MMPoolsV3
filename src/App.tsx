@@ -200,7 +200,7 @@ const App: React.FC = () => {
       if (p.id !== poolId) return p;
 
       // Fill empty squares
-      const filledSquares = p.squares.map((s) => s.owner ? s : { ...s, owner: `SimBot`, isPaid: true });
+      const filledSquares = p.squares.map((s, i) => s.owner ? s : { ...s, owner: `SimBot`, isPaid: true });
       // Generate axes if needed
       const newHomeAxis = p.axisNumbers ? p.axisNumbers.home : generateRandomAxis();
       const newAwayAxis = p.axisNumbers ? p.axisNumbers.away : generateRandomAxis();
@@ -610,34 +610,6 @@ const App: React.FC = () => {
                    })}
                  </div>
              </div>
-        </div>
-
-        {latestWinner && (
-          <div className="max-w-[1400px] mx-auto px-4 mb-4 text-center animate-in zoom-in duration-300">
-             <div className="inline-block bg-slate-800/80 border border-amber-500/50 rounded-full px-8 py-2 text-amber-300 font-bold text-lg shadow-[0_0_20px_rgba(245,158,11,0.2)]">🤑 IN THE MONEY: {latestWinner} 🤑</div>
-          </div>
-        )}
-
-        <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 xl:grid-cols-[300px_1fr_300px] gap-8 items-start mb-8">
-            <div className="hidden xl:block">
-                <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
-                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-indigo-400 font-bold">{currentPool.awayTeam}</span> score next...</h3></div>
-                    <div className="bg-black/50 p-4 space-y-4">{awayPredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-indigo-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
-                </div>
-            </div>
-            <div className="flex flex-col items-center">
-               <div className="mb-4"><div className="w-16 h-16 bg-indigo-900/20 rounded-full flex items-center justify-center border-2 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-white p-1">{awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-indigo-400 font-bold text-xl">{currentPool.awayTeam.substring(0,2).toUpperCase()}</span>}</div></div>
-               <div className="flex items-center gap-4 w-full">
-                  <div className="hidden md:flex flex-col items-center gap-2"><div className="w-16 h-16 bg-rose-900/20 rounded-full flex items-center justify-center border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] bg-white p-1">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-rose-400 font-bold text-xl">{currentPool.homeTeam.substring(0,2).toUpperCase()}</span>}</div></div>
-                  <div className="flex-1 overflow-x-auto"><Grid gameState={currentPool} onClaimSquares={handleClaimSquares} winners={winners} highlightHomeDigit={getLastDigit(currentPool.scores.current?.home ?? 0)} highlightAwayDigit={getLastDigit(currentPool.scores.current?.away ?? 0)} /></div>
-               </div>
-            </div>
-            <div className="hidden xl:block">
-                <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
-                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-rose-400 font-bold">{currentPool.homeTeam}</span> score next...</h3></div>
-                    <div className="bg-black/50 p-4 space-y-4">{homePredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-rose-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
-                </div>
-            </div>
         </div>
 
         {/* --- NEW PAYOUTS SECTION BELOW GRID --- */}
