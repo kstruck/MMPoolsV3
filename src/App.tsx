@@ -426,34 +426,6 @@ const App: React.FC = () => {
           )
         }
 
-        {/* Grid Component */}
-        <div className="max-w-[1600px] mx-auto px-4 py-8 flex flex-col items-center">
-          <div className="flex items-center gap-4 w-full justify-center">
-            {/* Home Logo */}
-            <div className="hidden md:flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-rose-900/20 rounded-full flex items-center justify-center border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] bg-white p-1">
-                {homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-rose-400 font-bold text-xl">{currentPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
-              </div>
-            </div>
-            {/* Grid */}
-            <div className="flex-1 overflow-x-auto">
-              <Grid
-                gameState={currentPool}
-                onClaimSquares={(ids, name, details) => handleClaimSquares(ids, name, details)}
-                winners={winners}
-                highlightHomeDigit={getLastDigit(currentPool.scores.current?.home ?? 0)}
-                highlightAwayDigit={getLastDigit(currentPool.scores.current?.away ?? 0)}
-              />
-            </div>
-            {/* Away Logo */}
-            <div className="hidden md:flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-indigo-900/20 rounded-full flex items-center justify-center border-2 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-white p-1">
-                {awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-indigo-400 font-bold text-xl">{currentPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* INFO & PAYOUTS ROW */}
         <div className="max-w-[1400px] mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 1. Grid Owner */}
@@ -482,6 +454,34 @@ const App: React.FC = () => {
                 const label = key === 'q1' ? '1st Quarter' : key === 'half' ? '2nd Quarter' : key === 'q3' ? '3rd Quarter' : 'Final Score';
                 return (<div key={key} className="flex justify-between items-center text-sm"><span className="text-slate-400 font-bold">{label}:</span><span className="text-white font-mono font-bold">${amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}</span></div>);
               })}
+            </div>
+          </div>
+        </div>
+
+        {/* Grid Component */}
+        <div className="max-w-[1600px] mx-auto px-4 py-8 flex flex-col items-center">
+          <div className="flex items-center gap-4 w-full justify-center">
+            {/* Home Logo */}
+            <div className="hidden md:flex flex-col items-center gap-2">
+              <div className="w-16 h-16 bg-rose-900/20 rounded-full flex items-center justify-center border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] bg-white p-1">
+                {homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-rose-400 font-bold text-xl">{currentPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
+              </div>
+            </div>
+            {/* Grid */}
+            <div className="flex-1 overflow-x-auto">
+              <Grid
+                gameState={currentPool}
+                onClaimSquares={(ids, name, details) => handleClaimSquares(ids, name, details)}
+                winners={winners}
+                highlightHomeDigit={getLastDigit(currentPool.scores.current?.home ?? 0)}
+                highlightAwayDigit={getLastDigit(currentPool.scores.current?.away ?? 0)}
+              />
+            </div>
+            {/* Away Logo */}
+            <div className="hidden md:flex flex-col items-center gap-2">
+              <div className="w-16 h-16 bg-indigo-900/20 rounded-full flex items-center justify-center border-2 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-white p-1">
+                {awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-indigo-400 font-bold text-xl">{currentPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
+              </div>
             </div>
           </div>
         </div>
