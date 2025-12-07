@@ -9,12 +9,14 @@ import type { GameState, Scores, PlayerDetails, User } from './types';
 import { calculateWinners, generateRandomAxis, calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
-import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search } from 'lucide-react';
+import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- Routing & State ---
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
   const [pools, setPools] = useState<GameState[]>(() => {
     try {
@@ -65,6 +67,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsubscribe = authService.onAuthStateChanged((u) => {
       setUser(u);
+      if (u) setShowAuthModal(false); // Close modal on successful login
     });
     return unsubscribe;
   }, []);
@@ -244,6 +247,15 @@ const App: React.FC = () => {
     setShowShareModal(true);
   };
 
+  const handleOpenAuth = (mode: 'login' | 'signup') => {
+    if (user) {
+      window.location.hash = '#admin';
+      return;
+    }
+    setAuthMode(mode);
+    setShowAuthModal(true);
+  };
+
   // --- Sub-components ---
   const ShareModal = () => {
     if (!showShareModal) return null;
@@ -266,6 +278,19 @@ const App: React.FC = () => {
     );
   };
 
+  // --- Auth Modal ---
+  const AuthModal = () => {
+    if (!showAuthModal) return null;
+    return (
+      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="w-full max-w-md relative">
+          <button onClick={() => setShowAuthModal(false)} className="absolute -top-12 right-0 text-slate-400 hover:text-white transition-colors p-2"><X size={24} /></button>
+          <Auth onLogin={() => { setShowAuthModal(false); window.location.hash = '#admin'; }} />
+        </div>
+      </div>
+    );
+  };
+
   const Header = () => (
     <header className="bg-slate-800/50 border-b border-slate-700 backdrop-blur-md sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -283,7 +308,10 @@ const App: React.FC = () => {
               <button onClick={() => authService.logout()} className="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-1.5 rounded text-slate-300 transition-colors"><LogOut size={14} /></button>
             </div>
           ) : (
-            <button onClick={() => window.location.hash = '#admin'} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">Login / Register</button>
+            <div className="flex gap-2">
+              <button onClick={() => handleOpenAuth('login')} className="text-xs font-bold text-slate-300 hover:text-white px-3 py-1.5 transition-colors">Sign In</button>
+              <button onClick={() => handleOpenAuth('signup')} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">Register</button>
+            </div>
           )}
         </div>
       </div>
@@ -294,7 +322,12 @@ const App: React.FC = () => {
 
   // Landing Page (New Default)
   if (route.view === 'home') {
-    return <LandingPage onLogin={() => window.location.hash = '#admin'} onBrowse={() => window.location.hash = '#browse'} isLoggedIn={!!user} />;
+    return (
+      <>
+        <LandingPage onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('signup')} onBrowse={() => window.location.hash = '#browse'} isLoggedIn={!!user} />
+        <AuthModal />
+      </>
+    );
   }
 
   // Admin / Dashboard Views
@@ -365,6 +398,7 @@ const App: React.FC = () => {
             </div>
           )}
         </main>
+        <AuthModal />
       </div>
     );
   }
@@ -402,6 +436,7 @@ const App: React.FC = () => {
             )}
           </div>
         </main>
+        <AuthModal />
       </div>
     );
   }
@@ -517,152 +552,151 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative">
         <ShareModal />
-
+        
         {/* SIMULATION TOAST */}
         {simMessage && (
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-fuchsia-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce flex items-center gap-2 font-bold">
-            <Zap size={20} fill="currentColor" /> {simMessage}
-          </div>
+            <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-fuchsia-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce flex items-center gap-2 font-bold">
+               <Zap size={20} fill="currentColor" /> {simMessage}
+            </div>
         )}
-
+        
         {/* ADMIN FAB: RUN SIMULATION */}
         {isAdmin && (
-          <button
-            onClick={() => handleRunSimulation(currentPool.id)}
-            disabled={isSimulating}
-            className="fixed bottom-6 right-6 z-50 bg-fuchsia-600 hover:bg-fuchsia-500 text-white p-4 rounded-full shadow-2xl shadow-fuchsia-500/40 flex items-center justify-center transition-all hover:scale-110 active:scale-95 disabled:opacity-50 disabled:scale-100"
-            title="Run Live Game Simulation"
-          >
-            {isSimulating ? <Zap className="animate-spin" size={24} /> : <Zap size={24} />}
-          </button>
+           <button 
+             onClick={() => handleRunSimulation(currentPool.id)} 
+             disabled={isSimulating}
+             className="fixed bottom-6 right-6 z-50 bg-fuchsia-600 hover:bg-fuchsia-500 text-white p-4 rounded-full shadow-2xl shadow-fuchsia-500/40 flex items-center justify-center transition-all hover:scale-110 active:scale-95 disabled:opacity-50 disabled:scale-100"
+             title="Run Live Game Simulation"
+           >
+             {isSimulating ? <Zap className="animate-spin" size={24} /> : <Zap size={24} />}
+           </button>
         )}
 
         <div className="max-w-[1400px] mx-auto px-4 pt-6 flex justify-between items-center">
-          <button onClick={() => window.location.hash = '#'} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all">Return to My Grids</button>
-          <div className="text-center"><h1 className="text-3xl font-bold text-white mb-1">{currentPool.name}</h1><p className="text-slate-400 text-sm">{squaresRemaining} Squares Remaining</p></div>
-          <button onClick={() => openShareModal()} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all">Copy Link Invite</button>
+             <button onClick={() => window.location.hash = '#'} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all">Return to My Grids</button>
+             <div className="text-center"><h1 className="text-3xl font-bold text-white mb-1">{currentPool.name}</h1><p className="text-slate-400 text-sm">{squaresRemaining} Squares Remaining</p></div>
+             <button onClick={() => openShareModal()} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all">Copy Link Invite</button>
         </div>
 
         <div className="max-w-[1400px] mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 1. Grid Owner */}
-          <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
-            <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
-            <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
-            <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{currentPool.paymentInstructions}</p></div>
-          </div>
-          {/* 2. Scoreboard */}
-          <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-slate-800/20 rounded-full blur-2xl"></div>
-            <div className="p-4 border-b border-slate-800 text-center"><h3 className="text-white font-bold">Game Scoreboard</h3></div>
-            <div className="p-4">
-              <div className="grid grid-cols-6 gap-2 text-center text-sm mb-2 text-slate-500 font-bold uppercase text-[10px]"><div className="col-span-2 text-left pl-2">Team</div><div>1</div><div>2</div><div>3</div><div>4</div><div>T</div></div>
-              {/* Away */}
-              <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.half?.away) - sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.q3?.away) - sanitize(currentPool.scores.half?.away)}</div><div>{sanitize(currentPool.scores.final?.away) - sanitize(currentPool.scores.q3?.away)}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
-              {/* Home */}
-              <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.half?.home) - sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.q3?.home) - sanitize(currentPool.scores.half?.home)}</div><div>{sanitize(currentPool.scores.final?.home) - sanitize(currentPool.scores.q3?.home)}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
-              <div className="mt-3 text-[10px] text-slate-600 text-right">Updated: {new Date().toLocaleTimeString()}</div>
-            </div>
-          </div>
-          {/* 3. Payout Structure */}
-          <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
-            <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
-            <div className="space-y-3">
-              {Object.entries(currentPool.payouts).map(([key, percent]) => {
-                const effectivePot = Math.max(0, totalPot - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
-                const amount = (effectivePot * (percent as number)) / 100;
-                const label = key === 'q1' ? '1st Quarter' : key === 'half' ? '2nd Quarter' : key === 'q3' ? '3rd Quarter' : 'Final Score';
-                return (<div key={key} className="flex justify-between items-center text-sm"><span className="text-slate-400 font-bold">{label}:</span><span className="text-white font-mono font-bold">${amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}</span></div>);
-              })}
-            </div>
-          </div>
+             {/* 1. Grid Owner */}
+             <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
+                <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
+                <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
+                <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{currentPool.paymentInstructions}</p></div>
+             </div>
+             {/* 2. Scoreboard */}
+             <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative">
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-slate-800/20 rounded-full blur-2xl"></div>
+                 <div className="p-4 border-b border-slate-800 text-center"><h3 className="text-white font-bold">Game Scoreboard</h3></div>
+                 <div className="p-4">
+                    <div className="grid grid-cols-6 gap-2 text-center text-sm mb-2 text-slate-500 font-bold uppercase text-[10px]"><div className="col-span-2 text-left pl-2">Team</div><div>1</div><div>2</div><div>3</div><div>4</div><div>T</div></div>
+                    {/* Away */}
+                    <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.half?.away) - sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.q3?.away) - sanitize(currentPool.scores.half?.away)}</div><div>{sanitize(currentPool.scores.final?.away) - sanitize(currentPool.scores.q3?.away)}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
+                    {/* Home */}
+                    <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.half?.home) - sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.q3?.home) - sanitize(currentPool.scores.half?.home)}</div><div>{sanitize(currentPool.scores.final?.home) - sanitize(currentPool.scores.q3?.home)}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
+                    <div className="mt-3 text-[10px] text-slate-600 text-right">Updated: {new Date().toLocaleTimeString()}</div>
+                 </div>
+             </div>
+             {/* 3. Payout Structure */}
+             <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
+                 <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
+                 <div className="space-y-3">
+                   {Object.entries(currentPool.payouts).map(([key, percent]) => {
+                     const effectivePot = Math.max(0, totalPot - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
+                     const amount = (effectivePot * (percent as number)) / 100;
+                     const label = key === 'q1' ? '1st Quarter' : key === 'half' ? '2nd Quarter' : key === 'q3' ? '3rd Quarter' : 'Final Score';
+                     return (<div key={key} className="flex justify-between items-center text-sm"><span className="text-slate-400 font-bold">{label}:</span><span className="text-white font-mono font-bold">${amount.toLocaleString(undefined, {minimumFractionDigits: 0})}</span></div>);
+                   })}
+                 </div>
+             </div>
         </div>
 
         {latestWinner && (
           <div className="max-w-[1400px] mx-auto px-4 mb-4 text-center animate-in zoom-in duration-300">
-            <div className="inline-block bg-slate-800/80 border border-amber-500/50 rounded-full px-8 py-2 text-amber-300 font-bold text-lg shadow-[0_0_20px_rgba(245,158,11,0.2)]">🤑 IN THE MONEY: {latestWinner} 🤑</div>
+             <div className="inline-block bg-slate-800/80 border border-amber-500/50 rounded-full px-8 py-2 text-amber-300 font-bold text-lg shadow-[0_0_20px_rgba(245,158,11,0.2)]">🤑 IN THE MONEY: {latestWinner} 🤑</div>
           </div>
         )}
 
         <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 xl:grid-cols-[300px_1fr_300px] gap-8 items-start mb-8">
-          <div className="hidden xl:block">
-            <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
-              <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-indigo-400 font-bold">{currentPool.awayTeam}</span> score next...</h3></div>
-              <div className="bg-black/50 p-4 space-y-4">{awayPredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-indigo-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+            <div className="hidden xl:block">
+                <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
+                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-indigo-400 font-bold">{currentPool.awayTeam}</span> score next...</h3></div>
+                    <div className="bg-black/50 p-4 space-y-4">{awayPredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-indigo-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+                </div>
             </div>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="mb-4"><div className="w-16 h-16 bg-indigo-900/20 rounded-full flex items-center justify-center border-2 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-white p-1">{awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-indigo-400 font-bold text-xl">{currentPool.awayTeam.substring(0, 2).toUpperCase()}</span>}</div></div>
-            <div className="flex items-center gap-4 w-full">
-              <div className="hidden md:flex flex-col items-center gap-2"><div className="w-16 h-16 bg-rose-900/20 rounded-full flex items-center justify-center border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] bg-white p-1">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-rose-400 font-bold text-xl">{currentPool.homeTeam.substring(0, 2).toUpperCase()}</span>}</div></div>
-              <div className="flex-1 overflow-x-auto"><Grid gameState={currentPool} onClaimSquares={handleClaimSquares} winners={winners} highlightHomeDigit={getLastDigit(currentPool.scores.current?.home ?? 0)} highlightAwayDigit={getLastDigit(currentPool.scores.current?.away ?? 0)} /></div>
+            <div className="flex flex-col items-center">
+               <div className="mb-4"><div className="w-16 h-16 bg-indigo-900/20 rounded-full flex items-center justify-center border-2 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-white p-1">{awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-indigo-400 font-bold text-xl">{currentPool.awayTeam.substring(0,2).toUpperCase()}</span>}</div></div>
+               <div className="flex items-center gap-4 w-full">
+                  <div className="hidden md:flex flex-col items-center gap-2"><div className="w-16 h-16 bg-rose-900/20 rounded-full flex items-center justify-center border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] bg-white p-1">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-rose-400 font-bold text-xl">{currentPool.homeTeam.substring(0,2).toUpperCase()}</span>}</div></div>
+                  <div className="flex-1 overflow-x-auto"><Grid gameState={currentPool} onClaimSquares={handleClaimSquares} winners={winners} highlightHomeDigit={getLastDigit(currentPool.scores.current?.home ?? 0)} highlightAwayDigit={getLastDigit(currentPool.scores.current?.away ?? 0)} /></div>
+               </div>
             </div>
-          </div>
-          <div className="hidden xl:block">
-            <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
-              <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-rose-400 font-bold">{currentPool.homeTeam}</span> score next...</h3></div>
-              <div className="bg-black/50 p-4 space-y-4">{homePredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-rose-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+            <div className="hidden xl:block">
+                <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
+                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-rose-400 font-bold">{currentPool.homeTeam}</span> score next...</h3></div>
+                    <div className="bg-black/50 p-4 space-y-4">{homePredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-rose-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+                </div>
             </div>
-          </div>
         </div>
 
         {/* --- NEW PAYOUTS SECTION BELOW GRID --- */}
         <div className="max-w-[1400px] mx-auto px-4 mb-20">
-          <h3 className="text-center text-slate-400 font-bold uppercase tracking-widest text-sm mb-6">Payouts & Winners</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { title: 'Quarter 1', data: q1Data },
-              { title: 'Quarter 2', data: halfData },
-              { title: 'Quarter 3', data: q3Data },
-              { title: 'Quarter 4', data: finalData }
-            ].map((card, idx) => (
-              <div key={idx} className="bg-black border border-slate-800 rounded-xl p-6 flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
-                {/* Background Glow */}
-                <div className={`absolute top-0 w-full h-1 opacity-20 group-hover:opacity-50 transition-opacity ${card.data.isLocked ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-
-                <h4 className="text-slate-400 font-bold text-sm uppercase mb-4">{card.title}</h4>
-
-                {/* Scores */}
-                <div className="flex items-center gap-4 mb-2">
-                  <div className="flex items-center gap-2">
-                    {homeLogo ? <img src={homeLogo} className="w-8 h-8 object-contain" /> : <div className="w-8 h-8 bg-rose-900/50 rounded-full"></div>}
-                    <span className="text-3xl font-bold text-white">{card.data.home}</span>
-                  </div>
-                  <span className="text-slate-600 font-bold">-</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-3xl font-bold text-white">{card.data.away}</span>
-                    {awayLogo ? <img src={awayLogo} className="w-8 h-8 object-contain" /> : <div className="w-8 h-8 bg-indigo-900/50 rounded-full"></div>}
-                  </div>
+           <h3 className="text-center text-slate-400 font-bold uppercase tracking-widest text-sm mb-6">Payouts & Winners</h3>
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { title: 'Quarter 1', data: q1Data },
+                { title: 'Quarter 2', data: halfData },
+                { title: 'Quarter 3', data: q3Data },
+                { title: 'Quarter 4', data: finalData }
+              ].map((card, idx) => (
+                <div key={idx} className="bg-black border border-slate-800 rounded-xl p-6 flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
+                   {/* Background Glow */}
+                   <div className={`absolute top-0 w-full h-1 opacity-20 group-hover:opacity-50 transition-opacity ${card.data.isLocked ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+                   
+                   <h4 className="text-slate-400 font-bold text-sm uppercase mb-4">{card.title}</h4>
+                   
+                   {/* Scores */}
+                   <div className="flex items-center gap-4 mb-2">
+                      <div className="flex items-center gap-2">
+                         {homeLogo ? <img src={homeLogo} className="w-8 h-8 object-contain" /> : <div className="w-8 h-8 bg-rose-900/50 rounded-full"></div>}
+                         <span className="text-3xl font-bold text-white">{card.data.home}</span>
+                      </div>
+                      <span className="text-slate-600 font-bold">-</span>
+                      <div className="flex items-center gap-2">
+                         <span className="text-3xl font-bold text-white">{card.data.away}</span>
+                         {awayLogo ? <img src={awayLogo} className="w-8 h-8 object-contain" /> : <div className="w-8 h-8 bg-indigo-900/50 rounded-full"></div>}
+                      </div>
+                   </div>
+                   
+                   <p className="text-xs text-slate-500 mb-6 font-medium">This Quarter: {card.data.qPointsHome} - {card.data.qPointsAway}</p>
+                   
+                   <div className="mb-4">
+                      <p className="text-xs text-slate-400 uppercase font-bold mb-1">In the money:</p>
+                      <p className="text-white font-bold text-lg">{card.data.winnerName}</p>
+                      {card.data.reverseWinnerName && (
+                          <div className="mt-1 flex flex-col items-center">
+                              <span className="text-[10px] text-slate-500">AND (Reverse)</span>
+                              <span className="text-indigo-300 font-bold text-sm">{card.data.reverseWinnerName}</span>
+                          </div>
+                      )}
+                   </div>
+                   
+                   <div className="text-2xl font-bold font-mono text-emerald-400 mb-4">${card.data.amount.toLocaleString()}</div>
+                   
+                   {card.data.isLocked ? (
+                      <Lock size={20} className="text-rose-500/50" />
+                   ) : (
+                      <Unlock size={20} className="text-emerald-500/30" />
+                   )}
                 </div>
-
-                <p className="text-xs text-slate-500 mb-6 font-medium">This Quarter: {card.data.qPointsHome} - {card.data.qPointsAway}</p>
-
-                <div className="mb-4">
-                  <p className="text-xs text-slate-400 uppercase font-bold mb-1">In the money:</p>
-                  <p className="text-white font-bold text-lg">{card.data.winnerName}</p>
-                  {card.data.reverseWinnerName && (
-                    <div className="mt-1 flex flex-col items-center">
-                      <span className="text-[10px] text-slate-500">AND (Reverse)</span>
-                      <span className="text-indigo-300 font-bold text-sm">{card.data.reverseWinnerName}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="text-2xl font-bold font-mono text-emerald-400 mb-4">${card.data.amount.toLocaleString()}</div>
-
-                {card.data.isLocked ? (
-                  <Lock size={20} className="text-rose-500/50" />
-                ) : (
-                  <Unlock size={20} className="text-emerald-500/30" />
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+           </div>
         </div>
       </div>
-    );
-  }
-
-  return <div>Loading...</div>;
+      <AuthModal />
+    </div >
+  );
 };
 
 export default App;

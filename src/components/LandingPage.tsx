@@ -1,14 +1,15 @@
 import React from 'react';
 import { Logo } from './Logo';
-import { Trophy, Users, Zap, Shield, LayoutGrid, Award, Calendar, CheckCircle2 } from 'lucide-react';
+import { Trophy, Users, Zap, Shield, ArrowRight, LayoutGrid, Award, Calendar, CheckCircle2 } from 'lucide-react';
 
 interface LandingPageProps {
-  onLogin: () => void;
+  onLogin: () => void; // Used for "Sign In"
+  onSignup: () => void; // Used for "Get Started" / "Create Pool"
   onBrowse: () => void;
   isLoggedIn: boolean;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onBrowse, isLoggedIn }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onBrowse, isLoggedIn }) => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-orange-500 selection:text-white">
 
@@ -24,12 +25,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onBrowse, isL
               <LayoutGrid size={18} /> Find a Pool
             </button>
             <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
-            <button
-              onClick={onLogin}
-              className="bg-white text-slate-950 hover:bg-orange-50 px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.2)]"
-            >
-              {isLoggedIn ? 'Go to Dashboard' : 'Manager Login'}
-            </button>
+
+            {isLoggedIn ? (
+              <button
+                onClick={onLogin} // Redirects to dashboard if logged in
+                className="bg-white text-slate-950 hover:bg-orange-50 px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+              >
+                Go to Dashboard
+              </button>
+            ) : (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={onLogin}
+                  className="text-sm font-bold text-slate-300 hover:text-white transition-colors"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={onSignup}
+                  className="bg-white text-slate-950 hover:bg-orange-50 px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+                >
+                  Get Started
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </nav>
@@ -59,7 +78,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onBrowse, isL
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200">
             <button
-              onClick={onLogin}
+              onClick={onSignup}
               className="w-full sm:w-auto bg-orange-600 hover:bg-orange-500 text-white px-8 py-4 rounded-xl text-lg font-bold shadow-lg shadow-orange-500/30 transition-all flex items-center justify-center gap-2"
             >
               <Trophy size={20} /> Create Your Pool
@@ -185,7 +204,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onBrowse, isL
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-5xl font-black text-white mb-8">Ready to Start Your Pool?</h2>
           <button
-            onClick={onLogin}
+            onClick={onSignup}
             className="bg-white text-slate-900 hover:bg-orange-50 px-10 py-4 rounded-full text-lg font-bold transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(255,255,255,0.15)] mb-12"
           >
             Launch Manager Dashboard
