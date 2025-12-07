@@ -246,13 +246,34 @@ const App: React.FC = () => {
     return isNaN(val) ? 0 : val;
   };
 
+  const getScoreboardVal = (period: 1 | 2 | 3 | 4, team: 'home' | 'away') => {
+    if (!currentPool) return 0;
+    const s = currentPool.scores;
+    const cur = sanitize(s.current?.[team]);
+    const q1 = s.q1?.[team] !== undefined ? sanitize(s.q1[team]) : null;
+    const half = s.half?.[team] !== undefined ? sanitize(s.half[team]) : null;
+    const q3 = s.q3?.[team] !== undefined ? sanitize(s.q3[team]) : null;
+    const final = s.final?.[team] !== undefined ? sanitize(s.final[team]) : null;
+
+    if (period === 1) return q1 ?? cur;
+    if (period === 2) return half !== null ? half - (q1 ?? 0) : (q1 !== null ? cur - q1 : 0);
+    if (period === 3) return q3 !== null ? q3 - (half ?? 0) : (half !== null ? cur - half : 0);
+    if (period === 4) return final !== null ? final - (q3 ?? 0) : (q3 !== null ? cur - q3 : 0);
+    return 0;
+  };
+
   const getQuarterData = (period: 'q1' | 'half' | 'q3' | 'final') => {
     if (!currentPool) return { home: 0, away: 0, qPointsHome: 0, qPointsAway: 0, winnerName: '', reverseWinnerName: null, amount: 0, isLocked: false };
     const isFinal = !!currentPool.scores[period];
     const lockedScore = currentPool.scores[period];
     const liveScore = currentPool.scores.current;
-    const home = sanitize(lockedScore?.home) || sanitize(liveScore?.home) || 0;
-    const away = sanitize(lockedScore?.away) || sanitize(liveScore?.away) || 0;
+
+    const sHome = lockedScore ? sanitize(lockedScore.home) : sanitize(liveScore?.home);
+    const sAway = lockedScore ? sanitize(lockedScore.away) : sanitize(liveScore?.away);
+
+    const home = sHome;
+    const away = sAway;
+
     let prevHome = 0, prevAway = 0;
     if (period === 'half') { prevHome = sanitize(currentPool.scores.q1?.home); prevAway = sanitize(currentPool.scores.q1?.away); }
     else if (period === 'q3') { prevHome = sanitize(currentPool.scores.half?.home); prevAway = sanitize(currentPool.scores.half?.away); }
@@ -474,8 +495,8 @@ const App: React.FC = () => {
             <div className="p-4 border-b border-slate-800 text-center"><h3 className="text-white font-bold">Game Scoreboard</h3></div>
             <div className="p-4">
               <div className="grid grid-cols-7 gap-2 text-center text-sm mb-2 text-slate-500 font-bold uppercase text-[10px]"><div className="col-span-2 text-left pl-2">Team</div><div>1</div><div>2</div><div>3</div><div>4</div><div>T</div></div>
-              <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.half?.away) - sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.q3?.away) - sanitize(currentPool.scores.half?.away)}</div><div>{sanitize(currentPool.scores.final?.away) - sanitize(currentPool.scores.q3?.away)}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
-              <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.half?.home) - sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.q3?.home) - sanitize(currentPool.scores.half?.home)}</div><div>{sanitize(currentPool.scores.final?.home) - sanitize(currentPool.scores.q3?.home)}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
+              <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{getScoreboardVal(1, 'away')}</div><div>{getScoreboardVal(2, 'away')}</div><div>{getScoreboardVal(3, 'away')}</div><div>{getScoreboardVal(4, 'away')}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
+              <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{getScoreboardVal(1, 'home')}</div><div>{getScoreboardVal(2, 'home')}</div><div>{getScoreboardVal(3, 'home')}</div><div>{getScoreboardVal(4, 'home')}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
             </div>
           </div>
           {/* 3. Payout Structure */}
