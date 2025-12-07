@@ -79,7 +79,6 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
 
   const [pools, setPools] = useState<GameState[]>(() => {
@@ -144,7 +143,6 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentPool?.gameId, currentPool?.id, isSimulating]);
 
-  // Recalculate winners whenever the pool changes
   const winners = useMemo(() => {
     if (!currentPool) return [];
     return calculateWinners(currentPool);
@@ -390,7 +388,6 @@ const App: React.FC = () => {
     const halfData = getQuarterData('half');
     const q3Data = getQuarterData('q3');
     const finalData = getQuarterData('final');
-
     const homeLogo = getTeamLogo(currentPool.homeTeam);
     const awayLogo = getTeamLogo(currentPool.awayTeam);
     const homePredictions = calculateScenarioWinners(currentPool, 'home');
@@ -400,7 +397,7 @@ const App: React.FC = () => {
     const isAdmin = user && user.id === currentPool.ownerId;
 
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20 relative">
+      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative">
         <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
         {/* Header */}
         <div className="max-w-[1400px] mx-auto px-4 pt-6 flex justify-between items-center">
