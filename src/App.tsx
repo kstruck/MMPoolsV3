@@ -6,7 +6,7 @@ import { LandingPage } from './components/LandingPage';
 import { Logo } from './components/Logo';
 import { createNewPool, getTeamLogo } from './constants';
 import type { GameState, Scores, PlayerDetails, User } from './types';
-import { calculateWinners, generateRandomAxis, calculateScenarioWinners, getLastDigit } from './services/gameLogic';
+import { calculateWinners, generateRandomAxis, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X } from 'lucide-react';
@@ -79,6 +79,7 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
 
   const [pools, setPools] = useState<GameState[]>(() => {
@@ -217,13 +218,7 @@ const App: React.FC = () => {
     setTimeout(() => { setIsSimulating(false); setSimMessage(null); }, 13000);
   };
 
-  const handleOpenAuth = () => {
-    if (user) {
-      window.location.hash = '#admin';
-      return;
-    }
-    setShowAuthModal(true);
-  };
+
 
   const sanitize = (n: any) => {
     if (n === null || n === undefined) return 0;
@@ -390,10 +385,6 @@ const App: React.FC = () => {
     const finalData = getQuarterData('final');
     const homeLogo = getTeamLogo(currentPool.homeTeam);
     const awayLogo = getTeamLogo(currentPool.awayTeam);
-    const homePredictions = calculateScenarioWinners(currentPool, 'home');
-    const awayPredictions = calculateScenarioWinners(currentPool, 'away');
-    const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
-    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
     const isAdmin = user && user.id === currentPool.ownerId;
 
     return (
