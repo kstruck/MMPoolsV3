@@ -10,7 +10,7 @@ import { calculateWinners, generateRandomAxis, calculateScenarioWinners, getLast
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X, Shield } from 'lucide-react';
+import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X, Shield, Loader } from 'lucide-react';
 
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
@@ -93,6 +93,7 @@ const App: React.FC = () => {
   const [shareUrl, setShareUrl] = useState('');
 
   const [pools, setPools] = useState<GameState[]>([]);
+  const [isPoolsLoading, setIsPoolsLoading] = useState(true);
 
   const [isSimulating, setIsSimulating] = useState(false);
   const [simMessage, setSimMessage] = useState<string | null>(null);
@@ -117,6 +118,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsubscribe = dbService.subscribeToPools((updatedPools) => {
       setPools(updatedPools);
+      setIsPoolsLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -464,6 +466,7 @@ const App: React.FC = () => {
   }
 
   if (route.view === 'pool') {
+    if (isPoolsLoading) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
     if (!currentPool) return <div className="text-white p-10">Pool Not Found</div>;
 
     const q1Data = getQuarterData('q1');
@@ -483,7 +486,7 @@ const App: React.FC = () => {
         <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
         {/* Header */}
         <div className="max-w-[1400px] mx-auto px-4 pt-6 flex justify-between items-center">
-          <button onClick={() => window.location.hash = '#'} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Return to My Grids</button>
+          <button onClick={() => window.location.hash = '#admin'} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Return to My Grids</button>
           <div className="text-center">
             <h1 className="text-3xl font-bold text-white mb-1">{currentPool.name}</h1>
             <p className="text-slate-400 text-sm font-medium">{squaresRemaining} Squares Remaining</p>

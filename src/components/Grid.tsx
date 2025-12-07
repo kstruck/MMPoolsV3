@@ -464,14 +464,15 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               borderClass = "border-slate-700";
                               effectClass += " brightness-110";
                            } else if (isOwned) {
-                              bgClass = "bg-slate-900 shadow-[inset_0_2px_6px_rgba(0,0,0,0.8)]"; // Deep inset
-                              borderClass = "border-slate-950";
-                              textClass = "text-slate-400";
+                              bgClass = "bg-black shadow-inner";
+                              borderClass = "border-slate-800";
+                              textClass = "text-slate-200 font-medium";
                            } else if (isAvailable) {
-                              bgClass = "bg-slate-800/40 hover:bg-slate-700/80 cursor-pointer backdrop-blur-sm hover:shadow-lg hover:shadow-indigo-500/5";
-                              borderClass = "border-slate-700/50 hover:border-indigo-400/50";
+                              bgClass = "bg-slate-800 hover:bg-slate-700 cursor-pointer backdrop-blur-sm hover:shadow-lg hover:shadow-indigo-500/10";
+                              borderClass = "border-slate-700 hover:border-indigo-400/50";
                               effectClass += " hover:scale-[1.05] hover:-translate-y-0.5";
                               zIndex = "hover:z-10";
+                              textClass = "text-indigo-200";
                            } else if (isLockedEmpty) {
                               bgClass = "bg-slate-950/30 opacity-40 cursor-not-allowed";
                               borderClass = "border-slate-900/50";
