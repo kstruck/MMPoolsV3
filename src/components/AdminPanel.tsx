@@ -4,7 +4,6 @@ import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Activity,
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
-import { generateRandomAxis } from '../services/gameLogic';
 
 interface AdminPanelProps {
   gameState: GameState;
@@ -21,7 +20,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   updateConfig,
   updateScores,
   generateNumbers,
-  resetGame,
   onBack,
   onShare
 }) => {
