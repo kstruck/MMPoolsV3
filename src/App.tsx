@@ -79,7 +79,6 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
 
   const [pools, setPools] = useState<GameState[]>(() => {
@@ -144,21 +143,11 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentPool?.gameId, currentPool?.id, isSimulating]);
 
-  // --- DATA CALCULATIONS (Moved Top Level) ---
   const winners = useMemo(() => {
     if (!currentPool) return [];
     return calculateWinners(currentPool);
   }, [currentPool]);
 
-  const homeLogo = currentPool ? getTeamLogo(currentPool.homeTeam) : null;
-  const awayLogo = currentPool ? getTeamLogo(currentPool.awayTeam) : null;
-  const homePredictions = currentPool ? calculateScenarioWinners(currentPool, 'home') : [];
-  const awayPredictions = currentPool ? calculateScenarioWinners(currentPool, 'away') : [];
-  const squaresRemaining = currentPool ? 100 - currentPool.squares.filter(s => s.owner).length : 0;
-  const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
-  const isAdmin = user && currentPool && user.id === currentPool.ownerId;
-
-  // --- HELPERS ---
   const updatePool = (id: string, updates: Partial<GameState>) => {
     setPools(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   };
@@ -284,11 +273,6 @@ const App: React.FC = () => {
     return { home, away, qPointsHome, qPointsAway, winnerName, reverseWinnerName, amount, isLocked };
   };
 
-  const q1Data = getQuarterData('q1');
-  const halfData = getQuarterData('half');
-  const q3Data = getQuarterData('q3');
-  const finalData = getQuarterData('final');
-
   // --- RENDER SWITCH ---
   if (route.view === 'home') {
     return (
@@ -400,6 +384,18 @@ const App: React.FC = () => {
   if (route.view === 'pool') {
     if (!currentPool) return <div className="text-white p-10">Pool Not Found</div>;
 
+    const q1Data = getQuarterData('q1');
+    const halfData = getQuarterData('half');
+    const q3Data = getQuarterData('q3');
+    const finalData = getQuarterData('final');
+    const homeLogo = getTeamLogo(currentPool.homeTeam);
+    const awayLogo = getTeamLogo(currentPool.awayTeam);
+    const homePredictions = calculateScenarioWinners(currentPool, 'home');
+    const awayPredictions = calculateScenarioWinners(currentPool, 'away');
+    const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
+    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
+    const isAdmin = user && user.id === currentPool.ownerId;
+
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative">
         <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
@@ -472,7 +468,7 @@ const App: React.FC = () => {
             <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
             <div className="space-y-3">
               {Object.entries(currentPool.payouts).map(([key, percent]) => {
-                const effectivePot = Math.max(0, totalPot - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
+                const effectivePot = Math.max(0, (currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare) - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
                 const amount = (effectivePot * (percent as number)) / 100;
                 const label = key === 'q1' ? '1st Quarter' : key === 'half' ? '2nd Quarter' : key === 'q3' ? '3rd Quarter' : 'Final Score';
                 return (<div key={key} className="flex justify-between items-center text-sm"><span className="text-slate-400 font-bold">{label}:</span><span className="text-white font-mono font-bold">${amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}</span></div>);
