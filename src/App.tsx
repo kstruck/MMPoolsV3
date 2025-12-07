@@ -16,8 +16,7 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
   const [pools, setPools] = useState<GameState[]>(() => {
     try {
@@ -267,9 +266,11 @@ const App: React.FC = () => {
     const lockedScore = currentPool.scores[period];
     const liveScore = currentPool.scores.current;
 
+    // Effective score is the locked score if final, else current score, else 0-0
     const home = sanitize(lockedScore?.home) || sanitize(liveScore?.home) || 0;
     const away = sanitize(lockedScore?.away) || sanitize(liveScore?.away) || 0;
 
+    // Calculate 'This Quarter' points (Difference from prev quarter)
     let prevHome = 0, prevAway = 0;
     if (period === 'half') {
       prevHome = sanitize(currentPool.scores.q1?.home);
@@ -285,6 +286,7 @@ const App: React.FC = () => {
     const qPointsHome = home - prevHome;
     const qPointsAway = away - prevAway;
 
+    // Find 'In the money'
     let winnerName = "TBD";
     let reverseWinnerName: string | null = null;
     let isLocked = isFinal;
@@ -293,6 +295,7 @@ const App: React.FC = () => {
       const hD = getLastDigit(home);
       const aD = getLastDigit(away);
 
+      // Main Winner
       const row = currentPool.axisNumbers.home.indexOf(hD);
       const col = currentPool.axisNumbers.away.indexOf(aD);
 
@@ -302,12 +305,14 @@ const App: React.FC = () => {
         winnerName = owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
       }
 
+      // Reverse Winner Logic
       if (currentPool.ruleVariations.reverseWinners) {
         const rRow = currentPool.axisNumbers.home.indexOf(aD);
         const rCol = currentPool.axisNumbers.away.indexOf(hD);
 
         if (rRow !== -1 && rCol !== -1) {
           const rSqId = rRow * 10 + rCol;
+          // Only show if it is a distinct square
           if (rSqId !== (row * 10 + col)) {
             const rOwner = currentPool.squares[rSqId].owner;
             reverseWinnerName = rOwner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
@@ -316,17 +321,23 @@ const App: React.FC = () => {
       }
     }
 
-    const totalPot = currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare;
+    // Calculate Pot Amount
     const payoutPct = currentPool.payouts[period];
     let distributablePot = Math.max(0, totalPot - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
     let amount = (distributablePot * payoutPct) / 100;
 
+    // If there is a reverse winner, split pot displayed
     if (reverseWinnerName) {
       amount = amount / 2;
     }
 
     return { home, away, qPointsHome, qPointsAway, winnerName, reverseWinnerName, amount, isLocked };
   };
+
+  const q1Data = getQuarterData('q1');
+  const halfData = getQuarterData('half');
+  const q3Data = getQuarterData('q3');
+  const finalData = getQuarterData('final');
 
   // --- Sub-components ---
   const ShareModal = () => {
@@ -403,7 +414,7 @@ const App: React.FC = () => {
   }
 
   // Admin / Dashboard Views
-  if (route.view === 'admin-dashboard' || route.view === 'admin-editor') {
+  if (route.view === 'admin-dashboard') {
     if (!user) {
       return (
         <React.Fragment>
@@ -418,34 +429,6 @@ const App: React.FC = () => {
         </React.Fragment>
       );
     }
-    if (route.view === 'admin-editor' && currentPool) {
-      if (currentPool.ownerId && currentPool.ownerId !== user.id) {
-        return <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">Unauthorized</div>;
-      }
-      return (
-        <React.Fragment>
-          <AdminPanel
-            gameState={currentPool}
-            updateConfig={(updates) => updatePool(currentPool.id, updates)}
-            updateScores={(scores) => updateScores(currentPool.id, scores)}
-            generateNumbers={() => updatePool(currentPool.id, { axisNumbers: { home: generateRandomAxis(), away: generateRandomAxis() } })}
-            resetGame={() => { const fresh = createNewPool(currentPool.name, user.id); updatePool(currentPool.id, { ...fresh, id: currentPool.id }); }}
-            onBack={() => window.location.hash = '#admin'}
-            onShare={() => openShareModal(currentPool.id)}
-          />
-          <ShareModal />
-        </React.Fragment>
-      );
-    }
-    if (route.view === 'admin-editor' && !currentPool) {
-      return (
-        <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4">
-          <div className="text-xl font-bold mb-4">Pool Not Found</div>
-          <button onClick={() => window.location.hash = '#admin'} className="text-indigo-400 hover:underline">Return to Dashboard</button>
-        </div>
-      );
-    }
-    // Dashboard
     const userPools = pools.filter(p => p.ownerId === user.id);
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
@@ -482,7 +465,35 @@ const App: React.FC = () => {
     );
   }
 
-  // Browse Public Pools (Formerly Home)
+  if (route.view === 'admin-editor') {
+    if (!user) return <AuthModal />;
+    if (!currentPool) {
+      return (
+        <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4">
+          <div className="text-xl font-bold mb-4">Pool Not Found</div>
+          <button onClick={() => window.location.hash = '#admin'} className="text-indigo-400 hover:underline">Return to Dashboard</button>
+        </div>
+      );
+    }
+    if (currentPool.ownerId && currentPool.ownerId !== user.id) {
+      return <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">Unauthorized</div>;
+    }
+    return (
+      <React.Fragment>
+        <AdminPanel
+          gameState={currentPool}
+          updateConfig={(updates) => updatePool(currentPool.id, updates)}
+          updateScores={(scores) => updateScores(currentPool.id, scores)}
+          generateNumbers={() => updatePool(currentPool.id, { axisNumbers: { home: generateRandomAxis(), away: generateRandomAxis() } })}
+          resetGame={() => { const fresh = createNewPool(currentPool.name, user.id); updatePool(currentPool.id, { ...fresh, id: currentPool.id }); }}
+          onBack={() => window.location.hash = '#admin'}
+          onShare={() => openShareModal(currentPool.id)}
+        />
+        <ShareModal />
+      </React.Fragment>
+    );
+  }
+
   if (route.view === 'browse') {
     const publicPools = pools.filter(p => p.isPublic);
     return (
@@ -520,7 +531,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Pool View
   if (route.view === 'pool') {
     if (!currentPool) {
       return (
@@ -533,14 +543,12 @@ const App: React.FC = () => {
       );
     }
 
-    const totalPot = currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare;
-    const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
-    const homePredictions = calculateScenarioWinners(currentPool, 'home');
-    const awayPredictions = calculateScenarioWinners(currentPool, 'away');
-    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
     const homeLogo = getTeamLogo(currentPool.homeTeam);
     const awayLogo = getTeamLogo(currentPool.awayTeam);
-
+    const homePredictions = calculateScenarioWinners(currentPool, 'home');
+    const awayPredictions = calculateScenarioWinners(currentPool, 'away');
+    const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
+    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
     const isAdmin = user && user.id === currentPool.ownerId;
 
     // Data Calculation moved inside scope
@@ -631,6 +639,7 @@ const App: React.FC = () => {
             </div>
         </div>
 
+        {/* --- NEW PAYOUTS SECTION BELOW GRID --- */}
         <div className="max-w-[1400px] mx-auto px-4 mb-20">
            <h3 className="text-center text-slate-400 font-bold uppercase tracking-widest text-sm mb-6">Payouts & Winners</h3>
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -680,3 +689,5 @@ const App: React.FC = () => {
     </div >
   );
 };
+
+export default App;
