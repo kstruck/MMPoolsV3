@@ -43,8 +43,8 @@ export const calculateScenarioWinners = (state: GameState, scoringTeam: 'home' |
       awayDigit = getLastDigit(currentAway + points);
     }
 
-    const rowIndex = state.axisNumbers!.home.indexOf(homeDigit);
-    const colIndex = state.axisNumbers!.away.indexOf(awayDigit);
+    const rowIndex = state.axisNumbers!.away.indexOf(awayDigit);
+    const colIndex = state.axisNumbers!.home.indexOf(homeDigit);
 
     if (rowIndex !== -1 && colIndex !== -1) {
       const squareId = rowIndex * 10 + colIndex;
@@ -75,8 +75,8 @@ export const calculateWinners = (state: GameState): Winner[] => {
       const homeDigit = getLastDigit(event.home);
       const awayDigit = getLastDigit(event.away);
 
-      const row = state.axisNumbers!.home.indexOf(homeDigit);
-      const col = state.axisNumbers!.away.indexOf(awayDigit);
+      const row = state.axisNumbers!.away.indexOf(awayDigit);
+      const col = state.axisNumbers!.home.indexOf(homeDigit);
 
       if (row !== -1 && col !== -1) {
         const squareId = row * 10 + col;
@@ -120,8 +120,8 @@ export const calculateWinners = (state: GameState): Winner[] => {
       rolloverPot = 0;
 
       // Identify Winning Coordinates
-      const mainRowIndex = state.axisNumbers!.home.indexOf(homeDigit);
-      const mainColIndex = state.axisNumbers!.away.indexOf(awayDigit);
+      const mainRowIndex = state.axisNumbers!.away.indexOf(awayDigit);
+      const mainColIndex = state.axisNumbers!.home.indexOf(homeDigit);
 
       let winningScenarios = [];
 
@@ -137,8 +137,8 @@ export const calculateWinners = (state: GameState): Winner[] => {
 
       // Reverse Scenario
       if (state.ruleVariations.reverseWinners) {
-        const revRowIndex = state.axisNumbers!.home.indexOf(awayDigit);
-        const revColIndex = state.axisNumbers!.away.indexOf(homeDigit);
+        const revRowIndex = state.axisNumbers!.away.indexOf(homeDigit);
+        const revColIndex = state.axisNumbers!.home.indexOf(awayDigit);
         if (revRowIndex !== -1 && revColIndex !== -1) {
           const revSquareId = revRowIndex * 10 + revColIndex;
           // Avoid double counting same square

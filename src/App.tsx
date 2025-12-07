@@ -245,14 +245,14 @@ const App: React.FC = () => {
     if (currentPool.axisNumbers) {
       const hD = getLastDigit(home);
       const aD = getLastDigit(away);
-      const row = currentPool.axisNumbers.home.indexOf(hD);
-      const col = currentPool.axisNumbers.away.indexOf(aD);
+      const row = currentPool.axisNumbers.away.indexOf(aD);
+      const col = currentPool.axisNumbers.home.indexOf(hD);
       if (row !== -1 && col !== -1) {
         winnerName = currentPool.squares[row * 10 + col].owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
       }
       if (currentPool.ruleVariations.reverseWinners) {
-        const rRow = currentPool.axisNumbers.home.indexOf(aD);
-        const rCol = currentPool.axisNumbers.away.indexOf(hD);
+        const rRow = currentPool.axisNumbers.away.indexOf(hD);
+        const rCol = currentPool.axisNumbers.home.indexOf(aD);
         if (rRow !== -1 && rCol !== -1) {
           const rSqId = rRow * 10 + rCol;
           if (rSqId !== (row * 10 + col)) {

@@ -312,14 +312,14 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
          {/* --- SECTION 2: GRID HEADER (TEAMS) --- */}
          <div className="w-full bg-slate-900 p-4 rounded-t-xl border border-slate-800 flex flex-wrap justify-between items-center gap-4 shadow-lg relative z-10">
-            <div className="flex items-center gap-3 bg-gradient-to-r from-rose-900/40 to-slate-900 px-4 py-2 rounded-lg border border-rose-500/30 shadow-inner">
-               {homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain drop-shadow" />}
+            <div className="flex items-center gap-3 bg-gradient-to-r from-indigo-900/40 to-slate-900 px-4 py-2 rounded-lg border border-indigo-500/30 shadow-inner">
+               {awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain drop-shadow" />}
                <div className="flex flex-col">
-                  <span className="text-[10px] text-rose-400 uppercase font-bold flex items-center gap-1 tracking-wider">
+                  <span className="text-[10px] text-indigo-400 uppercase font-bold flex items-center gap-1 tracking-wider">
                      <ArrowDown size={10} /> Rows (Left)
                   </span>
                   <span className="text-lg font-bold text-white leading-none">
-                     {gameState.homeTeam}
+                     {gameState.awayTeam}
                   </span>
                </div>
             </div>
@@ -329,16 +329,16 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                <span>Last digit of score wins</span>
             </div>
 
-            <div className="flex items-center gap-3 bg-gradient-to-l from-indigo-900/40 to-slate-900 px-4 py-2 rounded-lg border border-indigo-500/30 shadow-inner text-right">
+            <div className="flex items-center gap-3 bg-gradient-to-l from-rose-900/40 to-slate-900 px-4 py-2 rounded-lg border border-rose-500/30 shadow-inner text-right">
                <div className="flex flex-col items-end">
-                  <span className="text-[10px] text-indigo-400 uppercase font-bold flex items-center gap-1 tracking-wider">
+                  <span className="text-[10px] text-rose-400 uppercase font-bold flex items-center gap-1 tracking-wider">
                      Cols (Top) <ArrowRight size={10} />
                   </span>
                   <span className="text-lg font-bold text-white leading-none">
-                     {gameState.awayTeam}
+                     {gameState.homeTeam}
                   </span>
                </div>
-               {awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain drop-shadow" />}
+               {homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain drop-shadow" />}
             </div>
          </div>
 
@@ -355,57 +355,57 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      <div className="absolute w-[200%] h-px bg-slate-700/50 rotate-45 transform origin-center z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></div>
 
                      <div className="absolute top-2 right-2 z-20 flex flex-col items-end">
-                        {awayLogo ? (
-                           <img src={awayLogo} className="w-6 h-6 object-contain drop-shadow-md" />
-                        ) : (
-                           <span className="text-[10px] font-bold text-indigo-400 uppercase">{gameState.awayTeam.substring(0, 3)}</span>
-                        )}
-                     </div>
-
-                     <div className="absolute bottom-2 left-2 z-20 flex flex-col items-start">
                         {homeLogo ? (
                            <img src={homeLogo} className="w-6 h-6 object-contain drop-shadow-md" />
                         ) : (
                            <span className="text-[10px] font-bold text-rose-400 uppercase">{gameState.homeTeam.substring(0, 3)}</span>
                         )}
                      </div>
+
+                     <div className="absolute bottom-2 left-2 z-20 flex flex-col items-start">
+                        {awayLogo ? (
+                           <img src={awayLogo} className="w-6 h-6 object-contain drop-shadow-md" />
+                        ) : (
+                           <span className="text-[10px] font-bold text-indigo-400 uppercase">{gameState.awayTeam.substring(0, 3)}</span>
+                        )}
+                     </div>
                   </div>
 
-                  {/* Top Row Headers (Away Team Numbers) */}
+                  {/* Top Row Headers (Home Team Numbers) */}
                   {Array.from({ length: 10 }).map((_, i) => {
-                     const digit = gameState.axisNumbers ? gameState.axisNumbers.away[i] : null;
-                     const isHighlighted = highlightAwayDigit !== undefined && digit !== null && digit === highlightAwayDigit && gameState.isLocked;
+                     const digit = gameState.axisNumbers ? gameState.axisNumbers.home[i] : null; // Top is Home
+                     const isHighlighted = highlightHomeDigit !== undefined && digit !== null && digit === highlightHomeDigit && gameState.isLocked;
                      const baseClass = "flex flex-col items-center justify-center font-bold text-2xl h-16 rounded-lg border relative overflow-hidden group transition-all duration-300";
                      const colorClass = isHighlighted
-                        ? "bg-gradient-to-b from-indigo-600 to-indigo-800 text-white border-indigo-400 shadow-[0_0_15px_rgba(79,70,229,0.5)] z-20 scale-105"
-                        : "bg-slate-900 text-indigo-200/70 border-slate-800 hover:border-indigo-500/30 hover:bg-slate-800";
+                        ? "bg-gradient-to-b from-rose-600 to-rose-800 text-white border-rose-400 shadow-[0_0_15px_rgba(225,29,72,0.5)] z-20 scale-105"
+                        : "bg-slate-900 text-rose-200/70 border-slate-800 hover:border-rose-500/30 hover:bg-slate-800";
 
                      return (
                         <div key={`head-top-${i}`} className={`${baseClass} ${colorClass}`}>
-                           <span className={`text-[9px] absolute top-1 uppercase tracking-widest w-full text-center px-1 truncate font-bold flex justify-center items-center gap-1 ${isHighlighted ? 'text-indigo-100' : 'text-slate-600'}`}>
-                              {gameState.awayTeam.substring(0, 3)}
+                           <span className={`text-[9px] absolute top-1 uppercase tracking-widest w-full text-center px-1 truncate font-bold flex justify-center items-center gap-1 ${isHighlighted ? 'text-rose-100' : 'text-slate-600'}`}>
+                              {gameState.homeTeam.substring(0, 3)}
                            </span>
                            <span className="mt-2 font-mono drop-shadow-sm">{digit !== null ? digit : '?'}</span>
                         </div>
                      );
                   })}
 
-                  {/* Render Rows */}
+                  {/* Render Rows (Away Team Numbers is now Left) */}
                   {Array.from({ length: 10 }).map((_, rowIndex) => (
                      <React.Fragment key={`row-${rowIndex}`}>
-                        {/* Left Column Header (Home Team Number) */}
+                        {/* Left Column Header (Away Team Number) */}
                         {(() => {
-                           const digit = gameState.axisNumbers ? gameState.axisNumbers.home[rowIndex] : null;
-                           const isHighlighted = highlightHomeDigit !== undefined && digit !== null && digit === highlightHomeDigit && gameState.isLocked;
+                           const digit = gameState.axisNumbers ? gameState.axisNumbers.away[rowIndex] : null; // Left is Away
+                           const isHighlighted = highlightAwayDigit !== undefined && digit !== null && digit === highlightAwayDigit && gameState.isLocked;
                            const baseClass = "flex flex-col items-center justify-center font-bold text-2xl w-full h-16 rounded-lg border relative overflow-hidden transition-all duration-300";
                            const colorClass = isHighlighted
-                              ? "bg-gradient-to-r from-rose-600 to-rose-800 text-white border-rose-400 shadow-[0_0_15px_rgba(225,29,72,0.5)] z-20 scale-105"
-                              : "bg-slate-900 text-rose-200/70 border-slate-800 hover:border-rose-500/30 hover:bg-slate-800";
+                              ? "bg-gradient-to-r from-indigo-600 to-indigo-800 text-white border-indigo-400 shadow-[0_0_15px_rgba(79,70,229,0.5)] z-20 scale-105"
+                              : "bg-slate-900 text-indigo-200/70 border-slate-800 hover:border-indigo-500/30 hover:bg-slate-800";
 
                            return (
                               <div className={`${baseClass} ${colorClass}`}>
-                                 <span className={`text-[9px] absolute top-1 uppercase tracking-widest w-full text-center px-1 truncate font-bold flex justify-center items-center gap-1 ${isHighlighted ? 'text-rose-100' : 'text-slate-600'}`}>
-                                    {gameState.homeTeam.substring(0, 3)}
+                                 <span className={`text-[9px] absolute top-1 uppercase tracking-widest w-full text-center px-1 truncate font-bold flex justify-center items-center gap-1 ${isHighlighted ? 'text-indigo-100' : 'text-slate-600'}`}>
+                                    {gameState.awayTeam.substring(0, 3)}
                                  </span>
                                  <span className="mt-2 font-mono drop-shadow-sm">{digit !== null ? digit : '?'}</span>
                               </div>
@@ -421,11 +421,11 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            const isSelected = selectedSquares.includes(squareIndex);
 
                            // Highlight logic for active row/col
-                           const homeDigit = gameState.axisNumbers ? gameState.axisNumbers.home[rowIndex] : -1;
-                           const awayDigit = gameState.axisNumbers ? gameState.axisNumbers.away[colIndex] : -1;
+                           const awayDigit = gameState.axisNumbers ? gameState.axisNumbers.away[rowIndex] : -1; // Row is Away
+                           const homeDigit = gameState.axisNumbers ? gameState.axisNumbers.home[colIndex] : -1; // Col is Home
 
-                           const isRowHighlighted = highlightHomeDigit !== undefined && homeDigit === highlightHomeDigit && gameState.isLocked;
-                           const isColHighlighted = highlightAwayDigit !== undefined && awayDigit === highlightAwayDigit && gameState.isLocked;
+                           const isRowHighlighted = highlightAwayDigit !== undefined && awayDigit === highlightAwayDigit && gameState.isLocked;
+                           const isColHighlighted = highlightHomeDigit !== undefined && homeDigit === highlightHomeDigit && gameState.isLocked;
                            const isActiveIntersection = isRowHighlighted && isColHighlighted;
 
                            // --- ENHANCED STYLE LOGIC ---
