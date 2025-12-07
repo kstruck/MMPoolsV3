@@ -19,6 +19,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     e.preventDefault();
     setIsLoading(true);
     try {
+      // Calls match the updated signatures in authService.ts
       if (isRegistering) {
         await authService.register(formData.name, formData.email, formData.password);
       } else {
@@ -27,7 +28,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       onLogin();
     } catch (error) {
       console.error("Auth error", error);
-      alert("Authentication failed. Please try again.");
+      alert("Authentication failed. Please use Google Login.");
     } finally {
       setIsLoading(false);
     }
@@ -48,7 +49,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const handleDemoLogin = async () => {
     setIsLoading(true);
     try {
-      // Create a persistent demo user
+      // Matches the login signature
       await authService.login("admin@test.com", "password");
       onLogin();
     } catch (error) {
@@ -69,7 +70,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             {isRegistering ? 'Sign up to create and manage pools' : 'Sign in to access your dashboard'}
           </p>
         </div>
-        
+
         <div className="p-8 space-y-6">
           {/* Google Button */}
           <button
@@ -90,6 +91,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
           </div>
 
+          {/* Form (Kept for UI structure, but encourages Google login) */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegistering && (
               <div className="space-y-1">
@@ -100,14 +102,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     type="text"
                     required
                     value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                     placeholder="John Doe"
                   />
                 </div>
               </div>
             )}
-            
+
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-400 uppercase">Email</label>
               <div className="relative">
@@ -116,7 +118,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   type="email"
                   required
                   value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   placeholder="name@example.com"
                 />
@@ -131,7 +133,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   type="password"
                   required
                   value={formData.password}
-                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   placeholder="••••••••"
                 />
@@ -153,13 +155,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               )}
             </button>
           </form>
-          
+
           <button
-              onClick={handleDemoLogin}
-              type="button"
-              className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all border border-slate-600"
-            >
-               <KeyRound size={18} /> Quick Demo Login (Admin)
+            onClick={handleDemoLogin}
+            type="button"
+            className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all border border-slate-600"
+          >
+            <KeyRound size={18} /> Quick Demo Login (Admin)
           </button>
 
           <div className="text-center pt-2">

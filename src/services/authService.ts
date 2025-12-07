@@ -17,7 +17,7 @@ const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
     id: firebaseUser.uid,
     name: firebaseUser.displayName || "Unknown User",
     email: firebaseUser.email || "",
-    picture: firebaseUser.photoURL || undefined // Allows undefined/null per your types
+    picture: firebaseUser.photoURL || undefined
   };
 };
 
@@ -48,17 +48,21 @@ export const authService = {
     }
   },
 
-  // Mock methods for backward compatibility (optional, can be removed if unused)
-  register: async () => { throw new Error("Use Google Login"); },
-  login: async (email: string) => {
+  // Mock methods for backward compatibility with Auth.tsx form
+  // These are required so the build doesn't fail when Auth.tsx calls them with args
+  register: async (_name: string, _email: string, _password: string): Promise<User> => {
+    throw new Error("Please use Google Login");
+  },
+
+  login: async (email: string, _password?: string): Promise<User> => {
     // Handle Demo Login specifically
     if (email === 'admin@test.com') {
       // Create a fake session for demo purposes
-      const demoUser = { id: 'demo_admin', name: 'Demo Admin', email: 'admin@test.com' };
+      const demoUser: User = { id: 'demo_admin', name: 'Demo Admin', email: 'admin@test.com' };
       localStorage.setItem('sbSquaresUser', JSON.stringify(demoUser));
       return demoUser;
     }
-    throw new Error("Use Google Login");
+    throw new Error("Please use Google Login");
   },
 
   // Listener for Auth State
