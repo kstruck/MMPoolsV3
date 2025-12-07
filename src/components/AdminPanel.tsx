@@ -1,4 +1,4 @@
-import import React, { useState } from 'react';
+import React, { useState } from 'react';
 import type { GameState, Scores, PayoutConfig, Square } from '../types';
 import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Activity, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
@@ -83,7 +83,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsThinking(true);
     setAiIdea('');
     try {
-      // VITE FIX: Use import.meta.env instead of process.env
       const apiKey = import.meta.env.VITE_API_KEY;
 
       if (!apiKey) {
