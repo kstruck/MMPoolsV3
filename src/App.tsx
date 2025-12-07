@@ -16,7 +16,8 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
   const [pools, setPools] = useState<GameState[]>(() => {
     try {
