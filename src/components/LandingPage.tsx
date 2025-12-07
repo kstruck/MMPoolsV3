@@ -1,10 +1,10 @@
 import React from 'react';
 import { Logo } from './Logo';
-import { Trophy, Users, Zap, Shield, ArrowRight, LayoutGrid, Award, Calendar, CheckCircle2 } from 'lucide-react';
+import { Trophy, Users, Zap, Shield, LayoutGrid, Award, Calendar, CheckCircle2 } from 'lucide-react';
 
 interface LandingPageProps {
-  onLogin: () => void; // Used for "Sign In"
-  onSignup: () => void; // Used for "Get Started" / "Create Pool"
+  onLogin: () => void;
+  onSignup: () => void;
   onBrowse: () => void;
   isLoggedIn: boolean;
 }
