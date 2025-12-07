@@ -16,12 +16,12 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [_authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
   const [pools, setPools] = useState<GameState[]>(() => {
     try {
       const saved = localStorage.getItem('sbSquaresPools');
       if (!saved) return [];
-
       const parsed = JSON.parse(saved);
       const ensureFields = (p: any) => ({
         ...createNewPool(p.name || 'Pool', p.ownerId),
@@ -31,52 +31,39 @@ const App: React.FC = () => {
         ruleVariations: p.ruleVariations ? { ...createNewPool().ruleVariations, ...p.ruleVariations } : createNewPool().ruleVariations,
         scoreEvents: p.scoreEvents || [],
         scoreChangePayoutAmount: p.scoreChangePayoutAmount ?? 5,
-        scores: { ...createNewPool().scores, ...p.scores } // Ensure 'current' field exists
+        scores: { ...createNewPool().scores, ...p.scores }
       });
-
-      if (!Array.isArray(parsed) && typeof parsed === 'object') {
-        return [ensureFields(parsed)];
-      }
-      if (Array.isArray(parsed)) {
-        return parsed.map(ensureFields);
-      }
+      if (!Array.isArray(parsed) && typeof parsed === 'object') return [ensureFields(parsed)];
+      if (Array.isArray(parsed)) return parsed.map(ensureFields);
       return [];
     } catch (e) {
-      console.error("Error loading pools:", e);
       return [];
     }
   });
 
-  // Share Modal State
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
-
-  // Simulation State
   const [isSimulating, setIsSimulating] = useState(false);
   const [simMessage, setSimMessage] = useState<string | null>(null);
 
-  // Listen to hash changes
   useEffect(() => {
     const handleHashChange = () => setHash(window.location.hash);
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Listen for Auth changes
   useEffect(() => {
     const unsubscribe = authService.onAuthStateChanged((u) => {
       setUser(u);
-      if (u) setShowAuthModal(false); // Close modal on successful login
+      if (u) setShowAuthModal(false);
     });
     return unsubscribe;
   }, []);
 
-  // Persistence
   useEffect(() => {
     localStorage.setItem('sbSquaresPools', JSON.stringify(pools));
   }, [pools]);
 
-  // --- Route Parsing ---
   const route = useMemo(() => {
     if (hash.startsWith('#admin')) {
       const parts = hash.split('/');
@@ -98,78 +85,44 @@ const App: React.FC = () => {
     return pools.find(p => p.id === route.id) || null;
   }, [pools, route.id]);
 
-  // --- Auto-Poll Scores ---
   useEffect(() => {
-    if (!currentPool?.gameId || isSimulating) return; // Don't poll if simulating
-
-    // Initial fetch
-    fetchGameScore(currentPool).then(result => {
-      if (result) updateScores(currentPool.id, result.scores);
-    });
-
+    if (!currentPool?.gameId || isSimulating) return;
+    fetchGameScore(currentPool).then(result => { if (result) updateScores(currentPool.id, result.scores); });
     const interval = setInterval(() => {
-      fetchGameScore(currentPool).then(result => {
-        if (result) updateScores(currentPool.id, result.scores);
-      });
-    }, 60000); // 1 minute
-
+      fetchGameScore(currentPool).then(result => { if (result) updateScores(currentPool.id, result.scores); });
+    }, 60000);
     return () => clearInterval(interval);
   }, [currentPool?.gameId, currentPool?.id, isSimulating]);
 
-  // --- Winners Calculation ---
   const winners = useMemo(() => {
     if (!currentPool) return [];
     return calculateWinners(currentPool);
   }, [currentPool]);
 
-  // --- Actions ---
   const updatePool = (id: string, updates: Partial<GameState>) => {
     setPools(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   };
 
-  // Fixed: Use functional update to avoid stale closures in timeouts/async operations
   const updateScores = (id: string, scoreUpdates: Partial<Scores>) => {
     setPools(prevPools => prevPools.map(pool => {
       if (pool.id !== id) return pool;
-      return {
-        ...pool,
-        scores: { ...pool.scores, ...scoreUpdates }
-      };
+      return { ...pool, scores: { ...pool.scores, ...scoreUpdates } };
     }));
   };
 
   const handleClaimSquares = (ids: number[], name: string, details: PlayerDetails): { success: boolean; message?: string } => {
     if (!currentPool) return { success: false };
-
     const normalizedName = name.trim();
     if (!normalizedName) return { success: false, message: 'Name required' };
-
-    const currentOwned = currentPool.squares.filter(
-      s => s.owner && s.owner.toLowerCase() === normalizedName.toLowerCase()
-    ).length;
-
-    // Strict number check for limit
+    const currentOwned = currentPool.squares.filter(s => s.owner && s.owner.toLowerCase() === normalizedName.toLowerCase()).length;
     const limit = Number(currentPool.maxSquaresPerPlayer) || 10;
-
-    if (currentOwned + ids.length > limit) {
-      return {
-        success: false,
-        message: `Limit exceeded. You already own ${currentOwned}. Max allowed is ${limit}.`
-      };
-    }
-
+    if (currentOwned + ids.length > limit) return { success: false, message: `Limit exceeded. Max ${limit}.` };
     const newSquares = [...currentPool.squares];
     ids.forEach(id => {
       if (!newSquares[id].owner) {
-        newSquares[id] = {
-          ...newSquares[id],
-          owner: normalizedName,
-          playerDetails: details,
-          isPaid: false
-        };
+        newSquares[id] = { ...newSquares[id], owner: normalizedName, playerDetails: details, isPaid: false };
       }
     });
-
     updatePool(currentPool.id, { squares: newSquares });
     return { success: true };
   };
@@ -181,73 +134,47 @@ const App: React.FC = () => {
   };
 
   const handleDeletePool = (id: string) => {
-    // Sandbox fix: Remove window.confirm
-    const newPools = pools.filter(p => p.id !== id);
-    setPools(newPools);
+    setPools(pools.filter(p => p.id !== id));
   };
 
   const handleRunSimulation = (poolId: string) => {
-    // Sandbox fix: Remove window.confirm
     setIsSimulating(true);
     setSimMessage("Simulation Started: Filling Grid...");
-
-    // 1. Prepare Pool (Fill, Lock, Generate)
     setPools(prev => prev.map(p => {
       if (p.id !== poolId) return p;
-
-      // Fill empty squares
-      const filledSquares = p.squares.map((s, i) => s.owner ? s : { ...s, owner: `SimBot`, isPaid: true });
-      // Generate axes if needed
+      const filledSquares = p.squares.map((s) => s.owner ? s : { ...s, owner: `SimBot`, isPaid: true });
       const newHomeAxis = p.axisNumbers ? p.axisNumbers.home : generateRandomAxis();
       const newAwayAxis = p.axisNumbers ? p.axisNumbers.away : generateRandomAxis();
-
       return {
         ...p,
-        squares: filledSquares,
-        isLocked: true,
-        lockGrid: true,
+        squares: filledSquares, isLocked: true, lockGrid: true,
         axisNumbers: { home: newHomeAxis, away: newAwayAxis },
         scores: { current: { home: 0, away: 0 }, q1: null, half: null, q3: null, final: null },
-        gameId: undefined // Unlink real game
+        gameId: undefined
       };
     }));
-
-    // 2. Timeline - Schedule updates
     const sequence = [
-      { delay: 3000, scores: { current: { home: 7, away: 0 }, q1: { home: 7, away: 0 } }, msg: "End of 1st Quarter" },
-      { delay: 6000, scores: { current: { home: 7, away: 3 }, half: { home: 7, away: 3 } }, msg: "Halftime Score" },
-      { delay: 9000, scores: { current: { home: 14, away: 3 }, q3: { home: 14, away: 3 } }, msg: "End of 3rd Quarter" },
-      { delay: 12000, scores: { current: { home: 14, away: 10 }, final: { home: 14, away: 10 } }, msg: "Final Score" }
+      { delay: 3000, scores: { current: { home: 7, away: 0 }, q1: { home: 7, away: 0 } }, msg: "End of 1st" },
+      { delay: 6000, scores: { current: { home: 7, away: 3 }, half: { home: 7, away: 3 } }, msg: "Halftime" },
+      { delay: 9000, scores: { current: { home: 14, away: 3 }, q3: { home: 14, away: 3 } }, msg: "End of 3rd" },
+      { delay: 12000, scores: { current: { home: 14, away: 10 }, final: { home: 14, away: 10 } }, msg: "Final" }
     ];
-
-    // Schedule timeouts
     sequence.forEach(step => {
-      setTimeout(() => {
-        updateScores(poolId, step.scores);
-        setSimMessage(step.msg);
-      }, step.delay);
+      setTimeout(() => { updateScores(poolId, step.scores); setSimMessage(step.msg); }, step.delay);
     });
-
-    setTimeout(() => {
-      setIsSimulating(false);
-      setSimMessage(null);
-      // Sandbox fix: Remove alert
-    }, 13000);
+    setTimeout(() => { setIsSimulating(false); setSimMessage(null); }, 13000);
   };
 
   const openShareModal = (poolId?: string) => {
     const id = poolId || currentPool?.id;
     if (!id) return;
-    const url = `${window.location.origin}${window.location.pathname}#pool/${id}`;
-    setShareUrl(url);
+    setShareUrl(`${window.location.origin}${window.location.pathname}#pool/${id}`);
     setShowShareModal(true);
   };
 
-  const handleOpenAuth = () => {
-    if (user) {
-      window.location.hash = '#admin';
-      return;
-    }
+  const handleOpenAuth = (mode: 'login' | 'signup') => {
+    if (user) { window.location.hash = '#admin'; return; }
+    setAuthMode(mode);
     setShowAuthModal(true);
   };
 
@@ -259,85 +186,58 @@ const App: React.FC = () => {
 
   const getQuarterData = (period: 'q1' | 'half' | 'q3' | 'final') => {
     if (!currentPool) return { home: 0, away: 0, qPointsHome: 0, qPointsAway: 0, winnerName: '', reverseWinnerName: null, amount: 0, isLocked: false };
-
     const isFinal = !!currentPool.scores[period];
     const lockedScore = currentPool.scores[period];
     const liveScore = currentPool.scores.current;
-
-    // Effective score is the locked score if final, else current score, else 0-0
     const home = sanitize(lockedScore?.home) || sanitize(liveScore?.home) || 0;
     const away = sanitize(lockedScore?.away) || sanitize(liveScore?.away) || 0;
-
-    // Calculate 'This Quarter' points (Difference from prev quarter)
     let prevHome = 0, prevAway = 0;
-    if (period === 'half') {
-      prevHome = sanitize(currentPool.scores.q1?.home);
-      prevAway = sanitize(currentPool.scores.q1?.away);
-    } else if (period === 'q3') {
-      prevHome = sanitize(currentPool.scores.half?.home);
-      prevAway = sanitize(currentPool.scores.half?.away);
-    } else if (period === 'final') {
-      prevHome = sanitize(currentPool.scores.q3?.home);
-      prevAway = sanitize(currentPool.scores.q3?.away);
-    }
-
+    if (period === 'half') { prevHome = sanitize(currentPool.scores.q1?.home); prevAway = sanitize(currentPool.scores.q1?.away); }
+    else if (period === 'q3') { prevHome = sanitize(currentPool.scores.half?.home); prevAway = sanitize(currentPool.scores.half?.away); }
+    else if (period === 'final') { prevHome = sanitize(currentPool.scores.q3?.home); prevAway = sanitize(currentPool.scores.q3?.away); }
     const qPointsHome = home - prevHome;
     const qPointsAway = away - prevAway;
-
-    // Find 'In the money'
     let winnerName = "TBD";
     let reverseWinnerName: string | null = null;
     let isLocked = isFinal;
-
     if (currentPool.axisNumbers) {
       const hD = getLastDigit(home);
       const aD = getLastDigit(away);
-
-      // Main Winner
       const row = currentPool.axisNumbers.home.indexOf(hD);
       const col = currentPool.axisNumbers.away.indexOf(aD);
-
       if (row !== -1 && col !== -1) {
-        const sqId = row * 10 + col;
-        const owner = currentPool.squares[sqId].owner;
-        winnerName = owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
+        winnerName = currentPool.squares[row * 10 + col].owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
       }
-
-      // Reverse Winner Logic
       if (currentPool.ruleVariations.reverseWinners) {
         const rRow = currentPool.axisNumbers.home.indexOf(aD);
         const rCol = currentPool.axisNumbers.away.indexOf(hD);
-
         if (rRow !== -1 && rCol !== -1) {
           const rSqId = rRow * 10 + rCol;
-          // Only show if it is a distinct square
           if (rSqId !== (row * 10 + col)) {
-            const rOwner = currentPool.squares[rSqId].owner;
-            reverseWinnerName = rOwner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
+            reverseWinnerName = currentPool.squares[rSqId].owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
           }
         }
       }
     }
-
-    // Calculate Pot Amount
-    const payoutPct = currentPool.payouts[period];
+    const totalPot = currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare;
     let distributablePot = Math.max(0, totalPot - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
-    let amount = (distributablePot * payoutPct) / 100;
-
-    // If there is a reverse winner, split pot displayed
-    if (reverseWinnerName) {
-      amount = amount / 2;
-    }
-
+    let amount = (distributablePot * currentPool.payouts[period]) / 100;
+    if (reverseWinnerName) amount = amount / 2;
     return { home, away, qPointsHome, qPointsAway, winnerName, reverseWinnerName, amount, isLocked };
   };
 
-  const q1Data = getQuarterData('q1');
-  const halfData = getQuarterData('half');
-  const q3Data = getQuarterData('q3');
-  const finalData = getQuarterData('final');
+  const AuthModal = () => {
+    if (!showAuthModal) return null;
+    return (
+      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="w-full max-w-md relative">
+          <button onClick={() => setShowAuthModal(false)} className="absolute -top-12 right-0 text-slate-400 hover:text-white transition-colors p-2"><X size={24} /></button>
+          <Auth onLogin={() => { setShowAuthModal(false); window.location.hash = '#admin'; }} />
+        </div>
+      </div>
+    );
+  };
 
-  // --- Sub-components ---
   const ShareModal = () => {
     if (!showShareModal) return null;
     const encodedUrl = encodeURIComponent(shareUrl);
@@ -349,24 +249,11 @@ const App: React.FC = () => {
           <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Share2 size={20} className="text-indigo-400" /> Share Pool</h3>
           <p className="text-sm text-slate-400 mb-6">Invite friends to join the action.</p>
           <div className="grid grid-cols-4 gap-4 mb-6">
-            <a href={`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-indigo-500 group-hover:bg-indigo-500/10 transition-colors"><Twitter size={20} className="fill-white" /></div><span className="text-xs text-slate-400 group-hover:text-white">X</span></a>
-            <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-blue-500 group-hover:bg-blue-500/10 transition-colors"><Facebook size={20} className="text-blue-500" /></div><span className="text-xs text-slate-400 group-hover:text-white">Facebook</span></a>
-            <a href={`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + shareUrl)}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-emerald-500 group-hover:bg-emerald-500/10 transition-colors"><MessageCircle size={20} className="text-emerald-500" /></div><span className="text-xs text-slate-400 group-hover:text-white">WhatsApp</span></a>
-            <button onClick={() => { navigator.clipboard.writeText(shareUrl); alert("Link copied!"); }} className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-amber-500 group-hover:bg-amber-500/10 transition-colors"><LinkIcon size={20} className="text-amber-500" /></div><span className="text-xs text-slate-400 group-hover:text-white">Copy</span></button>
+            <a href={`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodeURIComponent(text)}`} target="_blank" className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-indigo-500 transition-colors"><Twitter size={20} className="fill-white" /></div><span className="text-xs text-slate-400">X</span></a>
+            <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`} target="_blank" className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-blue-500 transition-colors"><Facebook size={20} className="text-blue-500" /></div><span className="text-xs text-slate-400">Facebook</span></a>
+            <a href={`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + shareUrl)}`} target="_blank" className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-emerald-500 transition-colors"><MessageCircle size={20} className="text-emerald-500" /></div><span className="text-xs text-slate-400">WhatsApp</span></a>
+            <button onClick={() => { navigator.clipboard.writeText(shareUrl); alert("Link copied!"); }} className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-amber-500 transition-colors"><LinkIcon size={20} className="text-amber-500" /></div><span className="text-xs text-slate-400">Copy</span></button>
           </div>
-        </div>
-      </div>
-    );
-  };
-
-  // --- Auth Modal ---
-  const AuthModal = () => {
-    if (!showAuthModal) return null;
-    return (
-      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-        <div className="w-full max-w-md relative">
-          <button onClick={() => setShowAuthModal(false)} className="absolute -top-12 right-0 text-slate-400 hover:text-white transition-colors p-2"><X size={24} /></button>
-          <Auth onLogin={() => { setShowAuthModal(false); window.location.hash = '#admin'; }} />
         </div>
       </div>
     );
@@ -390,8 +277,8 @@ const App: React.FC = () => {
             </div>
           ) : (
             <div className="flex gap-2">
-              <button onClick={() => handleOpenAuth()} className="text-xs font-bold text-slate-300 hover:text-white px-3 py-1.5 transition-colors">Sign In</button>
-              <button onClick={() => handleOpenAuth()} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">Register</button>
+              <button onClick={() => handleOpenAuth('login')} className="text-xs font-bold text-slate-300 hover:text-white px-3 py-1.5 transition-colors">Sign In</button>
+              <button onClick={() => handleOpenAuth('signup')} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">Register</button>
             </div>
           )}
         </div>
@@ -399,62 +286,30 @@ const App: React.FC = () => {
     </header>
   );
 
-  // --- Views ---
-
-  // Landing Page (New Default)
+  // === RENDER LOGIC ===
   if (route.view === 'home') {
     return (
       <React.Fragment>
-        <LandingPage onLogin={() => handleOpenAuth()} onSignup={() => handleOpenAuth()} onBrowse={() => window.location.hash = '#browse'} isLoggedIn={!!user} />
+        <LandingPage onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('signup')} onBrowse={() => window.location.hash = '#browse'} isLoggedIn={!!user} />
         <AuthModal />
       </React.Fragment>
     );
   }
 
-  // Admin / Dashboard Views
-  if (route.view === 'admin-dashboard' || route.view === 'admin-editor') {
+  if (route.view === 'admin-dashboard') {
     if (!user) {
       return (
         <React.Fragment>
           <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-            {/* This triggers if they go directly to #admin without being logged in */}
             <div className="text-center">
               <p className="mb-4 text-slate-400">Please sign in to access the dashboard.</p>
-              <button onClick={() => handleOpenAuth()} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In</button>
+              <button onClick={() => handleOpenAuth('login')} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In</button>
             </div>
           </div>
           <AuthModal />
         </React.Fragment>
       );
     }
-    if (route.view === 'admin-editor' && currentPool) {
-      if (currentPool.ownerId && currentPool.ownerId !== user.id) {
-        return <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">Unauthorized</div>;
-      }
-      return (
-        <React.Fragment>
-          <AdminPanel
-            gameState={currentPool}
-            updateConfig={(updates) => updatePool(currentPool.id, updates)}
-            updateScores={(scores) => updateScores(currentPool.id, scores)}
-            generateNumbers={() => updatePool(currentPool.id, { axisNumbers: { home: generateRandomAxis(), away: generateRandomAxis() } })}
-            resetGame={() => { const fresh = createNewPool(currentPool.name, user.id); updatePool(currentPool.id, { ...fresh, id: currentPool.id }); }}
-            onBack={() => window.location.hash = '#admin'}
-            onShare={() => openShareModal(currentPool.id)}
-          />
-          <ShareModal />
-        </React.Fragment>
-      );
-    }
-    if (route.view === 'admin-editor' && !currentPool) {
-      return (
-        <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4">
-          <div className="text-xl font-bold mb-4">Pool Not Found</div>
-          <button onClick={() => window.location.hash = '#admin'} className="text-indigo-400 hover:underline">Return to Dashboard</button>
-        </div>
-      );
-    }
-    // Dashboard
     const userPools = pools.filter(p => p.ownerId === user.id);
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
@@ -491,7 +346,35 @@ const App: React.FC = () => {
     );
   }
 
-  // Browse Public Pools (Formerly Home)
+  if (route.view === 'admin-editor') {
+    if (!user) return <AuthModal />;
+    if (!currentPool) {
+      return (
+        <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4">
+          <div className="text-xl font-bold mb-4">Pool Not Found</div>
+          <button onClick={() => window.location.hash = '#admin'} className="text-indigo-400 hover:underline">Return to Dashboard</button>
+        </div>
+      );
+    }
+    if (currentPool.ownerId && currentPool.ownerId !== user.id) {
+      return <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">Unauthorized</div>;
+    }
+    return (
+      <React.Fragment>
+        <AdminPanel
+          gameState={currentPool}
+          updateConfig={(updates) => updatePool(currentPool.id, updates)}
+          updateScores={(scores) => updateScores(currentPool.id, scores)}
+          generateNumbers={() => updatePool(currentPool.id, { axisNumbers: { home: generateRandomAxis(), away: generateRandomAxis() } })}
+          resetGame={() => { const fresh = createNewPool(currentPool.name, user.id); updatePool(currentPool.id, { ...fresh, id: currentPool.id }); }}
+          onBack={() => window.location.hash = '#admin'}
+          onShare={() => openShareModal(currentPool.id)}
+        />
+        <ShareModal />
+      </React.Fragment>
+    );
+  }
+
   if (route.view === 'browse') {
     const publicPools = pools.filter(p => p.isPublic);
     return (
@@ -503,7 +386,6 @@ const App: React.FC = () => {
               Public Grids
             </h2>
             <p className="text-slate-400 text-lg">Browse active pools open to the public.</p>
-
             <div className="mt-8 max-w-md mx-auto relative">
               <input type="text" placeholder="Search for a pool..." className="w-full bg-slate-800 border border-slate-700 rounded-full py-3 px-6 pl-12 text-white outline-none focus:ring-2 focus:ring-indigo-500" />
               <Search className="absolute left-4 top-3.5 text-slate-500" size={20} />
@@ -542,96 +424,15 @@ const App: React.FC = () => {
       );
     }
 
-    const totalPot = currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare;
-    const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
-    const homePredictions = calculateScenarioWinners(currentPool, 'home');
-    const awayPredictions = calculateScenarioWinners(currentPool, 'away');
-    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
     const homeLogo = getTeamLogo(currentPool.homeTeam);
     const awayLogo = getTeamLogo(currentPool.awayTeam);
-
+    const homePredictions = calculateScenarioWinners(currentPool, 'home');
+    const awayPredictions = calculateScenarioWinners(currentPool, 'away');
+    const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
+    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
     const isAdmin = user && user.id === currentPool.ownerId;
 
-    // --- Payout Calculation Helpers ---
-    const sanitize = (n: any) => {
-      if (n === null || n === undefined) return 0;
-      const val = parseInt(n);
-      return isNaN(val) ? 0 : val;
-    };
-
-    const getQuarterData = (period: 'q1' | 'half' | 'q3' | 'final') => {
-      const isFinal = !!currentPool.scores[period];
-      const lockedScore = currentPool.scores[period];
-      const liveScore = currentPool.scores.current;
-
-      // Effective score is the locked score if final, else current score, else 0-0
-      const home = sanitize(lockedScore?.home) || sanitize(liveScore?.home) || 0;
-      const away = sanitize(lockedScore?.away) || sanitize(liveScore?.away) || 0;
-
-      // Calculate 'This Quarter' points (Difference from prev quarter)
-      let prevHome = 0, prevAway = 0;
-      if (period === 'half') {
-        prevHome = sanitize(currentPool.scores.q1?.home);
-        prevAway = sanitize(currentPool.scores.q1?.away);
-      } else if (period === 'q3') {
-        prevHome = sanitize(currentPool.scores.half?.home);
-        prevAway = sanitize(currentPool.scores.half?.away);
-      } else if (period === 'final') {
-        prevHome = sanitize(currentPool.scores.q3?.home);
-        prevAway = sanitize(currentPool.scores.q3?.away);
-      }
-
-      const qPointsHome = home - prevHome;
-      const qPointsAway = away - prevAway;
-
-      // Find 'In the money'
-      let winnerName = "TBD";
-      let reverseWinnerName: string | null = null;
-      let isLocked = isFinal;
-
-      if (currentPool.axisNumbers) {
-        const hD = getLastDigit(home);
-        const aD = getLastDigit(away);
-
-        // Main Winner
-        const row = currentPool.axisNumbers.home.indexOf(hD);
-        const col = currentPool.axisNumbers.away.indexOf(aD);
-
-        if (row !== -1 && col !== -1) {
-          const sqId = row * 10 + col;
-          const owner = currentPool.squares[sqId].owner;
-          winnerName = owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
-        }
-
-        // Reverse Winner Logic
-        if (currentPool.ruleVariations.reverseWinners) {
-          const rRow = currentPool.axisNumbers.home.indexOf(aD);
-          const rCol = currentPool.axisNumbers.away.indexOf(hD);
-
-          if (rRow !== -1 && rCol !== -1) {
-            const rSqId = rRow * 10 + rCol;
-            // Only show if it is a distinct square
-            if (rSqId !== (row * 10 + col)) {
-              const rOwner = currentPool.squares[rSqId].owner;
-              reverseWinnerName = rOwner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
-            }
-          }
-        }
-      }
-
-      // Calculate Pot Amount
-      const payoutPct = currentPool.payouts[period];
-      let distributablePot = Math.max(0, totalPot - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
-      let amount = (distributablePot * payoutPct) / 100;
-
-      // If there is a reverse winner, split pot displayed
-      if (reverseWinnerName) {
-        amount = amount / 2;
-      }
-
-      return { home, away, qPointsHome, qPointsAway, winnerName, reverseWinnerName, amount, isLocked };
-    };
-
+    // Data Calculation
     const q1Data = getQuarterData('q1');
     const halfData = getQuarterData('half');
     const q3Data = getQuarterData('q3');
@@ -640,15 +441,11 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative">
         <ShareModal />
-        
-        {/* SIMULATION TOAST */}
         {simMessage && (
             <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-fuchsia-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce flex items-center gap-2 font-bold">
                <Zap size={20} fill="currentColor" /> {simMessage}
             </div>
         )}
-        
-        {/* ADMIN FAB: RUN SIMULATION */}
         {isAdmin && (
            <button 
              onClick={() => handleRunSimulation(currentPool.id)} 
@@ -667,26 +464,21 @@ const App: React.FC = () => {
         </div>
 
         <div className="max-w-[1400px] mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-             {/* 1. Grid Owner */}
              <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
                 <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
                 <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
                 <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{currentPool.paymentInstructions}</p></div>
              </div>
-             {/* 2. Scoreboard */}
              <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative">
                  <div className="absolute top-0 right-0 w-32 h-32 bg-slate-800/20 rounded-full blur-2xl"></div>
                  <div className="p-4 border-b border-slate-800 text-center"><h3 className="text-white font-bold">Game Scoreboard</h3></div>
                  <div className="p-4">
                     <div className="grid grid-cols-6 gap-2 text-center text-sm mb-2 text-slate-500 font-bold uppercase text-[10px]"><div className="col-span-2 text-left pl-2">Team</div><div>1</div><div>2</div><div>3</div><div>4</div><div>T</div></div>
-                    {/* Away */}
                     <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.half?.away) - sanitize(currentPool.scores.q1?.away)}</div><div>{sanitize(currentPool.scores.q3?.away) - sanitize(currentPool.scores.half?.away)}</div><div>{sanitize(currentPool.scores.final?.away) - sanitize(currentPool.scores.q3?.away)}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
-                    {/* Home */}
                     <div className="grid grid-cols-6 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.half?.home) - sanitize(currentPool.scores.q1?.home)}</div><div>{sanitize(currentPool.scores.q3?.home) - sanitize(currentPool.scores.half?.home)}</div><div>{sanitize(currentPool.scores.final?.home) - sanitize(currentPool.scores.q3?.home)}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
                     <div className="mt-3 text-[10px] text-slate-600 text-right">Updated: {new Date().toLocaleTimeString()}</div>
                  </div>
              </div>
-             {/* 3. Payout Structure */}
              <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
                  <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
                  <div className="space-y-3">
@@ -698,6 +490,34 @@ const App: React.FC = () => {
                    })}
                  </div>
              </div>
+        </div>
+
+        {latestWinner && (
+          <div className="max-w-[1400px] mx-auto px-4 mb-4 text-center animate-in zoom-in duration-300">
+             <div className="inline-block bg-slate-800/80 border border-amber-500/50 rounded-full px-8 py-2 text-amber-300 font-bold text-lg shadow-[0_0_20px_rgba(245,158,11,0.2)]">🤑 IN THE MONEY: {latestWinner} 🤑</div>
+          </div>
+        )}
+
+        <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 xl:grid-cols-[300px_1fr_300px] gap-8 items-start mb-8">
+            <div className="hidden xl:block">
+                <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
+                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-indigo-400 font-bold">{currentPool.awayTeam}</span> score next...</h3></div>
+                    <div className="bg-black/50 p-4 space-y-4">{awayPredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-indigo-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+                </div>
+            </div>
+            <div className="flex flex-col items-center">
+               <div className="mb-4"><div className="w-16 h-16 bg-indigo-900/20 rounded-full flex items-center justify-center border-2 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-white p-1">{awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-indigo-400 font-bold text-xl">{currentPool.awayTeam.substring(0,2).toUpperCase()}</span>}</div></div>
+               <div className="flex items-center gap-4 w-full">
+                  <div className="hidden md:flex flex-col items-center gap-2"><div className="w-16 h-16 bg-rose-900/20 rounded-full flex items-center justify-center border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] bg-white p-1">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-rose-400 font-bold text-xl">{currentPool.homeTeam.substring(0,2).toUpperCase()}</span>}</div></div>
+                  <div className="flex-1 overflow-x-auto"><Grid gameState={currentPool} onClaimSquares={handleClaimSquares} winners={winners} highlightHomeDigit={getLastDigit(currentPool.scores.current?.home ?? 0)} highlightAwayDigit={getLastDigit(currentPool.scores.current?.away ?? 0)} /></div>
+               </div>
+            </div>
+            <div className="hidden xl:block">
+                <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
+                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-rose-400 font-bold">{currentPool.homeTeam}</span> score next...</h3></div>
+                    <div className="bg-black/50 p-4 space-y-4">{homePredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-rose-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+                </div>
+            </div>
         </div>
 
         {/* --- NEW PAYOUTS SECTION BELOW GRID --- */}
@@ -712,10 +532,7 @@ const App: React.FC = () => {
               ].map((card, idx) => (
                 <div key={idx} className="bg-black border border-slate-800 rounded-xl p-6 flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
                    <div className={`absolute top-0 w-full h-1 opacity-20 group-hover:opacity-50 transition-opacity ${card.data.isLocked ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-                   
                    <h4 className="text-slate-400 font-bold text-sm uppercase mb-4">{card.title}</h4>
-                   
-                   {/* Scores */}
                    <div className="flex items-center gap-4 mb-2">
                       <div className="flex items-center gap-2">
                          {homeLogo ? <img src={homeLogo} className="w-8 h-8 object-contain" /> : <div className="w-8 h-8 bg-rose-900/50 rounded-full"></div>}
@@ -727,9 +544,7 @@ const App: React.FC = () => {
                          {awayLogo ? <img src={awayLogo} className="w-8 h-8 object-contain" /> : <div className="w-8 h-8 bg-indigo-900/50 rounded-full"></div>}
                       </div>
                    </div>
-                   
                    <p className="text-xs text-slate-500 mb-6 font-medium">This Quarter: {card.data.qPointsHome} - {card.data.qPointsAway}</p>
-                   
                    <div className="mb-4">
                       <p className="text-xs text-slate-400 uppercase font-bold mb-1">In the money:</p>
                       <p className="text-white font-bold text-lg">{card.data.winnerName}</p>
@@ -740,9 +555,7 @@ const App: React.FC = () => {
                           </div>
                       )}
                    </div>
-                   
                    <div className="text-2xl font-bold font-mono text-emerald-400 mb-4">${card.data.amount.toLocaleString()}</div>
-                   
                    {card.data.isLocked ? (
                       <Lock size={20} className="text-rose-500/50" />
                    ) : (
@@ -756,6 +569,9 @@ const App: React.FC = () => {
       <AuthModal />
     </div >
   );
+  }
+
+return <div>Loading...</div>;
 };
 
 export default App;
