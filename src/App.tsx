@@ -323,10 +323,10 @@ const App: React.FC = () => {
   // Landing Page (New Default)
   if (route.view === 'home') {
     return (
-      <>
+      <React.Fragment>
         <LandingPage onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('signup')} onBrowse={() => window.location.hash = '#browse'} isLoggedIn={!!user} />
         <AuthModal />
-      </>
+      </React.Fragment>
     );
   }
 
@@ -334,7 +334,7 @@ const App: React.FC = () => {
   if (route.view === 'admin-dashboard' || route.view === 'admin-editor') {
     if (!user) {
       return (
-        <>
+        <React.Fragment>
           <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
             {/* This triggers if they go directly to #admin without being logged in */}
             <div className="text-center">
@@ -343,7 +343,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <AuthModal />
-        </>
+        </React.Fragment>
       );
     }
     if (route.view === 'admin-editor' && currentPool) {
@@ -351,7 +351,7 @@ const App: React.FC = () => {
         return <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">Unauthorized</div>;
       }
       return (
-        <>
+        <React.Fragment>
           <AdminPanel
             gameState={currentPool}
             updateConfig={(updates) => updatePool(currentPool.id, updates)}
@@ -362,7 +362,7 @@ const App: React.FC = () => {
             onShare={() => openShareModal(currentPool.id)}
           />
           <ShareModal />
-        </>
+        </React.Fragment>
       );
     }
     if (route.view === 'admin-editor' && !currentPool) {
