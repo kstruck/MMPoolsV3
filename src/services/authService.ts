@@ -35,8 +35,14 @@ export const authService = {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       return mapUser(result.user);
-    } catch (error) {
-      console.error("Google Sign-In Error", error);
+    } catch (error: any) {
+      console.error("Google Sign-In Popup Error", error);
+      // Fallback to redirect if popup is blocked or closed
+      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/popup-blocked') {
+        const { signInWithRedirect } = await import('firebase/auth');
+        await signInWithRedirect(auth, googleProvider);
+        return null; // The page will redirect
+      }
       throw error;
     }
   },
