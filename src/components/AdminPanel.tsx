@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { GameState, Scores, PayoutConfig, Square } from '../types';
+import { GameState, Scores, PayoutConfig, Square } from '../types';
 import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Activity, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
