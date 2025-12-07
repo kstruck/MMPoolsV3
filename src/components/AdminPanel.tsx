@@ -83,6 +83,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsThinking(true);
     setAiIdea('');
     try {
+      // VITE FIX: Use import.meta.env instead of process.env
       const apiKey = import.meta.env.VITE_API_KEY;
 
       if (!apiKey) {
