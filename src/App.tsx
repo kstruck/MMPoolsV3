@@ -237,18 +237,29 @@ const App: React.FC = () => {
 
     updatePool(currentPool.id, { squares: newSquares });
 
-    // Send Email Confirmation
-    if (currentPool.emailConfirmation === 'Email Confirmation' && details.email) {
-      // Import emailService dynamically or use the imported one
+    // Send Email Confirmation to User
+    if ((currentPool.emailConfirmation === 'Email Confirmation' || currentPool.emailConfirmation === 'true') && details.email) {
       import('./services/emailService').then(({ emailService }) => {
         emailService.sendConfirmation(
           currentPool.name,
           squaresInitials,
-          details.email!, // validated in Grid.tsx
+          details.email!,
           normalizedName,
           currentPool.contactEmail,
           currentPool.id
-        ).then(() => console.log('Email sent')).catch(err => console.error('Email failed', err));
+        ).catch(err => console.error('Email failed', err));
+      });
+    }
+
+    // Check for Grid Full
+    const totalSold = newSquares.filter(s => s.owner).length;
+    if (totalSold === 100 && currentPool.notifyAdminFull && currentPool.contactEmail) {
+      import('./services/emailService').then(({ emailService }) => {
+        emailService.sendGridFullNotification(
+          currentPool.name,
+          currentPool.contactEmail,
+          currentPool.id
+        ).then(() => console.log('Admin alert sent - Grid Full')).catch(err => console.error('Admin alert failed', err));
       });
     }
 
