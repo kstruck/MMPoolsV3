@@ -79,6 +79,7 @@ const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
 
   const [pools, setPools] = useState<GameState[]>(() => {
@@ -217,13 +218,7 @@ const App: React.FC = () => {
     return { success: true };
   };
 
-  const handleOpenAuth = () => {
-    if (user) {
-      window.location.hash = '#admin';
-      return;
-    }
-    setShowAuthModal(true);
-  };
+
 
   const sanitize = (n: any) => {
     if (n === null || n === undefined) return 0;
@@ -402,7 +397,10 @@ const App: React.FC = () => {
         {/* Header */}
         <div className="max-w-[1400px] mx-auto px-4 pt-6 flex justify-between items-center">
           <button onClick={() => window.location.hash = '#'} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Return to My Grids</button>
-          <div className="text-center"><h1 className="text-3xl font-bold text-white mb-1">{currentPool.name}</h1></div>
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-white mb-1">{currentPool.name}</h1>
+            <p className="text-slate-400 text-sm font-medium">{squaresRemaining} Squares Remaining</p>
+          </div>
           <button onClick={() => openShare(currentPool.id)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Share</button>
         </div>
 
@@ -416,6 +414,17 @@ const App: React.FC = () => {
             {isSimulating ? <Zap className="animate-spin" size={24} /> : <Zap size={24} />}
           </button>
         )}
+
+        {/* Latest Winner Banner */}
+        {
+          latestWinner && (
+            <div className="flex justify-center mt-4 mb-2">
+              <div className="bg-gradient-to-r from-amber-900/40 to-yellow-900/40 border border-amber-500/50 rounded-full px-8 py-2 text-amber-200 font-bold tracking-widest uppercase shadow-[0_0_20px_rgba(245,158,11,0.1)] flex items-center gap-3">
+                🤑 IN THE MONEY: <span className="text-white text-lg">{latestWinner}</span> 🤑
+              </div>
+            </div>
+          )
+        }
 
         {/* Grid Component */}
         <div className="max-w-[1600px] mx-auto px-4 py-8 flex flex-col items-center">
@@ -522,7 +531,7 @@ const App: React.FC = () => {
           </div>
         </div>
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-      </div>
+      </div >
     );
   }
 
