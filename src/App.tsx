@@ -9,7 +9,7 @@ import type { GameState, Scores, PlayerDetails, User } from './types';
 import { calculateWinners, generateRandomAxis, calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
-import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X } from 'lucide-react';
+import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X, Shield } from 'lucide-react';
 
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
@@ -62,6 +62,11 @@ const Header: React.FC<{ user: User | null; onOpenAuth: () => void; onLogout: ()
         {user ? (
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-300">Hi, {user.name}</span>
+            {user.email === 'kstruck@gmail.com' && (
+              <button onClick={() => window.location.hash = '#super-admin'} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold">
+                <Shield size={12} /> Super Admin
+              </button>
+            )}
             <button onClick={() => window.location.hash = '#admin'} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">My Pools</button>
             <button onClick={onLogout} className="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-1.5 rounded text-slate-300 transition-colors"><LogOut size={14} /></button>
           </div>
