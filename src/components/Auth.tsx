@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { authService } from '../services/authService';
-import { Mail, Lock, User, Chrome, ArrowRight, Loader2, KeyRound } from 'lucide-react';
+import { Mail, Lock, User, Chrome, ArrowRight, Loader2, KeyRound, AlertCircle } from 'lucide-react';
 
 interface AuthProps {
   onLogin: () => void;
@@ -9,6 +9,8 @@ interface AuthProps {
 export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -18,17 +20,27 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
+
     try {
-      // Calls match the updated signatures in authService.ts
       if (isRegistering) {
         await authService.register(formData.name, formData.email, formData.password);
       } else {
         await authService.login(formData.email, formData.password);
       }
       onLogin();
-    } catch (error) {
-      console.error("Auth error", error);
-      alert("Authentication failed. Please use Google Login.");
+    } catch (err: any) {
+      console.error("Auth error", err);
+      // Map common Firebase errors to readable messages
+      if (err.code === 'auth/email-already-in-use') {
+        setError("This email is already registered. Please sign in.");
+      } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        setError("Invalid email or password.");
+      } else if (err.code === 'auth/weak-password') {
+        setError("Password should be at least 6 characters.");
+      } else {
+        setError(err.message || "Authentication failed. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -36,11 +48,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       await authService.loginWithGoogle();
       onLogin();
-    } catch (error) {
-      console.error("Google Auth error", error);
+    } catch (err: any) {
+      console.error("Google Auth error", err);
+      setError("Google Sign-In failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -48,12 +62,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
   const handleDemoLogin = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      // Matches the login signature
       await authService.login("admin@test.com", "password");
       onLogin();
-    } catch (error) {
-      console.error("Demo login error", error);
+    } catch (err) {
+      console.error("Demo login error", err);
     } finally {
       setIsLoading(false);
     }
@@ -72,14 +86,22 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         </div>
 
         <div className="p-8 space-y-6">
+          {/* Error Banner */}
+          {error && (
+            <div className="bg-rose-500/10 border border-rose-500/50 rounded-lg p-3 flex items-start gap-3 text-rose-200 text-sm">
+              <AlertCircle size={18} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
           {/* Google Button */}
           <button
             onClick={handleGoogleLogin}
             disabled={isLoading}
-            className="w-full bg-white text-slate-900 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 hover:bg-slate-100 transition-colors"
+            className="w-full bg-white text-slate-900 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Chrome size={20} />}
-            Sign in with Google
+            {isRegistering ? 'Sign up with Google' : 'Sign in with Google'}
           </button>
 
           <div className="relative">
@@ -87,11 +109,10 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               <div className="w-full border-t border-slate-600"></div>
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-slate-800 px-2 text-slate-500 font-bold">Or continue with</span>
+              <span className="bg-slate-800 px-2 text-slate-500 font-bold">Or continue with email</span>
             </div>
           </div>
 
-          {/* Form (Kept for UI structure, but encourages Google login) */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegistering && (
               <div className="space-y-1">
@@ -132,6 +153,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 <input
                   type="password"
                   required
+                  minLength={6}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
@@ -143,7 +165,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all mt-6"
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <Loader2 className="animate-spin" size={20} />
@@ -167,7 +189,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <div className="text-center pt-2">
             <button
               type="button"
-              onClick={() => setIsRegistering(!isRegistering)}
+              onClick={() => { setIsRegistering(!isRegistering); setError(null); }}
               className="text-indigo-400 hover:text-indigo-300 text-sm font-bold transition-colors"
             >
               {isRegistering ? 'Already have an account? Sign In' : "Don't have an account? Register"}
