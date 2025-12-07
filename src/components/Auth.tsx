@@ -39,6 +39,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
         setError("Invalid email or password.");
       } else if (err.code === 'auth/weak-password') {
         setError("Password should be at least 6 characters.");
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError("Email/Password login is not enabled in Firebase Console.");
       } else {
         setError(err.message || "Authentication failed. Please try again.");
       }
