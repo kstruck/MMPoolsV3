@@ -114,6 +114,7 @@ export interface GameState {
     scoreChangePayout: boolean; // Pay fixed amount on every score change
   };
   ownerId?: string; // ID of the user who owns this pool
+  manualScoreOverride?: boolean;
 }
 
 export interface User {

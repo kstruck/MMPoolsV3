@@ -126,13 +126,13 @@ const App: React.FC = () => {
   const currentPool = useMemo(() => route.id ? pools.find(p => p.id === route.id || (p.urlSlug && p.urlSlug.toLowerCase() === route.id.toLowerCase())) || null : null, [pools, route.id]);
 
   useEffect(() => {
-    if (!currentPool?.gameId || isSimulating) return;
+    if (!currentPool?.gameId || isSimulating || currentPool.manualScoreOverride || currentPool.scores.final) return;
     fetchGameScore(currentPool).then(res => { if (res) updateScores(currentPool.id, res.scores); });
     const interval = setInterval(() => {
       fetchGameScore(currentPool).then(res => { if (res) updateScores(currentPool.id, res.scores); });
     }, 60000);
     return () => clearInterval(interval);
-  }, [currentPool?.gameId, currentPool?.id, isSimulating]);
+  }, [currentPool?.gameId, currentPool?.id, isSimulating, currentPool?.manualScoreOverride, currentPool?.scores.final]);
 
   const winners = useMemo(() => {
     if (!currentPool) return [];

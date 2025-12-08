@@ -515,7 +515,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* SCORING TAB */}
         {activeTab === 'scoring' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 relative overflow-hidden"><div className="flex items-center justify-between mb-4"><div className="flex items-center gap-2"><Wifi className="text-indigo-400" size={20} /><h3 className="font-bold text-white">Live Updates</h3></div>{fetchStatus && (<span className={`text-xs px-2 py-1 rounded font-bold ${fetchStatus.type === 'success' ? 'text-emerald-400 bg-emerald-900/30' : fetchStatus.type === 'error' ? 'text-rose-400 bg-rose-900/30' : 'text-slate-400'}`}>{fetchStatus.msg}</span>)}</div><p className="text-slate-400 text-sm mb-6">{gameState.gameId ? `Linked to Game ID: ${gameState.gameId}. Updates will be precise.` : `Fuzzy matching active.`}</p><button onClick={handleFetchLiveScores} disabled={isFetchingScores} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button></div>
+            {/* MANUAL OVERRIDE TOGGLE */}
+            <div className={`p-6 rounded-xl border transition-all ${gameState.manualScoreOverride ? 'bg-amber-900/20 border-amber-500/50' : 'bg-slate-900 border-slate-800'}`}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className={`font-bold text-lg ${gameState.manualScoreOverride ? 'text-amber-400' : 'text-slate-200'}`}>Manual Score Override</h3>
+                  <p className="text-sm text-slate-400">Disable auto-updates and manually set scores in the database.</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={!!gameState.manualScoreOverride} onChange={(e) => updateConfig({ manualScoreOverride: e.target.checked })} className="sr-only peer" />
+                  <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+            </div>
+
+            <div className={`bg-slate-900 p-6 rounded-xl border border-slate-800 relative overflow-hidden ${gameState.manualScoreOverride ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2"><Wifi className="text-indigo-400" size={20} /><h3 className="font-bold text-white">Live Updates</h3></div>
+                {fetchStatus && (<span className={`text-xs px-2 py-1 rounded font-bold ${fetchStatus.type === 'success' ? 'text-emerald-400 bg-emerald-900/30' : fetchStatus.type === 'error' ? 'text-rose-400 bg-rose-900/30' : 'text-slate-400'}`}>{fetchStatus.msg}</span>)}
+              </div>
+              <p className="text-slate-400 text-sm mb-6">{gameState.gameId ? `Linked to Game ID: ${gameState.gameId}. Updates will be precise.` : `Fuzzy matching active.`}</p>
+              <button onClick={handleFetchLiveScores} disabled={isFetchingScores} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button>
+            </div>
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800"><h3 className="font-bold text-white mb-4">Quarterly Scores</h3><div className="grid gap-4">{(['q1', 'half', 'q3', 'final'] as const).map((period) => {
               const isActive = !!gameState.scores[period];
               const label = period === 'q1' ? '1st Quarter' : period === 'half' ? 'Halftime' : period === 'q3' ? '3rd Quarter' : 'Final Score';
