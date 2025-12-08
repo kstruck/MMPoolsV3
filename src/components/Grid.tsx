@@ -455,10 +455,10 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               effectClass += " transform scale-110";
                               zIndex = "z-30";
                            } else if (isActiveIntersection) {
-                              bgClass = isOwned ? "bg-slate-800" : "bg-slate-800/80";
-                              borderClass = "border-white/30 ring-1 ring-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)]";
-                              textClass = isOwned ? "text-slate-200" : "text-slate-400";
-                              zIndex = "z-20";
+                              bgClass = isOwned ? "bg-amber-900/40" : "bg-amber-900/20";
+                              borderClass = "border-2 border-amber-500 animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.5)]";
+                              textClass = isOwned ? "text-white font-bold" : "text-amber-200/70";
+                              zIndex = "z-30";
                            } else if (isRowHighlighted || isColHighlighted) {
                               bgClass = isOwned ? "bg-slate-900" : "bg-slate-800/60";
                               borderClass = "border-slate-700";
