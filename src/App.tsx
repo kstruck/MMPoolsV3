@@ -54,8 +54,6 @@ import { Header } from './components/Header';
 
 // --- MAIN APP ---
 
-// --- MAIN APP ---
-
 const App: React.FC = () => {
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
@@ -125,7 +123,7 @@ const App: React.FC = () => {
     return { view: 'home', id: null };
   }, [hash]);
 
-  const currentPool = useMemo(() => route.id ? pools.find(p => p.id === route.id || p.urlSlug === route.id) || null : null, [pools, route.id]);
+  const currentPool = useMemo(() => route.id ? pools.find(p => p.id === route.id || (p.urlSlug && p.urlSlug.toLowerCase() === route.id.toLowerCase())) || null : null, [pools, route.id]);
 
   useEffect(() => {
     if (!currentPool?.gameId || isSimulating) return;
@@ -346,20 +344,13 @@ const App: React.FC = () => {
   if (route.view === 'home') {
     return (
       <>
-        <>
-          <LandingPage
-            onLogin={() => { setAuthMode('login'); setShowAuthModal(true); }}
-            onSignup={() => { setAuthMode('register'); setShowAuthModal(true); }}
-            onBrowse={() => window.location.hash = '#browse'}
-            isLoggedIn={!!user}
-          />
-          <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
-          <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
-        </>
-        <div className="fixed bottom-0 left-0 w-full bg-black/80 text-xs text-green-400 p-2 font-mono flex justify-between z-50 pointer-events-none">
-          <div>PROJ: {import.meta.env.VITE_FIREBASE_PROJECT_ID || 'MISSING'} | AUTH: {user ? user.id.substring(0, 6) + '...' : 'NULL'} | POOLS: {pools.length} | ERR: {connectionError || 'NONE'}</div>
-          <div className="pointer-events-auto"><button onClick={() => alert(JSON.stringify(import.meta.env))} className="underline hover:text-white">Check Env</button></div>
-        </div>
+        <LandingPage
+          onLogin={() => { setAuthMode('login'); setShowAuthModal(true); }}
+          onSignup={() => { setAuthMode('register'); setShowAuthModal(true); }}
+          onBrowse={() => window.location.hash = '#browse'}
+          isLoggedIn={!!user}
+        />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
       </>
     );
   }
@@ -371,10 +362,6 @@ const App: React.FC = () => {
         <React.Suspense fallback={<div className="text-white p-10">Loading...</div>}>
           <SuperAdmin />
         </React.Suspense>
-        <div className="fixed bottom-0 left-0 w-full bg-black/80 text-xs text-green-400 p-2 font-mono flex justify-between z-50 pointer-events-none">
-          <div>PROJ: {import.meta.env.VITE_FIREBASE_PROJECT_ID || 'MISSING'} | AUTH: {user ? user.id.substring(0, 6) + '...' : 'NULL'} | POOLS: {pools.length} | ERR: {connectionError || 'NONE'}</div>
-          <div className="pointer-events-auto"><button onClick={() => alert(JSON.stringify(import.meta.env))} className="underline hover:text-white">Check Env</button></div>
-        </div>
       </div>
     );
   }
@@ -436,17 +423,6 @@ const App: React.FC = () => {
           )}
         </main>
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-        <div className="fixed bottom-0 left-0 w-full bg-black/80 text-xs text-green-400 p-2 font-mono flex justify-between z-50 pointer-events-none">
-          <div>
-            PROJ: {import.meta.env.VITE_FIREBASE_PROJECT_ID || 'MISSING'} |
-            AUTH: {user ? user.id.substring(0, 6) + '...' : 'NULL'} |
-            POOLS: {pools.length} |
-            ERR: {connectionError || 'NONE'}
-          </div>
-          <div className="pointer-events-auto">
-            <button onClick={() => alert(JSON.stringify(import.meta.env))} className="underline hover:text-white">Check Env</button>
-          </div>
-        </div>
       </div>
     );
   }
@@ -511,25 +487,40 @@ const App: React.FC = () => {
           )}
         </main>
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-        {/* DEBUG FOOTER - REMOVE IN PRODUCTION */}
-        <div className="fixed bottom-0 left-0 w-full bg-black/80 text-xs text-green-400 p-2 font-mono flex justify-between z-50 pointer-events-none">
-          <div>
-            PROJ: {import.meta.env.VITE_FIREBASE_PROJECT_ID || 'MISSING'} |
-            AUTH: {user ? user.id.substring(0, 6) + '...' : 'NULL'} |
-            POOL#: {pools.length} |
-            ERR: {connectionError || 'NONE'}
-          </div>
-          <div className="pointer-events-auto">
-            <button onClick={() => alert(JSON.stringify(import.meta.env))} className="underline hover:text-white">Check Env</button>
-          </div>
-        </div>
       </div>
     );
   }
 
   if (route.view === 'pool') {
     if (isPoolsLoading) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
-    if (!currentPool) return <div className="text-white p-10">Pool Not Found</div>;
+    if (!currentPool) {
+      return (
+        <div className="text-white p-10 font-mono flex flex-col items-center justify-center min-h-[50vh]">
+          <h2 className="text-xl font-bold mb-4 text-rose-400">Pool Not Found (Debug Mode)</h2>
+          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 max-w-2xl w-full text-sm space-y-2 shadow-2xl">
+            <p><strong>Route Mode:</strong> {route.view}</p>
+            <p><strong>Looking for ID/Slug:</strong> <span className="text-amber-300">"{route.id}"</span></p>
+            <p><strong>Current Hash:</strong> "{hash}"</p>
+            <p><strong>Window Path:</strong> "{window.location.pathname}"</p>
+            <p><strong>Pools Loaded:</strong> {pools.length}</p>
+            <div className="max-h-60 overflow-y-auto border border-slate-700 p-2 rounded bg-black/30 mt-4">
+              <p className="text-xs text-slate-400 mb-1 sticky top-0 bg-slate-900/90 py-1">Available Pools (ID | Slug | Name):</p>
+              {pools.map(p => (
+                <div key={p.id} className="text-xs border-b border-slate-800/50 py-1 font-mono flex justify-between gap-4">
+                  <span>{p.id}</span>
+                  <span className="text-emerald-400">{p.urlSlug || 'NO_SLUG'}</span>
+                  <span className="text-slate-500 truncate">{p.name}</span>
+                </div>
+              ))}
+            </div>
+            <div className="pt-4 flex gap-4">
+              <button onClick={() => window.location.href = '/'} className="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded text-white font-bold transition-colors">Go Home</button>
+              <button onClick={() => window.location.reload()} className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-white font-bold transition-colors">Reload Page</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     const q1Data = getQuarterData('q1');
     const halfData = getQuarterData('half');
