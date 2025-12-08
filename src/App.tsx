@@ -169,9 +169,19 @@ const App: React.FC = () => {
   };
 
   const handleCreatePool = async () => {
-    const newPool = createNewPool(`Pool #${pools.length + 1}`, user?.id);
-    await addNewPool(newPool); // Now creates in DB
-    window.location.hash = `#admin/${newPool.id}`;
+    try {
+      if (!user) {
+        alert("You must be logged in to create a pool.");
+        return;
+      }
+      const newPool = createNewPool(`Pool #${pools.length + 1}`, user.id);
+      await addNewPool(newPool); // Now creates in DB
+      window.location.hash = `#admin/${newPool.id}`;
+    } catch (err: any) {
+      console.error("Create failed", err);
+      const isAuth = err.code === 'permission-denied';
+      alert(`Failed to create pool: ${isAuth ? 'Permission Denied (Check Rules)' : err.message || err}.`);
+    }
   };
 
   const handleDeletePool = (id: string) => {
