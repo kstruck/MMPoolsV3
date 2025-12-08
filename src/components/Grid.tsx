@@ -324,9 +324,18 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                </div>
             </div>
 
-            <div className="hidden md:flex text-slate-500 font-mono text-[10px] items-center gap-2 bg-slate-950/50 px-3 py-1 rounded-full border border-slate-800/50">
-               <Info size={12} />
-               <span>Last digit of score wins</span>
+            <div className="hidden md:flex flex-col items-center">
+               {gameState.isLocked ? (
+                  <div className="text-slate-500 font-mono text-[10px] flex items-center gap-2 bg-slate-950/50 px-3 py-1 rounded-full border border-slate-800/50">
+                     <Info size={12} />
+                     <span>Last digit of score wins</span>
+                  </div>
+               ) : (
+                  <div className="text-emerald-400 font-bold text-sm flex items-center gap-2 bg-emerald-900/20 px-4 py-1.5 rounded-full border border-emerald-500/30 shadow-inner animate-pulse">
+                     <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                     <span>{100 - gameState.squares.filter(s => s.owner).length} Squares Left</span>
+                  </div>
+               )}
             </div>
 
             <div className="flex items-center gap-3 bg-gradient-to-l from-rose-900/40 to-slate-900 px-4 py-2 rounded-lg border border-rose-500/30 shadow-inner text-right">

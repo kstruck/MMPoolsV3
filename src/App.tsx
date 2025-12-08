@@ -611,10 +611,10 @@ const App: React.FC = () => {
         {/* Grid Component */}
         <div className="max-w-[1600px] mx-auto px-4 py-8 flex flex-col items-center">
           <div className="flex items-center gap-4 w-full justify-center">
-            {/* Home Logo */}
+            {/* Away Logo (Left - Matches Rows) */}
             <div className="hidden md:flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-rose-900/20 rounded-full flex items-center justify-center border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] bg-white p-1">
-                {homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-rose-400 font-bold text-xl">{currentPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
+              <div className="w-16 h-16 bg-indigo-900/20 rounded-full flex items-center justify-center border-2 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-white p-1">
+                {awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-indigo-400 font-bold text-xl">{currentPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
               </div>
             </div>
             {/* Grid */}
@@ -627,10 +627,10 @@ const App: React.FC = () => {
                 highlightAwayDigit={getLastDigit(currentPool.scores.current?.away ?? 0)}
               />
             </div>
-            {/* Away Logo */}
+            {/* Home Logo (Right - Matches Cols) */}
             <div className="hidden md:flex flex-col items-center gap-2">
-              <div className="w-16 h-16 bg-indigo-900/20 rounded-full flex items-center justify-center border-2 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-white p-1">
-                {awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-indigo-400 font-bold text-xl">{currentPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
+              <div className="w-16 h-16 bg-rose-900/20 rounded-full flex items-center justify-center border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] bg-white p-1">
+                {homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-rose-400 font-bold text-xl">{currentPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
               </div>
             </div>
           </div>
