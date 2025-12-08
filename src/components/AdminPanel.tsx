@@ -13,6 +13,7 @@ interface AdminPanelProps {
   resetGame: () => void;
   onBack: () => void;
   onShare: () => void;
+  checkSlugAvailable: (slug: string) => boolean;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -21,13 +22,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   updateScores,
   generateNumbers,
   onBack,
-  onShare
+  onShare,
+  checkSlugAvailable
 }) => {
   const [aiIdea, setAiIdea] = useState<string>('');
   const [isThinking, setIsThinking] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   // Updated Tab Order and Default
   const [activeTab, setActiveTab] = useState<'settings' | 'players' | 'scoring' | 'game'>('settings');
+
+  const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''); // Enforce safe chars
+    if (val && !checkSlugAvailable(val)) {
+      setSlugError("Slug is already taken");
+    } else {
+      setSlugError(null);
+    }
+    updateConfig({ urlSlug: val });
+  };
 
   const [wizardStep, setWizardStep] = useState(1);
   const TOTAL_STEPS = 5;
@@ -234,7 +247,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <p className="text-slate-400 text-sm mb-6">Let's verify the core details of your pool.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label><input type="text" value={gameState.name} onChange={(e) => updateConfig({ name: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="e.g. Super Bowl LVIII Party" /></div>
-          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">URL Slug</label><div className="relative"><span className="absolute left-3 top-3 text-slate-600 font-mono text-sm">/</span><input type="text" value={gameState.urlSlug} onChange={(e) => updateConfig({ urlSlug: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded pl-6 pr-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="unique-id" /></div></div>
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">URL Slug</label>
+            <div className="relative">
+              <span className="absolute left-3 top-3 text-slate-600 font-mono text-sm">/</span>
+              <input type="text" value={gameState.urlSlug || ''} onChange={handleSlugChange} className={`w-full bg-slate-950 border ${slugError ? 'border-rose-500 focus:ring-rose-500' : 'border-slate-700 focus:ring-indigo-500'} rounded pl-6 pr-4 py-3 text-white focus:ring-1 outline-none`} placeholder="unique-id" />
+            </div>
+            {slugError && <p className="text-rose-500 text-xs mt-1 font-bold">{slugError}</p>}
+            <p className="text-slate-500 text-[10px] mt-1">Lowercase letters, numbers, and dashes only.</p>
+          </div>
           <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contact Email</label><input type="email" value={gameState.contactEmail} onChange={(e) => updateConfig({ contactEmail: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="admin@example.com" /></div>
           <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payment Instructions</label><textarea value={gameState.paymentInstructions} onChange={(e) => updateConfig({ paymentInstructions: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-24 resize-none" /></div>
         </div>

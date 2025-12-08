@@ -121,6 +121,7 @@ export interface User {
   email: string;
   name: string;
   picture?: string | null; // Allow null for Firebase compatibility
+  registrationMethod?: 'google' | 'email' | 'unknown';
 }
 
 export interface Winner {

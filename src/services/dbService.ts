@@ -82,5 +82,27 @@ export const dbService = {
             console.error("Error fetching users:", error);
             return [];
         }
+    },
+
+    updateUser: async (userId: string, updates: Partial<User>) => {
+        try {
+            const userRef = doc(db, "users", userId);
+            await updateDoc(userRef, {
+                ...updates,
+                updatedAt: Timestamp.now()
+            });
+        } catch (error) {
+            console.error("Error updating user:", error);
+            throw error;
+        }
+    },
+
+    deleteUser: async (userId: string) => {
+        try {
+            await deleteDoc(doc(db, "users", userId));
+        } catch (error) {
+            console.error("Error deleting user:", error);
+            throw error;
+        }
     }
 };

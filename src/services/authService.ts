@@ -16,11 +16,20 @@ const googleProvider = new GoogleAuthProvider();
 // Map Firebase User to our App User type
 const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
   if (!firebaseUser) return null;
+
+  let method: 'google' | 'email' | 'unknown' = 'unknown';
+  if (firebaseUser.providerData.length > 0) {
+    const providerId = firebaseUser.providerData[0].providerId;
+    if (providerId === 'google.com') method = 'google';
+    else if (providerId === 'password') method = 'email';
+  }
+
   return {
     id: firebaseUser.uid,
     name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Unknown User",
     email: firebaseUser.email || "",
-    picture: firebaseUser.photoURL || undefined
+    picture: firebaseUser.photoURL || undefined,
+    registrationMethod: method
   };
 };
 

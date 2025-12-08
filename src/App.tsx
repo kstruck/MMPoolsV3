@@ -3,14 +3,14 @@ import { Grid } from './components/Grid';
 import { AdminPanel } from './components/AdminPanel';
 import { Auth } from './components/Auth';
 import { LandingPage } from './components/LandingPage';
-import { Logo } from './components/Logo';
+
 import { createNewPool, getTeamLogo } from './constants';
 import type { GameState, Scores, PlayerDetails, User } from './types';
 import { calculateWinners, generateRandomAxis, calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, LayoutGrid, Search, X, Shield, Loader } from 'lucide-react';
+import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, Search, X, Loader } from 'lucide-react';
 
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
@@ -50,37 +50,9 @@ const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void; initialMode?: 
   );
 };
 
-const Header: React.FC<{ user: User | null; onOpenAuth: () => void; onLogout: () => void }> = ({ user, onOpenAuth, onLogout }) => (
-  <header className="bg-slate-800/50 border-b border-slate-700 backdrop-blur-md sticky top-0 z-30">
-    <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
-      <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.hash = '#'}>
-        <Logo />
-      </div>
-      <div className="flex items-center gap-4">
-        <button onClick={() => window.location.hash = '#browse'} className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white transition-colors mr-2">
-          <LayoutGrid size={16} /> Public Grids
-        </button>
-        {user ? (
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-300">Hi, {user.name}</span>
-            {user.email === 'kstruck@gmail.com' && (
-              <button onClick={() => window.location.hash = '#super-admin'} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold">
-                <Shield size={12} /> Super Admin
-              </button>
-            )}
-            <button onClick={() => window.location.hash = '#admin'} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">My Pools</button>
-            <button onClick={onLogout} className="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-1.5 rounded text-slate-300 transition-colors"><LogOut size={14} /></button>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <button onClick={onOpenAuth} className="text-xs font-bold text-slate-300 hover:text-white px-3 py-1.5 transition-colors">Sign In</button>
-            <button onClick={onOpenAuth} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">Register</button>
-          </div>
-        )}
-      </div>
-    </div>
-  </header>
-);
+import { Header } from './components/Header';
+
+// --- MAIN APP ---
 
 // --- MAIN APP ---
 
@@ -134,7 +106,7 @@ const App: React.FC = () => {
     return { view: 'home', id: null };
   }, [hash]);
 
-  const currentPool = useMemo(() => route.id ? pools.find(p => p.id === route.id) || null : null, [pools, route.id]);
+  const currentPool = useMemo(() => route.id ? pools.find(p => p.id === route.id || p.urlSlug === route.id) || null : null, [pools, route.id]);
 
   useEffect(() => {
     if (!currentPool?.gameId || isSimulating) return;
@@ -424,6 +396,7 @@ const App: React.FC = () => {
 
     return (
       <>
+        <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
         <AdminPanel
           gameState={currentPool}
           updateConfig={(updates) => updatePool(currentPool.id, updates)}
@@ -432,6 +405,7 @@ const App: React.FC = () => {
           resetGame={() => { const fresh = createNewPool(currentPool.name, user.id); updatePool(currentPool.id, { ...fresh, id: currentPool.id }); }}
           onBack={() => window.location.hash = '#admin'}
           onShare={() => openShare(currentPool.id)}
+          checkSlugAvailable={(slug) => !pools.some(p => p.urlSlug === slug && p.id !== currentPool.id)}
         />
         <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
       </>
@@ -483,11 +457,11 @@ const App: React.FC = () => {
 
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative">
+        <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
         <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
-        {/* Header */}
+        {/* Header Content */}
         <div className="max-w-[1400px] mx-auto px-4 pt-6 flex justify-between items-center">
-          <button onClick={() => window.location.hash = '#admin'} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Return to My Grids</button>
-          <div className="text-center">
+          <div className="text-center md:text-left">
             <h1 className="text-3xl font-bold text-white mb-1">{currentPool.name}</h1>
             <p className="text-slate-400 text-sm font-medium">{squaresRemaining} Squares Remaining</p>
           </div>
