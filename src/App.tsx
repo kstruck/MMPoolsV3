@@ -69,8 +69,19 @@ const App: React.FC = () => {
 
   const [isSimulating, setIsSimulating] = useState(false);
   const [simMessage, setSimMessage] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Handle root path slugs (e.g. /my-slug -> /#pool/my-slug)
+    const path = window.location.pathname;
+    if (path.length > 1 && path !== '/index.html') {
+      // Remove leading slash
+      const slug = path.substring(1);
+      // Redirect to hash route
+      window.history.replaceState(null, '', `/#pool/${slug}`);
+      setHash(`#pool/${slug}`);
+    }
+
     const handleHashChange = () => setHash(window.location.hash);
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -88,10 +99,18 @@ const App: React.FC = () => {
 
   // Real-time subscription to pools
   useEffect(() => {
-    const unsubscribe = dbService.subscribeToPools((updatedPools) => {
-      setPools(updatedPools);
-      setIsPoolsLoading(false);
-    });
+    const unsubscribe = dbService.subscribeToPools(
+      (updatedPools) => {
+        setPools(updatedPools);
+        setIsPoolsLoading(false);
+        setConnectionError(null);
+      },
+      (error) => {
+        console.error("DB Error", error);
+        setIsPoolsLoading(false);
+        setConnectionError("Failed to connect to database. Please check configuration.");
+      }
+    );
     return () => unsubscribe();
   }, []);
 
@@ -189,7 +208,9 @@ const App: React.FC = () => {
 
   const openShare = (id?: string) => {
     if (!id) return;
-    setShareUrl(`${window.location.origin}${window.location.pathname}#pool/${id}`);
+    const pool = pools.find(p => p.id === id);
+    const identifier = pool?.urlSlug || id;
+    setShareUrl(`${window.location.origin}/#pool/${identifier}`);
     setShowShareModal(true);
   };
 
@@ -362,7 +383,18 @@ const App: React.FC = () => {
             <div><h2 className="text-3xl font-bold text-white">Dashboard</h2><p className="text-slate-400">Manage your pools</p></div>
             <button onClick={handleCreatePool} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20"><Plus size={18} /> Create Pool</button>
           </div>
-          {userPools.length === 0 ? (
+          {connectionError && (
+            <div className="bg-rose-500/10 border border-rose-500 text-rose-400 p-4 rounded mb-6 flex items-center gap-3">
+              <Zap className="text-rose-500" />
+              <div>
+                <p className="font-bold">Connection Fail</p>
+                <p className="text-sm">{connectionError}. Check your configuration.</p>
+              </div>
+            </div>
+          )}
+          {isPoolsLoading ? (
+            <div className="text-center py-20"><Loader className="animate-spin inline-block mb-2" /> <p>Loading your pools...</p></div>
+          ) : userPools.length === 0 ? (
             <div className="text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700 border-dashed">
               <Globe size={48} className="mx-auto text-slate-600 mb-4" /><p className="text-slate-400 font-medium">You haven't created any pools yet.</p>
             </div>
@@ -425,14 +457,28 @@ const App: React.FC = () => {
               <Search className="absolute left-4 top-3.5 text-slate-500" size={20} />
             </div>
           </div>
-          <div className="space-y-4">
-            {publicPools.map(pool => (
-              <div key={pool.id} onClick={() => window.location.hash = `#pool/${pool.id}`} className="bg-slate-800 border border-slate-700 p-6 rounded-xl flex justify-between items-center cursor-pointer hover:border-indigo-500">
-                <div><h3 className="text-xl font-bold text-white">{pool.name}</h3><p className="text-sm text-slate-400">{pool.awayTeam} vs {pool.homeTeam}</p></div>
-                <ArrowRight size={20} />
+          {connectionError && (
+            <div className="bg-rose-500/10 border border-rose-500 text-rose-400 p-4 rounded mb-6 flex items-center gap-3">
+              <Zap className="text-rose-500" />
+              <div>
+                <p className="font-bold">Connection Fail</p>
+                <p className="text-sm">{connectionError}. Check your configuration.</p>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+          {isPoolsLoading ? (
+            <div className="text-center py-20"><Loader className="animate-spin inline-block mb-2" /> <p>Loading public grids...</p></div>
+          ) : (
+            <div className="space-y-4">
+              {publicPools.map(pool => (
+                <div key={pool.id} onClick={() => window.location.hash = `#pool/${pool.id}`} className="bg-slate-800 border border-slate-700 p-6 rounded-xl flex justify-between items-center cursor-pointer hover:border-indigo-500">
+                  <div><h3 className="text-xl font-bold text-white">{pool.name}</h3><p className="text-sm text-slate-400">{pool.awayTeam} vs {pool.homeTeam}</p></div>
+                  <ArrowRight size={20} />
+                </div>
+              ))}
+              {publicPools.length === 0 && <div className="text-center text-slate-500 py-10">No public pools found.</div>}
+            </div>
+          )}
         </main>
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
       </div>

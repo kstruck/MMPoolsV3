@@ -53,11 +53,14 @@ export const dbService = {
     },
 
     // Real-time listener for ALL public pools OR user's pools
-    subscribeToPools: (callback: (pools: GameState[]) => void) => {
+    subscribeToPools: (callback: (pools: GameState[]) => void, onError?: (error: any) => void) => {
         const q = query(collection(db, "pools"));
         return onSnapshot(q, (snapshot) => {
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GameState));
             callback(pools);
+        }, (error) => {
+            console.error("Pool Subscription Error:", error);
+            if (onError) onError(error);
         });
     },
 
