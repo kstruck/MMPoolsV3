@@ -354,7 +354,12 @@ const App: React.FC = () => {
             isLoggedIn={!!user}
           />
           <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+          <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
         </>
+        <div className="fixed bottom-0 left-0 w-full bg-black/80 text-xs text-green-400 p-2 font-mono flex justify-between z-50 pointer-events-none">
+          <div>PROJ: {import.meta.env.VITE_FIREBASE_PROJECT_ID || 'MISSING'} | AUTH: {user ? user.id.substring(0, 6) + '...' : 'NULL'} | POOLS: {pools.length} | ERR: {connectionError || 'NONE'}</div>
+          <div className="pointer-events-auto"><button onClick={() => alert(JSON.stringify(import.meta.env))} className="underline hover:text-white">Check Env</button></div>
+        </div>
       </>
     );
   }
@@ -366,6 +371,10 @@ const App: React.FC = () => {
         <React.Suspense fallback={<div className="text-white p-10">Loading...</div>}>
           <SuperAdmin />
         </React.Suspense>
+        <div className="fixed bottom-0 left-0 w-full bg-black/80 text-xs text-green-400 p-2 font-mono flex justify-between z-50 pointer-events-none">
+          <div>PROJ: {import.meta.env.VITE_FIREBASE_PROJECT_ID || 'MISSING'} | AUTH: {user ? user.id.substring(0, 6) + '...' : 'NULL'} | POOLS: {pools.length} | ERR: {connectionError || 'NONE'}</div>
+          <div className="pointer-events-auto"><button onClick={() => alert(JSON.stringify(import.meta.env))} className="underline hover:text-white">Check Env</button></div>
+        </div>
       </div>
     );
   }
