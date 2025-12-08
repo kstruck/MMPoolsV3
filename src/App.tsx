@@ -287,9 +287,9 @@ const App: React.FC = () => {
     const final = s.final?.[team] !== undefined ? sanitize(s.final[team]) : null;
 
     if (period === 1) return q1 ?? cur;
-    if (period === 2) return half ?? (q1 !== null ? cur : 0);
-    if (period === 3) return q3 ?? (half !== null ? cur : 0);
-    if (period === 4) return final ?? (q3 !== null ? cur : 0);
+    if (period === 2) return half !== null ? half - (q1 ?? 0) : (q1 !== null ? cur - q1 : 0);
+    if (period === 3) return q3 !== null ? q3 - (half ?? 0) : (half !== null ? cur - half : 0);
+    if (period === 4) return final !== null ? final - (q3 ?? 0) : (q3 !== null ? cur - q3 : 0);
     return 0;
   };
 
