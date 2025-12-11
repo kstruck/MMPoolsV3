@@ -95,19 +95,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
           <div className="mt-20 relative mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-20 duration-1000 delay-300">
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent z-20"></div>
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-2xl">
-              <div className="bg-slate-950 rounded-xl overflow-hidden border border-slate-800 relative">
-                {/* Mock Grid UI */}
-                <div className="grid grid-cols-6 gap-px bg-slate-800 opacity-50 h-[300px] md:h-[500px]">
-                  {Array.from({ length: 36 }).map((_, i) => (
-                    <div key={i} className={`bg-slate-900 ${i === 14 ? 'bg-orange-600/20' : ''}`}></div>
-                  ))}
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center p-8 bg-black/40 backdrop-blur-sm rounded-2xl border border-white/10">
-                    <p className="text-3xl md:text-5xl font-black text-white mb-2">0 - 7</p>
-                    <p className="text-orange-400 font-bold uppercase tracking-widest text-sm">Winning Quarter 1</p>
-                  </div>
-                </div>
+              <div className="bg-slate-950 rounded-xl overflow-hidden border border-slate-800 relative group">
+                <img
+                  src="/hero-ui.png"
+                  alt="March Melee Pools Interface"
+                  className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-60"></div>
               </div>
             </div>
           </div>
