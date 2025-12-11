@@ -241,8 +241,15 @@ const App: React.FC = () => {
     updatePool(currentPool.id, { squares: newSquares });
 
     // Send Email Confirmation to User
+    console.log('[App] Processing Square Claim. Config:', {
+      emailSetting: currentPool.emailConfirmation,
+      userEmail: details.email
+    });
+
     if ((currentPool.emailConfirmation === 'Email Confirmation' || currentPool.emailConfirmation === 'true') && details.email) {
+      console.log('[App] Email condition met. Importing service...');
       import('./services/emailService').then(({ emailService }) => {
+        console.log('[App] Service imported. Sending confirmation...');
         emailService.sendConfirmation(
           currentPool.name,
           squaresInitials,
@@ -250,8 +257,11 @@ const App: React.FC = () => {
           normalizedName,
           currentPool.contactEmail,
           currentPool.id
-        ).catch(err => console.error('Email failed', err));
-      });
+        ).then((res) => console.log('[App] Email Service Response:', res))
+          .catch(err => console.error('[App] Email failed', err));
+      }).catch(err => console.error('[App] Failed to import emailService', err));
+    } else {
+      console.log('[App] Email NOT sent. Condition failed.');
     }
 
     // Check for Grid Full
