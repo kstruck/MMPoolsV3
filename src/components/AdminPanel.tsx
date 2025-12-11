@@ -238,13 +238,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     updateConfig({ squares: newSquares });
   };
 
+  /* Helper to estimate current NFL week */
+  const getEstimatedWeek = () => {
+    const now = new Date();
+    const seasonStart = new Date(now.getFullYear(), 8, 5); // Approx Sept 5th
+    const diff = now.getTime() - seasonStart.getTime();
+    const weekNum = Math.ceil(diff / (1000 * 60 * 60 * 24 * 7));
+    return Math.max(1, Math.min(18, weekNum));
+  };
+
+  const currentEstimatedWeek = getEstimatedWeek();
+
   const renderWizardStep1 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-xl font-bold text-white mb-2">Basic Information</h3>
         <p className="text-slate-400 text-sm mb-6">Let's verify the core details of your pool.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label><input type="text" value={gameState.name} onChange={(e) => updateConfig({ name: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="e.g. Super Bowl LVIII Party" /></div>
+          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label><input type="text" value={gameState.name} onChange={(e) => updateConfig({ name: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Enter Pool Name" /></div>
           <div>
             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">URL Slug</label>
             <div className="relative">
@@ -269,12 +280,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
           <div className="flex justify-between items-start mb-6">
             <div><h3 className="text-xl font-bold text-white mb-2">The Matchup</h3><p className="text-slate-400 text-sm">Select the teams. Import from the schedule to auto-fetch logos.</p></div>
-            <button onClick={() => setShowSchedule(!showSchedule)} className="bg-slate-800 hover:bg-slate-700 text-indigo-300 px-4 py-2 rounded-lg text-sm font-bold border border-slate-700 transition-colors flex items-center gap-2"><Calendar size={16} /> {showSchedule ? 'Hide Schedule' : 'Find Game'}</button>
+            <button onClick={() => { setShowSchedule(!showSchedule); if (!showSchedule) setWeek(currentEstimatedWeek.toString()); }} className="bg-slate-800 hover:bg-slate-700 text-indigo-300 px-4 py-2 rounded-lg text-sm font-bold border border-slate-700 transition-colors flex items-center gap-2"><Calendar size={16} /> {showSchedule ? 'Hide Schedule' : 'Find Game'}</button>
           </div>
           {showSchedule && (
             <div className="mb-6 bg-slate-950 border border-slate-700 rounded-xl p-4 animate-in fade-in">
               <div className="flex flex-wrap items-center gap-2 mb-4">
-                <select value={seasonType} onChange={(e) => { setSeasonType(e.target.value); setWeek('1'); }} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none">
+                <select value={seasonType} onChange={(e) => { setSeasonType(e.target.value); setWeek(currentEstimatedWeek.toString()); }} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none">
                   <option value="1">Preseason</option>
                   <option value="2">Regular Season</option>
                   <option value="3">Postseason</option>
@@ -282,9 +293,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <span className="text-slate-500 text-sm">Week</span>
                 <select value={week} onChange={(e) => setWeek(e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none">
-                  {seasonType === '2' && Array.from({ length: 18 }).map((_, i) => (
-                    <option key={i} value={i + 1}>Week {i + 1}</option>
-                  ))}
+                  {seasonType === '2' && Array.from({ length: 18 }).map((_, i) => {
+                    const w = i + 1;
+                    if (w < currentEstimatedWeek) return null; // Hide past weeks
+                    return <option key={i} value={w}>Week {w}</option>;
+                  })}
                   {seasonType === '3' && (
                     <>
                       <option value="1">Wild Card</option>
@@ -315,8 +328,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-indigo-500/50 transition-colors"><label className="block text-xs font-bold text-indigo-400 uppercase mb-4 text-center">Column Team (Top)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div><input type="text" value={gameState.awayTeam} onChange={(e) => updateConfig({ awayTeam: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="e.g. 49ers" /></div></div>
-            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-rose-500/50 transition-colors"><label className="block text-xs font-bold text-rose-400 uppercase mb-4 text-center">Row Team (Left)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div><input type="text" value={gameState.homeTeam} onChange={(e) => updateConfig({ homeTeam: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="e.g. Chiefs" /></div></div>
+            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-indigo-500/50 transition-colors"><label className="block text-xs font-bold text-indigo-400 uppercase mb-4 text-center">Column Team (Top)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div><input type="text" value={gameState.awayTeam} onChange={(e) => updateConfig({ awayTeam: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="e.g. Away Team" /></div></div>
+            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-rose-500/50 transition-colors"><label className="block text-xs font-bold text-rose-400 uppercase mb-4 text-center">Row Team (Left)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div><input type="text" value={gameState.homeTeam} onChange={(e) => updateConfig({ homeTeam: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="e.g. Home Team" /></div></div>
           </div>
         </div>
       </div>
