@@ -29,9 +29,9 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
   numberTheSquares: true,
   showPaid: true,
 
-  emailConfirmation: 'No Email Confirmation',
+  emailConfirmation: 'Email Confirmation',
   notifyAdminFull: true,
-  emailNumbersGenerated: false,
+  emailNumbersGenerated: true,
 
   collectReferral: false,
   collectPhone: false,
