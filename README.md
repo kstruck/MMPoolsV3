@@ -12,9 +12,10 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 
 ### Pool Management
 *   **Setup Wizard:** Easy flow to configure teams, costs, and pool rules.
+*   **Charity & Fundraising:** ❤️ **NEW!** Dedicate a percentage of the pot to a charity of your choice. Includes automated "Off The Top" calculations and public support badges.
 *   **Custom Payouts:** Configurable percentage splits for Q1, Halftime, Q3, and Final scores.
 *   **Score Change Payouts:** Optional rule to award fixed amounts on every score change.
-*   **Axis Number Generation:** Randomly generate row/column numbers when the grid is filled.
+*   **Email Notifications:** Automated confirmation emails for square purchases and pool creation via Firebase Trigger Email.
 *   **Manager Controls:** Lock/unlock grid, mark squares as paid, manual override options.
 
 ### Super Admin Dashboard
