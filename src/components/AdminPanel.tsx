@@ -178,8 +178,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     updateConfig({
       homeTeam: home.displayName,
       awayTeam: away.displayName,
-      gameId: game.id,
-      name: `${away.abbreviation} @ ${home.abbreviation} Pool`
+      gameId: game.id
     });
 
     setShowSchedule(false);
