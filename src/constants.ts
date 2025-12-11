@@ -61,6 +61,13 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
     q3: 20,
     final: 40,
   },
+  charity: {
+    enabled: false,
+    name: '',
+    description: '',
+    url: '',
+    percentage: 0
+  },
   isLocked: false,
   ruleVariations: {
     reverseWinners: false,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { GameState, Scores, PayoutConfig, Square } from '../types';
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Activity, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield } from 'lucide-react';
+import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Activity, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
@@ -354,7 +354,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const renderWizardStep4 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div className="flex justify-between items-center mb-6"><div><h3 className="text-xl font-bold text-white mb-1">Payout Distribution</h3><p className="text-slate-400 text-sm">Define how the pot is split. Must total 100%.</p></div><div className={`text-xl font-bold font-mono px-4 py-2 rounded border ${totalPayout === 100 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/50' : 'bg-rose-500/10 text-rose-400 border-rose-500/50'}`}>Total: {totalPayout}%</div></div>
+        <div className="flex justify-between items-center mb-6"><div><h3 className="text-xl font-bold text-white mb-1">Payout & Charity Configuration</h3><p className="text-slate-400 text-sm">Define how the pot is split. Must total 100%.</p></div><div className={`text-xl font-bold font-mono px-4 py-2 rounded border ${totalPayout === 100 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/50' : 'bg-rose-500/10 text-rose-400 border-rose-500/50'}`}>Total: {totalPayout}%</div></div>
         <div className="space-y-6">
           {['q1', 'half', 'q3', 'final'].map((key) => {
             const label = key === 'q1' ? '1st Quarter' : key === 'half' ? 'Halftime' : key === 'q3' ? '3rd Quarter' : 'Final Score';
@@ -362,6 +362,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             return (<div key={key} className="bg-slate-950 p-4 rounded-xl border border-slate-700 flex items-center gap-4"><div className="w-32 font-bold text-slate-300">{label}</div><input type="range" min="0" max="100" step="5" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseInt(e.target.value) } })} className="flex-1 accent-indigo-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" /><div className="w-20 relative"><input type="number" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseFloat(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-right text-white font-mono font-bold outline-none focus:border-indigo-500" /><span className="absolute right-6 top-1.5 text-slate-500 text-xs hidden">%</span></div></div>)
           })}
         </div>
+      </div>
+
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+              <Heart size={20} className="text-rose-500" /> Charity & Fundraising
+            </h3>
+            <p className="text-slate-400 text-sm">Dedicate a portion of the pot to a cause.</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={gameState.charity?.enabled || false}
+              onChange={(e) => updateConfig({ charity: { ...(gameState.charity || { name: '', percentage: 0, url: '' }), enabled: e.target.checked } })}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+          </label>
+        </div>
+
+        {gameState.charity?.enabled && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-top-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Charity Name</label>
+                <input
+                  type="text"
+                  value={gameState.charity.name}
+                  onChange={(e) => updateConfig({ charity: { ...gameState.charity!, name: e.target.value } })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-rose-500 outline-none"
+                  placeholder="e.g. Red Cross"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Website URL (Optional)</label>
+                <input
+                  type="text"
+                  value={gameState.charity.url || ''}
+                  onChange={(e) => updateConfig({ charity: { ...gameState.charity!, url: e.target.value } })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-rose-500 outline-none"
+                  placeholder="https://..."
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
+              <div className="flex justify-between mb-2">
+                <span className="font-bold text-slate-300">Donation Percentage</span>
+                <span className="font-mono font-bold text-rose-400">{gameState.charity.percentage}% Off The Top</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={gameState.charity.percentage}
+                onChange={(e) => updateConfig({ charity: { ...gameState.charity!, percentage: parseInt(e.target.value) } })}
+                className="w-full accent-rose-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                This percentage will be deducted from the <strong>Total Pot</strong>. The remaining funds will be distributed to winners based on the Payout config above.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -448,7 +514,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"><ArrowLeft size={20} /></button>
-            <div><h1 className="text-xl font-bold text-white flex items-center gap-2"><Settings className="text-indigo-400" size={20} /> {gameState.name}</h1><p className="text-xs text-slate-500">Admin Editor</p></div>
+            <div><h1 className="text-xl font-bold text-white flex items-center gap-2"><Settings className="text-indigo-400" size={20} /> {gameState.name} <span className="text-xs bg-rose-500 text-white px-2 py-0.5 rounded-full">v3.1 Charity Update</span></h1><p className="text-xs text-slate-500">Admin Editor</p></div>
           </div>
           <div className="flex gap-2">
             <button onClick={onShare} className="text-xs bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-600 px-3 py-2 rounded font-bold cursor-pointer flex items-center gap-2"><Share2 size={14} /> Share</button>

@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // POOLS: 
+    // - Everyone (including guests) can READ and UPDATE (to claim squares)
+    // - Only Logged In users can CREATE or DELETE pools
+    match /pools/{poolId} {
+      allow read, update: if true;
+      allow create, delete: if request.auth != null;
+    }
+    
+    // USERS:
+    // - Only Logged In users can read/write user profiles
+    // - (Optional) Super Admin can read all users
+    match /users/{userId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // EMAIL TRIGGERS:
+    // - Allow anyone (including guests) to create an email request
+    // - This allows the "Send Confirmation" feature to work for public users
+    match /mail/{document=**} {
+      allow create: if true;
+    }
+  }
+}

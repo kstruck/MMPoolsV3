@@ -39,6 +39,14 @@ export interface PayoutConfig {
   final: number;
 }
 
+export interface CharityConfig {
+  enabled: boolean;
+  name: string;
+  description?: string;
+  url?: string;
+  percentage: number; // 0-100
+}
+
 export interface AxisNumbers {
   home: number[]; // Array of 10 numbers (0-9)
   away: number[]; // Array of 10 numbers (0-9)
@@ -107,6 +115,7 @@ export interface GameState {
   scoreEvents: ScoreEvent[]; // Log of score changes
   scoreChangePayoutAmount: number; // Fixed $ amount per event
   payouts: PayoutConfig; // Percentages
+  charity?: CharityConfig; // Optional charity configuration
   isLocked: boolean; // If true, users can't buy squares, numbers are revealed
   ruleVariations: {
     reverseWinners: boolean; // Split pot with reverse digits

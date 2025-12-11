@@ -4,13 +4,13 @@ import { AdminPanel } from './components/AdminPanel';
 import { Auth } from './components/Auth';
 import { LandingPage } from './components/LandingPage';
 
-import { createNewPool, getTeamLogo } from './constants';
+import { createNewPool, getTeamLogo, PERIOD_LABELS } from './constants';
 import type { GameState, Scores, PlayerDetails, User } from './types';
 import { calculateWinners, generateRandomAxis, calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, Search, X, Loader } from 'lucide-react';
+import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, Search, X, Loader, Heart } from 'lucide-react';
 
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
@@ -568,16 +568,96 @@ const App: React.FC = () => {
               <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{getScoreboardVal(1, 'home')}</div><div>{getScoreboardVal(2, 'home')}</div><div>{getScoreboardVal(3, 'home')}</div><div>{getScoreboardVal(4, 'home')}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
             </div>
           </div>
-          {/* 3. Payout Structure */}
+          {/* Charity Banner (if enabled) */}
+          {currentPool.charity?.enabled && (
+            <div className="bg-slate-900 border border-rose-500/30 rounded-2xl p-6 shadow-lg shadow-rose-500/10 mb-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <Heart size={100} className="text-rose-500" />
+              </div>
+              <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="bg-rose-500/20 p-2 rounded-lg">
+                    <Heart size={24} className="text-rose-400" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white">Proudly Supporting</h3>
+                </div>
+                <h2 className="text-3xl font-black text-rose-400 mb-2">{currentPool.charity.name}</h2>
+                <p className="text-slate-400 max-w-lg mb-4">
+                  {currentPool.charity.percentage}% of this pool's proceeds are donated directly to this cause.
+                </p>
+
+                <div className="flex gap-4 items-center">
+                  <div className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-lg">
+                    <span className="text-xs text-slate-500 uppercase font-bold block">Donation Amount</span>
+                    <span className="text-xl font-mono font-bold text-white">
+                      ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
+                    </span>
+                  </div>
+                  {currentPool.charity.url && (
+                    <a
+                      href={currentPool.charity.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-rose-400 hover:text-white font-bold text-sm flex items-center gap-1 transition-colors"
+                    >
+                      Learn More <ArrowRight size={16} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Payout Structure Card - Updated Logic */}
           <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
             <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
+
             <div className="space-y-3">
-              {(['q1', 'half', 'q3', 'final'] as const).map((key) => {
-                const percent = currentPool.payouts[key];
-                const effectivePot = Math.max(0, (currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare) - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
-                const amount = (effectivePot * (percent as number)) / 100;
-                const label = key === 'q1' ? '1st Quarter' : key === 'half' ? '2nd Quarter' : key === 'q3' ? '3rd Quarter' : 'Final Score';
-                return (<div key={key} className="flex justify-between items-center text-sm"><span className="text-slate-400 font-bold">{label}:</span><span className="text-white font-mono font-bold">${amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}</span></div>);
+              {/* Total Collected */}
+              <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
+                <span className="text-slate-400">Total Pot</span>
+                <span className="text-white font-mono font-bold">
+                  ${(currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare).toLocaleString()}
+                </span>
+              </div>
+
+              {/* Charity Deduction Line */}
+              {currentPool.charity?.enabled && (
+                <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
+                  <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({currentPool.charity.percentage}%)</span>
+                  <span className="font-mono font-bold">
+                    -${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {/* Net Prize Pot */}
+              <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
+                <span className="text-white font-bold">Net Prize Pool</span>
+                <span className="text-emerald-400 font-mono font-bold text-lg">
+                  ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
+                </span>
+              </div>
+
+              {Object.entries(currentPool.payouts).map(([key, percent]) => {
+                if (!percent) return null;
+                const label = PERIOD_LABELS[key] || key;
+                // Calculate strictly based on Net Prize Pool
+                const totalPot = currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare;
+                const charityDeduction = currentPool.charity?.enabled ? Math.floor(totalPot * (currentPool.charity.percentage / 100)) : 0;
+                const netPot = totalPot - charityDeduction;
+                const amount = Math.floor(netPot * (percent / 100));
+
+                return (
+                  <div key={key} className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400 font-bold">{label}
+                      <span className="text-slate-600 font-normal ml-1">({percent}%)</span>
+                    </span>
+                    <span className="text-white font-mono font-bold">
+                      ${amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                );
               })}
             </div>
           </div>
