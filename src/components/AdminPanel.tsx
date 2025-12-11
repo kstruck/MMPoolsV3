@@ -152,16 +152,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const data = await response.json();
       const events = data.events || [];
 
-      // Filter for future games (or games in the last 24 hours to include live ones)
+      // Filter for future games only (based on user request)
       const now = new Date();
-      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
+      // Optional: buffer of 0 hours, strict future.
       const upcoming = events.filter((e: any) => {
         const gameDate = new Date(e.date);
-        return gameDate > oneDayAgo;
+        return gameDate > now;
       });
 
-      setScheduleGames(upcoming.length > 0 ? upcoming : events); // Fallback to all if no future games found
+      setScheduleGames(upcoming);
     } catch (e) {
       console.error(e);
       // Sandbox fix: Remove alert
