@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import type { GameState, User } from '../types';
-import { Trash2, Shield, Activity } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart } from 'lucide-react';
 
 export const SuperAdmin: React.FC = () => {
     const [pools, setPools] = useState<GameState[]>([]);
@@ -145,6 +145,7 @@ export const SuperAdmin: React.FC = () => {
                         <thead className="text-xs text-slate-400 uppercase bg-slate-900">
                             <tr>
                                 <th className="p-4">Pool Name</th>
+                                <th className="p-4">Matchup</th>
                                 <th className="p-4">Owner ID</th>
                                 <th className="p-4">Squares</th>
                                 <th className="p-4">Actions</th>
@@ -153,7 +154,17 @@ export const SuperAdmin: React.FC = () => {
                         <tbody className="divide-y divide-slate-700">
                             {pools.map(pool => (
                                 <tr key={pool.id} className="hover:bg-slate-700/50">
-                                    <td className="p-4 text-white font-bold">{pool.name}</td>
+                                    <td className="p-4 text-white font-bold">
+                                        <div className="flex items-center gap-2">
+                                            {pool.name}
+                                            {pool.charity?.enabled && (
+                                                <span title={`Supporting ${pool.charity.name}`} className="bg-rose-500/10 text-rose-400 p-1 rounded-full border border-rose-500/20">
+                                                    <Heart size={12} className="fill-rose-500/50" />
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="p-4 text-slate-300 text-sm">{pool.awayTeam} vs {pool.homeTeam}</td>
                                     <td className="p-4 text-slate-400 font-mono text-xs">{pool.ownerId || 'Anonymous'}</td>
                                     <td className="p-4 text-slate-300">{pool.squares.filter(s => s.owner).length}/100</td>
                                     <td className="p-4 flex gap-2">
