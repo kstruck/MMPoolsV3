@@ -175,9 +175,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="space-y-4">
                 {[
                   { label: 'Super Bowl Squares', status: 'Live Now', active: true },
-                  { label: 'March Madness Brackets', status: 'Spring 2024', active: false },
-                  { label: 'NFL Pick\'em', status: 'Fall 2024', active: false },
-                  { label: 'Survivor Pools', status: 'Fall 2024', active: false },
+                  { label: 'March Madness Brackets', status: 'February 2026', active: false },
+                  { label: 'NFL Pick\'em', status: 'August 2026', active: false },
+                  { label: 'Survivor Pools', status: 'August 2026', active: false },
+                  { label: 'College Football Squares', status: 'August 2026', active: false },
                 ].map((item, i) => (
                   <div key={i} className={`flex items-center justify-between p-4 rounded-xl border ${item.active ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-slate-950 border-slate-800 opacity-60'}`}>
                     <span className="font-bold text-white flex items-center gap-3">
