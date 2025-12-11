@@ -58,6 +58,61 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
+    const generateRandomScore = (currentHome: number, currentAway: number) => {
+        const scores = [0, 3, 7];
+        const addHome = scores[Math.floor(Math.random() * scores.length)];
+        const addAway = scores[Math.floor(Math.random() * scores.length)];
+        return { home: currentHome + addHome, away: currentAway + addAway };
+    };
+
+    const handleRunSimulation = async (pool: GameState) => {
+        if (!confirm(`Run full simulation for ${pool.name}? This will fill empty squares and overwrite scores.`)) return;
+
+        // 1. Fill Grid with Random Users
+        const fakeUsers = ["Alice", "Bob", "Charlie", "Dave", "Eve", "Frank", "Grace", "Heidi", "Ivan", "Judy", "Mallory", "Niaj"];
+        const newSquares = pool.squares.map(s => {
+            if (s.owner) return s;
+            const randomUser = fakeUsers[Math.floor(Math.random() * fakeUsers.length)];
+            return { ...s, owner: randomUser, isPaid: true, playerDetails: { email: `${randomUser.toLowerCase()}@example.com` } };
+        });
+
+        // 2. Generate Axis Numbers if missing
+        const newAxis = pool.axisNumbers || {
+            home: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5),
+            away: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5)
+        };
+
+        // 3. Reset and Lock
+        await dbService.updatePool(pool.id, {
+            squares: newSquares,
+            axisNumbers: newAxis,
+            isLocked: true,
+            lockGrid: true,
+            scores: { current: { home: 0, away: 0 }, q1: null, half: null, q3: null, final: null }
+        });
+
+        // 4. Simulate Game Flow
+        const q1 = generateRandomScore(0, 0);
+        const half = generateRandomScore(q1.home, q1.away);
+        const q3 = generateRandomScore(half.home, half.away);
+        const final = generateRandomScore(q3.home, q3.away);
+
+        const sequence = [
+            { delay: 2000, updates: { scores: { ...pool.scores, current: q1, q1: q1 } }, msg: "End of Q1" },
+            { delay: 5000, updates: { scores: { ...pool.scores, current: half, q1: q1, half: half } }, msg: "Halftime" },
+            { delay: 8000, updates: { scores: { ...pool.scores, current: q3, q1: q1, half: half, q3: q3 } }, msg: "End of Q3" },
+            { delay: 11000, updates: { scores: { ...pool.scores, current: final, q1: q1, half: half, q3: q3, final: final } }, msg: "Final" }
+        ];
+
+        sequence.forEach(step => {
+            setTimeout(() => {
+                dbService.updatePool(pool.id, step.updates); // Note: Should ideally merge deep, but we constructed full object
+            }, step.delay);
+        });
+
+        alert("Simulation started! Watch the pool update over the next 12 seconds.");
+    };
+
     return (
         <div className="max-w-7xl mx-auto p-6 relative">
             <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
@@ -103,6 +158,7 @@ export const SuperAdmin: React.FC = () => {
                                     <td className="p-4 text-slate-300">{pool.squares.filter(s => s.owner).length}/100</td>
                                     <td className="p-4 flex gap-2">
                                         <button onClick={() => window.location.hash = `#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 mr-2 font-bold text-xs uppercase border border-indigo-500/30 px-2 py-1 rounded">Manage</button>
+                                        <button onClick={() => handleRunSimulation(pool)} className="text-fuchsia-400 hover:text-fuchsia-300 mr-2 font-bold text-xs uppercase border border-fuchsia-500/30 px-2 py-1 rounded">Run Sim</button>
                                         <button onClick={() => handleDeletePool(pool.id)} className="text-rose-400 hover:text-rose-300"><Trash2 size={18} /></button>
                                     </td>
                                 </tr>
