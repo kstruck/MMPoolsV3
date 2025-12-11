@@ -1,44 +1,29 @@
-import emailjs from '@emailjs/browser';
-
-interface EmailParams {
-    to_name: string;
-    to_email: string;
-    from_name?: string;
-    from_email?: string;
-    reply_to: string;
-    message: string;
-    pool_name: string;
-    grid_link: string;
-}
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 export const emailService = {
+    // Generic helper to write to the 'mail' collection
     sendEmail: async (
-        templateId: string,
-        params: EmailParams,
-        publicKey?: string,
-        serviceId?: string
+        to: string | string[],
+        subject: string,
+        text: string,
+        html?: string
     ) => {
-        const pubKey = publicKey || import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
-        const srvId = serviceId || import.meta.env.VITE_EMAILJS_SERVICE_ID;
-
-        // Force Sender/From if not provided, though template usually overrides
-        const finalParams = {
-            ...params,
-            from_name: params.from_name || 'March Melee Pools',
-            from_email: params.from_email || 'support@marchmeleepools.com'
-        };
-
-        if (!pubKey || !srvId) {
-            console.warn('EmailJS keys missing. Email not sent.', { params: finalParams });
-            return { status: 200, text: 'Simulated Success' };
-        }
-
         try {
-            const response = await emailjs.send(srvId, templateId, finalParams as any, pubKey);
-            return response;
+            await addDoc(collection(db, 'mail'), {
+                to,
+                message: {
+                    subject,
+                    text,
+                    html: html || text.replace(/\n/g, '<br>')
+                }
+            });
+            console.log(`Email trigger created for: ${to}`);
+            return { success: true };
         } catch (error) {
-            console.error('EmailJS Error:', error);
-            throw error;
+            console.error('Error creating email trigger:', error);
+            // Non-blocking error
+            return { success: false, error };
         }
     },
 
@@ -47,26 +32,31 @@ export const emailService = {
         squaresInitials: string[], // e.g. ["#4 (Kevin)", "#12 (Kevin)"]
         playerEmail: string,
         playerName: string,
-        poolOwnerEmail: string,
+        _poolOwnerEmail: string,
         poolId: string
     ) => {
-        const link = `${window.location.origin}${window.location.pathname}#pool/${poolId}`;
-        const message = `You have successfully claimed ${squaresInitials.length} square(s) in "${poolName}".\n\nSquares: ${squaresInitials.join(', ')}\n\nGood luck!`;
+        const link = `${window.location.origin}/#pool/${poolId}`;
+        const subject = `Confirmation: You joined "${poolName}"`;
 
-        // Use a default confirmation template ID or env var
-        const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_CONFIRM_ID || 'template_confirm';
+        const text = `Hi ${playerName},
 
-        return emailService.sendEmail(
-            templateId,
-            {
-                to_name: playerName,
-                to_email: playerEmail,
-                reply_to: poolOwnerEmail,
-                message: message,
-                pool_name: poolName,
-                grid_link: link
-            }
-        );
+You have successfully claimed ${squaresInitials.length} square(s) in "${poolName}".
+
+Squares: ${squaresInitials.join(', ')}
+
+View the pool here: ${link}
+
+Good luck!`;
+
+        const html = `
+            <p>Hi ${playerName},</p>
+            <p>You have successfully claimed <strong>${squaresInitials.length} square(s)</strong> in "<strong>${poolName}</strong>".</p>
+            <p><strong>Squares:</strong> ${squaresInitials.join(', ')}</p>
+            <p><a href="${link}">View Pool</a></p>
+            <p>Good luck!</p>
+        `;
+
+        return emailService.sendEmail(playerEmail, subject, text, html);
     },
 
     sendGridFullNotification: async (
@@ -74,22 +64,20 @@ export const emailService = {
         adminEmail: string,
         poolId: string
     ) => {
-        const link = `${window.location.origin}${window.location.pathname}#pool/${poolId}`;
-        const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ADMIN_ID || 'template_admin_notification'; // Ensure you have this template in EmailJS
+        const link = `${window.location.origin}/#pool/${poolId}`;
+        const subject = `Action Required: Grid Full for "${poolName}"`;
 
-        console.log(`[EmailService] Sending Grid Full Alert to ${adminEmail}`);
+        const text = `The grid for "${poolName}" is now FULL (100 squares sold)!
+        
+Time to generate numbers and manage your pool: ${link}`;
 
-        return emailService.sendEmail(
-            templateId,
-            {
-                to_name: "Admin",
-                to_email: adminEmail,
-                reply_to: "support@marchmeleepools.com",
-                message: `The grid for "${poolName}" is now FULL (100 squares sold)! Time to generate numbers.`,
-                pool_name: poolName,
-                grid_link: link
-            }
-        );
+        const html = `
+            <p>The grid for "<strong>${poolName}</strong>" is now FULL (100 squares sold)!</p>
+            <p>Time to generate numbers and manage your pool:</p>
+            <p><a href="${link}">Go to Pool</a></p>
+        `;
+
+        return emailService.sendEmail(adminEmail, subject, text, html);
     },
 
     sendNumbersSetNotification: async (
@@ -98,19 +86,21 @@ export const emailService = {
         playerName: string,
         poolId: string
     ) => {
-        const link = `${window.location.origin}${window.location.pathname}#pool/${poolId}`;
-        const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_UPDATE_ID || 'template_update';
+        const link = `${window.location.origin}/#pool/${poolId}`;
+        const subject = `Numbers Generated: "${poolName}"`;
 
-        return emailService.sendEmail(
-            templateId,
-            {
-                to_name: playerName,
-                to_email: playerEmail,
-                reply_to: "support@marchmeleepools.com",
-                message: `The numbers have been generated for "${poolName}"! Check the grid to see your luck.`,
-                pool_name: poolName,
-                grid_link: link
-            }
-        );
+        const text = `Hi ${playerName},
+        
+The numbers have been generated for "${poolName}"! 
+
+Check the grid to see your luck: ${link}`;
+
+        const html = `
+            <p>Hi ${playerName},</p>
+            <p>The numbers have been generated for "<strong>${poolName}</strong>"!</p>
+            <p><a href="${link}">Check your squares here</a></p>
+        `;
+
+        return emailService.sendEmail(playerEmail, subject, text, html);
     }
 };
