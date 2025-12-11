@@ -65,8 +65,7 @@ const App: React.FC = () => {
   const [pools, setPools] = useState<GameState[]>([]);
   const [isPoolsLoading, setIsPoolsLoading] = useState(true);
 
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simMessage, setSimMessage] = useState<string | null>(null);
+
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -126,13 +125,13 @@ const App: React.FC = () => {
   const currentPool = useMemo(() => route.id ? pools.find(p => p.id === route.id || (p.urlSlug && p.urlSlug.toLowerCase() === route.id.toLowerCase())) || null : null, [pools, route.id]);
 
   useEffect(() => {
-    if (!currentPool?.gameId || isSimulating || currentPool.manualScoreOverride || currentPool.scores.final) return;
+    if (!currentPool?.gameId || currentPool.manualScoreOverride || currentPool.scores.final) return;
     fetchGameScore(currentPool).then(res => { if (res) updateScores(currentPool.id, res.scores); });
     const interval = setInterval(() => {
       fetchGameScore(currentPool).then(res => { if (res) updateScores(currentPool.id, res.scores); });
     }, 60000);
     return () => clearInterval(interval);
-  }, [currentPool?.gameId, currentPool?.id, isSimulating, currentPool?.manualScoreOverride, currentPool?.scores.final]);
+  }, [currentPool?.gameId, currentPool?.id, currentPool?.manualScoreOverride, currentPool?.scores.final]);
 
   const winners = useMemo(() => {
     if (!currentPool) return [];
@@ -186,33 +185,7 @@ const App: React.FC = () => {
     deletePool(id);
   };
 
-  const handleRunSimulation = (poolId: string) => {
-    setIsSimulating(true);
-    setSimMessage("Simulation Started: Filling Grid...");
-    setPools(prev => prev.map(p => {
-      if (p.id !== poolId) return p;
-      const filledSquares = p.squares.map((s) => s.owner ? s : { ...s, owner: `SimBot`, isPaid: true });
-      const newHomeAxis = p.axisNumbers ? p.axisNumbers.home : generateRandomAxis();
-      const newAwayAxis = p.axisNumbers ? p.axisNumbers.away : generateRandomAxis();
-      return {
-        ...p,
-        squares: filledSquares, isLocked: true, lockGrid: true,
-        axisNumbers: { home: newHomeAxis, away: newAwayAxis },
-        scores: { current: { home: 0, away: 0 }, q1: null, half: null, q3: null, final: null },
-        gameId: undefined
-      };
-    }));
-    const sequence = [
-      { delay: 3000, scores: { current: { home: 7, away: 0 }, q1: { home: 7, away: 0 } }, msg: "End of 1st" },
-      { delay: 6000, scores: { current: { home: 7, away: 3 }, half: { home: 7, away: 3 } }, msg: "Halftime" },
-      { delay: 9000, scores: { current: { home: 14, away: 3 }, q3: { home: 14, away: 3 } }, msg: "End of 3rd" },
-      { delay: 12000, scores: { current: { home: 14, away: 10 }, final: { home: 14, away: 10 } }, msg: "Final" }
-    ];
-    sequence.forEach(step => {
-      setTimeout(() => { updateScores(poolId, step.scores); setSimMessage(step.msg); }, step.delay);
-    });
-    setTimeout(() => { setIsSimulating(false); setSimMessage(null); }, 13000);
-  };
+
 
   const openShare = (id?: string) => {
     if (!id) return;
@@ -542,7 +515,7 @@ const App: React.FC = () => {
     const awayPredictions = calculateScenarioWinners(currentPool, 'away');
     const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
     const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
-    const isAdmin = user && user.id === currentPool.ownerId;
+
 
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative">
@@ -564,16 +537,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Sim Banner */}
-        {simMessage && (
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-fuchsia-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce flex items-center gap-2 font-bold"><Zap size={20} fill="currentColor" /> {simMessage}</div>
-        )}
-        {/* Sim Button */}
-        {isAdmin && (
-          <button onClick={() => handleRunSimulation(currentPool.id)} disabled={isSimulating} className="fixed bottom-6 right-6 z-50 bg-fuchsia-600 hover:bg-fuchsia-500 text-white p-4 rounded-full shadow-2xl shadow-fuchsia-500/40 flex items-center justify-center transition-all hover:scale-110 active:scale-95 disabled:opacity-50 disabled:scale-100">
-            {isSimulating ? <Zap className="animate-spin" size={24} /> : <Zap size={24} />}
-          </button>
-        )}
+
 
         {/* Latest Winner Banner */}
         {
