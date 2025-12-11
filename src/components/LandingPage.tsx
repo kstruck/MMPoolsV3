@@ -1,6 +1,6 @@
 import React from 'react';
 import { Logo } from './Logo';
-import { Trophy, Users, Zap, Shield, LayoutGrid, Award, Calendar, CheckCircle2 } from 'lucide-react';
+import { Trophy, Users, Zap, Shield, LayoutGrid, Award, Calendar, CheckCircle2, Heart } from 'lucide-react';
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -120,7 +120,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             {[
               { icon: Zap, title: "Real-Time Automation", desc: "Live scoring updates via ESPN integration. Winners are calculated instantly as the game progresses." },
               { icon: Users, title: "Player Management", desc: "Track payments, manage participants, and send automated email notifications easily." },
-              { icon: Shield, title: "Secure & Customizable", desc: "Set your own rules, payout structures, and privacy settings. Your pool, your way." }
+              { icon: Shield, title: "Secure & Customizable", desc: "Set your own rules, payout structures, and privacy settings. Your pool, your way." },
+              { icon: Heart, title: "Charity & Fundraising", desc: "Run pools for a good cause. Easily designate a percentage of the pot to donate." }
             ].map((feature, i) => (
               <div key={i} className="bg-slate-950 p-8 rounded-2xl border border-slate-800 hover:border-orange-500/50 transition-colors group">
                 <div className="w-14 h-14 bg-orange-900/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 border border-orange-500/20">

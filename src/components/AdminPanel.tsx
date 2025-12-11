@@ -359,7 +359,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {['q1', 'half', 'q3', 'final'].map((key) => {
             const label = key === 'q1' ? '1st Quarter' : key === 'half' ? 'Halftime' : key === 'q3' ? '3rd Quarter' : 'Final Score';
             const val = gameState.payouts[key as keyof PayoutConfig];
-            return (<div key={key} className="bg-slate-950 p-4 rounded-xl border border-slate-700 flex items-center gap-4"><div className="w-32 font-bold text-slate-300">{label}</div><input type="range" min="0" max="100" step="5" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseInt(e.target.value) } })} className="flex-1 accent-indigo-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" /><div className="w-20 relative"><input type="number" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseFloat(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-right text-white font-mono font-bold outline-none focus:border-indigo-500" /><span className="absolute right-6 top-1.5 text-slate-500 text-xs hidden">%</span></div></div>)
+
+            // Calculate Projected Amount
+            const totalPot = gameState.costPerSquare * 100;
+            const charityDeduction = gameState.charity?.enabled ? (totalPot * (gameState.charity.percentage / 100)) : 0;
+            const netPot = totalPot - charityDeduction;
+            const projectedAmount = (netPot * (val / 100));
+
+            return (
+              <div key={key} className="bg-slate-950 p-4 rounded-xl border border-slate-700 flex items-center gap-4">
+                <div className="w-32 font-bold text-slate-300">
+                  {label}
+                  <div className="text-[10px] text-slate-500 font-normal">Est. ${projectedAmount.toLocaleString()}</div>
+                </div>
+                <input type="range" min="0" max="100" step="5" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseInt(e.target.value) } })} className="flex-1 accent-indigo-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
+                <div className="w-20 relative">
+                  <input type="number" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseFloat(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-right text-white font-mono font-bold outline-none focus:border-indigo-500" />
+                  <span className="absolute right-6 top-1.5 text-slate-500 text-xs hidden">%</span>
+                </div>
+              </div>
+            )
           })}
         </div>
       </div>
@@ -423,8 +442,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="w-full accent-rose-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
               />
               <p className="text-xs text-slate-500 mt-2">
-                This percentage will be deducted from the <strong>Total Pot</strong>. The remaining funds will be distributed to winners based on the Payout config above.
+                This percentage will be deducted from the <strong>Total Pot</strong> before winner payouts.
               </p>
+
+              {/* Projected Donation Amount */}
+              <div className="mt-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg flex justify-between items-center">
+                <span className="text-xs font-bold text-rose-300 uppercase">Projected Donation (100 Sqs)</span>
+                <span className="font-mono font-bold text-white text-lg">
+                  ${((gameState.costPerSquare * 100) * (gameState.charity.percentage / 100)).toLocaleString()}
+                </span>
+              </div>
             </div>
           </div>
         )}
