@@ -598,7 +598,8 @@ const App: React.FC = () => {
           <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
             <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
             <div className="space-y-3">
-              {Object.entries(currentPool.payouts).map(([key, percent]) => {
+              {(['q1', 'half', 'q3', 'final'] as const).map((key) => {
+                const percent = currentPool.payouts[key];
                 const effectivePot = Math.max(0, (currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare) - (currentPool.ruleVariations.scoreChangePayout ? (currentPool.scoreEvents.length * currentPool.scoreChangePayoutAmount) : 0));
                 const amount = (effectivePot * (percent as number)) / 100;
                 const label = key === 'q1' ? '1st Quarter' : key === 'half' ? '2nd Quarter' : key === 'q3' ? '3rd Quarter' : 'Final Score';
