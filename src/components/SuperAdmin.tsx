@@ -10,6 +10,7 @@ export const SuperAdmin: React.FC = () => {
 
     // User Edit State
     const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [viewingUser, setViewingUser] = useState<User | null>(null);
     const [editName, setEditName] = useState('');
     const [editEmail, setEditEmail] = useState('');
 
@@ -45,6 +46,10 @@ export const SuperAdmin: React.FC = () => {
         setEditingUser(user);
         setEditName(user.name);
         setEditEmail(user.email);
+    };
+
+    const handleViewUser = (user: User) => {
+        setViewingUser(user);
     };
 
     const saveUserChanges = async () => {
@@ -146,7 +151,7 @@ export const SuperAdmin: React.FC = () => {
                             <tr>
                                 <th className="p-4">Pool Name</th>
                                 <th className="p-4">Matchup</th>
-                                <th className="p-4">Owner ID</th>
+                                <th className="p-4">Owner</th>
                                 <th className="p-4">Squares</th>
                                 <th className="p-4">Actions</th>
                             </tr>
@@ -165,7 +170,20 @@ export const SuperAdmin: React.FC = () => {
                                         </div>
                                     </td>
                                     <td className="p-4 text-slate-300 text-sm">{pool.awayTeam} vs {pool.homeTeam}</td>
-                                    <td className="p-4 text-slate-400 font-mono text-xs">{pool.ownerId || 'Anonymous'}</td>
+                                    <td className="p-4">
+                                        {pool.ownerId ? (
+                                            <button
+                                                onClick={() => {
+                                                    const u = users.find(u => u.id === pool.ownerId);
+                                                    if (u) setViewingUser(u);
+                                                }}
+                                                className="text-indigo-400 hover:text-white hover:underline font-bold text-sm text-left"
+                                            >
+                                                {users.find(u => u.id === pool.ownerId)?.name || 'Unknown User'}
+                                            </button>
+                                        ) : <span className="text-slate-500 italic">Anonymous</span>}
+                                        <div className="text-[10px] text-slate-600 font-mono truncate max-w-[100px]">{pool.ownerId}</div>
+                                    </td>
                                     <td className="p-4 text-slate-300">{pool.squares.filter(s => s.owner).length}/100</td>
                                     <td className="p-4 flex gap-2">
                                         <button onClick={() => window.location.hash = `#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 mr-2 font-bold text-xs uppercase border border-indigo-500/30 px-2 py-1 rounded">Manage</button>
@@ -199,7 +217,9 @@ export const SuperAdmin: React.FC = () => {
                         <tbody className="divide-y divide-slate-700">
                             {users.map(u => (
                                 <tr key={u.id} className="hover:bg-slate-700/50">
-                                    <td className="p-4 text-white font-medium">{u.name}</td>
+                                    <td className="p-4 text-white font-medium">
+                                        <button onClick={() => handleViewUser(u)} className="hover:text-indigo-400 hover:underline font-bold text-left">{u.name}</button>
+                                    </td>
                                     <td className="p-4 text-slate-400">{u.email}</td>
                                     <td className="p-4">
                                         <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${u.registrationMethod === 'google' ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'}`}>
@@ -236,6 +256,78 @@ export const SuperAdmin: React.FC = () => {
                         <div className="flex justify-end gap-3">
                             <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-white font-bold text-sm">Cancel</button>
                             <button onClick={saveUserChanges} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded font-bold text-sm">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* VIEW USER DETAILS MODAL */}
+            {viewingUser && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+                        <div className="p-6 border-b border-slate-700 flex justify-between items-start bg-slate-950/50 rounded-t-2xl">
+                            <div>
+                                <h2 className="text-3xl font-bold text-white mb-1">{viewingUser.name}</h2>
+                                <p className="text-slate-400 flex items-center gap-2 text-sm">
+                                    <span className="bg-slate-800 px-2 py-0.5 rounded text-slate-300 border border-slate-700">ID: {viewingUser.id}</span>
+                                    <span className="text-slate-500">•</span>
+                                    <span>{viewingUser.email}</span>
+                                </p>
+                            </div>
+                            <button onClick={() => setViewingUser(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors">
+                                <span className="sr-only">Close</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+
+                        <div className="p-6">
+                            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                                <Activity size={20} className="text-indigo-400" /> Pools Managed by {viewingUser.name.split(' ')[0]}
+                            </h3>
+
+                            {pools.filter(p => p.ownerId === viewingUser.id).length === 0 ? (
+                                <div className="p-8 text-center bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
+                                    <p className="text-slate-500 font-medium">No pools found for this user.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {pools.filter(p => p.ownerId === viewingUser.id).map(pool => (
+                                        <div key={pool.id} className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-indigo-500/50 transition-colors group">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <h4 className="font-bold text-white text-lg group-hover:text-indigo-400 transition-colors">{pool.name}</h4>
+                                                    <p className="text-xs text-slate-400 uppercase font-bold mt-1">{pool.awayTeam} vs {pool.homeTeam}</p>
+                                                </div>
+                                                {pool.charity?.enabled && <Heart size={16} className="text-rose-500 fill-rose-500" />}
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2 text-sm text-slate-400 mb-4 bg-slate-900/50 p-3 rounded-lg">
+                                                <div>Squares: <span className="text-white font-mono">{pool.squares.filter(s => s.owner).length}/100</span></div>
+                                                <div>Status: <span className={pool.isLocked ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"}>{pool.isLocked ? 'LOCKED' : 'OPEN'}</span></div>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        window.location.hash = `#admin/${pool.id}`;
+                                                        setViewingUser(null);
+                                                    }}
+                                                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded font-bold text-sm transition-colors text-center"
+                                                >
+                                                    Manage Pool
+                                                </button>
+                                                <a
+                                                    href={`#pool/${pool.id}`}
+                                                    target="_blank"
+                                                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded font-bold text-sm transition-colors text-center"
+                                                >
+                                                    View Grid
+                                                </a>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
