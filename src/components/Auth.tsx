@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { authService } from '../services/authService';
-import { Mail, Lock, User, Chrome, ArrowRight, Loader2, KeyRound, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User, Chrome, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 
 interface AuthProps {
   onLogin: () => void;
@@ -63,18 +63,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
     }
   };
 
-  const handleDemoLogin = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await authService.login("admin@test.com", "password");
-      onLogin();
-    } catch (err) {
-      console.error("Demo login error", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
 
   return (
     <div className="w-full max-w-md mx-auto">
@@ -181,13 +170,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
             </button>
           </form>
 
-          <button
-            onClick={handleDemoLogin}
-            type="button"
-            className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all border border-slate-600"
-          >
-            <KeyRound size={18} /> Quick Demo Login (Admin)
-          </button>
+
 
           <div className="text-center pt-2">
             <button
