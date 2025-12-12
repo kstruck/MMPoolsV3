@@ -1,38 +1,38 @@
-import * as functions from "firebase-functions";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
 
 
-export const lockPool = functions.https.onCall(async (data, context) => {
+export const lockPool = onCall(async (request) => {
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
 
     // 1. Auth Check - Must be logged in
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
+    if (!request.auth) {
+        throw new HttpsError(
             "unauthenticated",
             "User must be logged in to lock a pool."
         );
     }
 
-    const { poolId } = data;
+    const { poolId } = request.data;
     if (!poolId) {
-        throw new functions.https.HttpsError("invalid-argument", "Pool ID is required.");
+        throw new HttpsError("invalid-argument", "Pool ID is required.");
     }
 
     const poolRef = db.collection("pools").doc(poolId);
     const poolSnap = await poolRef.get();
 
     if (!poolSnap.exists) {
-        throw new functions.https.HttpsError("not-found", "Pool not found.");
+        throw new HttpsError("not-found", "Pool not found.");
     }
 
     const poolData = poolSnap.data() as GameState;
 
     // 2. Permission Check - Must be Owner
-    if (poolData.ownerId !== context.auth.uid) {
+    if (poolData.ownerId !== request.auth.uid) {
         // Optional: Allow global admins here if you had a super-admin role
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "permission-denied",
             "Only the pool owner can lock the grid."
         );
