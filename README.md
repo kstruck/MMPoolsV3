@@ -28,7 +28,9 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 *   **Frontend:** React 19, TypeScript, Vite
 *   **Styling:** Tailwind CSS, Lucide React (Icons)
 *   **Backend / Data:** Firebase (Firestore, Auth)
-*   **APIs:** ESPN (Scoreboard data)
+*   **APIs:** 
+    *   **Data:** ESPN (Scoreboard)
+    *   **AI:** Google Gemini (AI Commissioner Features)
 *   **Deployment:** Docker (Nginx serving static assets)
 
 ## 💻 Local Developement Setup
