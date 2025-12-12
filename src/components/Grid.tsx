@@ -5,7 +5,7 @@ import { getTeamLogo } from '../constants';
 
 interface GridProps {
    gameState: GameState;
-   onClaimSquares: (ids: number[], name: string, details: PlayerDetails) => { success: boolean; message?: string };
+   onClaimSquares: (ids: number[], name: string, details: PlayerDetails) => Promise<{ success: boolean; message?: string }> | { success: boolean; message?: string };
    winners: Winner[];
    highlightHomeDigit?: number;
    highlightAwayDigit?: number;
@@ -128,8 +128,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       setIsConfirming(true);
    };
 
-   const handleFinalizePurchase = () => {
-      const result = onClaimSquares(selectedSquares, playerInfo.name, playerInfo.details);
+   const handleFinalizePurchase = async () => {
+      const result = await onClaimSquares(selectedSquares, playerInfo.name, playerInfo.details);
       if (result.success) {
          setSelectedSquares([]);
          setIsConfirming(false);

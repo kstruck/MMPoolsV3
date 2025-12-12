@@ -110,6 +110,8 @@ export interface GameState {
 
   isPublic: boolean; // Visibility on public listing
   squares: Square[];
+  createdAt?: any; // Firestore Timestamp
+  updatedAt?: any; // Firestore Timestamp
   axisNumbers: AxisNumbers | null; // Null means not generated yet
   scores: Scores;
   scoreEvents: ScoreEvent[]; // Log of score changes

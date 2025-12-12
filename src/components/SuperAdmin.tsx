@@ -150,6 +150,7 @@ export const SuperAdmin: React.FC = () => {
                         <thead className="text-xs text-slate-400 uppercase bg-slate-900">
                             <tr>
                                 <th className="p-4">Pool Name</th>
+                                <th className="p-4">Created</th>
                                 <th className="p-4">Matchup</th>
                                 <th className="p-4">Owner</th>
                                 <th className="p-4">Squares</th>
@@ -168,6 +169,10 @@ export const SuperAdmin: React.FC = () => {
                                                 </span>
                                             )}
                                         </div>
+                                    </td>
+                                    <td className="p-4 text-slate-400 text-xs">
+                                        {pool.createdAt?.seconds ? new Date(pool.createdAt.seconds * 1000).toLocaleDateString() : 'Unknown'}
+                                        <div className="text-[10px] text-slate-600">{pool.createdAt?.seconds ? new Date(pool.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</div>
                                     </td>
                                     <td className="p-4 text-slate-300 text-sm">{pool.awayTeam} vs {pool.homeTeam}</td>
                                     <td className="p-4">

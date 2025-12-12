@@ -9,7 +9,7 @@ interface AdminPanelProps {
   gameState: GameState;
   updateConfig: (updates: Partial<GameState>) => void;
   updateScores: (scores: Partial<Scores>) => void;
-  generateNumbers: () => void;
+  generateNumbers: () => Promise<void> | void;
   resetGame: () => void;
   onBack: () => void;
   onShare: () => void;
@@ -103,11 +103,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const toggleLock = () => {
+  const toggleLock = async () => {
     if (!gameState.isLocked && !gameState.axisNumbers) {
-      generateNumbers();
+      // If unlocking or numbers not set, and we are starting: Use Server Function
+      await generateNumbers();
+    } else {
+      // Just toggle the lock state (Pause/Unpause)
+      updateConfig({ isLocked: !gameState.isLocked, lockGrid: !gameState.isLocked });
     }
-    updateConfig({ isLocked: !gameState.isLocked, lockGrid: !gameState.isLocked });
   };
 
   const handleSave = () => {

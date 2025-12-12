@@ -3,23 +3,36 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // POOLS: 
-    // - Everyone (including guests) can READ and UPDATE (to claim squares)
-    // - Only Logged In users can CREATE or DELETE pools
+    // - READ: Everyone (Public)
+    // - CREATE: Logged in users
+    // - UPDATE: 
+    //   - Allow Owner to update (for settings, managing players)
+    //   - DENY others (Public users claiming squares must use Cloud Function 'reserveSquare')
+    //   - DENY 'isLocked', 'axisNumbers' updates from Client (must use Cloud Function 'lockPool') - enforce via field check if owner?
+    //     - Actually, even Owner should use lockPool for RNG.
+    //     - But Owner might need to toggle lock manually? 
+    //     - Let's restrict 'axisNumbers' to only be writable if unchanged or via Admin SDK (which bypasses rules).
+    //     - So: allow update if request.auth.uid == resource.data.ownerId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers']))
+    // - DELETE: Owner only
+    
     match /pools/{poolId} {
-      allow read, update: if true;
-      allow create, delete: if request.auth != null;
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
+      allow update: if request.auth != null && request.auth.uid == resource.data.ownerId 
+                    && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers']));
     }
     
     // USERS:
-    // - Only Logged In users can read/write user profiles
-    // - (Optional) Super Admin can read all users
+    // - Read: Authenticated users (so SuperAdmin can list them)
+    // - Write: Self only
     match /users/{userId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
 
     // EMAIL TRIGGERS:
-    // - Allow anyone (including guests) to create an email request
-    // - This allows the "Send Confirmation" feature to work for public users
+    // - Public write allowed (for now, to support legacy client-side trigger)
     match /mail/{document=**} {
       allow create: if true;
     }

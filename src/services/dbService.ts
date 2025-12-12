@@ -9,7 +9,8 @@ import {
     query,
     Timestamp
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../firebase";
 import type { GameState, User } from "../types";
 
 export const dbService = {
@@ -48,6 +49,27 @@ export const dbService = {
             await deleteDoc(doc(db, "pools", poolId));
         } catch (error) {
             console.error("Error deleting pool:", error);
+            throw error;
+        }
+    },
+
+    // --- CLOUD FUNCTIONS ---
+    lockPool: async (poolId: string): Promise<void> => {
+        try {
+            const lockPoolFn = httpsCallable(functions, 'lockPool');
+            await lockPoolFn({ poolId });
+        } catch (error) {
+            console.error("Error calling lockPool function:", error);
+            throw error;
+        }
+    },
+
+    reserveSquare: async (poolId: string, squareId: number, customerDetails?: any): Promise<void> => {
+        try {
+            const reserveSquareFn = httpsCallable(functions, 'reserveSquare');
+            await reserveSquareFn({ poolId, squareId, customerDetails });
+        } catch (error) {
+            console.error("Error calling reserveSquare function:", error);
             throw error;
         }
     },

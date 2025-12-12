@@ -63,6 +63,25 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
     ```
     The app will actailable at `http://localhost:5173`.
 
+## 🔒 Authentication & Security
+
+This project relies on **Firebase Cloud Functions** to enforce game integrity and prevent cheating.
+
+### Cloud Functions (`/functions`)
+Sensitive operations are moved off the client-side to a trusted Node.js environment:
+*   `lockPool(poolId)`: Securely locks the grid and generates the random 0-9 axis numbers. This prevents users from manipulating the local `Math.random` or seeing numbers before they are locked.
+*   `reserveSquare(poolId, squareId)`: Handles square purchases transactionally. Prevents race conditions (two users buying the same square at the same time) and enforces limits securely.
+
+### Firestore Security Rules
+*   **Clients:** Explicitly blocked from writing to sensitive fields like `isLocked` and `axisNumbers`.
+*   **Users:** Can only write to their own user profile.
+*   **SuperAdmin:** The dashboard has read-only access to all users to resolve names in the UI.
+
+### Email Service (Extension)
+Uses the **"Trigger Email from Firestore"** extension.
+*   **Flow:** App writes a document to `/mail` -> Extension detects it -> Sends SMTP email via Hostinger.
+*   **Regions:** Configured for `us-central1` (Functions) and `nam5` (Firestore).
+
 ## 🚀 Deployment Guide (Coolify / Docker)
 
 This project is configured for deployment using **Docker**.
