@@ -116,6 +116,7 @@ export interface GameState {
   scoreChangePayoutAmount: number; // Fixed $ amount per event
   payouts: PayoutConfig; // Percentages
   charity?: CharityConfig; // Optional charity configuration
+  includeOvertime: boolean; // If true, Final score includes OT. If false, Final is end of Q4.
   isLocked: boolean; // If true, users can't buy squares, numbers are revealed
   ruleVariations: {
     reverseWinners: boolean; // Split pot with reverse digits

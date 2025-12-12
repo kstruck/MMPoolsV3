@@ -68,6 +68,7 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
     url: '',
     percentage: 0
   },
+  includeOvertime: true,
   isLocked: false,
   ruleVariations: {
     reverseWinners: false,

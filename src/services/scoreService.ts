@@ -68,22 +68,54 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     const homeLines = apiHomeComp.linescores || [];
     const awayLines = apiAwayComp.linescores || [];
 
-    // Safely calculate cumulative scores
-    const q1Home = safeInt(homeLines[0]?.value);
-    const q1Away = safeInt(awayLines[0]?.value);
+    // Robust Helper to find score by period number
+    // ESPN API format: { period: 1, value: 7, ... }
+    const getPeriodScore = (lines: any[], p: number) => {
+      const found = lines.find((l: any) => l.period === p);
+      return found ? safeInt(found.value) : 0;
+    };
 
-    const q2Home = safeInt(homeLines[1]?.value);
-    const q2Away = safeInt(awayLines[1]?.value);
+    // 1. Calculate Individual Quarter Scores
+    const q1Home = getPeriodScore(homeLines, 1);
+    const q1Away = getPeriodScore(awayLines, 1);
+
+    const q2Home = getPeriodScore(homeLines, 2);
+    const q2Away = getPeriodScore(awayLines, 2);
+
+    const q3HomeRaw = getPeriodScore(homeLines, 3);
+    const q3AwayRaw = getPeriodScore(awayLines, 3);
+
+    const q4HomeRaw = getPeriodScore(homeLines, 4);
+    const q4AwayRaw = getPeriodScore(awayLines, 4);
+
+    // 2. Calculate Cumulative Scores (The "Grid Logic")
+    // Halftime = Q1 + Q2
     const halfHome = q1Home + q2Home;
     const halfAway = q1Away + q2Away;
 
-    const q3HomeRaw = safeInt(homeLines[2]?.value);
-    const q3AwayRaw = safeInt(awayLines[2]?.value);
+    // Q3 Cumulative = Halftime + Q3
     const q3Home = halfHome + q3HomeRaw;
     const q3Away = halfAway + q3AwayRaw;
 
-    const finalHome = safeInt(apiHomeComp.score);
-    const finalAway = safeInt(apiAwayComp.score);
+    // Regulation Final = Q3 Cumulative + Q4
+    const regFinalHome = q3Home + q4HomeRaw;
+    const regFinalAway = q3Away + q4AwayRaw;
+
+    // 3. Determine "Final" Score based on Settings
+    const apiTotalHome = safeInt(apiHomeComp.score);
+    const apiTotalAway = safeInt(apiAwayComp.score);
+
+    let finalHome, finalAway;
+
+    if (gameState.includeOvertime) {
+      // Default: Use the total game score (includes OT)
+      finalHome = apiTotalHome;
+      finalAway = apiTotalAway;
+    } else {
+      // Variation: Strict Regulation Only
+      finalHome = regFinalHome;
+      finalAway = regFinalAway;
+    }
 
     // Use optional chaining for safe access
     const statusState = matchedGame.status.type?.state;
@@ -91,13 +123,22 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     const completed = matchedGame.status.type?.completed;
 
     const newScores: Partial<Scores> = {
-      current: { home: finalHome, away: finalAway }
+      current: { home: apiTotalHome, away: apiTotalAway }
     };
 
+    // Update state based on game progress
+    // Note: We use >= logic to ensure scores persist after the period ends
     if (period >= 2 || statusState === 'post') newScores.q1 = { home: q1Home, away: q1Away };
     if (period >= 3 || statusState === 'post') newScores.half = { home: halfHome, away: halfAway };
     if (period >= 4 || statusState === 'post') newScores.q3 = { home: q3Home, away: q3Away };
-    if (statusState === 'post' || (period === 4 && completed)) newScores.final = { home: finalHome, away: finalAway };
+
+    // Final is set when game is over OR if we are in OT and treating it as live final
+    if (statusState === 'post' || completed) {
+      newScores.final = { home: finalHome, away: finalAway };
+    } else if (period >= 4) {
+      // Show live final in Q4/OT
+      newScores.final = { home: finalHome, away: finalAway };
+    }
 
     return { scores: newScores, status: matchedGame.shortName || 'Game' };
 
