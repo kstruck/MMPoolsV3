@@ -3,8 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.reserveSquare = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const db = admin.firestore();
 exports.reserveSquare = functions.https.onCall(async (data, context) => {
+    // 0. Ensure Admin Init (Lazy)
+    const db = admin.firestore();
     // 1. Auth Check
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Must be logged in to reserve a square.");

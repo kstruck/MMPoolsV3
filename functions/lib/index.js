@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.reserveSquare = exports.lockPool = exports.db = void 0;
+exports.reserveSquare = exports.lockPool = void 0;
 const admin = require("firebase-admin");
-admin.initializeApp();
-exports.db = admin.firestore();
+if (!admin.apps.length) {
+    admin.initializeApp();
+}
 // Exported Cloud Functions
 var poolParams_1 = require("./poolParams");
 Object.defineProperty(exports, "lockPool", { enumerable: true, get: function () { return poolParams_1.lockPool; } });

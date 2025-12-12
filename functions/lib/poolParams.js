@@ -3,8 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.lockPool = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const db = admin.firestore();
 exports.lockPool = functions.https.onCall(async (data, context) => {
+    // 0. Ensure Admin Init (Lazy)
+    const db = admin.firestore();
     // 1. Auth Check - Must be logged in
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "User must be logged in to lock a pool.");

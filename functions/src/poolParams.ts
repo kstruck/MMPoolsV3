@@ -2,9 +2,11 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
 
-const db = admin.firestore();
 
 export const lockPool = functions.https.onCall(async (data, context) => {
+    // 0. Ensure Admin Init (Lazy)
+    const db = admin.firestore();
+
     // 1. Auth Check - Must be logged in
     if (!context.auth) {
         throw new functions.https.HttpsError(
