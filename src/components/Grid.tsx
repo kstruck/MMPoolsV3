@@ -477,11 +477,11 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               borderClass = "border-slate-800";
                               textClass = "text-slate-200 font-medium";
                            } else if (isAvailable) {
-                              bgClass = "bg-slate-800 hover:bg-slate-700 cursor-pointer backdrop-blur-sm hover:shadow-lg hover:shadow-indigo-500/10";
-                              borderClass = "border-slate-700 hover:border-indigo-400/50";
+                              bgClass = "bg-white hover:bg-slate-50 cursor-pointer shadow-sm hover:shadow-lg hover:shadow-indigo-500/10";
+                              borderClass = "border-slate-200 hover:border-indigo-400/50";
                               effectClass += " hover:scale-[1.05] hover:-translate-y-0.5";
                               zIndex = "hover:z-10";
-                              textClass = "text-indigo-200";
+                              textClass = "text-slate-900";
                            } else if (isLockedEmpty) {
                               bgClass = "bg-slate-950/30 opacity-40 cursor-not-allowed";
                               borderClass = "border-slate-900/50";
@@ -548,7 +548,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                     !gameState.isLocked && !isSelected && (
                                        <div className="flex flex-col items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-all duration-300">
                                           <UserPlus size={14} className="text-indigo-400" />
-                                          <span className="text-[10px] font-mono text-indigo-300 font-bold">${gameState.costPerSquare}</span>
+                                          <span className="text-[10px] font-mono text-indigo-600 font-bold">${gameState.costPerSquare}</span>
                                        </div>
                                     )
                                  )}
