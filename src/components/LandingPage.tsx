@@ -1,6 +1,7 @@
 import React from 'react';
 import { Logo } from './Logo';
 import { Trophy, Users, Zap, Shield, LayoutGrid, Award, Calendar, CheckCircle2, Heart } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -11,25 +12,26 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onBrowse, isLoggedIn }) => {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-orange-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-orange-500 selection:text-white transition-colors duration-300">
 
       {/* Navigation */}
-      <nav className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+      <nav className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md sticky top-0 z-50 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <Logo />
           <div className="flex items-center gap-4">
+            <ThemeToggle />
             <button
               onClick={onBrowse}
-              className="hidden md:flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white transition-colors"
+              className="hidden md:flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
             >
-              <LayoutGrid size={18} /> Find a Pool
+              <LayoutGrid size={18} /> Public Pools
             </button>
-            <div className="h-6 w-px bg-slate-800 hidden md:block"></div>
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden md:block"></div>
 
             {isLoggedIn ? (
               <button
                 onClick={onLogin} // Redirects to dashboard if logged in
-                className="bg-white text-slate-950 hover:bg-orange-50 px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+                className="bg-slate-900 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-orange-50 px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-lg shadow-slate-900/10 dark:shadow-white/10"
               >
                 Go to Dashboard
               </button>
@@ -37,13 +39,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="flex items-center gap-3">
                 <button
                   onClick={onLogin}
-                  className="text-sm font-bold text-slate-300 hover:text-white transition-colors"
+                  className="text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
                 >
                   Sign In
                 </button>
                 <button
                   onClick={onSignup}
-                  className="bg-white text-slate-950 hover:bg-orange-50 px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+                  className="bg-slate-900 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-orange-50 px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-lg shadow-slate-900/10 dark:shadow-white/10"
                 >
                   Get Started
                 </button>
@@ -54,54 +56,54 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
       </nav>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-20 pb-32">
+      <section className="relative overflow-hidden pt-12 md:pt-20 pb-20 md:pb-32">
         {/* Background Gradients */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none">
-          <div className="absolute top-20 right-0 w-[500px] h-[500px] bg-orange-600/10 rounded-full blur-[120px]"></div>
-          <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[120px]"></div>
+          <div className="absolute top-20 right-0 w-[500px] h-[500px] bg-indigo-500/10 dark:bg-orange-600/10 rounded-full blur-[120px]"></div>
+          <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-rose-500/10 dark:bg-indigo-600/10 rounded-full blur-[120px]"></div>
         </div>
 
         <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
-          <div className="inline-flex items-center gap-2 bg-slate-900/50 border border-slate-700/50 rounded-full px-4 py-1.5 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-pulse"></span>
-            <span className="text-xs font-bold text-slate-300 tracking-wide uppercase">Live for Super Bowl & March Madness</span>
+          <div className="inline-flex items-center gap-2 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 rounded-full px-4 py-1.5 mb-6 md:mb-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500 dark:bg-orange-500 animate-pulse"></span>
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 tracking-wide uppercase">Live for Super Bowl & March Madness</span>
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-black text-white tracking-tight mb-8 leading-tight animate-in fade-in slide-in-from-bottom-8 duration-700">
-            Elevate Your <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-400 to-rose-400">Game Day Experience</span>
+          <h1 className="text-4xl md:text-7xl font-black text-slate-900 dark:text-white tracking-tight mb-6 md:mb-8 leading-tight animate-in fade-in slide-in-from-bottom-8 duration-700">
+            Create Your <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-rose-600 dark:from-orange-400 dark:via-amber-400 dark:to-rose-400">Squares Pool Now</span>
           </h1>
 
-          <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-700 delay-100">
-            The professional platform for managing sports pools. Automated scoring, real-time payouts, and advanced customization for the ultimate grid experience.
+          <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-700 delay-100">
+            The professional platform for managing sports pools. Automated scoring, real-time payouts, and extensive customization for the ultimate grid experience.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200">
             <button
               onClick={onSignup}
-              className="w-full sm:w-auto bg-orange-600 hover:bg-orange-500 text-white px-8 py-4 rounded-xl text-lg font-bold shadow-lg shadow-orange-500/30 transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 dark:bg-orange-600 dark:hover:bg-orange-500 text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl shadow-indigo-600/20 dark:shadow-orange-500/30 transition-all flex items-center justify-center gap-2"
             >
               <Trophy size={20} /> Create Your Pool
             </button>
             <button
               onClick={onBrowse}
-              className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-white px-8 py-4 rounded-xl text-lg font-bold border border-slate-700 transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white px-8 py-4 rounded-xl text-lg font-bold border border-slate-200 dark:border-slate-700 shadow-sm transition-all flex items-center justify-center gap-2"
             >
-              <LayoutGrid size={20} /> Browse Public Grids
+              <LayoutGrid size={20} /> Browse Public Pools
             </button>
           </div>
 
           {/* Hero Visual */}
-          <div className="mt-20 relative mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-20 duration-1000 delay-300">
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent z-20"></div>
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-2xl">
-              <div className="bg-slate-950 rounded-xl overflow-hidden border border-slate-800 relative group">
+          <div className="mt-16 md:mt-20 relative mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-20 duration-1000 delay-300">
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-50 dark:from-slate-950 via-transparent to-transparent z-20"></div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2 shadow-2xl">
+              <div className="bg-slate-100 dark:bg-slate-950 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 relative group">
                 <img
                   src="/hero-ui.png"
                   alt="March Melee Pools Interface"
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-60"></div>
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-50 dark:from-slate-950 via-transparent to-transparent opacity-60"></div>
               </div>
             </div>
           </div>
@@ -109,26 +111,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
       </section>
 
       {/* Features Grid */}
-      <section className="py-24 bg-slate-900/50 border-y border-slate-800">
+      <section className="py-24 bg-white dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Everything You Need to Run the Perfect Pool</h2>
-            <p className="text-slate-400">Ditch the spreadsheets. Upgrade to a fully automated system.</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">Everything You Need to Run the Perfect Pool</h2>
+            <p className="text-slate-600 dark:text-slate-400">Ditch the spreadsheets. Upgrade to a fully automated system.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
             {[
               { icon: Zap, title: "Real-Time Automation", desc: "Live scoring updates via ESPN integration. Winners are calculated instantly as the game progresses." },
               { icon: Users, title: "Player Management", desc: "Track payments, manage participants, and send automated email notifications easily." },
               { icon: Shield, title: "Secure & Customizable", desc: "Set your own rules, payout structures, and privacy settings. Your pool, your way." },
               { icon: Heart, title: "Charity & Fundraising", desc: "Run pools for a good cause. Easily designate a percentage of the pot to donate." }
             ].map((feature, i) => (
-              <div key={i} className="bg-slate-950 p-8 rounded-2xl border border-slate-800 hover:border-orange-500/50 transition-colors group">
-                <div className="w-14 h-14 bg-orange-900/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 border border-orange-500/20">
-                  <feature.icon size={28} className="text-orange-400" />
+              <div key={i} className="bg-slate-50 dark:bg-slate-950 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 dark:hover:border-orange-500/50 transition-colors group flex flex-col h-full">
+                <div className="w-14 h-14 bg-indigo-50 dark:bg-orange-900/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 border border-indigo-100 dark:border-orange-500/20">
+                  <feature.icon size={28} className="text-indigo-600 dark:text-orange-400" />
                 </div>
-                <h3 className="text-xl font-bold text-white mb-3">{feature.title}</h3>
-                <p className="text-slate-400 leading-relaxed">{feature.desc}</p>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">{feature.title}</h3>
+                <p className="text-slate-600 dark:text-slate-400 leading-relaxed flex-grow">{feature.desc}</p>
               </div>
             ))}
           </div>
