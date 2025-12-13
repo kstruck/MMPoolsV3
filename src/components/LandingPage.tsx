@@ -26,6 +26,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             >
               <LayoutGrid size={18} /> Public Pools
             </button>
+            <button
+              onClick={() => window.location.hash = '#features'}
+              className="hidden md:flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors ml-4"
+            >
+              <Zap size={18} /> Features
+            </button>
             <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden md:block"></div>
 
             {isLoggedIn ? (

@@ -32,14 +32,12 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                             Featuring AI-driven dispute resolution, military-grade audit logs, and real-time live scoring.
                         </p>
                         <div className="flex flex-col sm:flex-row justify-center gap-4">
-                            <button onClick={() => window.location.hash = '#browse'} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-transform hover:scale-105 shadow-lg shadow-indigo-500/20">
-                                Find a Pool
+                            <button onClick={onOpenAuth} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-transform hover:scale-105 shadow-lg shadow-indigo-500/20 flex items-center gap-2">
+                                <Trophy size={20} /> Create Your Pool
                             </button>
-                            {!user && (
-                                <button onClick={onOpenAuth} className="bg-slate-800 hover:bg-slate-700 text-white px-8 py-4 rounded-xl font-bold text-lg border border-slate-700 transition-colors">
-                                    Create Account
-                                </button>
-                            )}
+                            <button onClick={() => window.location.hash = '#browse'} className="bg-white hover:bg-slate-50 text-slate-900 px-8 py-4 rounded-xl font-bold text-lg border border-slate-200 transition-colors flex items-center gap-2">
+                                <Layout size={20} /> Find a Pool
+                            </button>
                         </div>
                     </div>
                 </section>
