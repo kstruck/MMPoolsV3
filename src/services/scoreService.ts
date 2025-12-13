@@ -2,9 +2,12 @@ import type { Scores, GameState } from '../types';
 
 export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Partial<Scores>, status: string } | null> => {
   try {
-    let url = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
+    // Determine League Path
+    const leaguePath = gameState.league === 'college' || gameState.league === 'ncaa' ? 'college-football' : 'nfl';
+
+    let url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/scoreboard`;
     if (gameState.gameId) {
-      url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${gameState.gameId}`;
+      url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/summary?event=${gameState.gameId}`;
     }
 
     const response = await fetch(url);
