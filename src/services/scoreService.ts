@@ -123,7 +123,8 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     const completed = matchedGame.status.type?.completed;
 
     const clock = matchedGame.status.displayClock;
-    const date = matchedGame.date; // ISO string typically
+    // Fallback: Check competition date if main event date is missing
+    const date = matchedGame.date || competition.date;
 
     const newScores: Partial<Scores> = {
       current: { home: apiTotalHome, away: apiTotalAway },
