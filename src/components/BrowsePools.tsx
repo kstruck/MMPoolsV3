@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Heart, DollarSign } from 'lucide-react';
+import { Search, Filter, Heart, DollarSign, Trophy } from 'lucide-react';
 import type { GameState, User } from '../types';
 import { Header } from './Header';
 import { getTeamLogo } from '../constants';
@@ -17,6 +17,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
     const [filterCharity, setFilterCharity] = useState(false);
     const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'locked' | 'live' | 'final'>('all');
     const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 10, mid 10-50, high > 50
+    const [selectedLeague, setSelectedLeague] = useState<string>('all');
 
     // Filter Logic
     const filteredPools = useMemo(() => {
@@ -56,9 +57,20 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                 if (filterPrice === 'high' && cost <= 50) return false;
             }
 
+            // League Filter
+            if (selectedLeague !== 'all') {
+                const poolLeague = p.league || 'nfl'; // Default to NFL if undefined
+                // Normalize for "NCAA Football"
+                const isCollege = poolLeague === 'college' || poolLeague === 'ncaa';
+                const isNfl = poolLeague === 'nfl';
+
+                if (selectedLeague === 'nfl' && !isNfl) return false;
+                if (selectedLeague === 'college' && !isCollege) return false;
+            }
+
             return true;
         });
-    }, [pools, searchTerm, filterCharity, filterStatus, filterPrice]);
+    }, [pools, searchTerm, filterCharity, filterStatus, filterPrice, selectedLeague]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
@@ -108,6 +120,38 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                 className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 pl-10 text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
                             />
                             <Search className="absolute left-3 top-3.5 text-slate-500" size={18} />
+                        </div>
+
+
+                        {/* Sport Filter */}
+                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Trophy size={14} /> Sport / League
+                            </h3>
+                            <div className="flex flex-col gap-2">
+                                {[
+                                    { id: 'all', label: 'All Sports', active: true },
+                                    { id: 'nfl', label: 'NFL Football', active: true },
+                                    { id: 'college', label: 'NCAA Football', active: true },
+                                    { id: 'nba', label: 'NBA', active: false },
+                                    { id: 'ncaa_bb', label: 'NCAA Basketball', active: false },
+                                ].map((sport) => (
+                                    <button
+                                        key={sport.id}
+                                        onClick={() => sport.active && setSelectedLeague(sport.id)}
+                                        disabled={!sport.active}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all flex justify-between items-center ${!sport.active
+                                                ? 'opacity-40 cursor-not-allowed text-slate-500 hover:bg-transparent'
+                                                : selectedLeague === sport.id
+                                                    ? 'bg-indigo-600 text-white'
+                                                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                            }`}
+                                    >
+                                        <span>{sport.label}</span>
+                                        {!sport.active && <span className="text-[10px] uppercase font-bold bg-slate-800 px-1.5 py-0.5 rounded">Soon</span>}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         {/* Status Filters */}
