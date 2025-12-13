@@ -1,6 +1,7 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import { GameState, AxisNumbers } from "./types";
+import { writeAuditEvent, computeDigitsHash } from "./audit";
 
 // Helper to generate random digits
 const generateDigits = (): number[] => {
@@ -83,9 +84,27 @@ export const syncGameStatus = onSchedule({
                 let qNums = freshPool.quarterlyNumbers || {};
                 let updated = false;
 
-                if (isQ1Final && !qNums.q2) { qNums.q2 = generateAxisNumbers(); updated = true; }
-                if (isHalfFinal && !qNums.q3) { qNums.q3 = generateAxisNumbers(); updated = true; }
-                if (isQ3Final && !qNums.q4) { qNums.q4 = generateAxisNumbers(); updated = true; }
+                // Helper to generate and log
+                const handleGen = async (pKey: 'q2' | 'q3' | 'q4', triggerPeriod: string) => {
+                    const newAxis = generateAxisNumbers();
+                    qNums[pKey] = newAxis;
+                    updated = true;
+
+                    const digitsHash = computeDigitsHash({ home: newAxis.home, away: newAxis.away, poolId: doc.id, period: pKey });
+                    await writeAuditEvent({
+                        poolId: doc.id,
+                        type: 'DIGITS_GENERATED',
+                        message: `${pKey.toUpperCase()} Axis Numbers Generated`,
+                        severity: 'INFO',
+                        actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
+                        payload: { period: pKey, commitHash: digitsHash },
+                        dedupeKey: `DIGITS_GENERATED:${doc.id}:${pKey}:${digitsHash}`
+                    }, transaction);
+                };
+
+                if (isQ1Final && !qNums.q2) await handleGen('q2', 'Q1 Final');
+                if (isHalfFinal && !qNums.q3) await handleGen('q3', 'Half Final');
+                if (isQ3Final && !qNums.q4) await handleGen('q4', 'Q3 Final');
 
                 if (updated) {
                     transactionUpdates.quarterlyNumbers = qNums;

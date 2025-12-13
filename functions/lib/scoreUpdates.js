@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncGameStatus = void 0;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
+const audit_1 = require("./audit");
 // Helper to generate random digits
 const generateDigits = () => {
     const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -75,18 +76,28 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
             if (freshPool.numberSets === 4) {
                 let qNums = freshPool.quarterlyNumbers || {};
                 let updated = false;
-                if (isQ1Final && !qNums.q2) {
-                    qNums.q2 = generateAxisNumbers();
+                // Helper to generate and log
+                const handleGen = async (pKey, triggerPeriod) => {
+                    const newAxis = generateAxisNumbers();
+                    qNums[pKey] = newAxis;
                     updated = true;
-                }
-                if (isHalfFinal && !qNums.q3) {
-                    qNums.q3 = generateAxisNumbers();
-                    updated = true;
-                }
-                if (isQ3Final && !qNums.q4) {
-                    qNums.q4 = generateAxisNumbers();
-                    updated = true;
-                }
+                    const digitsHash = (0, audit_1.computeDigitsHash)({ home: newAxis.home, away: newAxis.away, poolId: doc.id, period: pKey });
+                    await (0, audit_1.writeAuditEvent)({
+                        poolId: doc.id,
+                        type: 'DIGITS_GENERATED',
+                        message: `${pKey.toUpperCase()} Axis Numbers Generated`,
+                        severity: 'INFO',
+                        actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
+                        payload: { period: pKey, commitHash: digitsHash },
+                        dedupeKey: `DIGITS_GENERATED:${doc.id}:${pKey}:${digitsHash}`
+                    }, transaction);
+                };
+                if (isQ1Final && !qNums.q2)
+                    await handleGen('q2', 'Q1 Final');
+                if (isHalfFinal && !qNums.q3)
+                    await handleGen('q3', 'Half Final');
+                if (isQ3Final && !qNums.q4)
+                    await handleGen('q4', 'Q3 Final');
                 if (updated) {
                     transactionUpdates.quarterlyNumbers = qNums;
                     // Sync current axis

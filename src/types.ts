@@ -158,3 +158,37 @@ export interface Winner {
   isRollover?: boolean;
   description?: string;
 }
+
+// --- AUDIT LOG ---
+export type AuditEventType =
+  | 'POOL_CREATED'
+  | 'POOL_LOCKED'
+  | 'POOL_UNLOCKED'
+  | 'POOL_STATUS_CHANGED'
+  | 'DIGITS_GENERATED' // payload: { period, commitHash }
+  | 'SCORE_FINALIZED'  // payload: { period, home, away, eventId, sourceHash }
+  | 'WINNER_COMPUTED'  // payload: { period, squareId, winnerUid, amount }
+  | 'SQUARE_RESERVED'  // payload: { squareId, ownerName }
+  | 'SQUARE_RELEASED'
+  | 'SQUARE_MARKED_PAID'
+  | 'SQUARE_UNPAID_REVERTED'
+  | 'ADMIN_OVERRIDE_SCORE'
+  | 'ADMIN_OVERRIDE_WINNER'
+  | 'ADMIN_OVERRIDE_DIGITS'
+  | 'ADMIN_OVERRIDE_SQUARE_STATE';
+
+export interface AuditLogEvent {
+  id: string; // Auto-generated
+  poolId: string;
+  timestamp: number;
+  type: AuditEventType;
+  message: string;
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  actor: {
+    uid: string;
+    role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN';
+    label?: string; // e.g. "Kevin" or "Scheduler"
+  };
+  payload?: any; // Structured details (JSON)
+  dedupeKey?: string; // For idempotency
+}

@@ -52,6 +52,28 @@ exports.lockPool = (0, https_1.onCall)(async (request) => {
         };
     }
     await poolRef.update(updates);
+    // --- AUDIT LOGGING ---
+    const { writeAuditEvent, computeDigitsHash } = await Promise.resolve().then(() => require("./audit"));
+    // 1. Log Lock
+    await writeAuditEvent({
+        poolId,
+        type: 'POOL_LOCKED',
+        message: 'Pool locked by owner',
+        severity: 'INFO',
+        actor: { uid: request.auth.uid, role: 'ADMIN', label: request.auth.token.name || 'Owner' }
+    });
+    // 2. Log Digits Generation (Initial)
+    const digitsHash = computeDigitsHash({ home: axisNumbers.home, away: axisNumbers.away, poolId, period: 'q1' });
+    await writeAuditEvent({
+        poolId,
+        type: 'DIGITS_GENERATED',
+        message: 'Initial Axis Numbers Generated',
+        severity: 'INFO',
+        actor: { uid: 'system', role: 'SYSTEM', label: 'Cloud RNG' },
+        payload: { period: 'initial', commitHash: digitsHash, numberSets: poolData.numberSets },
+        // Use hash as dedupe key to ensure we log this specific generation once (though lockPool is transactional usually)
+        dedupeKey: `DIGITS_GENERATED:${poolId}:initial:${digitsHash}`
+    });
     return { success: true, axisNumbers };
 });
 //# sourceMappingURL=poolParams.js.map

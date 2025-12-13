@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
+import { writeAuditEvent } from "./audit";
 
 
 export const reserveSquare = onCall(async (request) => {
@@ -87,6 +88,17 @@ export const reserveSquare = onCall(async (request) => {
             squares: updatedSquares,
             updatedAt: admin.firestore.Timestamp.now()
         });
+
+        // --- AUDIT LOGGING ---
+        const role = pool.ownerId === userId ? 'ADMIN' : 'USER';
+        await writeAuditEvent({
+            poolId,
+            type: 'SQUARE_RESERVED',
+            message: `Square #${squareId} reserved by ${userName}`,
+            severity: 'INFO',
+            actor: { uid: userId, role, label: userName },
+            payload: { squareId, ownerName: userName, email: userEmail }
+        }, transaction);
     });
 
     return { success: true };

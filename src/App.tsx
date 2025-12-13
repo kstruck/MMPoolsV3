@@ -10,7 +10,9 @@ import { calculateWinners, calculateScenarioWinners, getLastDigit } from './serv
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, Search, X, Loader, Heart } from 'lucide-react';
+import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, Search, X, Loader, Heart, Shield } from 'lucide-react';
+
+import { AuditLog } from './components/AuditLog'; // Standard import
 
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
@@ -61,6 +63,7 @@ const App: React.FC = () => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
+  const [showAudit, setShowAudit] = useState(false); // New State
 
   const [pools, setPools] = useState<GameState[]>([]);
   const [isPoolsLoading, setIsPoolsLoading] = useState(true);
@@ -531,7 +534,12 @@ const App: React.FC = () => {
         {/* Header Content */}
         <div className="max-w-[1400px] mx-auto px-4 pt-6 flex justify-between items-center">
           <div className="text-center md:text-left">
-            <h1 className="text-3xl font-bold text-white mb-1">{currentPool.name}</h1>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-3xl font-bold text-white">{currentPool.name}</h1>
+              <button onClick={() => setShowAudit(true)} className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors">
+                <Shield size={10} className="fill-emerald-400/20" /> Fully Auditable
+              </button>
+            </div>
             <p className="text-slate-400 text-sm font-medium">{squaresRemaining} Squares Remaining</p>
           </div>
           <div className="flex gap-2">
@@ -795,6 +803,7 @@ const App: React.FC = () => {
           </div>
         </div>
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+        {showAudit && <AuditLog poolId={currentPool.id} onClose={() => setShowAudit(false)} />}
       </div >
     );
   }

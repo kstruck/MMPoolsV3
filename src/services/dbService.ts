@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
+export { db };
 import type { GameState, User } from "../types";
 
 export const dbService = {

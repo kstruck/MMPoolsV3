@@ -21,6 +21,14 @@ service cloud.firestore {
       allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
       allow update: if request.auth != null && request.auth.uid == resource.data.ownerId 
                     && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers']));
+
+      // AUDIT LOGS: Encapsulated logic
+      // - Read: Everyone
+      // - Write/Delete: NO ONE (Clients). Only Server (Admin SDK) bypasses this.
+      match /audit/{auditId} {
+        allow read: if true;
+        allow write, delete: if false; 
+      }
     }
     
     // USERS:

@@ -134,3 +134,34 @@ export interface User {
     picture?: string | null; // Allow null for Firebase compatibility
     registrationMethod?: 'google' | 'email' | 'unknown';
 }
+
+// --- AUDIT LOG ---
+export type AuditEventType =
+    | 'POOL_CREATED'
+    | 'POOL_LOCKED'
+    | 'POOL_UNLOCKED'
+    | 'DIGITS_GENERATED'
+    | 'SCORE_FINALIZED'
+    | 'WINNER_COMPUTED'
+    | 'SQUARE_RESERVED'
+    | 'SQUARE_RELEASED'
+    | 'ADMIN_OVERRIDE_SCORE'
+    | 'ADMIN_OVERRIDE_WINNER'
+    | 'ADMIN_OVERRIDE_DIGITS'
+    | 'ADMIN_OVERRIDE_SQUARE_STATE';
+
+export interface AuditLogEvent {
+    id: string;
+    poolId: string;
+    timestamp: number;
+    type: AuditEventType;
+    message: string;
+    severity: 'INFO' | 'WARNING' | 'CRITICAL';
+    actor: {
+        uid: string;
+        role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN';
+        label?: string;
+    };
+    payload?: any;
+    dedupeKey?: string;
+}

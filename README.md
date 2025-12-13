@@ -13,21 +13,32 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 ### Pool Management
 *   **Setup Wizard:** Easy flow to configure teams, costs, and pool rules.
 *   **Charity & Fundraising:** ❤️ **NEW!** Dedicate a percentage of the pot to a charity of your choice. Includes automated "Off The Top" calculations and public support badges.
+*   **Quarterly Numbers ('4 Sets'):** **NEW!** Optional mode to generate brand new axis numbers for every quarter (Q1, Q2, Q3, Final). Numbers are generated transactionally by the server.
 *   **Custom Payouts:** Configurable percentage splits for Q1, Halftime, Q3, and Final scores.
 *   **Score Change Payouts:** Optional rule to award fixed amounts on every score change.
 *   **Email Notifications:** Automated confirmation emails for square purchases and pool creation via Firebase Trigger Email.
 *   **Manager Controls:** Lock/unlock grid, mark squares as paid, manual override options.
 
+### 🛡️ Audit & Integrity (NEW)
+A military-grade audit logging system to ensure absolute fairness and transparency.
+*   **Immutable Log:** All critical actions (Locking, Number Generation, Reservations) are written to an append-only `audit` collection.
+*   **Tamper-Resistant:** Firestore Security Rules (`read: true, write: false`) prevent ANY client (even Pool Managers) from altering the log. Only trusted Cloud Functions can write entries.
+*   **Public Verification:** A **"Fully Auditable"** badge on the pool view allows any player to inspect the complete, timestamped timeline of events, proving that numbers were generated fairly and payouts are accurate.
+
 ### Super Admin Dashboard
 *   **System Overview:** View all pools and registered users.
 *   **User Management:** Edit user details or delete accounts.
-*   **Simulation Mode:** Built-in simulation tool to populate a test pool with random users and simulate a full game with realistic scoring events (viewable at `/#super-admin`).
+*   **Simulation Mode:** Built-in simulation tool to populate a test pool and simulate a game:
+    *   Fills empty squares with test users.
+    *   Locks pool & generates Q1 numbers.
+    *   Simulates game flow (Q1 -> Half -> Q3 -> Final) over ~12 seconds.
+    *   **Auto-Generates Quarterly Numbers** for "4 Sets" pools during the sim.
 
 ## 🛠️ Tech Stack
 
 *   **Frontend:** React 19, TypeScript, Vite
 *   **Styling:** Tailwind CSS, Lucide React (Icons)
-*   **Backend / Data:** Firebase (Firestore, Auth)
+*   **Backend / Data:** Firebase (Firestore, Auth, Cloud Functions v2)
 *   **APIs:** 
     *   **Data:** ESPN (Scoreboard)
     *   **AI:** Google Gemini (AI Commissioner Features)
@@ -61,26 +72,25 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
     ```bash
     npm run dev
     ```
-    The app will actailable at `http://localhost:5173`.
+    The app will be available at `http://localhost:5173`.
 
 ## 🔒 Authentication & Security
 
-This project relies on **Firebase Cloud Functions** to enforce game integrity and prevent cheating.
+This project relies on **Firebase Cloud Functions (2nd Gen)** to enforce game integrity and prevent cheating.
 
 ### Cloud Functions (`/functions`)
 Sensitive operations are moved off the client-side to a trusted Node.js environment:
-*   `lockPool(poolId)`: Securely locks the grid and generates the random 0-9 axis numbers. This prevents users from manipulating the local `Math.random` or seeing numbers before they are locked.
-*   `reserveSquare(poolId, squareId)`: Handles square purchases transactionally. Prevents race conditions (two users buying the same square at the same time) and enforces limits securely.
+*   `lockPool(poolId)`: Securely locks the grid and generates the random 0-9 axis numbers using server-side CSPRNG. Logs the action to the secure Audit Trail.
+*   `reserveSquare(poolId, squareId)`: Handles square purchases transactionally with race-condition prevention. Added to Audit Log.
+*   `syncGameStatus` (Scheduled): Polls ESPN every 5 minutes (during games) to update scores and **generate new quarterly numbers** if the "4 Sets" rule is active.
 
 ### Firestore Security Rules
+*   **Audit Log:** `read: true` for transparency, `write: false` for everyone (Client-side writes blocked).
 *   **Clients:** Explicitly blocked from writing to sensitive fields like `isLocked` and `axisNumbers`.
 *   **Users:** Can only write to their own user profile.
-*   **SuperAdmin:** The dashboard has read-only access to all users to resolve names in the UI.
 
 ### Email Service (Extension)
-Uses the **"Trigger Email from Firestore"** extension.
-*   **Flow:** App writes a document to `/mail` -> Extension detects it -> Sends SMTP email via Hostinger.
-*   **Regions:** Configured for `us-central1` (Functions) and `nam5` (Firestore).
+Uses the **"Trigger Email from Firestore"** extension to send transaction confirmations.
 
 ## 🚀 Deployment Guide (Coolify / Docker)
 
@@ -101,13 +111,3 @@ This project is configured for deployment using **Docker**.
 ### Production Notes
 *   **Nginx:** The project uses a custom `nginx.conf` to handle client-side routing (SPA fallback to `index.html`).
 *   **Caching:** A script in `index.html` automatically unregisters legacy Service Workers to prevent caching issues from older versions of the app.
-
-## 🧪 Simulation Testing (Super Admin)
-
-To test the application flow without waiting for a real game:
-1.  Navigate to `YOUR_DOMAIN/#super-admin`.
-2.  Locate a pool you want to test.
-3.  Click the **RUN SIM** button.
-    *   This will auto-fill empty squares with fake users.
-    *   Lock the grid and generate numbers.
-    *   Simulate a 4-quarter game over ~12 seconds.

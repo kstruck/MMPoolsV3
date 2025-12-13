@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.reserveSquare = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const audit_1 = require("./audit");
 exports.reserveSquare = (0, https_1.onCall)(async (request) => {
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
@@ -64,6 +65,16 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
             squares: updatedSquares,
             updatedAt: admin.firestore.Timestamp.now()
         });
+        // --- AUDIT LOGGING ---
+        const role = pool.ownerId === userId ? 'ADMIN' : 'USER';
+        await (0, audit_1.writeAuditEvent)({
+            poolId,
+            type: 'SQUARE_RESERVED',
+            message: `Square #${squareId} reserved by ${userName}`,
+            severity: 'INFO',
+            actor: { uid: userId, role, label: userName },
+            payload: { squareId, ownerName: userName, email: userEmail }
+        }, transaction);
     });
     return { success: true };
 });
