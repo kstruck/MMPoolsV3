@@ -39,13 +39,19 @@ exports.lockPool = (0, https_1.onCall)(async (request) => {
         home: generateDigits(),
         away: generateDigits(),
     };
-    // 4. Update Pool
-    await poolRef.update({
+    let updates = {
         isLocked: true,
         lockGrid: true, // Legacy support
         axisNumbers,
         updatedAt: admin.firestore.Timestamp.now(),
-    });
+    };
+    // Initialize 4-Sets if applicable
+    if (poolData.numberSets === 4) {
+        updates.quarterlyNumbers = {
+            q1: axisNumbers
+        };
+    }
+    await poolRef.update(updates);
     return { success: true, axisNumbers };
 });
 //# sourceMappingURL=poolParams.js.map

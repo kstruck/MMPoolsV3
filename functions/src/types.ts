@@ -105,6 +105,12 @@ export interface GameState {
     isPublic: boolean; // Visibility on public listing
     squares: Square[];
     axisNumbers: AxisNumbers | null; // Null means not generated yet
+    quarterlyNumbers?: {
+        q1?: AxisNumbers;
+        q2?: AxisNumbers;
+        q3?: AxisNumbers;
+        q4?: AxisNumbers;
+    };
     scores: Scores;
     scoreEvents: ScoreEvent[]; // Log of score changes
     scoreChangePayoutAmount: number; // Fixed $ amount per event

@@ -116,7 +116,13 @@ export interface GameState {
   squares: Square[];
   createdAt?: any; // Firestore Timestamp
   updatedAt?: any; // Firestore Timestamp
-  axisNumbers: AxisNumbers | null; // Null means not generated yet
+  axisNumbers: AxisNumbers | null; // For Single Set (or current set)
+  quarterlyNumbers?: {
+    q1?: AxisNumbers;
+    q2?: AxisNumbers;
+    q3?: AxisNumbers;
+    q4?: AxisNumbers;
+  };
   scores: Scores;
   scoreEvents: ScoreEvent[]; // Log of score changes
   scoreChangePayoutAmount: number; // Fixed $ amount per event

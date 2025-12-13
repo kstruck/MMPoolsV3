@@ -120,8 +120,17 @@ export const calculateWinners = (state: GameState): Winner[] => {
       rolloverPot = 0;
 
       // Identify Winning Coordinates
-      const mainRowIndex = state.axisNumbers!.away.indexOf(awayDigit);
-      const mainColIndex = state.axisNumbers!.home.indexOf(homeDigit);
+      let currentAxis = state.axisNumbers!;
+
+      if (state.numberSets === 4 && state.quarterlyNumbers) {
+        if (period === 'q1' && state.quarterlyNumbers.q1) currentAxis = state.quarterlyNumbers.q1;
+        else if (period === 'half' && state.quarterlyNumbers.q2) currentAxis = state.quarterlyNumbers.q2;
+        else if (period === 'q3' && state.quarterlyNumbers.q3) currentAxis = state.quarterlyNumbers.q3;
+        else if (period === 'final' && state.quarterlyNumbers.q4) currentAxis = state.quarterlyNumbers.q4;
+      }
+
+      const mainRowIndex = currentAxis.away.indexOf(awayDigit);
+      const mainColIndex = currentAxis.home.indexOf(homeDigit);
 
       let winningScenarios = [];
 
@@ -137,8 +146,8 @@ export const calculateWinners = (state: GameState): Winner[] => {
 
       // Reverse Scenario
       if (state.ruleVariations.reverseWinners) {
-        const revRowIndex = state.axisNumbers!.away.indexOf(homeDigit);
-        const revColIndex = state.axisNumbers!.home.indexOf(awayDigit);
+        const revRowIndex = currentAxis.away.indexOf(homeDigit);
+        const revColIndex = currentAxis.home.indexOf(awayDigit);
         if (revRowIndex !== -1 && revColIndex !== -1) {
           const revSquareId = revRowIndex * 10 + revColIndex;
           // Avoid double counting same square

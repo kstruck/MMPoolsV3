@@ -68,6 +68,124 @@ export const SuperAdmin: React.FC = () => {
     // Pool Edit/View State
     const [viewingPool, setViewingPool] = useState<GameState | null>(null);
 
+    const handleRunSim = async (pool: GameState) => {
+        const confirmSim = confirm(`Run simulation for ${pool.name}? This will advance the game state.`);
+        if (!confirmSim) return;
+
+        try {
+            const updates: any = {};
+            const scores = { ...pool.scores };
+
+            // Helper to generate digits
+            const genDigits = () => {
+                const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+                for (let i = nums.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [nums[i], nums[j]] = [nums[j], nums[i]];
+                }
+                return nums;
+            };
+            const genAxis = () => ({ home: genDigits(), away: genDigits() });
+
+            // State Machine Logic
+            if (!pool.isLocked) {
+                // 1. Lock Pool & Init
+                updates.isLocked = true;
+                updates.lockGrid = true;
+
+                // Init Numbers
+                const baseAxis = pool.axisNumbers || genAxis();
+                updates.axisNumbers = baseAxis;
+
+                if (pool.numberSets === 4) {
+                    updates.quarterlyNumbers = {
+                        q1: baseAxis
+                    };
+                }
+
+                updates['scores.gameStatus'] = 'pre';
+                updates['scores.startTime'] = new Date().toISOString();
+                alert('Sim: Pool Locked. Open Sim again to start Q1.');
+            } else if (scores.gameStatus === 'pre') {
+                // 2. Start Game -> Q1 IN
+                updates['scores.gameStatus'] = 'in';
+                updates['scores.period'] = 1;
+                updates['scores.clock'] = '15:00';
+                updates['scores.current'] = { home: 0, away: 0 };
+                alert('Sim: Game Started (Q1).');
+            } else if (scores.gameStatus === 'in') {
+                const p = scores.period || 1;
+
+                if (p === 1) {
+                    // Q1 -> Q2
+                    updates['scores.period'] = 2;
+                    updates['scores.clock'] = '15:00';
+                    updates['scores.q1'] = { home: 7, away: 3 }; // Sim Score
+                    updates['scores.current'] = { home: 7, away: 3 };
+
+                    // 4-Sets Logic
+                    if (pool.numberSets === 4) {
+                        const q2 = genAxis();
+                        updates['quarterlyNumbers.q2'] = q2;
+                        updates.axisNumbers = q2; // Update active numbers
+                    }
+                    alert('Sim: End of Q1.');
+                } else if (p === 2) {
+                    // Q2 -> Half -> Q3
+                    updates['scores.period'] = 3;
+                    updates['scores.clock'] = '15:00';
+                    updates['scores.half'] = { home: 14, away: 10 };
+                    updates['scores.current'] = { home: 14, away: 10 };
+
+                    if (pool.numberSets === 4) {
+                        const q3 = genAxis();
+                        updates['quarterlyNumbers.q3'] = q3;
+                        updates.axisNumbers = q3;
+                    }
+                    alert('Sim: Halftime Complete.');
+                } else if (p === 3) {
+                    // Q3 -> Q4
+                    updates['scores.period'] = 4;
+                    updates['scores.clock'] = '15:00';
+                    updates['scores.q3'] = { home: 21, away: 17 };
+                    updates['scores.current'] = { home: 21, away: 17 };
+
+                    if (pool.numberSets === 4) {
+                        const q4 = genAxis();
+                        updates['quarterlyNumbers.q4'] = q4;
+                        updates.axisNumbers = q4;
+                    }
+                    alert('Sim: End of Q3.');
+                } else if (p === 4) {
+                    // Q4 -> Final
+                    updates['scores.gameStatus'] = 'post';
+                    updates['scores.period'] = 4;
+                    updates['scores.clock'] = '0:00';
+                    updates['scores.final'] = { home: 24, away: 20 };
+                    updates['scores.current'] = { home: 24, away: 20 };
+                    alert('Sim: Game Over.');
+                }
+            } else if (scores.gameStatus === 'post') {
+                // Reset
+                updates.isLocked = false;
+                updates.lockGrid = false;
+                updates.scores = {
+                    current: null, q1: null, half: null, q3: null, final: null, gameStatus: 'pre'
+                };
+                updates.axisNumbers = null;
+                if (pool.numberSets === 4) updates.quarterlyNumbers = null;
+                alert('Sim: Reset Complete.');
+            }
+
+            if (Object.keys(updates).length > 0) {
+                await dbService.updatePool(pool.id, updates);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Sim Failed');
+        }
+    };
+
     return (
         <div className="max-w-7xl mx-auto p-4 md:p-6 relative text-slate-100">
             <h1 className="text-3xl font-bold mb-8 flex items-center gap-3">
@@ -180,6 +298,7 @@ export const SuperAdmin: React.FC = () => {
                                     </td>
                                     <td className="p-4 flex gap-2">
                                         <button onClick={() => window.location.hash = `#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 mr-2 font-bold text-xs uppercase border border-indigo-500/30 px-2 py-1 rounded">Edit</button>
+                                        <button onClick={() => handleRunSim(pool)} className="text-emerald-400 hover:text-emerald-300 mr-2 font-bold text-xs uppercase border border-emerald-500/30 px-2 py-1 rounded">Run Sim</button>
                                         <button onClick={() => handleDeletePool(pool.id)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
                                     </td>
                                 </tr>

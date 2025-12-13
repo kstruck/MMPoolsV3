@@ -54,13 +54,21 @@ export const lockPool = onCall(async (request) => {
         away: generateDigits(),
     };
 
-    // 4. Update Pool
-    await poolRef.update({
+    let updates: any = {
         isLocked: true,
         lockGrid: true, // Legacy support
         axisNumbers,
         updatedAt: admin.firestore.Timestamp.now(),
-    });
+    };
+
+    // Initialize 4-Sets if applicable
+    if (poolData.numberSets === 4) {
+        updates.quarterlyNumbers = {
+            q1: axisNumbers
+        };
+    }
+
+    await poolRef.update(updates);
 
     return { success: true, axisNumbers };
 });
