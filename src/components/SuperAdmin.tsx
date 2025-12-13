@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import type { GameState, User } from '../types';
-import { Trash2, Shield, Activity, Heart } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users } from 'lucide-react';
 
 export const SuperAdmin: React.FC = () => {
     const [pools, setPools] = useState<GameState[]>([]);
@@ -210,6 +210,13 @@ export const SuperAdmin: React.FC = () => {
                     <p className="text-xl font-bold text-emerald-400 flex items-center gap-2"><Activity size={20} /> Operational</p>
                     <p className="text-xs text-slate-500 mt-1">Firestore Connected</p>
                 </div>
+                <div className="bg-slate-800/50 p-6 rounded-xl border border-indigo-500/30 backdrop-blur-sm">
+                    <h3 className="text-indigo-400 text-xs font-bold uppercase mb-2 tracking-wider flex items-center gap-2"><Users size={14} /> Referrals</h3>
+                    <p className="text-4xl font-bold text-indigo-400">{users.reduce((sum, u) => sum + (u.referralCount || 0), 0)}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                        {users.filter(u => u.referredBy).length} referred users
+                    </p>
+                </div>
             </div>
 
             {/* POOLS TABLE */}
@@ -376,6 +383,112 @@ export const SuperAdmin: React.FC = () => {
                             ))}
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            {/* REFERRAL DASHBOARD */}
+            <div className="bg-slate-800 rounded-xl border border-indigo-500/30 overflow-hidden mb-8 shadow-xl">
+                <div className="p-4 border-b border-slate-700 bg-indigo-900/20 flex justify-between items-center">
+                    <h2 className="text-xl font-bold flex items-center gap-2"><Users className="text-indigo-400" size={20} /> Referral Dashboard</h2>
+                    <span className="text-xs font-mono text-slate-500">Top Referrers & Referral Chain</span>
+                </div>
+
+                {/* Referral Stats Row */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border-b border-slate-700/50">
+                    <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                        <p className="text-3xl font-bold text-indigo-400">{users.reduce((sum, u) => sum + (u.referralCount || 0), 0)}</p>
+                        <p className="text-xs text-slate-500 uppercase font-bold">Total Referrals</p>
+                    </div>
+                    <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                        <p className="text-3xl font-bold text-emerald-400">{users.filter(u => u.referredBy).length}</p>
+                        <p className="text-xs text-slate-500 uppercase font-bold">Referred Users</p>
+                    </div>
+                    <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                        <p className="text-3xl font-bold text-amber-400">{users.filter(u => (u.referralCount || 0) > 0).length}</p>
+                        <p className="text-xs text-slate-500 uppercase font-bold">Active Referrers</p>
+                    </div>
+                    <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                        <p className="text-3xl font-bold text-white">{users.length > 0 ? ((users.filter(u => u.referredBy).length / users.length) * 100).toFixed(1) : 0}%</p>
+                        <p className="text-xs text-slate-500 uppercase font-bold">Referral Rate</p>
+                    </div>
+                </div>
+
+                {/* Top Referrers Leaderboard */}
+                <div className="p-4">
+                    <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">🏆 Top Referrers</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+                        {[...users]
+                            .filter(u => (u.referralCount || 0) > 0)
+                            .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
+                            .slice(0, 3)
+                            .map((u, i) => (
+                                <div key={u.id} className={`p-4 rounded-xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'}`}>
+                                    <div className="flex items-center gap-3">
+                                        <div className={`text-2xl font-black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'}`}>#{i + 1}</div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-bold text-white truncate">{u.name}</p>
+                                            <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-2xl font-bold text-indigo-400">{u.referralCount || 0}</p>
+                                            <p className="text-[10px] text-slate-500 uppercase">referrals</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        {users.filter(u => (u.referralCount || 0) > 0).length === 0 && (
+                            <div className="col-span-3 text-center py-8 text-slate-500">No referrals yet</div>
+                        )}
+                    </div>
+
+                    {/* Full Referral Table */}
+                    <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">All Users Referral Data</h3>
+                    <div className="overflow-x-auto rounded-lg border border-slate-700">
+                        <table className="w-full text-left text-sm">
+                            <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
+                                <tr>
+                                    <th className="p-3 font-bold">User</th>
+                                    <th className="p-3 font-bold">Referral Code</th>
+                                    <th className="p-3 font-bold text-center">Referrals Made</th>
+                                    <th className="p-3 font-bold">Referred By</th>
+                                    <th className="p-3 font-bold">Joined</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-700/50">
+                                {[...users]
+                                    .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
+                                    .map(u => {
+                                        const referrer = u.referredBy ? users.find(ref => ref.id === u.referredBy) : null;
+                                        return (
+                                            <tr key={u.id} className="hover:bg-slate-700/30">
+                                                <td className="p-3">
+                                                    <p className="font-bold text-white">{u.name}</p>
+                                                    <p className="text-xs text-slate-500">{u.email}</p>
+                                                </td>
+                                                <td className="p-3">
+                                                    <code className="text-xs bg-slate-900 px-2 py-1 rounded text-indigo-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <span className={`font-bold ${(u.referralCount || 0) > 0 ? 'text-indigo-400' : 'text-slate-500'}`}>{u.referralCount || 0}</span>
+                                                </td>
+                                                <td className="p-3">
+                                                    {referrer ? (
+                                                        <span className="text-emerald-400 text-xs">{referrer.name}</span>
+                                                    ) : u.referredBy ? (
+                                                        <span className="text-slate-500 text-xs font-mono">{u.referredBy.slice(0, 8)}...</span>
+                                                    ) : (
+                                                        <span className="text-slate-600 text-xs">—</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-3 text-xs text-slate-500">
+                                                    {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
