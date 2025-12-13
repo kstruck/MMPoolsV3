@@ -613,22 +613,27 @@ const App: React.FC = () => {
               {(() => {
                 const { gameStatus, startTime, clock, period } = currentPool.scores;
 
-                if (gameStatus === 'pre' && startTime) {
+                // Live Game
+                if (gameStatus === 'in') {
+                  const pLabel = period === 1 ? '1st' : period === 2 ? '2nd' : period === 3 ? '3rd' : period === 4 ? '4th' : 'OT';
+                  return <p className="text-xs text-emerald-400 font-bold uppercase tracking-wider mt-1 animate-pulse">● Live • {pLabel} Qtr • {clock || '0:00'}</p>;
+                }
+
+                // Final Game
+                if (gameStatus === 'post') {
+                  return <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">Final Score</p>;
+                }
+
+                // Default / Pre-Game (Show if startTime exists)
+                if (startTime) {
                   const dateObj = new Date(startTime);
                   const dateStr = dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
                   const timeStr = dateObj.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
                   return <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">{dateStr} • {timeStr}</p>;
                 }
 
-                if (gameStatus === 'in') {
-                  const pLabel = period === 1 ? '1st' : period === 2 ? '2nd' : period === 3 ? '3rd' : period === 4 ? '4th' : 'OT';
-                  return <p className="text-xs text-emerald-400 font-bold uppercase tracking-wider mt-1 animate-pulse">● Live • {pLabel} Qtr • {clock || '0:00'}</p>;
-                }
-
-                if (gameStatus === 'post') {
-                  return <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">Final Score</p>;
-                }
-                return null;
+                // Fallback if no start time
+                return <p className="text-xs text-slate-600 font-bold uppercase tracking-wider mt-1">Status: Pending</p>;
               })()}
             </div>
             <div className="p-4">
@@ -709,8 +714,10 @@ const App: React.FC = () => {
               </div>
 
             </div>
-            {Object.entries(currentPool.payouts).map(([key, percent]) => {
+            {['q1', 'half', 'q3', 'final'].map((key) => {
+              const percent = currentPool.payouts[key as keyof typeof currentPool.payouts];
               if (!percent) return null;
+
               const label = PERIOD_LABELS[key] || key;
               const totalPot = currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare;
               const charityDeduction = currentPool.charity?.enabled ? Math.floor(totalPot * (currentPool.charity.percentage / 100)) : 0;
