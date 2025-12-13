@@ -2,6 +2,7 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { UserRecord } from "firebase-functions/v1/auth";
+import { onCall, CallableRequest } from "firebase-functions/v2/https";
 
 const db = admin.firestore();
 
@@ -42,5 +43,51 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
         }
     } catch (error) {
         console.error(`[UserSync] Failed to sync user ${uid}:`, error);
+    }
+});
+
+// Force Sync All Users (Callable)
+export const syncAllUsers = onCall(async (request: CallableRequest) => {
+    if (!request.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be logged in.');
+    }
+
+    try {
+        // List max 1000 users (pagination needed for large apps, but fine for MVP)
+        const listUsersResult = await admin.auth().listUsers(1000);
+        const users = listUsersResult.users;
+
+        const batch = db.batch();
+        let count = 0;
+
+        for (const user of users) {
+            const userRef = db.collection("users").doc(user.uid);
+
+            let method: 'google' | 'email' | 'unknown' = 'unknown';
+            if (user.providerData && user.providerData.length > 0) {
+                const pid = user.providerData[0].providerId;
+                if (pid === 'google.com') method = 'google';
+                else if (pid === 'password') method = 'email';
+            }
+
+            const userData = {
+                id: user.uid,
+                name: user.displayName || user.email?.split('@')[0] || 'Unknown',
+                email: user.email || '',
+                picture: user.photoURL || null,
+                registrationMethod: method,
+                // Don't overwrite createdAt if it exists, but ensure sync timestamp
+                syncedAt: admin.firestore.FieldValue.serverTimestamp()
+            };
+
+            batch.set(userRef, userData, { merge: true });
+            count++;
+        }
+
+        await batch.commit();
+        return { success: true, count };
+    } catch (error) {
+        console.error("Sync Users Error:", error);
+        throw new functions.https.HttpsError('internal', 'Failed to sync users.');
     }
 });

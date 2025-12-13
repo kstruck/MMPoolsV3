@@ -9,5 +9,5 @@ export { lockPool } from "./poolParams";
 export { reserveSquare } from "./squares";
 export { syncGameStatus } from "./scoreUpdates";
 export { onWinnerUpdate, onAIRequest } from "./aiCommissioner";
-export { onUserCreated } from "./userSync";
+export { onUserCreated, syncAllUsers } from "./userSync";
 

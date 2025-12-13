@@ -54,7 +54,19 @@ export const dbService = {
         }
     },
 
+
     // --- CLOUD FUNCTIONS ---
+    syncAllUsers: async (): Promise<{ success: boolean; count: number }> => {
+        try {
+            const syncFn = httpsCallable(functions, 'syncAllUsers');
+            const result = await syncFn();
+            return result.data as { success: boolean; count: number };
+        } catch (error) {
+            console.error("Error calling syncAllUsers function:", error);
+            throw error;
+        }
+    },
+
     lockPool: async (poolId: string): Promise<void> => {
         try {
             const lockPoolFn = httpsCallable(functions, 'lockPool');

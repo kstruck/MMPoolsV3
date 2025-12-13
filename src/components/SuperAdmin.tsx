@@ -312,12 +312,33 @@ export const SuperAdmin: React.FC = () => {
             <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden mb-8 shadow-xl">
                 <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
                     <h2 className="text-xl font-bold">Registered Users</h2>
-                    <button
-                        onClick={fetchUsers}
-                        className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
-                    >
-                        <Activity size={12} /> Refresh List
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={async () => {
+                                if (confirm('Force sync all users from Auth to DB?')) {
+                                    setUsersLoading(true);
+                                    try {
+                                        const res = await dbService.syncAllUsers();
+                                        alert(`Synced ${res.count} users.`);
+                                        fetchUsers();
+                                    } catch (e) {
+                                        alert('Sync failed');
+                                    } finally {
+                                        setUsersLoading(false);
+                                    }
+                                }
+                            }}
+                            className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-bold"
+                        >
+                            Force Sync
+                        </button>
+                        <button
+                            onClick={fetchUsers}
+                            className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                        >
+                            <Activity size={12} /> Refresh List
+                        </button>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
