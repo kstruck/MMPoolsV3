@@ -1,6 +1,6 @@
 import React from 'react';
 import { Logo } from './Logo';
-import { Trophy, Users, Zap, Shield, LayoutGrid, Award, Calendar, CheckCircle2, Heart } from 'lucide-react';
+import { Trophy, Zap, Shield, LayoutGrid, Award, Calendar, CheckCircle2, Heart } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 interface LandingPageProps {
@@ -64,9 +64,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
         </div>
 
         <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
-          <div className="inline-flex items-center gap-2 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 rounded-full px-4 py-1.5 mb-6 md:mb-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-500 dark:bg-orange-500 animate-pulse"></span>
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 tracking-wide uppercase">Live for Super Bowl & March Madness</span>
+          <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-4 py-1.5 mb-6 md:mb-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <span className="flex h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></span>
+            <span className="text-xs font-bold text-indigo-400 tracking-wide uppercase">Free for a Limited Time • Create Your Pool</span>
           </div>
 
           <h1 className="text-4xl md:text-7xl font-black text-slate-900 dark:text-white tracking-tight mb-6 md:mb-8 leading-tight animate-in fade-in slide-in-from-bottom-8 duration-700">
@@ -120,14 +120,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
             {[
-              { icon: Zap, title: "Real-Time Automation", desc: "Live scoring updates via ESPN integration. Winners are calculated instantly as the game progresses." },
-              { icon: Users, title: "Player Management", desc: "Track payments, manage participants, and send automated email notifications easily." },
-              { icon: Shield, title: "Secure & Customizable", desc: "Set your own rules, payout structures, and privacy settings. Your pool, your way." },
-              { icon: Heart, title: "Charity & Fundraising", desc: "Run pools for a good cause. Easily designate a percentage of the pot to donate." }
+              { icon: Zap, title: "Live ESPN Sync", desc: "Real-time scoring updates. Watch the winners update instantly as the game unfolds." },
+              { icon: Shield, title: "Audit Log & Integrity", desc: "Every action is logged. Numbers are generated securely. 100% tamper-proof." },
+              { icon: Trophy, title: "AI Commissioner", desc: "Resolve disputes and explain winning squares automatically with our built-in AI." },
+              { icon: Heart, title: "Charity Integration", desc: "Easily designate a percentage of the pot to a charity of your choice. Built-in fundraising." }
             ].map((feature, i) => (
               <div key={i} className="bg-slate-50 dark:bg-slate-950 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 dark:hover:border-orange-500/50 transition-colors group flex flex-col h-full">
-                <div className="w-14 h-14 bg-indigo-50 dark:bg-orange-900/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 border border-indigo-100 dark:border-orange-500/20">
-                  <feature.icon size={28} className="text-indigo-600 dark:text-orange-400" />
+                <div className="w-14 h-14 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 border border-indigo-100 dark:border-indigo-500/20">
+                  <feature.icon size={28} className="text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">{feature.title}</h3>
                 <p className="text-slate-600 dark:text-slate-400 leading-relaxed flex-grow">{feature.desc}</p>
@@ -203,10 +203,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
           <h2 className="text-3xl md:text-5xl font-black text-white mb-8">Ready to Start Your Pool?</h2>
           <button
             onClick={onSignup}
-            className="bg-white text-slate-900 hover:bg-orange-50 px-10 py-4 rounded-full text-lg font-bold transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(255,255,255,0.15)] mb-12"
+            className="bg-white text-indigo-600 px-10 py-5 rounded-full text-xl font-black transition-all transform hover:scale-105 shadow-[0_0_40px_rgba(255,255,255,0.3)] mb-4 hover:shadow-[0_0_60px_rgba(255,255,255,0.5)]"
           >
-            Launch Manager Dashboard
+            Create Your Free Pool Now
           </button>
+          <p className="text-indigo-200 text-sm font-bold uppercase tracking-wider mb-12">Limited Time Offer</p>
 
           <div className="border-t border-slate-900 pt-12 flex flex-col md:flex-row justify-between items-center gap-6 opacity-60">
             <div className="flex items-center gap-2">
