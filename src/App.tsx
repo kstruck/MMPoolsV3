@@ -604,48 +604,140 @@ const App: React.FC = () => {
         }
 
         {/* INFO & PAYOUTS ROW */}
-        <div className="max-w-[1400px] mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 1. Grid Owner */}
-          <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
-            {/* Pool Status Display */}
-            <div className="mb-4">
-              <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Status:</h3>
-              {(() => {
-                if (!currentPool.isLocked) return (
-                  <div className="flex items-center gap-2">
-                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span></span>
-                    <div><p className="text-emerald-400 font-bold text-sm leading-none">Open</p><p className="text-slate-500 text-[10px]">Grid is available to choose squares</p></div>
-                  </div>
-                );
+        <div className="max-w-[1400px] mx-auto px-4 py-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+            {/* 1. Grid Owner */}
+            <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
+              {/* Pool Status Display */}
+              <div className="mb-4">
+                <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Status:</h3>
+                {(() => {
+                  if (!currentPool.isLocked) return (
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span></span>
+                      <div><p className="text-emerald-400 font-bold text-sm leading-none">Open</p><p className="text-slate-500 text-[10px]">Grid is available to choose squares</p></div>
+                    </div>
+                  );
 
-                const status = currentPool.scores.gameStatus;
-                const isLive = status === 'in' || status === 'post';
+                  const status = currentPool.scores.gameStatus;
+                  const isLive = status === 'in' || status === 'post';
 
-                if (isLive) return (
-                  <div className="flex items-center gap-2">
-                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span></span>
-                    <div><p className="text-rose-500 font-bold text-sm leading-none">Locked - Live</p><p className="text-slate-500 text-[10px]">Game has started</p></div>
-                  </div>
-                );
+                  if (isLive) return (
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span></span>
+                      <div><p className="text-rose-500 font-bold text-sm leading-none">Locked - Live</p><p className="text-slate-500 text-[10px]">Game has started</p></div>
+                    </div>
+                  );
 
-                return (
-                  <div className="flex items-center gap-2">
-                    <Lock size={14} className="text-amber-500" />
-                    <div><p className="text-amber-500 font-bold text-sm leading-none">Locked - Pending</p><p className="text-slate-500 text-[10px]">Waiting for kickoff</p></div>
-                  </div>
-                );
-              })()}
+                  return (
+                    <div className="flex items-center gap-2">
+                      <Lock size={14} className="text-amber-500" />
+                      <div><p className="text-amber-500 font-bold text-sm leading-none">Locked - Pending</p><p className="text-slate-500 text-[10px]">Waiting for kickoff</p></div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
+              <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
+              <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{currentPool.paymentInstructions}</p></div>
             </div>
 
-            <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
-            <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
-            <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{currentPool.paymentInstructions}</p></div>
+            {/* Charity Card (Moved to Top Row if enabled, sharing grid) */}
+            {currentPool.charity?.enabled && (
+              <div className="bg-slate-900 border border-rose-500/30 rounded-xl p-6 shadow-lg shadow-rose-500/10 relative overflow-hidden flex flex-col justify-center">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <Heart size={80} className="text-rose-500" />
+                </div>
+                <div className="relative z-10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="bg-rose-500/20 p-1.5 rounded-lg">
+                      <Heart size={18} className="text-rose-400" />
+                    </div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Proudly Supporting</h3>
+                  </div>
+                  <h2 className="text-2xl font-black text-rose-400 mb-1 leading-tight">{currentPool.charity.name}</h2>
+                  <div className="mt-3">
+                    <span className="text-xs text-slate-500 uppercase font-bold block mb-1">Donation Amount</span>
+                    <span className="text-2xl font-mono font-bold text-white">
+                      ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
+                    </span>
+                    {currentPool.charity.url && (
+                      <a
+                        href={currentPool.charity.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-rose-400 hover:text-white font-bold text-xs flex items-center gap-1 mt-2 transition-colors"
+                      >
+                        Learn More <ArrowRight size={12} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Payout Structure Card - Updated Logic */}
+            <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
+              <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
+
+              <div className="space-y-3">
+                {/* Total Collected */}
+                <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
+                  <span className="text-slate-400">Total Pot</span>
+                  <span className="text-white font-mono font-bold">
+                    ${(currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Charity Deduction Line */}
+                {currentPool.charity?.enabled && (
+                  <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
+                    <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({currentPool.charity.percentage}%)</span>
+                    <span className="font-mono font-bold">
+                      -${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                {/* Net Prize Pot */}
+                <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
+                  <span className="text-white font-bold">Net Prize Pool</span>
+                  <span className="text-emerald-400 font-mono font-bold text-lg">
+                    ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
+                  </span>
+                </div>
+
+              </div>
+              {['q1', 'half', 'q3', 'final'].map((key) => {
+                const percent = currentPool.payouts[key as keyof typeof currentPool.payouts];
+                if (!percent) return null;
+
+                const label = PERIOD_LABELS[key] || key;
+                const totalPot = currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare;
+                const charityDeduction = currentPool.charity?.enabled ? Math.floor(totalPot * (currentPool.charity.percentage / 100)) : 0;
+                const netPot = totalPot - charityDeduction;
+                const amount = Math.floor(netPot * (percent / 100));
+
+                return (
+                  <div key={key} className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400 font-bold">{label}
+                      <span className="text-slate-600 font-normal ml-1">({percent}%)</span>
+                    </span>
+                    <span className="text-white font-mono font-bold">
+                      ${amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          {/* 2. Scoreboard */}
-          <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-slate-800/20 rounded-full blur-2xl"></div>
-            <div className="p-4 border-b border-slate-800 text-center relative z-10">
-              <h3 className="text-white font-bold">Game Scoreboard</h3>
+
+          {/* SCOREBOARD (Full Width Row) */}
+          <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative mb-8 max-w-4xl mx-auto">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-slate-800/20 rounded-full blur-3xl"></div>
+            <div className="p-4 border-b border-slate-800 text-center relative z-10 flex flex-col md:flex-row items-center justify-between px-8">
+              <h3 className="text-white font-bold text-xl tracking-tight">Game Scoreboard</h3>
               {/* Game Status Info */}
               {(() => {
                 const { gameStatus, startTime, clock, period } = currentPool.scores;
@@ -653,129 +745,64 @@ const App: React.FC = () => {
                 // Live Game
                 if (gameStatus === 'in') {
                   const pLabel = period === 1 ? '1st' : period === 2 ? '2nd' : period === 3 ? '3rd' : period === 4 ? '4th' : 'OT';
-                  return <p className="text-xs text-emerald-400 font-bold uppercase tracking-wider mt-1 animate-pulse">● Live • {pLabel} Qtr • {clock || '0:00'}</p>;
+                  return <div className="text-emerald-400 font-bold uppercase tracking-wider animate-pulse flex items-center gap-2 text-sm"><span className="w-2 h-2 bg-emerald-400 rounded-full"></span> Live • {pLabel} Qtr • {clock || '0:00'}</div>;
                 }
 
                 // Final Game
                 if (gameStatus === 'post') {
-                  return <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">Final Score</p>;
+                  return <p className="text-sm text-slate-400 font-bold uppercase tracking-wider">Final Score</p>;
                 }
 
-                // Default / Pre-Game (Show if startTime exists)
+                // Default / Pre-Game
                 if (startTime) {
                   const dateObj = new Date(startTime);
                   const dateStr = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
                   const timeStr = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' });
-                  return <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">{dateStr} • {timeStr}</p>;
+                  return <p className="text-sm text-slate-500 font-bold uppercase tracking-wider">{dateStr} • {timeStr}</p>;
                 }
 
                 // Fallback / Sync Status
-                if (syncStatus === 'searching') return <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mt-1 animate-pulse">Searching for Game...</p>;
-                if (syncStatus === 'not-found') return <p className="text-xs text-rose-500 font-bold uppercase tracking-wider mt-1" title="Ensure Home/Away teams match ESPN names">No Active Game Found</p>;
-                if (syncStatus === 'found' && !startTime) return <p className="text-xs text-amber-500 font-bold uppercase tracking-wider mt-1">Game Matched • Time TBD</p>;
+                if (syncStatus === 'searching') return <p className="text-sm text-indigo-400 font-bold uppercase tracking-wider animate-pulse">Searching for Game...</p>;
+                if (syncStatus === 'not-found') return <p className="text-sm text-rose-500 font-bold uppercase tracking-wider" title="Ensure Home/Away teams match ESPN names">No Active Game Found</p>;
+                if (syncStatus === 'found' && !startTime) return <p className="text-sm text-amber-500 font-bold uppercase tracking-wider">Game Matched • Time TBD</p>;
 
-                return <p className="text-xs text-slate-600 font-bold uppercase tracking-wider mt-1">Status: Pending (Idle)</p>;
+                return <p className="text-sm text-slate-600 font-bold uppercase tracking-wider">Status: Pending (Idle)</p>;
               })()}
             </div>
-            <div className="p-4">
-              <div className="grid grid-cols-7 gap-2 text-center text-sm mb-2 text-slate-500 font-bold uppercase text-[10px]"><div className="col-span-2 text-left pl-2">Team</div><div>1</div><div>2</div><div>3</div><div>4</div><div>T</div></div>
-              <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{getScoreboardVal(1, 'away')}</div><div>{getScoreboardVal(2, 'away')}</div><div>{getScoreboardVal(3, 'away')}</div><div>{getScoreboardVal(4, 'away')}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
-              <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain" />}{currentPool.homeTeam}</div><div>{getScoreboardVal(1, 'home')}</div><div>{getScoreboardVal(2, 'home')}</div><div>{getScoreboardVal(3, 'home')}</div><div>{getScoreboardVal(4, 'home')}</div><div className="text-rose-400 text-lg">{sanitize(currentPool.scores.current?.home)}</div></div>
-            </div>
-          </div>
-          {/* Charity Banner (if enabled) */}
-          {currentPool.charity?.enabled && (
-            <div className="bg-slate-900 border border-rose-500/30 rounded-2xl p-6 shadow-lg shadow-rose-500/10 mb-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                <Heart size={100} className="text-rose-500" />
-              </div>
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="bg-rose-500/20 p-2 rounded-lg">
-                    <Heart size={24} className="text-rose-400" />
-                  </div>
-                  <h3 className="text-xl font-bold text-white">Proudly Supporting</h3>
-                </div>
-                <h2 className="text-3xl font-black text-rose-400 mb-2">{currentPool.charity.name}</h2>
-                <p className="text-slate-400 max-w-lg mb-4">
-                  {currentPool.charity.percentage}% of this pool's proceeds are donated directly to this cause.
-                </p>
 
-                <div className="flex gap-4 items-center">
-                  <div className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-lg">
-                    <span className="text-xs text-slate-500 uppercase font-bold block">Donation Amount</span>
-                    <span className="text-xl font-mono font-bold text-white">
-                      ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
-                    </span>
-                  </div>
-                  {currentPool.charity.url && (
-                    <a
-                      href={currentPool.charity.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-rose-400 hover:text-white font-bold text-sm flex items-center gap-1 transition-colors"
-                    >
-                      Learn More <ArrowRight size={16} />
-                    </a>
-                  )}
+            {/* Scoreboard Grid */}
+            <div className="p-6">
+              <div className="grid grid-cols-7 gap-4 text-center text-slate-500 font-bold uppercase text-xs mb-3">
+                <div className="col-span-2 text-left pl-4">Team</div>
+                <div>1</div><div>2</div><div>3</div><div>4</div><div>T</div>
+              </div>
+
+              {/* Away Team Row */}
+              <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-4 rounded-lg border border-slate-800/50">
+                <div className="col-span-2 text-left pl-2 flex items-center gap-3">
+                  {awayLogo ? <img src={awayLogo} className="w-10 h-10 object-contain drop-shadow-md" /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{currentPool.awayTeam.charAt(0)}</div>}
+                  <span className="text-lg">{currentPool.awayTeam}</span>
                 </div>
+                <div className="text-xl text-slate-400">{getScoreboardVal(1, 'away')}</div>
+                <div className="text-xl text-slate-400">{getScoreboardVal(2, 'away')}</div>
+                <div className="text-xl text-slate-400">{getScoreboardVal(3, 'away')}</div>
+                <div className="text-xl text-slate-400">{getScoreboardVal(4, 'away')}</div>
+                <div className="text-3xl text-indigo-400 font-black">{sanitize(currentPool.scores.current?.away)}</div>
+              </div>
+
+              {/* Home Team Row */}
+              <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center bg-slate-900/50 p-4 rounded-lg border border-slate-800/50">
+                <div className="col-span-2 text-left pl-2 flex items-center gap-3">
+                  {homeLogo ? <img src={homeLogo} className="w-10 h-10 object-contain drop-shadow-md" /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{currentPool.homeTeam.charAt(0)}</div>}
+                  <span className="text-lg">{currentPool.homeTeam}</span>
+                </div>
+                <div className="text-xl text-slate-400">{getScoreboardVal(1, 'home')}</div>
+                <div className="text-xl text-slate-400">{getScoreboardVal(2, 'home')}</div>
+                <div className="text-xl text-slate-400">{getScoreboardVal(3, 'home')}</div>
+                <div className="text-xl text-slate-400">{getScoreboardVal(4, 'home')}</div>
+                <div className="text-3xl text-rose-400 font-black">{sanitize(currentPool.scores.current?.home)}</div>
               </div>
             </div>
-          )}
-
-          {/* Payout Structure Card - Updated Logic */}
-          <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
-            <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
-
-            <div className="space-y-3">
-              {/* Total Collected */}
-              <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
-                <span className="text-slate-400">Total Pot</span>
-                <span className="text-white font-mono font-bold">
-                  ${(currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare).toLocaleString()}
-                </span>
-              </div>
-
-              {/* Charity Deduction Line */}
-              {currentPool.charity?.enabled && (
-                <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
-                  <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({currentPool.charity.percentage}%)</span>
-                  <span className="font-mono font-bold">
-                    -${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
-                  </span>
-                </div>
-              )}
-
-              {/* Net Prize Pot */}
-              <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
-                <span className="text-white font-bold">Net Prize Pool</span>
-                <span className="text-emerald-400 font-mono font-bold text-lg">
-                  ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
-                </span>
-              </div>
-
-            </div>
-            {['q1', 'half', 'q3', 'final'].map((key) => {
-              const percent = currentPool.payouts[key as keyof typeof currentPool.payouts];
-              if (!percent) return null;
-
-              const label = PERIOD_LABELS[key] || key;
-              const totalPot = currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare;
-              const charityDeduction = currentPool.charity?.enabled ? Math.floor(totalPot * (currentPool.charity.percentage / 100)) : 0;
-              const netPot = totalPot - charityDeduction;
-              const amount = Math.floor(netPot * (percent / 100));
-
-              return (
-                <div key={key} className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400 font-bold">{label}
-                    <span className="text-slate-600 font-normal ml-1">({percent}%)</span>
-                  </span>
-                  <span className="text-white font-mono font-bold">
-                    ${amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                  </span>
-                </div>
-              );
-            })}
           </div>
         </div>
 
