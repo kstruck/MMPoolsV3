@@ -7,11 +7,14 @@ export const emailService = {
         to: string | string[],
         subject: string,
         text: string,
-        html?: string
+        html?: string,
+        options?: { bcc?: string[], replyTo?: string }
     ) => {
         try {
             await addDoc(collection(db, 'mail'), {
                 to,
+                bcc: options?.bcc,
+                replyTo: options?.replyTo,
                 message: {
                     subject,
                     text,
@@ -25,6 +28,33 @@ export const emailService = {
             // Non-blocking error
             return { success: false, error };
         }
+    },
+
+    sendBroadcast: async (
+        recipients: string[],
+        subject: string,
+        html: string,
+        replyTo?: string
+    ) => {
+        // Use BCC for privacy - send to a generic 'noreply' or the first recipient as 'to'
+        // The extension should handle BCC correctly
+        // We'll set 'to' to the first recipient if only 1, otherwise use BCC
+
+        let toAddress = 'support@marchmeleepools.com'; // Default 'to' for mass emails
+        let bccList = recipients;
+
+        if (recipients.length === 1) {
+            toAddress = recipients[0];
+            bccList = [];
+        }
+
+        return emailService.sendEmail(
+            toAddress,
+            subject,
+            "Please view this email in a client that supports HTML.", // Fallback text
+            html,
+            { bcc: bccList, replyTo }
+        );
     },
 
     sendConfirmation: async (

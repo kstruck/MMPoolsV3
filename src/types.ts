@@ -149,6 +149,7 @@ export interface GameState {
   ownerId?: string; // ID of the user who owns this pool
   manualScoreOverride?: boolean;
   reminders?: ReminderSettings;
+  lastBroadcastTime?: number; // Timestamp of last mass email
 }
 
 export interface ReminderSettings {
