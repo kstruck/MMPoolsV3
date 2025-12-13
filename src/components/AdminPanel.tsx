@@ -182,12 +182,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const comp = game.competitions[0];
     const home = comp.competitors.find((c: any) => c.homeAway === 'home').team;
     const away = comp.competitors.find((c: any) => c.homeAway === 'away').team;
+    // Auto-set the Lock Time to the game start time
+    const gameDate = new Date(game.date);
+    const existingReminders = gameState.reminders || {
+      payment: { enabled: false, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false },
+      lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: gameDate.getTime() },
+      winner: { enabled: true, channels: ['email'], includeDigits: true, includeCharityImpact: true }
+    };
+
     updateConfig({
       homeTeam: home.displayName,
       awayTeam: away.displayName,
       gameId: game.id,
       homeTeamLogo: home.logo,
       awayTeamLogo: away.logo,
+      reminders: {
+        ...existingReminders,
+        lock: {
+          ...existingReminders.lock,
+          lockAt: gameDate.getTime()
+        }
+      }
     });
 
     setShowSchedule(false);
@@ -349,30 +364,123 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <input
               type="checkbox"
               checked={gameState.reminders?.lock?.enabled || false}
-              onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, lock: { ...(gameState.reminders?.lock || { scheduleMinutes: [1440, 120] }), enabled: e.target.checked } } })}
+              onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, lock: { ...(gameState.reminders?.lock || { scheduleMinutes: [60, 30, 15, 5] }), enabled: e.target.checked } } })}
               className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
             />
           </label>
 
           {gameState.reminders?.lock?.enabled && (
             <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lock Time (Planned)</label>
-                <input
-                  type="datetime-local"
-                  value={gameState.reminders.lock.lockAt ? new Date(gameState.reminders.lock.lockAt).toISOString().slice(0, 16) : ''}
-                  onChange={(e) => {
-                    const d = new Date(e.target.value);
-                    updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: d.getTime() } } });
-                  }}
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">This sets the deadline for the reminders to fire against.</p>
+              <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Lock Time (Kickoff)</label>
+
+                {/* Custom Date/Time Selector */}
+                <div className="flex flex-wrap gap-3 items-center">
+                  {/* Date Picker */}
+                  <input
+                    type="date"
+                    value={gameState.reminders.lock.lockAt ? new Date(gameState.reminders.lock.lockAt).toISOString().split('T')[0] : ''}
+                    onChange={(e) => {
+                      const dateStr = e.target.value;
+                      if (!dateStr) return;
+
+                      const current = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
+                      // Parse YYYY-MM-DD
+                      const [year, month, day] = dateStr.split('-').map(Number);
+
+                      const newDate = new Date(current);
+                      newDate.setFullYear(year);
+                      newDate.setMonth(month - 1);
+                      newDate.setDate(day);
+
+                      updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: newDate.getTime() } } });
+                    }}
+                    className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                  />
+
+                  <span className="text-slate-600 font-bold">@</span>
+
+                  {/* Time Dropdowns */}
+                  <div className="flex items-center gap-1 bg-slate-900 border border-slate-600 rounded p-1">
+                    {/* Hour */}
+                    <select
+                      value={(() => {
+                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
+                        let h = d.getHours();
+                        if (h === 0) h = 12;
+                        else if (h > 12) h -= 12;
+                        return h;
+                      })()}
+                      onChange={(e) => {
+                        const newHour12 = parseInt(e.target.value);
+                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
+                        const currentHours = d.getHours();
+                        const isPM = currentHours >= 12;
+
+                        let newHours;
+                        if (isPM) {
+                          newHours = (newHour12 === 12) ? 12 : newHour12 + 12;
+                        } else {
+                          newHours = (newHour12 === 12) ? 0 : newHour12;
+                        }
+
+                        d.setHours(newHours);
+                        updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: d.getTime() } } });
+                      }}
+                      className="bg-transparent text-white outline-none text-center font-bold font-mono appearance-none px-2 cursor-pointer hover:text-indigo-400"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h} className="bg-slate-900">{h}</option>)}
+                    </select>
+
+                    <span className="text-slate-500">:</span>
+
+                    {/* Minute */}
+                    <select
+                      value={gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt).getMinutes() : 0}
+                      onChange={(e) => {
+                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
+                        d.setMinutes(parseInt(e.target.value));
+                        updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: d.getTime() } } });
+                      }}
+                      className="bg-transparent text-white outline-none text-center font-bold font-mono appearance-none px-2 cursor-pointer hover:text-indigo-400"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i * 5).map(m => <option key={m} value={m} className="bg-slate-900">{m.toString().padStart(2, '0')}</option>)}
+                    </select>
+
+                    {/* AM/PM */}
+                    <select
+                      value={(() => {
+                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
+                        return d.getHours() >= 12 ? 'PM' : 'AM';
+                      })()}
+                      onChange={(e) => {
+                        const isPM = e.target.value === 'PM';
+                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
+                        let h = d.getHours();
+
+                        if (isPM && h < 12) h += 12;
+                        if (!isPM && h >= 12) h -= 12;
+
+                        d.setHours(h);
+                        updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: d.getTime() } } });
+                      }}
+                      className="bg-transparent text-indigo-400 font-bold outline-none appearance-none pl-2 pr-1 cursor-pointer"
+                    >
+                      <option value="AM" className="bg-slate-900">AM</option>
+                      <option value="PM" className="bg-slate-900">PM</option>
+                    </select>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 mt-2">
+                  Defaults to game start time. You can manually adjust this.
+                </p>
               </div>
+
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Alert Schedule (Minutes Before)</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Alert Schedule (Start Time Minus...)</label>
                 <div className="flex gap-2">
-                  {[24 * 60, 2 * 60, 15].map(mins => {
+                  {[60, 30, 15, 5].map(mins => {
                     const isActive = gameState.reminders!.lock.scheduleMinutes.includes(mins);
                     return (
                       <button
@@ -382,9 +490,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           const next = isActive ? current.filter(m => m !== mins) : [...current, mins];
                           updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, scheduleMinutes: next } } });
                         }}
-                        className={`px-3 py-1 text-xs font-bold rounded border ${isActive ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-slate-950 text-slate-500 border-slate-700'}`}
+                        className={`px-3 py-2 text-xs font-bold rounded-lg border transition-all ${isActive ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20 shadow-lg' : 'bg-slate-950 text-slate-500 border-slate-700 hover:border-slate-500 hover:text-slate-300'}`}
                       >
-                        {mins >= 60 ? `${mins / 60} Hrs` : `${mins} Mins`}
+                        {mins >= 60 ? `1 Hr` : `${mins} Mins`}
                       </button>
                     )
                   })}
