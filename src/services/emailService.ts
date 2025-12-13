@@ -11,16 +11,24 @@ export const emailService = {
         options?: { bcc?: string[], replyTo?: string }
     ) => {
         try {
-            await addDoc(collection(db, 'mail'), {
+            const emailData: any = {
                 to,
-                bcc: options?.bcc,
-                replyTo: options?.replyTo,
                 message: {
                     subject,
                     text,
                     html: html || text.replace(/\n/g, '<br>')
                 }
-            });
+            };
+
+            if (options?.bcc && options.bcc.length > 0) {
+                emailData.bcc = options.bcc;
+            }
+
+            if (options?.replyTo) {
+                emailData.replyTo = options.replyTo;
+            }
+
+            await addDoc(collection(db, 'mail'), emailData);
             console.log(`Email trigger created for: ${to}`);
             return { success: true };
         } catch (error) {
