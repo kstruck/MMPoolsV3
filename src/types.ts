@@ -138,6 +138,27 @@ export interface GameState {
   };
   ownerId?: string; // ID of the user who owns this pool
   manualScoreOverride?: boolean;
+  reminders?: ReminderSettings;
+}
+
+export interface ReminderSettings {
+  payment: {
+    enabled: boolean;
+    graceMinutes: number; // e.g., 60
+    repeatEveryHours: number; // e.g., 12
+    notifyUsers: boolean;
+  };
+  lock: {
+    enabled: boolean;
+    lockAt?: number; // epoch timestamp
+    scheduleMinutes: number[]; // e.g., [1440, 120, 15]
+  };
+  winner: {
+    enabled: boolean;
+    channels: ('email' | 'in-app')[];
+    includeDigits: boolean;
+    includeCharityImpact: boolean;
+  };
 }
 
 export interface User {
@@ -201,6 +222,16 @@ export interface AuditLogEvent {
   };
   payload?: any; // Structured details (JSON)
   dedupeKey?: string; // For idempotency
+}
+
+export interface NotificationLog {
+  id: string; // dedupKey
+  poolId: string;
+  type: 'PAYMENT_HOST' | 'PAYMENT_USER' | 'LOCK_COUNTDOWN' | 'WINNER_ANNOUNCEMENT';
+  recipient: string; // uid or email
+  sentAt: number;
+  status: 'SENT' | 'FAILED' | 'SKIPPED';
+  metadata?: any;
 }
 
 // --- AI COMMISSIONER ---
