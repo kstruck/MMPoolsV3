@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types';
 import { dbService } from '../services/dbService';
+import { authService } from '../services/authService';
 import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader } from 'lucide-react';
 
 interface UserProfileProps {
@@ -55,7 +56,14 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
         setMessage(null);
 
         try {
+            // Update Firestore
             await dbService.updateUser(user.id, formData);
+
+            // Sync to Firebase Auth (Display Name)
+            if (formData.name && formData.name !== user.name) {
+                await authService.updateProfile(formData.name);
+            }
+
             onUpdate({ ...user, ...formData });
             setMessage({ type: 'success', text: 'Profile updated successfully!' });
 

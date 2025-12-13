@@ -110,5 +110,20 @@ export const authService = {
         callback(mapUser(firebaseUser));
       }
     });
+  },
+
+  // Update Profile (Name/Photo)
+  updateProfile: async (name: string, photoURL?: string) => {
+    try {
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: name,
+          photoURL: photoURL
+        });
+      }
+    } catch (error) {
+      console.error("Update Profile Error", error);
+      throw error;
+    }
   }
 };
