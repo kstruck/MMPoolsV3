@@ -25,6 +25,13 @@ A military-grade audit logging system to ensure absolute fairness and transparen
 *   **Tamper-Resistant:** Firestore Security Rules (`read: true, write: false`) prevent ANY client (even Pool Managers) from altering the log. Only trusted Cloud Functions can write entries.
 *   **Public Verification:** A **"Fully Auditable"** badge on the pool view allows any player to inspect the complete, timestamped timeline of events, proving that numbers were generated fairly and payouts are accurate.
 
+### 🤖 AI Commissioner (Powered by Gemini)
+A neutral, AI-driven referee that brings clarity and trust to the game.
+*   **"Why This Square Won":** Automatically generates clear, step-by-step explanations for every quarterly winner. It cites specific axis digits, the final score, and the grid intersection logic.
+*   **Dispute Helper:** Included "Ask the Commissioner" tool allows users to verify fairness. e.g., "Did the numbers change?" The AI analyzes the secure Audit Log to provide factual, evidence-based answers.
+*   **Zero-Hallucinations:** Built with strict "Facts Only" system prompts. If data is missing or unverifiable, the AI will refuse to make up an answer, ensuring absolute integrity.
+*   **Idempotency:** Smart hashing ensures the AI never processes the same event twice, keeping API costs low and responses consistent.
+
 ### Super Admin Dashboard
 *   **System Overview:** View all pools and registered users.
 *   **User Management:** Edit user details or delete accounts.
