@@ -146,6 +146,14 @@ export interface User {
   name: string;
   picture?: string | null; // Allow null for Firebase compatibility
   registrationMethod?: 'google' | 'email' | 'unknown';
+  phone?: string;
+  socialLinks?: {
+    twitter?: string;
+    instagram?: string;
+    facebook?: string;
+    linkedin?: string;
+    other?: string;
+  };
 }
 
 export interface Winner {

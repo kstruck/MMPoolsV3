@@ -17,6 +17,7 @@ import { AICommissioner } from './components/AICommissioner';
 
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
+import { UserProfile } from './components/UserProfile';
 
 // --- SHARED COMPONENTS ---
 
@@ -123,6 +124,7 @@ const App: React.FC = () => {
     if (hash.startsWith('#super-admin')) return { view: 'super-admin', id: null };
     if (hash.startsWith('#pool')) return { view: 'pool', id: hash.split('/')[1] };
     if (hash.startsWith('#browse')) return { view: 'browse', id: null };
+    if (hash.startsWith('#profile')) return { view: 'profile', id: null };
     return { view: 'home', id: null };
   }, [hash]);
 
@@ -479,6 +481,25 @@ const App: React.FC = () => {
               {publicPools.length === 0 && <div className="text-center text-slate-500 py-10">No public pools found.</div>}
             </div>
           )}
+        </main>
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+      </div>
+    );
+  }
+
+  if (route.view === 'profile') {
+    if (!user) { window.location.hash = '#'; return null; }
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+        <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
+        <main className="max-w-4xl mx-auto p-6 mt-10">
+          <UserProfile
+            user={user}
+            onUpdate={(updatedUser) => {
+              setUser(updatedUser);
+              dbService.saveUser(updatedUser);
+            }}
+          />
         </main>
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
       </div>

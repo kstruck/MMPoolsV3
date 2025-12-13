@@ -1,7 +1,7 @@
 import React from 'react';
 import { Logo } from './Logo';
 import type { User } from '../types';
-import { LayoutGrid, Shield, LogOut } from 'lucide-react';
+import { LayoutGrid, Shield, LogOut, User as UserIcon } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
@@ -30,6 +30,9 @@ export const Header: React.FC<HeaderProps> = ({ user, onOpenAuth, onLogout }) =>
                             </button>
                         )}
                         <button onClick={() => window.location.hash = '#admin'} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">My Pools</button>
+                        <button onClick={() => window.location.hash = '#profile'} className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded transition-colors flex items-center gap-1">
+                            <UserIcon size={14} /> Profile
+                        </button>
                         <button onClick={onLogout} className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded transition-colors"><LogOut size={14} /></button>
                     </div>
                 ) : (
