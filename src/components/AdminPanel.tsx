@@ -1113,7 +1113,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"><ArrowLeft size={20} /></button>
-            <div><h1 className="text-xl font-bold text-white flex items-center gap-2"><Settings className="text-indigo-400" size={20} /> {gameState.name} <span className="text-xs bg-rose-500 text-white px-2 py-0.5 rounded-full">v3.1 Charity Update</span></h1><p className="text-xs text-slate-500">Admin Editor</p></div>
+            <div><h1 className="text-xl font-bold text-white flex items-center gap-2"><Settings className="text-indigo-400" size={20} /> {gameState.name} <span className="text-xs bg-rose-500 text-white px-2 py-0.5 rounded-full">Charity</span></h1><p className="text-xs text-slate-500">Admin Editor</p></div>
           </div>
           <div className="flex gap-2">
             <button onClick={onShare} className="text-xs bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-600 px-3 py-2 rounded font-bold cursor-pointer flex items-center gap-2"><Share2 size={14} /> Share</button>
@@ -1249,8 +1249,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         onClick={handleRandomizeWinner}
                         disabled={!randomizerAvailable || isRandomizing}
                         className={`w-full py-6 rounded-xl font-bold text-xl shadow-lg transition-all flex flex-col items-center gap-2 ${randomizerAvailable
-                            ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-orange-500/20'
-                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                          ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-orange-500/20'
+                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                           }`}
                       >
                         {isRandomizing ? 'ROLLING THE DICE...' : '🎲 CLICK TO PICK RANDOM WINNER'}
