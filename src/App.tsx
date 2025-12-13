@@ -664,8 +664,8 @@ const App: React.FC = () => {
                 // Default / Pre-Game (Show if startTime exists)
                 if (startTime) {
                   const dateObj = new Date(startTime);
-                  const dateStr = dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-                  const timeStr = dateObj.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+                  const dateStr = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+                  const timeStr = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' });
                   return <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">{dateStr} • {timeStr}</p>;
                 }
 
