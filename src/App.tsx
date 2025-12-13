@@ -972,7 +972,7 @@ const App: React.FC = () => {
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
                     {currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random'
-                      ? "If the final square is empty, the 'Randomizer' will activate. The Commissioner will randomly select a lucky winner from all occupied squares."
+                      ? "If the final square is empty, the Commissioner will activate the site's 'Randomizer' function to determine a winner. The system will randomly select a winner from all occupied squares."
                       : "If the final square is empty, the prize reverts to the most recent previous winner (e.g. 3rd Quarter)."}
                   </p>
                 </div>
