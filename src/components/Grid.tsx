@@ -471,9 +471,23 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               textClass = isOwned ? "text-white font-bold" : "text-amber-200/70";
                               zIndex = "z-30";
                            } else if (isRowHighlighted || isColHighlighted) {
-                              bgClass = isOwned ? "bg-slate-900" : "bg-slate-800/60";
-                              borderClass = "border-slate-700";
+                              // "Outline the entire row/col to current outline of winning square"
+                              borderClass = "border-2 border-amber-500/60"; // Matches winning square border style
                               effectClass += " brightness-110";
+
+                              if (isOwned) {
+                                 if (square.isPaid) {
+                                    // Paid = Lighter Green
+                                    bgClass = "bg-emerald-500 shadow-[inset_0_0_10px_rgba(16,185,129,0.4)]";
+                                    textClass = "text-white font-bold";
+                                 } else {
+                                    // Unpaid = Orange
+                                    bgClass = "bg-orange-500 shadow-inner";
+                                    textClass = "text-white font-bold";
+                                 }
+                              } else {
+                                 bgClass = "bg-slate-800/60";
+                              }
                            } else if (isOwned) {
                               if (square.isPaid) {
                                  // PAID = Green
