@@ -1191,72 +1191,91 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 p-6 rounded-xl border border-indigo-500/30"><div className="flex items-center gap-2 mb-4"><Sparkles className="text-indigo-400" size={20} /><h3 className="text-lg font-bold text-indigo-100">AI Commissioner</h3></div>{aiIdea && (<div className="bg-slate-950/80 p-4 rounded-lg border border-indigo-500/30 mb-4 shadow-inner"><p className="text-lg text-indigo-200 font-serif italic">"{aiIdea}"</p></div>)}<button onClick={askGeminiForIdeas} disabled={isThinking} className="bg-indigo-600/80 hover:bg-indigo-500 text-white py-2 px-4 rounded-lg text-sm font-bold uppercase tracking-wide transition-colors">{isThinking ? 'Thinking...' : 'Suggest Rule Variation'}</button></div>
 
             {/* RANDOMIZER SECTION */}
-            {(() => {
-              // Calculate if the Randomizer should be available
-              const gameIsOver = gameState.scores.gameStatus === 'post';
-              const finalScore = gameState.scores.final;
-              let finalSquareIsEmpty = false;
+            {gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' && gameState.ruleVariations.quarterlyRollover && (
+              (() => {
+                // Calculate conditions
+                const gameIsOver = gameState.scores.gameStatus === 'post';
+                const finalScore = gameState.scores.final;
+                let finalSquareIsEmpty = false;
 
-              if (finalScore && gameState.axisNumbers) {
-                const homeDigit = finalScore.home % 10;
-                const awayDigit = finalScore.away % 10;
-                const colIdx = gameState.axisNumbers.away.indexOf(awayDigit);
-                const rowIdx = gameState.axisNumbers.home.indexOf(homeDigit);
-                if (colIdx !== -1 && rowIdx !== -1) {
-                  const squareId = rowIdx * 10 + colIdx;
-                  finalSquareIsEmpty = !gameState.squares[squareId]?.owner;
+                if (finalScore && gameState.axisNumbers) {
+                  const homeDigit = finalScore.home % 10;
+                  const awayDigit = finalScore.away % 10;
+                  const colIdx = gameState.axisNumbers.away.indexOf(awayDigit);
+                  const rowIdx = gameState.axisNumbers.home.indexOf(homeDigit);
+                  if (colIdx !== -1 && rowIdx !== -1) {
+                    const squareId = rowIdx * 10 + colIdx;
+                    finalSquareIsEmpty = !gameState.squares[squareId]?.owner;
+                  }
                 }
-              }
 
-              const randomizerAvailable =
-                gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' &&
-                gameState.ruleVariations.quarterlyRollover &&
-                gameIsOver &&
-                finalSquareIsEmpty;
+                const randomizerAvailable = gameIsOver && finalSquareIsEmpty;
 
-              if (!randomizerAvailable) return null;
-
-              return (
-                <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 border-t-4 border-t-amber-500 shadow-xl">
-                  <div className="flex justify-between items-start mb-6">
-                    <div>
-                      <h3 className="text-lg font-bold text-white flex items-center gap-2"><Sparkles className="text-amber-400" /> Final Prize Randomizer</h3>
-                      <p className="text-sm text-slate-400">Randomly select a square for the unclaimed rollover pot.</p>
+                return (
+                  <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 border-t-4 border-t-amber-500 shadow-xl">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2"><Sparkles className="text-amber-400" /> Final Prize Randomizer</h3>
+                        <p className="text-sm text-slate-400">Randomly select a square for the unclaimed rollover pot.</p>
+                      </div>
+                      {gameState.randomWinner ? (
+                        <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Winner Selected</div>
+                      ) : randomizerAvailable ? (
+                        <div className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Ready to Roll</div>
+                      ) : (
+                        <div className="bg-slate-700/50 text-slate-400 border border-slate-600/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Waiting</div>
+                      )}
                     </div>
-                    {gameState.randomWinner ? (
-                      <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Winner Selected</div>
+
+                    {/* Condition Checklist - show when not yet available */}
+                    {!randomizerAvailable && !gameState.randomWinner && (
+                      <div className="bg-slate-950 border border-slate-700 rounded-lg p-4 mb-4">
+                        <p className="text-xs text-slate-400 font-bold uppercase mb-3">This feature will unlock when:</p>
+                        <ul className="space-y-2 text-sm">
+                          <li className={`flex items-center gap-2 ${gameIsOver ? 'text-emerald-400' : 'text-slate-500'}`}>
+                            {gameIsOver ? <CheckCircle size={16} className="text-emerald-400" /> : <div className="w-4 h-4 border-2 border-slate-600 rounded-full" />}
+                            The game has ended (Final score recorded)
+                          </li>
+                          <li className={`flex items-center gap-2 ${finalSquareIsEmpty ? 'text-emerald-400' : 'text-slate-500'}`}>
+                            {finalSquareIsEmpty ? <CheckCircle size={16} className="text-emerald-400" /> : <div className="w-4 h-4 border-2 border-slate-600 rounded-full" />}
+                            The final winning square is unclaimed (empty)
+                          </li>
+                        </ul>
+                      </div>
+                    )}
+
+                    {!gameState.randomWinner ? (
+                      <button
+                        onClick={handleRandomizeWinner}
+                        disabled={!randomizerAvailable || isRandomizing}
+                        className={`w-full py-6 rounded-xl font-bold text-xl shadow-lg transition-all flex flex-col items-center gap-2 ${randomizerAvailable
+                            ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-orange-500/20'
+                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                          }`}
+                      >
+                        {isRandomizing ? 'ROLLING THE DICE...' : '🎲 CLICK TO PICK RANDOM WINNER'}
+                        {!isRandomizing && randomizerAvailable && <span className="text-xs font-normal opacity-80 uppercase tracking-widest">Hold Your Breath</span>}
+                        {!randomizerAvailable && <span className="text-xs font-normal opacity-60 uppercase tracking-widest">Conditions Not Met</span>}
+                      </button>
                     ) : (
-                      <div className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Ready to Roll</div>
+                      <div className="bg-slate-950 rounded-xl p-6 text-center border border-emerald-500/30 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+                        <p className="text-slate-500 text-xs font-bold uppercase mb-2">The Lucky Square Is</p>
+                        <div className="text-6xl font-black text-white font-mono mb-2">#{gameState.randomWinner.squareId}</div>
+                        <div className="text-xl text-emerald-400 font-bold mb-4">{gameState.randomWinner.owner}</div>
+                        <p className="text-xs text-slate-600">Selected at {new Date(gameState.randomWinner.timestamp).toLocaleTimeString()}</p>
+                        <button
+                          onClick={() => updateConfig({ randomWinner: undefined })}
+                          className="mt-4 text-xs text-slate-500 hover:text-rose-500 underline"
+                        >
+                          Reset (Admin Only)
+                        </button>
+                      </div>
                     )}
                   </div>
-
-                  {!gameState.randomWinner ? (
-                    <button
-                      onClick={handleRandomizeWinner}
-                      disabled={isRandomizing}
-                      className="w-full py-6 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl font-bold text-xl shadow-lg shadow-orange-500/20 transition-all flex flex-col items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isRandomizing ? 'ROLLING THE DICE...' : '🎲 CLICK TO PICK RANDOM WINNER'}
-                      {!isRandomizing && <span className="text-xs font-normal opacity-80 uppercase tracking-widest">Hold Your Breath</span>}
-                    </button>
-                  ) : (
-                    <div className="bg-slate-950 rounded-xl p-6 text-center border border-emerald-500/30 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
-                      <p className="text-slate-500 text-xs font-bold uppercase mb-2">The Lucky Square Is</p>
-                      <div className="text-6xl font-black text-white font-mono mb-2">#{gameState.randomWinner.squareId}</div>
-                      <div className="text-xl text-emerald-400 font-bold mb-4">{gameState.randomWinner.owner}</div>
-                      <p className="text-xs text-slate-600">Selected at {new Date(gameState.randomWinner.timestamp).toLocaleTimeString()}</p>
-                      <button
-                        onClick={() => updateConfig({ randomWinner: undefined })}
-                        className="mt-4 text-xs text-slate-500 hover:text-rose-500 underline"
-                      >
-                        Reset (Admin Only)
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+                );
+              })()
+            )}
 
           </div>
         )}
