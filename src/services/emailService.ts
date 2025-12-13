@@ -1,6 +1,17 @@
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
+const PROMO_SIGNATURE_TEXT = `
+
+---
+Want to create and host your own pool? Go to MarchMeleePools.com and create a pool for your office, friends, or favorite charity today!`;
+
+const PROMO_SIGNATURE_HTML = `
+<hr style="border: 1px solid #eee; margin: 20px 0;" />
+<p style="font-size: 12px; color: #666; text-align: center;">
+  Want to create and host your own pool? Go to <a href="https://marchmeleepools.com" style="color: #4f46e5;">MarchMeleePools.com</a> and create a pool for your office, friends, or favorite charity today!
+</p>`;
+
 export const emailService = {
     // Generic helper to write to the 'mail' collection
     sendEmail: async (
@@ -11,12 +22,15 @@ export const emailService = {
         options?: { bcc?: string[], replyTo?: string }
     ) => {
         try {
+            const finalText = text + PROMO_SIGNATURE_TEXT;
+            const finalHtml = (html || text.replace(/\n/g, '<br>')) + PROMO_SIGNATURE_HTML;
+
             const emailData: any = {
                 to,
                 message: {
                     subject,
-                    text,
-                    html: html || text.replace(/\n/g, '<br>')
+                    text: finalText,
+                    html: finalHtml
                 }
             };
 

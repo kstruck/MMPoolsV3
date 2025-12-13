@@ -77,6 +77,17 @@ const App: React.FC = () => {
 
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
+  // Capture referral code from URL on load
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const refCode = urlParams.get('ref');
+    if (refCode) {
+      authService.storeReferralCode(refCode);
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+    }
+  }, []);
+
   useEffect(() => {
     // Handle root path slugs (e.g. /my-slug -> /#pool/my-slug)
     const path = window.location.pathname;

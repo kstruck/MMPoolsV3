@@ -186,6 +186,11 @@ export interface User {
     linkedin?: string;
     other?: string;
   };
+  // Referral System
+  referralCode?: string; // Unique code for referral link (typically same as user ID)
+  referredBy?: string; // UID of the user who referred this user
+  referralCount?: number; // Number of users this user has referred
+  createdAt?: number; // Timestamp of account creation
 }
 
 export interface Winner {

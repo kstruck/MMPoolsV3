@@ -347,6 +347,7 @@ export const SuperAdmin: React.FC = () => {
                                 <th className="p-4 tracking-wider">Name</th>
                                 <th className="p-4 tracking-wider">Email</th>
                                 <th className="p-4 tracking-wider">Method</th>
+                                <th className="p-4 tracking-wider">Referrals</th>
                                 <th className="p-4 tracking-wider">ID</th>
                                 <th className="p-4 tracking-wider">Actions</th>
                             </tr>
@@ -362,6 +363,9 @@ export const SuperAdmin: React.FC = () => {
                                         <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
                                             {u.registrationMethod || 'EMAIL'}
                                         </span>
+                                    </td>
+                                    <td className="p-4 text-center">
+                                        <span className="text-indigo-400 font-bold">{u.referralCount || 0}</span>
                                     </td>
                                     <td className="p-4 text-slate-500 font-mono text-xs max-w-[100px] truncate" title={u.id}>{u.id}</td>
                                     <td className="p-4 flex gap-2">

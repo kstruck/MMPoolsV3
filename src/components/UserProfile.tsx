@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { User } from '../types';
 import { dbService } from '../services/dbService';
 import { authService } from '../services/authService';
-import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader } from 'lucide-react';
+import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon } from 'lucide-react';
 
 interface UserProfileProps {
     user: User;
@@ -88,6 +88,39 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                     <div>
                         <h2 className="text-2xl font-bold text-white">Your Profile</h2>
                         <p className="text-slate-400 text-sm">Manage your account details and public links.</p>
+                    </div>
+                </div>
+
+                {/* Referral Program Section */}
+                <div className="p-6 border-b border-slate-800 bg-gradient-to-r from-indigo-900/20 to-purple-900/20">
+                    <h3 className="text-sm font-bold text-indigo-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <Users size={16} /> Referral Program
+                    </h3>
+                    <div className="bg-slate-950 rounded-lg p-4 border border-indigo-500/20">
+                        <p className="text-xs text-slate-400 mb-3">Share your unique link to earn referral credit!</p>
+                        <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-indigo-300 font-mono truncate">
+                                {`${window.location.origin}/?ref=${user.referralCode || user.id}`}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(`${window.location.origin}/?ref=${user.referralCode || user.id}`);
+                                    alert('Link copied!');
+                                }}
+                                className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+                                title="Copy Link"
+                            >
+                                <Copy size={18} />
+                            </button>
+                        </div>
+                        <div className="mt-4 flex items-center gap-4 text-sm">
+                            <div className="flex items-center gap-2">
+                                <LinkIcon size={14} className="text-slate-500" />
+                                <span className="text-slate-400">Your Referrals: </span>
+                                <span className="text-white font-bold">{user.referralCount || 0}</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
