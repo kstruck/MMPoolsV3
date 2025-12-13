@@ -189,9 +189,18 @@ export const SuperAdmin: React.FC = () => {
     // Tab state
     const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals'>('overview');
 
-    // Group pools by sport
+    // Group pools by sport/league (using existing league field from setup wizard)
+    const getLeagueDisplayName = (league: string | undefined) => {
+        switch (league) {
+            case 'nfl': return 'NFL Football';
+            case 'college': return 'NCAA Football';
+            case 'ncaa': return 'NCAA Football';
+            default: return 'Other';
+        }
+    };
+
     const poolsBySport = pools.reduce((acc, pool) => {
-        const sport = pool.sport || 'Other';
+        const sport = getLeagueDisplayName(pool.league);
         if (!acc[sport]) acc[sport] = [];
         acc[sport].push(pool);
         return acc;
