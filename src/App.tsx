@@ -561,6 +561,36 @@ const App: React.FC = () => {
         <div className="max-w-[1400px] mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 1. Grid Owner */}
           <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
+            {/* Pool Status Display */}
+            <div className="mb-4">
+              <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Status:</h3>
+              {(() => {
+                if (!currentPool.isLocked) return (
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span></span>
+                    <div><p className="text-emerald-400 font-bold text-sm leading-none">Open</p><p className="text-slate-500 text-[10px]">Grid is available to choose squares</p></div>
+                  </div>
+                );
+
+                const status = currentPool.scores.gameStatus;
+                const isLive = status === 'in' || status === 'post';
+
+                if (isLive) return (
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span></span>
+                    <div><p className="text-rose-500 font-bold text-sm leading-none">Locked - Live</p><p className="text-slate-500 text-[10px]">Game has started</p></div>
+                  </div>
+                );
+
+                return (
+                  <div className="flex items-center gap-2">
+                    <Lock size={14} className="text-amber-500" />
+                    <div><p className="text-amber-500 font-bold text-sm leading-none">Locked - Pending</p><p className="text-slate-500 text-[10px]">Waiting for kickoff</p></div>
+                  </div>
+                );
+              })()}
+            </div>
+
             <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
             <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
             <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{currentPool.paymentInstructions}</p></div>

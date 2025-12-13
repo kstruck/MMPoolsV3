@@ -82,7 +82,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
 
   // Helper to safely update nested score state
-  const handleScoreChange = (period: keyof Scores, team: 'home' | 'away', value: string) => {
+  const handleScoreChange = (period: Exclude<keyof Scores, 'gameStatus'>, team: 'home' | 'away', value: string) => {
     const numVal = value === '' ? 0 : parseInt(value);
     if (isNaN(numVal)) return;
 
@@ -95,7 +95,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
-  const togglePeriodActive = (period: keyof Scores) => {
+  const togglePeriodActive = (period: Exclude<keyof Scores, 'gameStatus'>) => {
     if (gameState.scores[period]) {
       updateScores({ [period]: null });
     } else {

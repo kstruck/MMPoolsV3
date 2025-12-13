@@ -123,7 +123,8 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     const completed = matchedGame.status.type?.completed;
 
     const newScores: Partial<Scores> = {
-      current: { home: apiTotalHome, away: apiTotalAway }
+      current: { home: apiTotalHome, away: apiTotalAway },
+      gameStatus: statusState as 'pre' | 'in' | 'post'
     };
 
     // Update state based on game progress

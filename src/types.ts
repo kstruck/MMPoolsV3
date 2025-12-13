@@ -30,6 +30,7 @@ export interface Scores {
   half: GameScore | null;
   q3: GameScore | null;
   final: GameScore | null;
+  gameStatus?: 'pre' | 'in' | 'post'; // Track game state
 }
 
 export interface PayoutConfig {

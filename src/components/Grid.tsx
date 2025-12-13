@@ -165,121 +165,123 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          )}
 
          {/* --- SECTION 1: PLAYER IDENTITY PANEL --- */}
-         <div className={`w-full max-w-2xl mb-6 rounded-xl border overflow-hidden transition-all duration-300 ${isIdentitySet ? 'bg-slate-900/50 border-emerald-500/30' : 'bg-slate-800 border-indigo-500/50 shadow-lg shadow-indigo-500/10'}`}>
+         {!gameState.isLocked && (
+            <div className={`w-full max-w-2xl mb-6 rounded-xl border overflow-hidden transition-all duration-300 ${isIdentitySet ? 'bg-slate-900/50 border-emerald-500/30' : 'bg-slate-800 border-indigo-500/50 shadow-lg shadow-indigo-500/10'}`}>
 
-            {/* Header */}
-            <div
-               className={`p-4 flex items-center justify-between cursor-pointer ${isIdentitySet ? 'bg-emerald-900/10' : 'bg-slate-800'}`}
-               onClick={() => setIsIdentityOpen(!isIdentityOpen)}
-            >
-               <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isIdentitySet ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-700 text-slate-400'}`}>
-                     <User size={20} />
-                  </div>
-                  <div>
-                     <h3 className={`font-bold text-sm uppercase tracking-wide ${isIdentitySet ? 'text-emerald-400' : 'text-slate-300'}`}>
-                        {isIdentitySet ? 'Picking as:' : 'Player Details'}
-                     </h3>
-                     <div className="flex items-center gap-2">
-                        <p className="text-lg font-bold text-white leading-none">
-                           {isIdentitySet ? playerInfo.name : 'Enter your info to start'}
-                        </p>
-                        {isIdentitySet && squaresAlreadyOwned > 0 && (
-                           <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400 border border-slate-700">
-                              Owns {squaresAlreadyOwned} sq
-                           </span>
-                        )}
-                     </div>
-                  </div>
-               </div>
-               <button className="text-slate-400 hover:text-white transition-colors">
-                  {isIdentityOpen ? <ChevronUp size={20} /> : <Edit2 size={18} />}
-               </button>
-            </div>
-
-            {/* Form Body */}
-            {isIdentityOpen && (
-               <div className="p-6 border-t border-slate-700 bg-slate-900/50 animate-in slide-in-from-top-2">
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                     <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-indigo-400 uppercase mb-1">Your Name *</label>
-                        <input
-                           type="text"
-                           value={playerInfo.name}
-                           onChange={(e) => { setPlayerInfo(prev => ({ ...prev, name: e.target.value })); setErrorMsg(null); }}
-                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none text-lg placeholder:text-slate-600"
-                           placeholder="e.g. John Smith"
-                        />
+               {/* Header */}
+               <div
+                  className={`p-4 flex items-center justify-between cursor-pointer ${isIdentitySet ? 'bg-emerald-900/10' : 'bg-slate-800'}`}
+                  onClick={() => setIsIdentityOpen(!isIdentityOpen)}
+               >
+                  <div className="flex items-center gap-3">
+                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isIdentitySet ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-700 text-slate-400'}`}>
+                        <User size={20} />
                      </div>
                      <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email Address</label>
-                        <input
-                           type="email"
-                           value={playerInfo.details.email}
-                           onChange={(e) => updateDetail('email', e.target.value)}
-                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none placeholder:text-slate-600"
-                           placeholder="john@example.com"
-                        />
+                        <h3 className={`font-bold text-sm uppercase tracking-wide ${isIdentitySet ? 'text-emerald-400' : 'text-slate-300'}`}>
+                           {isIdentitySet ? 'Picking as:' : 'Player Details'}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                           <p className="text-lg font-bold text-white leading-none">
+                              {isIdentitySet ? playerInfo.name : 'Enter your info to start'}
+                           </p>
+                           {isIdentitySet && squaresAlreadyOwned > 0 && (
+                              <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400 border border-slate-700">
+                                 Owns {squaresAlreadyOwned} sq
+                              </span>
+                           )}
+                        </div>
                      </div>
-                     {gameState.collectPhone && (
-                        <div>
-                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Phone Number</label>
-                           <input
-                              type="tel"
-                              value={playerInfo.details.phone}
-                              onChange={(e) => updateDetail('phone', e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none placeholder:text-slate-600"
-                              placeholder="(555) 123-4567"
-                           />
-                        </div>
-                     )}
-                     {gameState.collectReferral && (
-                        <div>
-                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Referred By</label>
-                           <input
-                              type="text"
-                              value={playerInfo.details.referral}
-                              onChange={(e) => updateDetail('referral', e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
-                           />
-                        </div>
-                     )}
-                     {gameState.collectAddress && (
-                        <div className="md:col-span-2">
-                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Postal Address</label>
-                           <input
-                              type="text"
-                              value={playerInfo.details.address}
-                              onChange={(e) => updateDetail('address', e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
-                           />
-                        </div>
-                     )}
-                     {gameState.collectNotes && (
-                        <div className="md:col-span-2">
-                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notes</label>
-                           <textarea
-                              value={playerInfo.details.notes}
-                              onChange={(e) => updateDetail('notes', e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-20 resize-none placeholder:text-slate-600"
-                              placeholder="Special requests..."
-                           />
-                        </div>
-                     )}
                   </div>
-
-                  <div className="flex justify-end">
-                     <button
-                        onClick={handleSetIdentity}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
-                     >
-                        Start Picking <ArrowRight size={18} />
-                     </button>
-                  </div>
+                  <button className="text-slate-400 hover:text-white transition-colors">
+                     {isIdentityOpen ? <ChevronUp size={20} /> : <Edit2 size={18} />}
+                  </button>
                </div>
-            )}
-         </div>
+
+               {/* Form Body */}
+               {isIdentityOpen && (
+                  <div className="p-6 border-t border-slate-700 bg-slate-900/50 animate-in slide-in-from-top-2">
+
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div className="md:col-span-2">
+                           <label className="block text-xs font-bold text-indigo-400 uppercase mb-1">Your Name *</label>
+                           <input
+                              type="text"
+                              value={playerInfo.name}
+                              onChange={(e) => { setPlayerInfo(prev => ({ ...prev, name: e.target.value })); setErrorMsg(null); }}
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none text-lg placeholder:text-slate-600"
+                              placeholder="e.g. John Smith"
+                           />
+                        </div>
+                        <div>
+                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email Address</label>
+                           <input
+                              type="email"
+                              value={playerInfo.details.email}
+                              onChange={(e) => updateDetail('email', e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none placeholder:text-slate-600"
+                              placeholder="john@example.com"
+                           />
+                        </div>
+                        {gameState.collectPhone && (
+                           <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Phone Number</label>
+                              <input
+                                 type="tel"
+                                 value={playerInfo.details.phone}
+                                 onChange={(e) => updateDetail('phone', e.target.value)}
+                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none placeholder:text-slate-600"
+                                 placeholder="(555) 123-4567"
+                              />
+                           </div>
+                        )}
+                        {gameState.collectReferral && (
+                           <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Referred By</label>
+                              <input
+                                 type="text"
+                                 value={playerInfo.details.referral}
+                                 onChange={(e) => updateDetail('referral', e.target.value)}
+                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                              />
+                           </div>
+                        )}
+                        {gameState.collectAddress && (
+                           <div className="md:col-span-2">
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Postal Address</label>
+                              <input
+                                 type="text"
+                                 value={playerInfo.details.address}
+                                 onChange={(e) => updateDetail('address', e.target.value)}
+                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                              />
+                           </div>
+                        )}
+                        {gameState.collectNotes && (
+                           <div className="md:col-span-2">
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notes</label>
+                              <textarea
+                                 value={playerInfo.details.notes}
+                                 onChange={(e) => updateDetail('notes', e.target.value)}
+                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-20 resize-none placeholder:text-slate-600"
+                                 placeholder="Special requests..."
+                              />
+                           </div>
+                        )}
+                     </div>
+
+                     <div className="flex justify-end">
+                        <button
+                           onClick={handleSetIdentity}
+                           className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
+                        >
+                           Start Picking <ArrowRight size={18} />
+                        </button>
+                     </div>
+                  </div>
+               )}
+            </div>
+         )}
 
          {/* --- CONFIRMATION MODAL --- */}
          {isConfirming && (
