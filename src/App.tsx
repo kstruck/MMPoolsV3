@@ -278,7 +278,8 @@ const App: React.FC = () => {
           details.email!,
           normalizedName,
           currentPool.contactEmail,
-          currentPool.id
+          currentPool.id,
+          currentPool.ownerId // Pool owner's referral code
         ).then((res) => console.log('[App] Email Service Response:', res))
           .catch(err => console.error('[App] Email failed', err));
       }).catch(err => console.error('[App] Failed to import emailService', err));

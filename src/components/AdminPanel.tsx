@@ -304,7 +304,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     try {
       // recipientList contains emails implicitly due to filtering logic
-      await emailService.sendBroadcast(recipientList, emailSubject, htmlContent, replyTo);
+      await emailService.sendBroadcast(recipientList, emailSubject, htmlContent, replyTo, gameState.ownerId);
       updateConfig({ lastBroadcastTime: now });
       setEmailStatus({ type: 'success', msg: `Sent to ${recipientList.length} recipients!` });
       // Reset form slightly
