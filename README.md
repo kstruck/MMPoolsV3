@@ -6,8 +6,10 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 
 ### Core Experience
 *   **Interactive 100-Square Grid:** Real-time selection and ownership tracking.
-*   **Live Scoreboard:** Automated real-time game scores, quarters, clock, and pre-game info via ESPN API.
-*   **Enhanced Visualization:** **NEW!** Dynamic grid highlighting for active rows/columns, with specialized colors for paid (Emerald) vs. reserved (Amber) squares.
+*   **Live Scoreboard V2:** Intelligent syncing with ESPN. Features fuzzy-match game detection (no gameId required), precise Eastern Time (ET) scheduling, and "Time TBD" handling. Displays quarter-by-quarter status and game clock.
+*   **User Profiles:** Users can manage their display name, phone number, and social links via a new Profile Manager. Changes sync instantly across Firestore and Authentication.
+*   **Enhanced Visualization:** **NEW!** Dynamic grid highlighting for active rows/columns, winning squares, and paid (Emerald) vs. reserved (Amber) status.
+*   **Dynamic Layouts:** Smart responsive design that adapts to pool settings (e.g., auto-centering status cards when Charity is disabled).
 *   **Mobile-Responsive:** fully optimized design for desktop, tablet, and mobile devices.
 *   **User Accounts:** Secure Google Authentication and email registration via Firebase.
 
