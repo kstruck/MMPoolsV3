@@ -254,7 +254,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const currentEstimatedWeek = getEstimatedWeek();
 
-  const renderRemindersContent = () => (
+  const renderWizardReminders = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
@@ -631,7 +631,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     </div>
   );
 
-  const renderWizardStep5 = () => (
+  const renderWizardStep5 = () => renderWizardReminders();
+
+  const renderWizardStep6 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-xl font-bold text-white mb-2">Final Preferences</h3>
@@ -749,7 +751,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   { step: 2, label: '2. Matchup' },
                   { step: 3, label: '3. Rules' },
                   { step: 4, label: '4. Payouts' },
-                  { step: 5, label: '5. Finish' }
+                  { step: 5, label: '5. Reminders' },
+                  { step: 6, label: '6. Finish' }
                 ].map(s => (
                   <button
                     key={s.step}
@@ -770,6 +773,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {wizardStep === 3 && renderWizardStep3()}
             {wizardStep === 4 && renderWizardStep4()}
             {wizardStep === 5 && renderWizardStep5()}
+            {wizardStep === 6 && renderWizardStep6()}
 
             <div className="flex justify-between pt-6 border-t border-slate-800">
               <button onClick={() => setWizardStep(Math.max(1, wizardStep - 1))} disabled={wizardStep === 1} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all"><ArrowLeft size={18} /> Previous</button>
@@ -827,165 +831,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* REMINDERS TAB */}
         {activeTab === 'reminders' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                <Bell size={20} className="text-amber-400" /> Payment Reminders
-              </h3>
-              <p className="text-slate-400 text-sm mb-6">Automate follow-ups for unpaid squares.</p>
-
-              <div className="space-y-4">
-                <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
-                  <div>
-                    <span className="font-bold text-slate-200 block">Enable Auto-Reminders</span>
-                    <span className="text-xs text-slate-500">System checks every 15 mins for unpaid reservations.</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={gameState.reminders?.payment?.enabled || false}
-                    onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, payment: { ...(gameState.reminders?.payment || { graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false }), enabled: e.target.checked } } })}
-                    className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </label>
-
-                {gameState.reminders?.payment?.enabled && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Grace Period (Minutes)</label>
-                      <input
-                        type="number"
-                        value={gameState.reminders.payment.graceMinutes}
-                        onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, payment: { ...gameState.reminders!.payment, graceMinutes: parseInt(e.target.value) || 0 } } })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                      />
-                      <p className="text-[10px] text-slate-500 mt-1">Wait time after reservation before nagging.</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Repeat Every (Hours)</label>
-                      <input
-                        type="number"
-                        value={gameState.reminders.payment.repeatEveryHours}
-                        onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, payment: { ...gameState.reminders!.payment, repeatEveryHours: parseInt(e.target.value) || 0 } } })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                      />
-                      <p className="text-[10px] text-slate-500 mt-1">Frequency of follow-up emails.</p>
-                    </div>
-                    <label className="md:col-span-2 flex items-center gap-3 cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800">
-                      <input
-                        type="checkbox"
-                        checked={gameState.reminders.payment.notifyUsers}
-                        onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, payment: { ...gameState.reminders!.payment, notifyUsers: e.target.checked } } })}
-                        className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600"
-                      />
-                      <span className="text-sm text-slate-300">Also email the <strong>Participants</strong> directly (not just Host summary)</span>
-                    </label>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                <Clock size={20} className="text-rose-400" /> Lock Countdown
-              </h3>
-              <p className="text-slate-400 text-sm mb-6">Warn users before the grid locks.</p>
-
-              <div className="space-y-4">
-                <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
-                  <div>
-                    <span className="font-bold text-slate-200 block">Enable Countdown Alerts</span>
-                    <span className="text-xs text-slate-500">Sends email warnings at scheduled times.</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={gameState.reminders?.lock?.enabled || false}
-                    onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, lock: { ...(gameState.reminders?.lock || { scheduleMinutes: [1440, 120] }), enabled: e.target.checked } } })}
-                    className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </label>
-
-                {gameState.reminders?.lock?.enabled && (
-                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lock Time (Planned)</label>
-                      <input
-                        type="datetime-local"
-                        value={gameState.reminders.lock.lockAt ? new Date(gameState.reminders.lock.lockAt).toISOString().slice(0, 16) : ''}
-                        onChange={(e) => {
-                          const d = new Date(e.target.value);
-                          updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: d.getTime() } } });
-                        }}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                      />
-                      <p className="text-[10px] text-slate-500 mt-1">This sets the deadline for the reminders to fire against.</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Alert Schedule (Minutes Before)</label>
-                      <div className="flex gap-2">
-                        {[24 * 60, 2 * 60, 15].map(mins => {
-                          const isActive = gameState.reminders!.lock.scheduleMinutes.includes(mins);
-                          return (
-                            <button
-                              key={mins}
-                              onClick={() => {
-                                const current = gameState.reminders!.lock.scheduleMinutes;
-                                const next = isActive ? current.filter(m => m !== mins) : [...current, mins];
-                                updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, scheduleMinutes: next } } });
-                              }}
-                              className={`px-3 py-1 text-xs font-bold rounded border ${isActive ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-slate-950 text-slate-500 border-slate-700'}`}
-                            >
-                              {mins >= 60 ? `${mins / 60} Hrs` : `${mins} Mins`}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                <Sparkles size={20} className="text-emerald-400" /> Winner Announcements
-              </h3>
-              <p className="text-slate-400 text-sm mb-6">Instant alerts when a quarter closes.</p>
-              <div className="space-y-4">
-                <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
-                  <div>
-                    <span className="font-bold text-slate-200 block">Enable Winner Emails</span>
-                    <span className="text-xs text-slate-500">Auto-email all participants when a winner is calculated.</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={gameState.reminders?.winner?.enabled || false}
-                    onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, winner: { ...(gameState.reminders?.winner || { channels: ['email'], includeDigits: true, includeCharityImpact: true }), enabled: e.target.checked } } })}
-                    className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </label>
-                {gameState.reminders?.winner?.enabled && (
-                  <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={gameState.reminders.winner.includeDigits}
-                        onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, winner: { ...gameState.reminders!.winner, includeDigits: e.target.checked } } })}
-                        className="w-5 h-5 rounded bg-slate-800 border-slate-600"
-                      />
-                      <span className="text-sm text-slate-300">Include Winning Digits</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={gameState.reminders.winner.includeCharityImpact}
-                        onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, winner: { ...gameState.reminders!.winner, includeCharityImpact: e.target.checked } } })}
-                        className="w-5 h-5 rounded bg-slate-800 border-slate-600"
-                      />
-                      <span className="text-sm text-slate-300">Include Charity Impact</span>
-                    </label>
-                  </div>
-                )}
-              </div>
-            </div>
+            {renderWizardReminders()}
           </div>
         )}
 
