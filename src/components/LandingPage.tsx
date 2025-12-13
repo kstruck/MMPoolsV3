@@ -315,8 +315,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
         </div>
       </section>
 
-      {/* CTA Footer */}
-      <footer className="bg-slate-950 border-t border-slate-800 pt-24 pb-12">
+      {/* CTA Section */}
+      <div className="bg-slate-950 border-t border-slate-800 pt-24 pb-12">
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-5xl font-black text-white mb-8">Ready to Start Your Pool?</h2>
           <button
@@ -326,22 +326,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             Create Your Free Pool Now
           </button>
           <p className="text-indigo-200 text-sm font-bold uppercase tracking-wider mb-12">Limited Time Offer</p>
-
-          <div className="border-t border-slate-900 pt-12 flex flex-col md:flex-row justify-between items-center gap-6 opacity-60">
-            <div className="flex items-center gap-2">
-              <Logo className="w-6 h-6" textClassName="text-sm" />
-            </div>
-            <div className="text-sm text-slate-500">
-              © 2024 MarchMeleePools. All rights reserved.
-            </div>
-            <div className="flex gap-6 text-sm text-slate-500 font-medium">
-              <a href="#" className="hover:text-white transition-colors">Privacy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms</a>
-              <a href="#" className="hover:text-white transition-colors">Support</a>
-            </div>
-          </div>
         </div>
-      </footer>
+      </div>
 
       <Footer />
     </div>

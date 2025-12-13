@@ -3,6 +3,7 @@ import React from 'react';
 import { Shield, Brain, Zap, Lock, Mail, Layout, Globe, Users, Trophy, MessageCircle } from 'lucide-react';
 import { Header } from './Header';
 import type { User } from '../types';
+import { Footer } from './Footer';
 
 interface FeaturesPageProps {
     user: User | null;
@@ -159,6 +160,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                 </section>
 
             </main>
+            <Footer />
         </div>
     );
 };

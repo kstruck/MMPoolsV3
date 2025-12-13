@@ -4,6 +4,7 @@ import { Search, Filter, Heart, DollarSign, Trophy } from 'lucide-react';
 import type { GameState, User } from '../types';
 import { Header } from './Header';
 import { getTeamLogo } from '../constants';
+import { Footer } from './Footer';
 
 interface BrowsePoolsProps {
     user: User | null;
@@ -141,10 +142,10 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                         onClick={() => sport.active && setSelectedLeague(sport.id)}
                                         disabled={!sport.active}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all flex justify-between items-center ${!sport.active
-                                                ? 'opacity-40 cursor-not-allowed text-slate-500 hover:bg-transparent'
-                                                : selectedLeague === sport.id
-                                                    ? 'bg-indigo-600 text-white'
-                                                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                            ? 'opacity-40 cursor-not-allowed text-slate-500 hover:bg-transparent'
+                                            : selectedLeague === sport.id
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                                             }`}
                                     >
                                         <span>{sport.label}</span>
@@ -299,6 +300,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                     </div>
                 </div>
             </main>
+            <Footer />
         </div>
     );
 };
