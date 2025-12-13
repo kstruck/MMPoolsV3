@@ -14,13 +14,12 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 *   **User Accounts:** Secure Google Authentication and email registration via Firebase.
 
 ### Pool Management
-### Pool Management
 *   **Setup Wizard:** Enhanced 7-step flow to configure teams, costs, reminder rules, and payouts.
 *   **Charity & Fundraising:** ❤️ **NEW!** Dedicate a percentage of the pot to a charity of your choice. Includes automated "Off The Top" calculations and public support badges.
 *   **Unclaimed Prize Handling:** **NEW!** Choose how to handle empty winning squares:
     *   **Rollover:** Unclaimed money automatically moves to the next quarter's pot.
-    *   **Random Draw:** **NEW!** Activate a "Randomizer" button for the Final Prize to pick a lucky winner from occupied squares (includes animation).
-*   **Quarterly Numbers ('4 Sets'):** Optional mode to generate brand new axis numbers for every quarter. Numbers are generated transactionally by the server.
+    *   **Random Draw:** **NEW!** Activate a "Randomizer" button for the Final Prize to pick a lucky winner from occupied squares. **Security-Enhanced:** Only available when the game is over AND the final winning square is empty, ensuring fairness.
+*   **Email Broadcast Tool:** **NEW!** Pool managers can send mass emails to participants with recipient filtering (All, Paid, Unpaid), dynamic content inclusion (Rules, Payouts, Link), BCC for privacy, and 15-minute rate limiting.
 *   **Quarterly Numbers ('4 Sets'):** Optional mode to generate brand new axis numbers for every quarter. Numbers are generated transactionally by the server.
 *   **College Football Support:** **NEW!** Full support for NCAA/CFB pools including conference filters and automatic logo fetching.
 *   **Public Grids Sport Filter:** **NEW!** Filter active pools by NFL, NCAA Football, or view all. (NBA/NCAA Basketball coming soon).
@@ -47,6 +46,14 @@ A neutral, AI-driven referee that brings clarity and trust to the game.
 *   **Dispute Helper:** Included "Ask the Commissioner" tool allows users to verify fairness. e.g., "Did the numbers change?" The AI analyzes the secure Audit Log to provide factual, evidence-based answers.
 *   **Zero-Hallucinations:** Built with strict "Facts Only" system prompts. If data is missing or unverifiable, the AI will refuse to make up an answer, ensuring absolute integrity.
 *   **Idempotency:** Smart hashing ensures the AI never processes the same event twice, keeping API costs low and responses consistent.
+
+### 🔗 Referral System (NEW)
+Built-in viral growth mechanism to help pool managers expand their reach.
+*   **Unique Referral Links:** Each pool manager receives a personalized referral link (`marchmeleepools.com/?ref=UID`).
+*   **Automatic Tracking:** New signups via referral links are automatically attributed to the referrer in Firestore.
+*   **Dashboard Stats:** Pool managers can view their referral count and copy their link directly from their Profile page.
+*   **SuperAdmin Visibility:** Referral performance is tracked in the SuperAdmin dashboard for analytics.
+*   **Email Promotion:** All outgoing site emails include a promotional footer encouraging users to create their own pools.
 
 ### Super Admin Dashboard
 *   **System Overview:** View all pools and registered users.
