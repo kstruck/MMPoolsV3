@@ -150,7 +150,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setShowSchedule(true);
     try {
       const leaguePath = gameState.league === 'college' || gameState.league === 'ncaa' ? 'college-football' : 'nfl';
-      const url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/scoreboard?seasontype=${seasonType}&week=${week}`;
+      let url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/scoreboard?seasontype=${seasonType}&week=${week}`;
+      if (leaguePath === 'college-football') {
+        url += `&groups=${cfbConference}`;
+        // If searching specific conference, disable limit to ensure visibility, though groups usually limits enough
+        url += `&limit=100`;
+      }
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch schedule');
       const data = await response.json();
@@ -242,6 +247,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
     updateConfig({ squares: newSquares });
   };
+
+  const [cfbConference, setCfbConference] = useState('80'); // Default to All FBS
+
+  const CFB_CONFERENCES = [
+    { id: '80', name: 'All FBS (Div I-A)' },
+    { id: '81', name: 'All FCS (Div I-AA)' },
+    { id: '1', name: 'ACC' },
+    { id: '4', name: 'Big 12' },
+    { id: '5', name: 'Big Ten' },
+    { id: '8', name: 'SEC' },
+    { id: '9', name: 'Pac-12' },
+    { id: '151', name: 'American' },
+    { id: '12', name: 'C-USA' },
+    { id: '15', name: 'MAC' },
+    { id: '17', name: 'Mountain West' },
+    { id: '37', name: 'Sun Belt' },
+  ];
 
   /* Helper to estimate current NFL week */
   const getEstimatedWeek = () => {
@@ -452,12 +474,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
           <div className="flex justify-between items-start mb-6">
             <div><h3 className="text-xl font-bold text-white mb-2">The Matchup</h3><p className="text-slate-400 text-sm">Select the teams. Import from the schedule to auto-fetch logos.</p></div>
-            <button onClick={() => { setShowSchedule(!showSchedule); if (!showSchedule) setWeek(currentEstimatedWeek.toString()); }} className="bg-slate-800 hover:bg-slate-700 text-indigo-300 px-4 py-2 rounded-lg text-sm font-bold border border-slate-700 transition-colors flex items-center gap-2"><Calendar size={16} /> {showSchedule ? 'Hide Schedule' : 'Find Game'}</button>
+            <button onClick={() => {
+              setShowSchedule(!showSchedule);
+              if (!showSchedule) {
+                // Smart Defaults
+                const isCollege = gameState.league === 'college' || gameState.league === 'ncaa';
+                const month = new Date().getMonth();
+                if (isCollege && (month === 11 || month === 0)) {
+                  setSeasonType('3'); // Postseason
+                  setWeek('1');
+                } else {
+                  setWeek(currentEstimatedWeek.toString());
+                }
+              }
+            }} className="bg-slate-800 hover:bg-slate-700 text-indigo-300 px-4 py-2 rounded-lg text-sm font-bold border border-slate-700 transition-colors flex items-center gap-2"><Calendar size={16} /> {showSchedule ? 'Hide Schedule' : 'Find Game'}</button>
           </div>
           {showSchedule && (
             <div className="mb-6 bg-slate-950 border border-slate-700 rounded-xl p-4 animate-in fade-in">
               <div className="flex flex-wrap items-center gap-2 mb-4">
-                <select value={seasonType} onChange={(e) => { setSeasonType(e.target.value); setWeek(currentEstimatedWeek.toString()); }} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none">
+                <select value={seasonType} onChange={(e) => {
+                  const newType = e.target.value;
+                  setSeasonType(newType);
+                  // Reset week logic
+                  if (newType === '2') {
+                    setWeek(currentEstimatedWeek.toString());
+                  } else {
+                    setWeek('1');
+                  }
+                }} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none">
                   <option value="1">Preseason</option>
                   <option value="2">Regular Season</option>
                   <option value="3">Postseason</option>
@@ -467,7 +511,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <select value={week} onChange={(e) => setWeek(e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none">
                   {seasonType === '2' && Array.from({ length: 18 }).map((_, i) => {
                     const w = i + 1;
-                    if (w < currentEstimatedWeek) return null; // Hide past weeks
                     return <option key={i} value={w}>Week {w}</option>;
                   })}
                   {seasonType === '3' && (
@@ -483,6 +526,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <option key={i} value={i + 1}>Week {i + 1}</option>
                   ))}
                 </select>
+
+
+
+                {(gameState.league === 'college' || gameState.league === 'ncaa') && (
+                  <select value={cfbConference} onChange={(e) => setCfbConference(e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none w-32">
+                    {CFB_CONFERENCES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                )}
 
                 <button onClick={fetchSchedule} disabled={isLoadingSchedule} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded text-sm font-bold ml-2">{isLoadingSchedule ? 'Loading...' : 'Load Games'}</button>
               </div>
@@ -504,7 +555,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-rose-500/50 transition-colors"><label className="block text-xs font-bold text-rose-400 uppercase mb-4 text-center">Row Team (Left)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div><input type="text" value={gameState.homeTeam} onChange={(e) => updateConfig({ homeTeam: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="e.g. Home Team" /></div></div>
           </div>
         </div>
-      </div>
+      </div >
     )
   };
 
