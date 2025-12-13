@@ -18,7 +18,7 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 *   **Charity & Fundraising:** ❤️ **NEW!** Dedicate a percentage of the pot to a charity of your choice. Includes automated "Off The Top" calculations and public support badges.
 *   **Unclaimed Prize Handling:** **NEW!** Choose how to handle empty winning squares:
     *   **Rollover:** Unclaimed money automatically moves to the next quarter's pot.
-    *   **Random Draw:** **NEW!** Activate a "Randomizer" button for the Final Prize to pick a lucky winner from occupied squares. **Security-Enhanced:** Only available when the game is over AND the final winning square is empty, ensuring fairness.
+    *   **Random Draw:** **NEW!** Activate a "Randomizer" button for the Final Prize to pick a lucky winner from occupied squares. **Security-Enhanced:** Only available when the game is over AND the final winning square is empty, ensuring fairness. The UI remains visible with a grayed-out button and condition checklist, ensuring transparency about when the feature will unlock.
 *   **Email Broadcast Tool:** **NEW!** Pool managers can send mass emails to participants with recipient filtering (All, Paid, Unpaid), dynamic content inclusion (Rules, Payouts, Link), BCC for privacy, and 15-minute rate limiting.
 *   **Quarterly Numbers ('4 Sets'):** Optional mode to generate brand new axis numbers for every quarter. Numbers are generated transactionally by the server.
 *   **College Football Support:** **NEW!** Full support for NCAA/CFB pools including conference filters and automatic logo fetching.
