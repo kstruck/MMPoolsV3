@@ -2,6 +2,7 @@ import React from 'react';
 import { Logo } from './Logo';
 import { Trophy, Zap, Shield, LayoutGrid, Award, Calendar, CheckCircle2, Heart } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { Footer } from './Footer';
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -341,6 +342,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
           </div>
         </div>
       </footer>
+
+      <Footer />
     </div>
   );
 };

@@ -20,6 +20,9 @@ const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => 
 import { UserProfile } from './components/UserProfile';
 import { BrowsePools } from './components/BrowsePools';
 import { FeaturesPage } from './components/FeaturesPage';
+import { PrivacyPage } from './components/PrivacyPage';
+import { TermsPage } from './components/TermsPage';
+import { SupportPage } from './components/SupportPage';
 
 // --- SHARED COMPONENTS ---
 
@@ -554,6 +557,18 @@ const App: React.FC = () => {
 
   if (route.view === 'features') {
     return <FeaturesPage user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />;
+  }
+
+  if (route.view === 'privacy') {
+    return <PrivacyPage />;
+  }
+
+  if (route.view === 'terms') {
+    return <TermsPage />;
+  }
+
+  if (route.view === 'support') {
+    return <SupportPage />;
   }
 
   if (route.view === 'profile') {
