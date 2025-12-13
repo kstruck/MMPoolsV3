@@ -77,6 +77,7 @@ export interface GameState {
   gridUsername?: string;
   gridPassword?: string;
   contactEmail: string;
+  managerName: string; // Name of the pool manager
   paymentInstructions: string; // Instructions for payment (Venmo, etc.)
   theme: string;
 

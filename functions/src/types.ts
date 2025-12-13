@@ -36,6 +36,10 @@ export interface Scores {
     half: GameScore | null;
     q3: GameScore | null;
     final: GameScore | null;
+    gameStatus?: 'pre' | 'in' | 'post'; // Track game state
+    clock?: string; // e.g. "12:45"
+    period?: number; // 0=Pre, 1=Q1, 2=Q2, etc.
+    startTime?: string; // ISO String
 }
 
 export interface PayoutConfig {
@@ -79,6 +83,7 @@ export interface GameState {
     gridUsername?: string;
     gridPassword?: string;
     contactEmail: string;
+    managerName: string; // Name of the pool manager
     paymentInstructions: string; // Instructions for payment (Venmo, etc.)
     theme: string;
 

@@ -175,7 +175,7 @@ const App: React.FC = () => {
         alert("You must be logged in to create a pool.");
         return;
       }
-      const newPool = createNewPool(`Pool #${pools.length + 1}`, user.id);
+      const newPool = createNewPool(`Pool #${pools.length + 1}`, user.id, user.name, user.email);
       await addNewPool(newPool); // Now creates in DB
       window.location.hash = `#admin/${newPool.id}`;
     } catch (err: any) {

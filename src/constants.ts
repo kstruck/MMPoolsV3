@@ -6,11 +6,12 @@ export const DEFAULT_SQUARES = Array.from({ length: 100 }, (_, i) => ({
   isPaid: false
 }));
 
-export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: string): GameState => ({
+export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: string, managerName: string = '', contactEmail: string = ''): GameState => ({
   id: Math.random().toString(36).substring(2, 9),
   name,
   urlSlug: Math.random().toString(36).substring(2, 7),
-  contactEmail: '',
+  contactEmail: contactEmail,
+  managerName: managerName,
   paymentInstructions: 'Venmo @YourName to participate. Payments due before kickoff.',
   theme: 'Default Theme',
   gridUsername: '',

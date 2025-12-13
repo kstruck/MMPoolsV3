@@ -475,9 +475,17 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               borderClass = "border-slate-700";
                               effectClass += " brightness-110";
                            } else if (isOwned) {
-                              bgClass = "bg-black shadow-inner";
-                              borderClass = "border-slate-800";
-                              textClass = "text-slate-200 font-medium";
+                              if (square.isPaid) {
+                                 // PAID = Green
+                                 bgClass = "bg-emerald-600 shadow-inner";
+                                 borderClass = "border-emerald-500";
+                                 textClass = "text-white font-bold";
+                              } else {
+                                 // UNPAID = Orange
+                                 bgClass = "bg-orange-500 shadow-inner";
+                                 borderClass = "border-orange-400";
+                                 textClass = "text-white font-bold";
+                              }
                            } else if (isAvailable) {
                               bgClass = "bg-white hover:bg-slate-50 cursor-pointer shadow-sm hover:shadow-lg hover:shadow-indigo-500/10";
                               borderClass = "border-slate-200 hover:border-indigo-400/50";
@@ -564,6 +572,41 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      </React.Fragment>
                   ))}
                </div>
+            </div>
+         </div>
+
+         {/* --- COLOR LEGEND (Always Visible at Bottom) --- */}
+         <div className="w-full max-w-4xl mt-6 px-4 mb-24 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
+            <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800 flex flex-wrap justify-center items-center gap-6 md:gap-8">
+               <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded bg-emerald-600 border border-emerald-500 shadow-sm flex items-center justify-center">
+                     <Check size={14} className="text-white" />
+                  </div>
+                  <span className="text-sm font-bold text-slate-300">Paid & Confirmed</span>
+               </div>
+
+               <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded bg-orange-500 border border-orange-400 shadow-sm flex items-center justify-center">
+                     <User size={14} className="text-white" />
+                  </div>
+                  <span className="text-sm font-bold text-slate-300">Reserved (Unpaid)</span>
+               </div>
+
+               <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded bg-amber-400 border border-amber-300 shadow-sm flex items-center justify-center animate-bounce">
+                     <Trophy size={14} className="text-black" fill="currentColor" />
+                  </div>
+                  <span className="text-sm font-bold text-amber-200">Winner!</span>
+               </div>
+
+               {!gameState.isLocked && (
+                  <div className="flex items-center gap-3">
+                     <div className="w-6 h-6 rounded bg-white hover:bg-slate-50 border border-slate-200 shadow-sm flex items-center justify-center">
+                        <span className="text-[10px] font-bold text-slate-400">$</span>
+                     </div>
+                     <span className="text-sm font-bold text-slate-300">Open For Sale</span>
+                  </div>
+               )}
             </div>
          </div>
 

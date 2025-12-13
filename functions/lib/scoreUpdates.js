@@ -65,14 +65,36 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
         const isQ1Final = (period >= 2) || (state === "post");
         const isHalfFinal = (period >= 3) || (state === "post");
         const isQ3Final = (period >= 4) || (state === "post");
+        // Create updates object
+        let updates = {};
+        // 1. Basic Score & Time Data
+        const homeComp = competition.competitors.find((c) => c.homeAway === 'home');
+        const awayComp = competition.competitors.find((c) => c.homeAway === 'away');
+        const homeScore = parseInt(homeComp.score || '0');
+        const awayScore = parseInt(awayComp.score || '0');
+        const displayClock = status.displayClock;
+        const gameDate = competition.date; // ISO String
+        // Prepare new scores object
+        const newScores = Object.assign(Object.assign({}, pool.scores), { current: { home: homeScore, away: awayScore }, gameStatus: state, period: period, clock: displayClock, startTime: gameDate });
+        // Deep check to strictly avoid unnecessary writes (infinite loops)
+        const isChanged = JSON.stringify(newScores.current) !== JSON.stringify(pool.scores.current) ||
+            pool.scores.gameStatus !== state ||
+            pool.scores.period !== period ||
+            pool.scores.clock !== displayClock ||
+            pool.scores.startTime !== gameDate;
+        if (isChanged) {
+            updates['scores'] = newScores;
+        }
         // --- TRANSACTION WRAPPER for Safety ---
         await db.runTransaction(async (transaction) => {
             const freshDoc = await transaction.get(doc.ref);
             if (!freshDoc.exists)
                 return;
             const freshPool = freshDoc.data();
-            // Re-read 4-Sets Logic with fresh data
             let transactionUpdates = {};
+            if (isChanged)
+                transactionUpdates['scores'] = newScores;
+            // Re-read 4-Sets Logic with fresh data
             if (freshPool.numberSets === 4) {
                 let qNums = freshPool.quarterlyNumbers || {};
                 let updated = false;
