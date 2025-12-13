@@ -21,7 +21,10 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
     *   **Rollover:** Unclaimed money automatically moves to the next quarter's pot.
     *   **Random Draw:** **NEW!** Activate a "Randomizer" button for the Final Prize to pick a lucky winner from occupied squares (includes animation).
 *   **Quarterly Numbers ('4 Sets'):** Optional mode to generate brand new axis numbers for every quarter. Numbers are generated transactionally by the server.
+*   **Quarterly Numbers ('4 Sets'):** Optional mode to generate brand new axis numbers for every quarter. Numbers are generated transactionally by the server.
 *   **College Football Support:** **NEW!** Full support for NCAA/CFB pools including conference filters and automatic logo fetching.
+*   **Public Grids Sport Filter:** **NEW!** Filter active pools by NFL, NCAA Football, or view all. (NBA/NCAA Basketball coming soon).
+*   **Improved Scoreboard:** **NEW!** Fully synchronized scoreboard for both NFL and College Football, displaying live clock, quarters, and final scores.
 *   **Custom Payouts:** Configurable percentage splits for Q1, Halftime, Q3, and Final scores.
 *   **Manager Controls:** Lock/unlock grid, mark squares as paid, manual score overrides, and legacy "Force Sync" options.
 *   **Pool Setup:** Automated pre-filling of manager contact info for streamlined creation.
