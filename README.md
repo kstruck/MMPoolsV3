@@ -23,6 +23,12 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 *   **Manager Controls:** Lock/unlock grid, mark squares as paid, "Force Sync" users to Firestore, and manual override options.
 *   **Pool Setup:** Automated pre-filling of manager contact info for streamlined creation.
 
+### 🔔 Smart Reminder System & Notifications
+*   **Automated Payment Reminders:** Scheduled system that identifies users with unpaid squares and sends focused email reminders.
+*   **Game Time Alerts:** Notifies users shortly before the pool locks.
+*   **Winner Announcements:** Instant email notifications sent to users when they win a quarter.
+*   **Smart & Safe:** Built with rate-limiting, idempotency (never double-send), and user opt-in preferences (Global vs. Pool-specific settings).
+
 ### 🛡️ Audit & Integrity (NEW)
 A military-grade audit logging system to ensure absolute fairness and transparency.
 *   **Immutable Log:** All critical actions (Locking, Number Generation, Reservations) are written to an append-only `audit` collection.
@@ -53,6 +59,7 @@ A neutral, AI-driven referee that brings clarity and trust to the game.
 *   **APIs:** 
     *   **Data:** ESPN (Scoreboard)
     *   **AI:** Google Gemini (AI Commissioner Features)
+    *   **Email:** EmailJS & Firebase Trigger Email
 *   **Deployment:** Docker (Nginx serving static assets)
 
 ## 💻 Local Developement Setup
@@ -94,6 +101,8 @@ Sensitive operations are moved off the client-side to a trusted Node.js environm
 *   `lockPool(poolId)`: Securely locks the grid and generates the random 0-9 axis numbers using server-side CSPRNG. Logs the action to the secure Audit Trail.
 *   `reserveSquare(poolId, squareId)`: Handles square purchases transactionally with race-condition prevention. Added to Audit Log.
 *   `syncGameStatus` (Scheduled): Polls ESPN every 5 minutes (during games) to update scores and **generate new quarterly numbers** if the "4 Sets" rule is active.
+*   `runReminders` (Scheduled): Runs periodically to check for unpaid squares or upcoming locks and sends notifications.
+*   `onWinnerComputed` (Trigger): Listens for game score updates to instantly notify winners via email.
 
 ### Firestore Security Rules
 *   **Audit Log:** `read: true` for transparency, `write: false` for everyone (Client-side writes blocked).
