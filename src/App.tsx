@@ -605,7 +605,7 @@ const App: React.FC = () => {
 
         {/* INFO & PAYOUTS ROW */}
         <div className="max-w-[1400px] mx-auto px-4 py-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 ${currentPool.charity?.enabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2 max-w-5xl mx-auto'}`}>
             {/* 1. Grid Owner */}
             <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
               {/* Pool Status Display */}
