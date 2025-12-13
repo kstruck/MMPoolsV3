@@ -66,6 +66,7 @@ const App: React.FC = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [showAudit, setShowAudit] = useState(false); // New State
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'searching' | 'found' | 'not-found' | 'error'>('idle');
 
   const [pools, setPools] = useState<GameState[]>([]);
   const [isPoolsLoading, setIsPoolsLoading] = useState(true);
@@ -133,12 +134,24 @@ const App: React.FC = () => {
   useEffect(() => {
     // Fetch if gameId exists OR (homeTeam AND awayTeam exist for fuzzy match)
     const canFetch = currentPool?.gameId || (currentPool?.homeTeam && currentPool?.awayTeam);
-    if (!canFetch || currentPool.manualScoreOverride || currentPool.scores.final) return;
+    if (!canFetch || currentPool.manualScoreOverride || currentPool.scores.final) {
+      setSyncStatus('idle');
+      return;
+    }
 
-    fetchGameScore(currentPool).then(res => { if (res) updateScores(currentPool.id, res.scores); });
-    const interval = setInterval(() => {
-      fetchGameScore(currentPool).then(res => { if (res) updateScores(currentPool.id, res.scores); });
-    }, 60000);
+    const doFetch = async () => {
+      setSyncStatus('searching');
+      const res = await fetchGameScore(currentPool);
+      if (res) {
+        updateScores(currentPool.id, res.scores);
+        setSyncStatus('found');
+      } else {
+        setSyncStatus('not-found');
+      }
+    };
+
+    doFetch();
+    const interval = setInterval(doFetch, 60000);
     return () => clearInterval(interval);
   }, [currentPool?.gameId, currentPool?.homeTeam, currentPool?.awayTeam, currentPool?.id, currentPool?.manualScoreOverride, currentPool?.scores.final]);
 
@@ -656,7 +669,10 @@ const App: React.FC = () => {
                   return <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">{dateStr} • {timeStr}</p>;
                 }
 
-                // Fallback if no start time
+                // Fallback / Sync Status
+                if (syncStatus === 'searching') return <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mt-1 animate-pulse">Searching for Game...</p>;
+                if (syncStatus === 'not-found') return <p className="text-xs text-rose-500 font-bold uppercase tracking-wider mt-1" title="Ensure Home/Away teams match ESPN names">No Active Game Found</p>;
+
                 return <p className="text-xs text-slate-600 font-bold uppercase tracking-wider mt-1">Status: Pending</p>;
               })()}
             </div>
