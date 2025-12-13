@@ -10,7 +10,7 @@ import { calculateWinners, calculateScenarioWinners, getLastDigit } from './serv
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, Search, X, Loader, Heart, Shield } from 'lucide-react';
+import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, X, Loader, Heart, Shield } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
@@ -18,6 +18,7 @@ import { AICommissioner } from './components/AICommissioner';
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
 import { UserProfile } from './components/UserProfile';
+import { BrowsePools } from './components/BrowsePools';
 
 // --- SHARED COMPONENTS ---
 
@@ -453,54 +454,7 @@ const App: React.FC = () => {
   }
 
   if (route.view === 'browse') {
-    const publicPools = pools.filter(p => p.isPublic);
-    return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-        <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
-        <main className="max-w-3xl mx-auto p-6 mt-10">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-white mb-4">Public Grids</h2>
-            <div className="mt-8 max-w-md mx-auto relative">
-              <input type="text" placeholder="Search for a pool..." className="w-full bg-slate-800 border border-slate-700 rounded-full py-3 px-6 pl-12 text-white outline-none focus:ring-2 focus:ring-indigo-500" />
-              <Search className="absolute left-4 top-3.5 text-slate-500" size={20} />
-            </div>
-          </div>
-          {connectionError && (
-            <div className="bg-rose-500/10 border border-rose-500 text-rose-400 p-4 rounded mb-6 flex items-center gap-3">
-              <Zap className="text-rose-500" />
-              <div>
-                <p className="font-bold">Connection Fail</p>
-                <p className="text-sm">{connectionError}. Check your configuration.</p>
-              </div>
-            </div>
-          )}
-          {isPoolsLoading ? (
-            <div className="text-center py-20"><Loader className="animate-spin inline-block mb-2" /> <p>Loading public grids...</p></div>
-          ) : (
-            <div className="space-y-4">
-              {publicPools.map(pool => (
-                <div key={pool.id} onClick={() => window.location.hash = `#pool/${pool.id}`} className="bg-slate-800 border border-slate-700 p-6 rounded-xl flex justify-between items-center cursor-pointer hover:border-indigo-500 hover:bg-slate-800/80 transition-all">
-                  <div>
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                      {pool.name}
-                      {pool.charity?.enabled && (
-                        <span className="text-xs bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <Heart size={10} className="fill-rose-500 text-rose-500" /> Supporting {pool.charity.name}
-                        </span>
-                      )}
-                    </h3>
-                    <p className="text-sm text-slate-400">{pool.awayTeam} vs {pool.homeTeam}</p>
-                  </div>
-                  <ArrowRight size={20} className="text-slate-500" />
-                </div>
-              ))}
-              {publicPools.length === 0 && <div className="text-center text-slate-500 py-10">No public pools found.</div>}
-            </div>
-          )}
-        </main>
-        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-      </div>
-    );
+    return <BrowsePools user={user} pools={pools} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />;
   }
 
   if (route.view === 'profile') {
