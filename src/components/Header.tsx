@@ -1,7 +1,7 @@
 import React from 'react';
 import { Logo } from './Logo';
 import type { User } from '../types';
-import { LayoutGrid, Shield, LogOut, User as UserIcon } from 'lucide-react';
+import { LayoutGrid, Shield, LogOut, User as UserIcon, Sparkles } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
@@ -20,6 +20,9 @@ export const Header: React.FC<HeaderProps> = ({ user, onOpenAuth, onLogout }) =>
                 <ThemeToggle />
                 <button onClick={() => window.location.hash = '#browse'} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                     <LayoutGrid size={16} /> Public Pools
+                </button>
+                <button onClick={() => window.location.hash = '#features'} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                    <Sparkles size={16} /> Features
                 </button>
                 {user ? (
                     <div className="flex items-center gap-4">
