@@ -8,3 +8,4 @@ if (!admin.apps.length) {
 export { lockPool } from "./poolParams";
 export { reserveSquare } from "./squares";
 export { syncGameStatus } from "./scoreUpdates";
+export { onWinnerUpdate, onAIRequest } from "./aiCommissioner";

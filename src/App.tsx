@@ -13,6 +13,7 @@ import { dbService } from './services/dbService';
 import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, Search, X, Loader, Heart, Shield } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
+import { AICommissioner } from './components/AICommissioner';
 
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
@@ -770,8 +771,9 @@ const App: React.FC = () => {
           </div>
         </div>
 
+
         {/* BOTTOM Payout Cards */}
-        <div className="max-w-[1400px] mx-auto px-4 mb-20">
+        <div className="max-w-[1400px] mx-auto px-4 mb-10">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { title: 'Quarter 1', data: q1Data },
@@ -802,6 +804,12 @@ const App: React.FC = () => {
             ))}
           </div>
         </div>
+
+        {/* AI COMMISSIONER */}
+        <div className="max-w-[1400px] mx-auto px-4 mb-20">
+          <AICommissioner poolId={currentPool.id} userId={user?.id} />
+        </div>
+
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
         {showAudit && <AuditLog poolId={currentPool.id} onClose={() => setShowAudit(false)} />}
       </div >

@@ -18,6 +18,18 @@ export interface GameScore {
     away: number;
 }
 
+export interface Winner {
+    period: string;
+    squareId: number;
+    owner: string;
+    amount: number;
+    homeDigit: number;
+    awayDigit: number;
+    isReverse?: boolean;
+    isRollover?: boolean;
+    description?: string;
+}
+
 export interface Scores {
     current: GameScore | null; // Live score right now
     q1: GameScore | null;
@@ -148,7 +160,8 @@ export type AuditEventType =
     | 'ADMIN_OVERRIDE_SCORE'
     | 'ADMIN_OVERRIDE_WINNER'
     | 'ADMIN_OVERRIDE_DIGITS'
-    | 'ADMIN_OVERRIDE_SQUARE_STATE';
+    | 'ADMIN_OVERRIDE_SQUARE_STATE'
+    | 'AI_ARTIFACT_CREATED';
 
 export interface AuditLogEvent {
     id: string;
@@ -164,4 +177,34 @@ export interface AuditLogEvent {
     };
     payload?: any;
     dedupeKey?: string;
+}
+
+// --- AI COMMISSIONER ---
+
+export interface AIArtifact {
+    id: string;
+    type: 'WINNER_EXPLANATION' | 'PERIOD_RECAP' | 'DISPUTE_RESPONSE' | 'POOL_SUMMARY';
+    period?: 'q1' | 'half' | 'q3' | 'final';
+    targetId?: string; // winnerId or requestId
+    content: {
+        headline: string;
+        summaryBullets: string[];
+        explanationSteps: string[]; // Steps showing math
+        confidence: number;
+        missingFacts?: string[]; // If data was missing
+    };
+    factsHash: string; // SHA256 of input facts for idempotency
+    createdAt: number;
+}
+
+export interface AIRequest {
+    id: string;
+    userId: string;
+    poolId: string;
+    question: string;
+    category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER';
+    status: 'PENDING' | 'COMPLETED' | 'ERROR';
+    responseArtifactId?: string;
+    createdAt: number;
+    updatedAt?: number;
 }

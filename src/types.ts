@@ -175,7 +175,8 @@ export type AuditEventType =
   | 'ADMIN_OVERRIDE_SCORE'
   | 'ADMIN_OVERRIDE_WINNER'
   | 'ADMIN_OVERRIDE_DIGITS'
-  | 'ADMIN_OVERRIDE_SQUARE_STATE';
+  | 'ADMIN_OVERRIDE_SQUARE_STATE'
+  | 'AI_ARTIFACT_CREATED';
 
 export interface AuditLogEvent {
   id: string; // Auto-generated
@@ -191,4 +192,34 @@ export interface AuditLogEvent {
   };
   payload?: any; // Structured details (JSON)
   dedupeKey?: string; // For idempotency
+}
+
+// --- AI COMMISSIONER ---
+
+export interface AIArtifact {
+  id: string;
+  type: 'WINNER_EXPLANATION' | 'PERIOD_RECAP' | 'DISPUTE_RESPONSE' | 'POOL_SUMMARY';
+  period?: 'q1' | 'half' | 'q3' | 'final';
+  targetId?: string; // winnerId or requestId
+  content: {
+    headline: string;
+    summaryBullets: string[];
+    explanationSteps: string[]; // Steps showing math
+    confidence: number;
+    missingFacts?: string[]; // If data was missing
+  };
+  factsHash: string; // SHA256 of input facts for idempotency
+  createdAt: number;
+}
+
+export interface AIRequest {
+  id: string;
+  userId: string;
+  poolId: string;
+  question: string;
+  category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER';
+  status: 'PENDING' | 'COMPLETED' | 'ERROR';
+  responseArtifactId?: string;
+  createdAt: number;
+  updatedAt?: number;
 }
