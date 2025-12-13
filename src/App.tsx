@@ -19,6 +19,7 @@ import { AICommissioner } from './components/AICommissioner';
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
 import { UserProfile } from './components/UserProfile';
 import { BrowsePools } from './components/BrowsePools';
+import { FeaturesPage } from './components/FeaturesPage';
 
 // --- SHARED COMPONENTS ---
 
@@ -126,6 +127,7 @@ const App: React.FC = () => {
     if (hash.startsWith('#super-admin')) return { view: 'super-admin', id: null };
     if (hash.startsWith('#pool')) return { view: 'pool', id: hash.split('/')[1] };
     if (hash.startsWith('#browse')) return { view: 'browse', id: null };
+    if (hash.startsWith('#features')) return { view: 'features', id: null };
     if (hash.startsWith('#profile')) return { view: 'profile', id: null };
     return { view: 'home', id: null };
   }, [hash]);
@@ -455,6 +457,10 @@ const App: React.FC = () => {
 
   if (route.view === 'browse') {
     return <BrowsePools user={user} pools={pools} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />;
+  }
+
+  if (route.view === 'features') {
+    return <FeaturesPage user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />;
   }
 
   if (route.view === 'profile') {
