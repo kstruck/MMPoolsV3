@@ -31,6 +31,9 @@ export interface Scores {
   q3: GameScore | null;
   final: GameScore | null;
   gameStatus?: 'pre' | 'in' | 'post'; // Track game state
+  clock?: string; // e.g. "12:45"
+  period?: number; // 0=Pre, 1=Q1, 2=Q2, etc.
+  startTime?: string; // ISO String or Display String
 }
 
 export interface PayoutConfig {

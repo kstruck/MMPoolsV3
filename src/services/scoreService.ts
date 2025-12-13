@@ -122,9 +122,15 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     const period = safeInt(matchedGame.status.period);
     const completed = matchedGame.status.type?.completed;
 
+    const clock = matchedGame.status.displayClock;
+    const date = matchedGame.date; // ISO string typically
+
     const newScores: Partial<Scores> = {
       current: { home: apiTotalHome, away: apiTotalAway },
-      gameStatus: statusState as 'pre' | 'in' | 'post'
+      gameStatus: statusState as 'pre' | 'in' | 'post',
+      clock: clock,
+      period: period,
+      startTime: date
     };
 
     // Update state based on game progress

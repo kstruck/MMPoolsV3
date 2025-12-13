@@ -598,7 +598,30 @@ const App: React.FC = () => {
           {/* 2. Scoreboard */}
           <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-slate-800/20 rounded-full blur-2xl"></div>
-            <div className="p-4 border-b border-slate-800 text-center"><h3 className="text-white font-bold">Game Scoreboard</h3></div>
+            <div className="p-4 border-b border-slate-800 text-center relative z-10">
+              <h3 className="text-white font-bold">Game Scoreboard</h3>
+              {/* Game Status Info */}
+              {(() => {
+                const { gameStatus, startTime, clock, period } = currentPool.scores;
+
+                if (gameStatus === 'pre' && startTime) {
+                  const dateObj = new Date(startTime);
+                  const dateStr = dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+                  const timeStr = dateObj.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+                  return <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">{dateStr} • {timeStr}</p>;
+                }
+
+                if (gameStatus === 'in') {
+                  const pLabel = period === 1 ? '1st' : period === 2 ? '2nd' : period === 3 ? '3rd' : period === 4 ? '4th' : 'OT';
+                  return <p className="text-xs text-emerald-400 font-bold uppercase tracking-wider mt-1 animate-pulse">● Live • {pLabel} Qtr • {clock || '0:00'}</p>;
+                }
+
+                if (gameStatus === 'post') {
+                  return <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">Final Score</p>;
+                }
+                return null;
+              })()}
+            </div>
             <div className="p-4">
               <div className="grid grid-cols-7 gap-2 text-center text-sm mb-2 text-slate-500 font-bold uppercase text-[10px]"><div className="col-span-2 text-left pl-2">Team</div><div>1</div><div>2</div><div>3</div><div>4</div><div>T</div></div>
               <div className="grid grid-cols-7 gap-2 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-2 rounded"><div className="col-span-2 text-left pl-2 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain" />}{currentPool.awayTeam}</div><div>{getScoreboardVal(1, 'away')}</div><div>{getScoreboardVal(2, 'away')}</div><div>{getScoreboardVal(3, 'away')}</div><div>{getScoreboardVal(4, 'away')}</div><div className="text-indigo-400 text-lg">{sanitize(currentPool.scores.current?.away)}</div></div>
