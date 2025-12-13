@@ -6,7 +6,8 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 
 ### Core Experience
 *   **Interactive 100-Square Grid:** Real-time selection and ownership tracking.
-*   **Live Scoreboard:** Automated real-time game scores and quarter tracking via ESPN API.
+*   **Live Scoreboard:** Automated real-time game scores, quarters, clock, and pre-game info via ESPN API.
+*   **Enhanced Visualization:** **NEW!** Dynamic grid highlighting for active rows/columns, with specialized colors for paid (Emerald) vs. reserved (Amber) squares.
 *   **Mobile-Responsive:** fully optimized design for desktop, tablet, and mobile devices.
 *   **User Accounts:** Secure Google Authentication and email registration via Firebase.
 
@@ -17,7 +18,8 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 *   **Custom Payouts:** Configurable percentage splits for Q1, Halftime, Q3, and Final scores.
 *   **Score Change Payouts:** Optional rule to award fixed amounts on every score change.
 *   **Email Notifications:** Automated confirmation emails for square purchases and pool creation via Firebase Trigger Email.
-*   **Manager Controls:** Lock/unlock grid, mark squares as paid, manual override options.
+*   **Manager Controls:** Lock/unlock grid, mark squares as paid, "Force Sync" users to Firestore, and manual override options.
+*   **Pool Setup:** Automated pre-filling of manager contact info for streamlined creation.
 
 ### 🛡️ Audit & Integrity (NEW)
 A military-grade audit logging system to ensure absolute fairness and transparency.
