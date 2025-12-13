@@ -14,13 +14,16 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 *   **User Accounts:** Secure Google Authentication and email registration via Firebase.
 
 ### Pool Management
-*   **Setup Wizard:** Easy flow to configure teams, costs, and pool rules.
+### Pool Management
+*   **Setup Wizard:** Enhanced 7-step flow to configure teams, costs, reminder rules, and payouts.
 *   **Charity & Fundraising:** ❤️ **NEW!** Dedicate a percentage of the pot to a charity of your choice. Includes automated "Off The Top" calculations and public support badges.
-*   **Quarterly Numbers ('4 Sets'):** **NEW!** Optional mode to generate brand new axis numbers for every quarter (Q1, Q2, Q3, Final). Numbers are generated transactionally by the server.
+*   **Unclaimed Prize Handling:** **NEW!** Choose how to handle empty winning squares:
+    *   **Rollover:** Unclaimed money automatically moves to the next quarter's pot.
+    *   **Random Draw:** **NEW!** Activate a "Randomizer" button for the Final Prize to pick a lucky winner from occupied squares (includes animation).
+*   **Quarterly Numbers ('4 Sets'):** Optional mode to generate brand new axis numbers for every quarter. Numbers are generated transactionally by the server.
+*   **College Football Support:** **NEW!** Full support for NCAA/CFB pools including conference filters and automatic logo fetching.
 *   **Custom Payouts:** Configurable percentage splits for Q1, Halftime, Q3, and Final scores.
-*   **Score Change Payouts:** Optional rule to award fixed amounts on every score change.
-*   **Email Notifications:** Automated confirmation emails for square purchases and pool creation via Firebase Trigger Email.
-*   **Manager Controls:** Lock/unlock grid, mark squares as paid, "Force Sync" users to Firestore, and manual override options.
+*   **Manager Controls:** Lock/unlock grid, mark squares as paid, manual score overrides, and legacy "Force Sync" options.
 *   **Pool Setup:** Automated pre-filling of manager contact info for streamlined creation.
 
 ### 🔔 Smart Reminder System & Notifications
