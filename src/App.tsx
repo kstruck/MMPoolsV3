@@ -672,8 +672,9 @@ const App: React.FC = () => {
                 // Fallback / Sync Status
                 if (syncStatus === 'searching') return <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mt-1 animate-pulse">Searching for Game...</p>;
                 if (syncStatus === 'not-found') return <p className="text-xs text-rose-500 font-bold uppercase tracking-wider mt-1" title="Ensure Home/Away teams match ESPN names">No Active Game Found</p>;
+                if (syncStatus === 'found' && !startTime) return <p className="text-xs text-amber-500 font-bold uppercase tracking-wider mt-1">Game Matched • Time TBD</p>;
 
-                return <p className="text-xs text-slate-600 font-bold uppercase tracking-wider mt-1">Status: Pending</p>;
+                return <p className="text-xs text-slate-600 font-bold uppercase tracking-wider mt-1">Status: Pending (Idle)</p>;
               })()}
             </div>
             <div className="p-4">
