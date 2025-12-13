@@ -207,13 +207,66 @@ export const calculateWinners = (state: GameState): Winner[] => {
           }
         });
       } else {
-        // Should logically not happen if axis are generated, but safety check
+        // No winning scenario (should happen only if logic fails, but treat as rollover)
         if (state.ruleVariations.quarterlyRollover) {
           rolloverPot += totalPeriodPot;
         }
       }
     }
   });
+
+  // Handle Final Rollover (if any money remains unclaimed after Final)
+  if (rolloverPot > 0 && state.ruleVariations.quarterlyRollover) {
+    const strategy = state.ruleVariations.unclaimedFinalPrizeStrategy || 'last_winner';
+
+    if (strategy === 'last_winner') {
+      // Find the last real winner
+      // We iterate backwards through winners array
+      const lastWinnerIdx = winners.slice().reverse().findIndex(w => !w.isRollover && w.owner !== 'Unsold (House)');
+
+      if (lastWinnerIdx !== -1) {
+        // The index is in the reversed array, so translate to original
+        const realIdx = winners.length - 1 - lastWinnerIdx;
+
+        // Add a Bonus entry (or modify? Better to add new entry for clarity)
+        winners.push({
+          period: 'Bonus',
+          squareId: winners[realIdx].squareId,
+          owner: winners[realIdx].owner,
+          amount: rolloverPot,
+          homeDigit: winners[realIdx].homeDigit,
+          awayDigit: winners[realIdx].awayDigit,
+          description: 'Rollover Bonus (Last Winner Rule)'
+        });
+
+        // Zero out the pot locally (though function ends)
+        rolloverPot = 0;
+      }
+    } else if (strategy === 'random') {
+      if (state.randomWinner) {
+        winners.push({
+          period: 'Bonus',
+          squareId: state.randomWinner.squareId,
+          owner: state.randomWinner.owner,
+          amount: rolloverPot,
+          homeDigit: -1,
+          awayDigit: -1,
+          description: 'Rollover Bonus (Random Draw)'
+        });
+        rolloverPot = 0;
+      } else {
+        // Waiting for random draw
+        winners.push({
+          period: 'Bonus',
+          squareId: -1,
+          owner: 'PENDING RANDOM DRAW',
+          amount: rolloverPot,
+          homeDigit: -1,
+          awayDigit: -1
+        });
+      }
+    }
+  }
 
   return winners;
 };

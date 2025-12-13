@@ -138,6 +138,13 @@ export interface GameState {
     reverseWinners: boolean; // Split pot with reverse digits
     quarterlyRollover: boolean; // Unsold squares roll money to next quarter
     scoreChangePayout: boolean; // Pay fixed amount on every score change
+    unclaimedFinalPrizeStrategy?: 'last_winner' | 'random';
+  };
+  randomWinner?: {
+    squareId: number;
+    owner: string;
+    amount: number;
+    timestamp: number;
   };
   ownerId?: string; // ID of the user who owns this pool
   manualScoreOverride?: boolean;

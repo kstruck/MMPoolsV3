@@ -263,6 +263,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     updateConfig({ squares: newSquares });
   };
 
+  const [isRandomizing, setIsRandomizing] = useState(false);
+  const [randomizingNumber, setRandomizingNumber] = useState<number | null>(null);
+
+  const handleRandomizeWinner = () => {
+    setIsRandomizing(true);
+    let count = 0;
+    const interval = setInterval(() => {
+      setRandomizingNumber(Math.floor(Math.random() * 100));
+      count++;
+      if (count > 40) { // Approx 4-5 seconds
+        clearInterval(interval);
+        const winningSquareId = Math.floor(Math.random() * 100);
+        setRandomizingNumber(winningSquareId);
+        setTimeout(() => {
+          setIsRandomizing(false);
+          setRandomizingNumber(null);
+          const owner = gameState.squares[winningSquareId].owner || 'Unclaimed Square';
+
+          // Update Game State
+          updateConfig({
+            randomWinner: {
+              squareId: winningSquareId,
+              owner: owner,
+              amount: 0, // Calculated dynamically in gameLogic
+              timestamp: Date.now()
+            }
+          });
+        }, 2000);
+      }
+    }, 100);
+  };
+
   const [cfbConference, setCfbConference] = useState('80'); // Default to All FBS
 
   const CFB_CONFERENCES = [
@@ -351,155 +383,130 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-          <Clock size={20} className="text-rose-400" /> Lock Countdown
+          <Clock size={20} className="text-rose-400" /> Auto-Lock & Number Generation
         </h3>
-        <p className="text-slate-400 text-sm mb-6">Warn users before the grid locks.</p>
+        <p className="text-slate-400 text-sm mb-6">Automatically lock the grid and reveal numbers.</p>
 
         <div className="space-y-4">
-          <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
-            <div>
-              <span className="font-bold text-slate-200 block">Enable Countdown Alerts</span>
-              <span className="text-xs text-slate-500">Sends email warnings at scheduled times.</span>
-            </div>
-            <input
-              type="checkbox"
-              checked={gameState.reminders?.lock?.enabled || false}
-              onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, lock: { ...(gameState.reminders?.lock || { scheduleMinutes: [60, 30, 15, 5] }), enabled: e.target.checked } } })}
-              className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-            />
-          </label>
+          <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Trigger Time</label>
+            <select
+              className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white mb-4 outline-none focus:border-indigo-500"
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'manual') {
+                  updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: undefined } } });
+                } else if (val === 'custom') {
+                  const now = new Date();
+                  now.setMinutes(now.getMinutes() + 60);
+                  updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: now.getTime() } } });
+                } else {
+                  const offsetMins = parseInt(val);
+                  if (gameState.scores.startTime) {
+                    const start = new Date(gameState.scores.startTime).getTime();
+                    updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: start - (offsetMins * 60 * 1000) } } });
+                  }
+                }
+              }}
+              value={
+                !gameState.reminders!.lock.lockAt ? 'manual' :
+                  gameState.scores.startTime && Math.abs(gameState.reminders!.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 3600000)) < 10000 ? '60' :
+                    gameState.scores.startTime && Math.abs(gameState.reminders!.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 1800000)) < 10000 ? '30' :
+                      gameState.scores.startTime && Math.abs(gameState.reminders!.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 900000)) < 10000 ? '15' :
+                        gameState.scores.startTime && Math.abs(gameState.reminders!.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 300000)) < 10000 ? '5' :
+                          'custom'
+              }
+            >
+              <option value="manual">Manual (I will click 'Lock')</option>
+              <option value="60" disabled={!gameState.scores.startTime}>1 Hour Before Kickoff</option>
+              <option value="30" disabled={!gameState.scores.startTime}>30 Minutes Before Kickoff</option>
+              <option value="15" disabled={!gameState.scores.startTime}>15 Minutes Before Kickoff</option>
+              <option value="5" disabled={!gameState.scores.startTime}>5 Minutes Before Kickoff</option>
+              <option value="custom">Custom Date & Time...</option>
+            </select>
 
-          {gameState.reminders?.lock?.enabled && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-              <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Lock Time (Kickoff)</label>
-
-                {/* Custom Date/Time Selector */}
-                <div className="flex flex-wrap gap-3 items-center">
-                  {/* Date Picker */}
-                  <input
-                    type="date"
-                    value={gameState.reminders.lock.lockAt ? new Date(gameState.reminders.lock.lockAt).toISOString().split('T')[0] : ''}
-                    onChange={(e) => {
-                      const dateStr = e.target.value;
-                      if (!dateStr) return;
-
-                      const current = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
-                      // Parse YYYY-MM-DD
-                      const [year, month, day] = dateStr.split('-').map(Number);
-
-                      const newDate = new Date(current);
-                      newDate.setFullYear(year);
-                      newDate.setMonth(month - 1);
-                      newDate.setDate(day);
-
-                      updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: newDate.getTime() } } });
-                    }}
-                    className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                  />
-
-                  <span className="text-slate-600 font-bold">@</span>
-
-                  {/* Time Dropdowns */}
-                  <div className="flex items-center gap-1 bg-slate-900 border border-slate-600 rounded p-1">
-                    {/* Hour */}
-                    <select
-                      value={(() => {
-                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
-                        let h = d.getHours();
-                        if (h === 0) h = 12;
-                        else if (h > 12) h -= 12;
-                        return h;
-                      })()}
+            {gameState.reminders!.lock.lockAt && (
+              <div className="animate-in fade-in slide-in-from-top-2 border-t border-slate-800 pt-4 mt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Date</label>
+                    <input
+                      type="date"
+                      value={new Date(gameState.reminders!.lock.lockAt).toISOString().split('T')[0]}
                       onChange={(e) => {
-                        const newHour12 = parseInt(e.target.value);
-                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
-                        const currentHours = d.getHours();
-                        const isPM = currentHours >= 12;
-
-                        let newHours;
-                        if (isPM) {
-                          newHours = (newHour12 === 12) ? 12 : newHour12 + 12;
-                        } else {
-                          newHours = (newHour12 === 12) ? 0 : newHour12;
-                        }
-
-                        d.setHours(newHours);
-                        updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: d.getTime() } } });
+                        if (!e.target.value) return;
+                        const [y, m, d] = e.target.value.split('-').map(Number);
+                        const current = new Date(gameState.reminders!.lock.lockAt!);
+                        current.setFullYear(y);
+                        current.setMonth(m - 1);
+                        current.setDate(d);
+                        updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: current.getTime() } } });
                       }}
-                      className="bg-transparent text-white outline-none text-center font-bold font-mono appearance-none px-2 cursor-pointer hover:text-indigo-400"
-                    >
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h} className="bg-slate-900">{h}</option>)}
-                    </select>
-
-                    <span className="text-slate-500">:</span>
-
-                    {/* Minute */}
-                    <select
-                      value={gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt).getMinutes() : 0}
-                      onChange={(e) => {
-                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
-                        d.setMinutes(parseInt(e.target.value));
-                        updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: d.getTime() } } });
-                      }}
-                      className="bg-transparent text-white outline-none text-center font-bold font-mono appearance-none px-2 cursor-pointer hover:text-indigo-400"
-                    >
-                      {Array.from({ length: 12 }, (_, i) => i * 5).map(m => <option key={m} value={m} className="bg-slate-900">{m.toString().padStart(2, '0')}</option>)}
-                    </select>
-
-                    {/* AM/PM */}
-                    <select
-                      value={(() => {
-                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
-                        return d.getHours() >= 12 ? 'PM' : 'AM';
-                      })()}
-                      onChange={(e) => {
-                        const isPM = e.target.value === 'PM';
-                        const d = gameState.reminders!.lock.lockAt ? new Date(gameState.reminders!.lock.lockAt) : new Date();
-                        let h = d.getHours();
-
-                        if (isPM && h < 12) h += 12;
-                        if (!isPM && h >= 12) h -= 12;
-
-                        d.setHours(h);
-                        updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: d.getTime() } } });
-                      }}
-                      className="bg-transparent text-indigo-400 font-bold outline-none appearance-none pl-2 pr-1 cursor-pointer"
-                    >
-                      <option value="AM" className="bg-slate-900">AM</option>
-                      <option value="PM" className="bg-slate-900">PM</option>
-                    </select>
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Time</label>
+                    <div className="flex bg-slate-900 border border-slate-700 rounded px-1">
+                      <select
+                        className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
+                        value={(() => {
+                          let h = new Date(gameState.reminders!.lock.lockAt).getHours();
+                          if (h === 0) h = 12;
+                          else if (h > 12) h -= 12;
+                          return h;
+                        })()}
+                        onChange={(e) => {
+                          const newH = parseInt(e.target.value);
+                          const current = new Date(gameState.reminders!.lock.lockAt!);
+                          const isPM = current.getHours() >= 12;
+                          let h = newH;
+                          if (isPM && newH !== 12) h += 12;
+                          if (!isPM && newH === 12) h = 0;
+                          current.setHours(h);
+                          updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: current.getTime() } } });
+                        }}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                      <span className="py-2 text-slate-500">:</span>
+                      <select
+                        className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
+                        value={Math.floor(new Date(gameState.reminders!.lock.lockAt).getMinutes() / 5) * 5}
+                        onChange={(e) => {
+                          const m = parseInt(e.target.value);
+                          const current = new Date(gameState.reminders!.lock.lockAt!);
+                          current.setMinutes(m);
+                          updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: current.getTime() } } });
+                        }}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i * 5).map(m => <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>)}
+                      </select>
+                      <select
+                        className="bg-transparent text-indigo-400 outline-none font-bold py-2 pl-2"
+                        value={new Date(gameState.reminders!.lock.lockAt).getHours() >= 12 ? 'PM' : 'AM'}
+                        onChange={(e) => {
+                          const isPM = e.target.value === 'PM';
+                          const current = new Date(gameState.reminders!.lock.lockAt!);
+                          let h = current.getHours();
+                          if (isPM && h < 12) h += 12;
+                          if (!isPM && h >= 12) h -= 12;
+                          current.setHours(h);
+                          updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: current.getTime() } } });
+                        }}
+                      >
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
-
-                <p className="text-[10px] text-slate-500 mt-2">
-                  Defaults to game start time. You can manually adjust this.
+                <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
+                  <CheckCircle size={10} /> Grid will automatically lock and numbers will be generated at this time.
                 </p>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Alert Schedule (Start Time Minus...)</label>
-                <div className="flex gap-2">
-                  {[60, 30, 15, 5].map(mins => {
-                    const isActive = gameState.reminders!.lock.scheduleMinutes.includes(mins);
-                    return (
-                      <button
-                        key={mins}
-                        onClick={() => {
-                          const current = gameState.reminders!.lock.scheduleMinutes;
-                          const next = isActive ? current.filter(m => m !== mins) : [...current, mins];
-                          updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, scheduleMinutes: next } } });
-                        }}
-                        className={`px-3 py-2 text-xs font-bold rounded-lg border transition-all ${isActive ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20 shadow-lg' : 'bg-slate-950 text-slate-500 border-slate-700 hover:border-slate-500 hover:text-slate-300'}`}
-                      >
-                        {mins >= 60 ? `1 Hr` : `${mins} Mins`}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -787,6 +794,54 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         )}
       </div>
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+              <Shield size={20} className="text-indigo-400" /> Unclaimed Prize Rules
+            </h3>
+            <p className="text-slate-400 text-sm">What happens if a winning square is empty?</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+            <div>
+              <span className="font-bold text-slate-200 block">Roll Over Winnings</span>
+              <span className="text-xs text-slate-500">Unclaimed money moves to the next quarter's pot.</span>
+            </div>
+            <input
+              type="checkbox"
+              checked={gameState.ruleVariations.quarterlyRollover}
+              onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, quarterlyRollover: e.target.checked } })}
+              className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+            />
+          </label>
+
+          {gameState.ruleVariations.quarterlyRollover && (
+            <div className="animate-in fade-in slide-in-from-top-2 p-4 bg-slate-950/50 border border-slate-800 rounded-lg">
+              <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Final Score Unclaimed Logic</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <button
+                  onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, unclaimedFinalPrizeStrategy: 'last_winner' } })}
+                  className={`p-3 rounded-lg border text-left transition-all ${gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'last_winner' || !gameState.ruleVariations.unclaimedFinalPrizeStrategy ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'}`}
+                >
+                  <div className="font-bold text-sm mb-1">Option A: Last Winner</div>
+                  <div className="text-xs opacity-80">Award prize to the most recent previous winner (e.g. Q3).</div>
+                </button>
+
+                <button
+                  onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, unclaimedFinalPrizeStrategy: 'random' } })}
+                  className={`p-3 rounded-lg border text-left transition-all ${gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'}`}
+                >
+                  <div className="font-bold text-sm mb-1">Option B: Random Draw</div>
+                  <div className="text-xs opacity-80">Activates a "Randomizer" button to pick a lucky square.</div>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 
@@ -951,6 +1006,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-sm"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-bold text-white">Game Status</h3><p className="text-sm text-slate-500">Control the betting and number generation.</p></div><span className={`text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide ${gameState.isLocked ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>{gameState.isLocked ? 'Locked' : 'Open'}</span></div><button onClick={toggleLock} className={`w-full py-4 rounded-lg font-bold flex items-center justify-center gap-2 transition-all text-lg ${gameState.isLocked ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock & Start Game</>}</button></div>
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800"><h3 className="text-lg font-bold text-white mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><button onClick={generateNumbers} disabled={gameState.isLocked} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-medium flex items-center gap-2 border border-slate-700"><Shuffle size={16} />{gameState.axisNumbers ? 'Regenerate' : 'Generate'} Numbers</button></div>{gameState.axisNumbers && (<div className="text-emerald-400 bg-emerald-500/10 p-4 rounded-full border border-emerald-500/20"><Sparkles size={24} /></div>)}</div></div>
             <div className="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 p-6 rounded-xl border border-indigo-500/30"><div className="flex items-center gap-2 mb-4"><Sparkles className="text-indigo-400" size={20} /><h3 className="text-lg font-bold text-indigo-100">AI Commissioner</h3></div>{aiIdea && (<div className="bg-slate-950/80 p-4 rounded-lg border border-indigo-500/30 mb-4 shadow-inner"><p className="text-lg text-indigo-200 font-serif italic">"{aiIdea}"</p></div>)}<button onClick={askGeminiForIdeas} disabled={isThinking} className="bg-indigo-600/80 hover:bg-indigo-500 text-white py-2 px-4 rounded-lg text-sm font-bold uppercase tracking-wide transition-colors">{isThinking ? 'Thinking...' : 'Suggest Rule Variation'}</button></div>
+
+            {/* RANDOMIZER SECTION */}
+            {gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' && gameState.ruleVariations.quarterlyRollover && (
+              <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 border-t-4 border-t-amber-500 shadow-xl">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><Sparkles className="text-amber-400" /> Final Prize Randomizer</h3>
+                    <p className="text-sm text-slate-400">Randomly select a square for the unclaimed rollover pot.</p>
+                  </div>
+                  {gameState.randomWinner ? (
+                    <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Winner Selected</div>
+                  ) : (
+                    <div className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Ready to Roll</div>
+                  )}
+                </div>
+
+                {!gameState.randomWinner ? (
+                  <button
+                    onClick={handleRandomizeWinner}
+                    disabled={isRandomizing}
+                    className="w-full py-6 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl font-bold text-xl shadow-lg shadow-orange-500/20 transition-all flex flex-col items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isRandomizing ? 'ROLLING THE DICE...' : '🎲 CLICK TO PICK RANDOM WINNER'}
+                    {!isRandomizing && <span className="text-xs font-normal opacity-80 uppercase tracking-widest">Hold Your Breath</span>}
+                  </button>
+                ) : (
+                  <div className="bg-slate-950 rounded-xl p-6 text-center border border-emerald-500/30 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+                    <p className="text-slate-500 text-xs font-bold uppercase mb-2">The Lucky Square Is</p>
+                    <div className="text-6xl font-black text-white font-mono mb-2">#{gameState.randomWinner.squareId}</div>
+                    <div className="text-xl text-emerald-400 font-bold mb-4">{gameState.randomWinner.owner}</div>
+                    <p className="text-xs text-slate-600">Selected at {new Date(gameState.randomWinner.timestamp).toLocaleTimeString()}</p>
+                    <button
+                      onClick={() => updateConfig({ randomWinner: undefined })}
+                      className="mt-4 text-xs text-slate-500 hover:text-rose-500 underline"
+                    >
+                      Reset (Admin Only)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         )}
 
@@ -1136,6 +1234,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         )}
       </div>
+      {/* RANDOMIZER OVERLAY */}
+      {isRandomizing && (
+        <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center backdrop-blur-md cursor-wait">
+          <h2 className="text-4xl md:text-6xl font-black text-white mb-8 animate-pulse text-center">PICKING A WINNER</h2>
+          <div className="w-64 h-64 bg-slate-900 rounded-3xl border-4 border-amber-500 flex items-center justify-center shadow-[0_0_100px_rgba(245,158,11,0.5)]">
+            <span className="text-8xl font-mono font-bold text-white tabular-nums">
+              {randomizingNumber}
+            </span>
+          </div>
+          <p className="text-amber-400 mt-8 font-bold animate-bounce tracking-widest">GOOD LUCK...</p>
+        </div>
+      )}
     </div>
   );
 };
+
+export default AdminPanel;
