@@ -477,9 +477,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
                               if (isOwned) {
                                  if (square.isPaid) {
-                                    // Paid = Lighter Green
-                                    bgClass = "bg-emerald-500 shadow-[inset_0_0_10px_rgba(16,185,129,0.4)]";
-                                    textClass = "text-white font-bold";
+                                    // Paid = Lighter Green (Highlight Pop)
+                                    bgClass = "bg-emerald-400 shadow-[inset_0_0_15px_rgba(52,211,153,0.6)] brightness-110";
+                                    textClass = "text-white font-bold text-shadow";
                                  } else {
                                     // Unpaid = Orange
                                     bgClass = "bg-orange-500 shadow-inner";
