@@ -84,6 +84,7 @@ export interface GameState {
   homeTeam: string; // Row Team
   awayTeam: string; // Column Team
   league?: 'nfl' | 'college' | 'ncaa'; // League Context
+  sport?: string; // Sport type (e.g., 'Football', 'Basketball', 'March Madness')
   homeTeamLogo?: string; // API provided logo
   awayTeamLogo?: string; // API provided logo
   gameId?: string; // ESPN Game ID for automated tracking
