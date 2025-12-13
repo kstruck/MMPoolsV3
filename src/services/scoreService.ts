@@ -122,9 +122,10 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     const period = safeInt(matchedGame.status.period);
     const completed = matchedGame.status.type?.completed;
 
-    const clock = matchedGame.status.displayClock;
+    // Sanitize fields to prevent Firestore "undefined" errors
+    const clock = matchedGame.status.displayClock || "0:00";
     // Fallback: Check competition date if main event date is missing
-    const date = matchedGame.date || competition.date;
+    const date = matchedGame.date || competition.date || null;
 
     const newScores: Partial<Scores> = {
       current: { home: apiTotalHome, away: apiTotalAway },
