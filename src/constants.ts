@@ -19,6 +19,9 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
 
   homeTeam: '',
   awayTeam: '',
+  league: 'nfl',
+  homeTeamLogo: '',
+  awayTeamLogo: '',
   gameId: undefined,
 
   costPerSquare: 10,

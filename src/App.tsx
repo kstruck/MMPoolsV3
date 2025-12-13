@@ -345,6 +345,17 @@ const App: React.FC = () => {
     return { home, away, qPointsHome, qPointsAway, winnerName, reverseWinnerName, amount, isLocked };
   };
 
+  // Calculate Total Charity
+  const totalCharity = useMemo(() => {
+    return pools.reduce((acc, pool) => {
+      if (!pool.charity?.enabled) return acc;
+      const filled = pool.squares.filter(s => s.owner).length;
+      const pot = filled * pool.costPerSquare;
+      const donation = pot * (pool.charity.percentage / 100);
+      return acc + donation;
+    }, 0);
+  }, [pools]);
+
   // --- RENDER SWITCH ---
   if (route.view === 'home') {
     return (
@@ -354,6 +365,7 @@ const App: React.FC = () => {
           onSignup={() => { setAuthMode('register'); setShowAuthModal(true); }}
           onBrowse={() => window.location.hash = '#browse'}
           isLoggedIn={!!user}
+          totalDonated={totalCharity}
         />
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
       </>
@@ -411,19 +423,88 @@ const App: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {userPools.map(pool => (
-                <div key={pool.id} className="bg-slate-800 border border-slate-700 rounded-xl p-6 hover:border-indigo-500/50 transition-all group">
-                  <div className="flex justify-between items-start mb-4">
-                    <div><h3 className="text-xl font-bold text-white flex items-center gap-2">{pool.name}{!pool.isPublic && <Lock size={14} className="text-amber-500" />}</h3><p className="text-sm text-slate-400">{pool.awayTeam} @ {pool.homeTeam}</p></div>
-                    <span className={`text-xs px-2 py-1 rounded font-bold uppercase ${pool.isLocked ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>{pool.isLocked ? 'Locked' : 'Open'}</span>
+              {userPools.map(pool => {
+                const filled = pool.squares.filter(s => s.owner).length;
+                const pct = Math.round((filled / 100) * 100);
+                const homeLogo = getTeamLogo(pool.homeTeam);
+                const awayLogo = getTeamLogo(pool.awayTeam);
+
+                return (
+                  <div key={pool.id} className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 rounded-xl p-5 transition-all relative overflow-hidden flex flex-col">
+                    {pool.charity?.enabled && (
+                      <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+                        <Heart size={100} className="fill-rose-500 text-rose-500" />
+                      </div>
+                    )}
+
+                    {/* CLICKABLE AREA FOR MANAGE */}
+                    <div className="cursor-pointer flex-1" onClick={() => window.location.hash = `#admin/${pool.id}`}>
+                      <div className="flex justify-between items-start mb-4 relative z-10">
+                        <div className="flex items-center gap-3">
+                          {/* Initial Icon */}
+                          <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-lg font-bold text-indigo-400 group-hover:scale-105 transition-transform">
+                            {pool.name.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1 flex items-center gap-2">
+                              {pool.name}
+                              {!pool.isPublic && <Lock size={12} className="text-amber-500" />}
+                            </h3>
+                            <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                              <span>Hosted by You</span>
+                              {pool.charity?.enabled && <span className="text-rose-400 flex items-center gap-1">• <Heart size={10} className="fill-rose-400" /> Charity</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="block text-xl font-bold text-emerald-400 font-mono">${pool.costPerSquare}</span>
+                          <span className="text-[10px] text-slate-500 uppercase font-bold">Per Square</span>
+                        </div>
+                      </div>
+
+                      {/* Matchup */}
+                      <div className="bg-black/30 rounded-lg p-3 border border-slate-800/50 mb-4 flex items-center justify-between relative z-10">
+                        <div className="flex items-center gap-2">
+                          {awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain opacity-80" />}
+                          <span className="text-sm font-bold text-slate-300">{pool.awayTeam}</span>
+                        </div>
+                        <span className="text-xs text-slate-600 font-bold uppercase">VS</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-slate-300">{pool.homeTeam}</span>
+                          {homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain opacity-80" />}
+                        </div>
+                      </div>
+
+                      {/* Progress & Meta */}
+                      <div className="flex items-center justify-between text-xs font-medium text-slate-400 relative z-10 mb-6">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }}></div>
+                            </div>
+                            <span>{100 - filled} Left</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {!pool.isLocked ? (
+                            <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Open Setup</span>
+                          ) : (
+                            <span className="text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Locked</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ACTION BUTTONS */}
+                    <div className="grid grid-cols-6 gap-2 relative z-20 pt-4 border-t border-slate-800/50">
+                      <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#admin/${pool.id}`; }} className="col-span-3 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage Pool</button>
+                      <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#pool/${pool.id}`; }} className="col-span-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View Grid</button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeletePool(pool.id); }} className="col-span-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/50 rounded-lg flex items-center justify-center transition-all"><Trash2 size={16} /></button>
+                    </div>
                   </div>
-                  <div className="flex gap-3 mt-6">
-                    <button onClick={() => window.location.hash = `#admin/${pool.id}`} className="flex-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white py-2 rounded-lg font-medium transition-colors">Manage</button>
-                    <button onClick={() => window.location.hash = `#pool/${pool.id}`} className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white py-2 rounded-lg font-medium transition-colors">View Grid</button>
-                    <button onClick={() => handleDeletePool(pool.id)} className="px-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors"><Trash2 size={18} /></button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </main>

@@ -85,6 +85,12 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                             </span>
                             <span className="text-xs text-slate-500 font-bold uppercase">Total Pot</span>
                         </div>
+                        <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-lg text-center border-l-4 border-l-rose-500">
+                            <span className="block text-2xl font-bold text-white">
+                                ${pools.filter(p => p.isPublic && p.charity?.enabled).reduce((acc, p) => acc + (p.squares.filter(s => s.owner).length * p.costPerSquare * (p.charity!.percentage / 100)), 0).toLocaleString()}
+                            </span>
+                            <span className="text-xs text-slate-500 font-bold uppercase flex items-center gap-1 justify-center"><Heart size={10} className="text-rose-500" /> Raised</span>
+                        </div>
                     </div>
                 </div>
 

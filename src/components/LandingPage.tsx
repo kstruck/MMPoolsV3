@@ -8,9 +8,10 @@ interface LandingPageProps {
   onSignup: () => void;
   onBrowse: () => void;
   isLoggedIn: boolean;
+  totalDonated?: number;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onBrowse, isLoggedIn }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onBrowse, isLoggedIn, totalDonated = 0 }) => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-orange-500 selection:text-white transition-colors duration-300">
 
@@ -79,6 +80,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             Create Your <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-rose-600 dark:from-orange-400 dark:via-amber-400 dark:to-rose-400">Squares Pool Now</span>
           </h1>
+
+          {/* Charity Stat Card */}
+          {totalDonated > 0 && (
+            <div className="mb-8 inline-flex items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 pr-6 shadow-xl animate-in fade-in slide-in-from-bottom-8 duration-700">
+              <div className="bg-rose-500/10 p-3 rounded-xl">
+                <Heart className="text-rose-500 fill-rose-500" size={24} />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Raised for Charity</p>
+                <p className="text-2xl font-black text-slate-900 dark:text-white">${totalDonated.toLocaleString()}</p>
+              </div>
+            </div>
+          )}
 
           <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-700 delay-100">
             The professional platform for managing sports pools. Automated scoring, real-time payouts, and extensive customization for the ultimate grid experience.

@@ -83,6 +83,9 @@ export interface GameState {
 
   homeTeam: string; // Row Team
   awayTeam: string; // Column Team
+  league?: 'nfl' | 'college' | 'ncaa'; // League Context
+  homeTeamLogo?: string; // API provided logo
+  awayTeamLogo?: string; // API provided logo
   gameId?: string; // ESPN Game ID for automated tracking
 
   costPerSquare: number;
