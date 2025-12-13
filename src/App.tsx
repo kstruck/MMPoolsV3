@@ -10,7 +10,7 @@ import { calculateWinners, calculateScenarioWinners, getLastDigit } from './serv
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, X, Loader, Heart, Shield } from 'lucide-react';
+import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, X, Loader, Heart, Shield, HelpCircle } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
@@ -66,6 +66,7 @@ const App: React.FC = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [showAudit, setShowAudit] = useState(false); // New State
   const [syncStatus, setSyncStatus] = useState<'idle' | 'searching' | 'found' | 'not-found' | 'error'>('idle');
@@ -681,6 +682,21 @@ const App: React.FC = () => {
 
               <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
               <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
+              <div className="mb-4">
+                <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Unclaimed Rules:</h3>
+                <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left">
+                  {currentPool.ruleVariations.quarterlyRollover ? (
+                    <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+                      <Zap size={12} className="fill-emerald-400" /> Rollover Active
+                    </div>
+                  ) : (
+                    <div className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold">
+                      Standard
+                    </div>
+                  )}
+                  <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
+                </button>
+              </div>
               <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{currentPool.paymentInstructions}</p></div>
             </div>
 
@@ -925,6 +941,58 @@ const App: React.FC = () => {
         <div className="max-w-[1400px] mx-auto px-4 mb-20">
           <AICommissioner poolId={currentPool.id} userId={user?.id} />
         </div>
+
+        {/* Rules Explanation Modal */}
+        {showRulesModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl shadow-2xl max-w-md w-full relative">
+              <button onClick={() => setShowRulesModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={20} /></button>
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Shield size={20} className="text-emerald-400" /> Unclaimed Prize Rules
+              </h3>
+
+              <div className="space-y-4">
+                <div className={`p-4 rounded-lg border ${currentPool.ruleVariations.quarterlyRollover ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-950 border-slate-800'}`}>
+                  <h4 className={`font-bold text-sm mb-1 ${currentPool.ruleVariations.quarterlyRollover ? 'text-emerald-400' : 'text-slate-300'}`}>
+                    {currentPool.ruleVariations.quarterlyRollover ? '✅ Quarterly Rollover is ON' : 'Standard Rules (No Rollover)'}
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {currentPool.ruleVariations.quarterlyRollover
+                      ? "If a winning square is empty for Q1, Half, or Q3, the prize money automatically rolls over to the next quarter's pot. This creates bigger jackpots for later winners!"
+                      : "If a winning square is empty, the prize is typically kept by the house or split among other winners (see Manager instructions)."}
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-lg bg-slate-950 border border-slate-800">
+                  <h4 className="font-bold text-sm text-slate-300 mb-1">Final Prize Strategy</h4>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                      {currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'Random Draw' : 'Last Winner'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random'
+                      ? "If the final square is empty, the 'Randomizer' will activate. The Commissioner will randomly select a lucky winner from all occupied squares."
+                      : "If the final square is empty, the prize reverts to the most recent previous winner (e.g. 3rd Quarter)."}
+                  </p>
+                </div>
+
+                <div className="flex items-start gap-2 p-3 bg-slate-950 rounded border border-slate-800">
+                  <Shield size={14} className="text-slate-500 mt-0.5" />
+                  <p className="text-[10px] text-slate-500 leading-tight">
+                    <strong className="text-slate-400">Audit Verified:</strong> All automated decisions, including rollover calculations and random winner selections, are securely recorded in the <span className="font-mono text-emerald-500">Immutable Audit Log</span>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-800 flex justify-end">
+                <button onClick={() => setShowRulesModal(false)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition-colors">
+                  Got it
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
         {showAudit && <AuditLog poolId={currentPool.id} onClose={() => setShowAudit(false)} />}
