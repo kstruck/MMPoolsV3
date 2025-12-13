@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onAIRequest = exports.onWinnerUpdate = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
+exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -15,4 +15,6 @@ Object.defineProperty(exports, "syncGameStatus", { enumerable: true, get: functi
 var aiCommissioner_1 = require("./aiCommissioner");
 Object.defineProperty(exports, "onWinnerUpdate", { enumerable: true, get: function () { return aiCommissioner_1.onWinnerUpdate; } });
 Object.defineProperty(exports, "onAIRequest", { enumerable: true, get: function () { return aiCommissioner_1.onAIRequest; } });
+var userSync_1 = require("./userSync");
+Object.defineProperty(exports, "onUserCreated", { enumerable: true, get: function () { return userSync_1.onUserCreated; } });
 //# sourceMappingURL=index.js.map
