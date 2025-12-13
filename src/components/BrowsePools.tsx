@@ -179,8 +179,8 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                             {filteredPools.map(pool => {
                                 const filled = pool.squares.filter(s => s.owner).length;
                                 const pct = Math.round((filled / 100) * 100);
-                                const homeLogo = getTeamLogo(pool.homeTeam);
-                                const awayLogo = getTeamLogo(pool.awayTeam);
+                                const homeLogo = pool.homeTeamLogo || getTeamLogo(pool.homeTeam);
+                                const awayLogo = pool.awayTeamLogo || getTeamLogo(pool.awayTeam);
 
                                 return (
                                     <div key={pool.id} onClick={() => window.location.hash = `#pool/${pool.id}`} className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 rounded-xl p-5 cursor-pointer transition-all relative overflow-hidden">

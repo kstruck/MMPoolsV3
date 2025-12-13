@@ -51,8 +51,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       }
    }, [errorMsg]);
 
-   const homeLogo = getTeamLogo(gameState.homeTeam);
-   const awayLogo = getTeamLogo(gameState.awayTeam);
+   const homeLogo = gameState.homeTeamLogo || getTeamLogo(gameState.homeTeam);
+   const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam);
 
    // --- Limit Calculation ---
    const maxPerPlayer = Number(gameState.maxSquaresPerPlayer) || 100;

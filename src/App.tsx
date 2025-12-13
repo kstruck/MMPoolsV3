@@ -426,8 +426,8 @@ const App: React.FC = () => {
               {userPools.map(pool => {
                 const filled = pool.squares.filter(s => s.owner).length;
                 const pct = Math.round((filled / 100) * 100);
-                const homeLogo = getTeamLogo(pool.homeTeam);
-                const awayLogo = getTeamLogo(pool.awayTeam);
+                const homeLogo = pool.homeTeamLogo || getTeamLogo(pool.homeTeam);
+                const awayLogo = pool.awayTeamLogo || getTeamLogo(pool.awayTeam);
 
                 return (
                   <div key={pool.id} className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 rounded-xl p-5 transition-all relative overflow-hidden flex flex-col">
@@ -598,8 +598,8 @@ const App: React.FC = () => {
     const halfData = getQuarterData('half');
     const q3Data = getQuarterData('q3');
     const finalData = getQuarterData('final');
-    const homeLogo = getTeamLogo(currentPool.homeTeam);
-    const awayLogo = getTeamLogo(currentPool.awayTeam);
+    const homeLogo = currentPool.homeTeamLogo || getTeamLogo(currentPool.homeTeam);
+    const awayLogo = currentPool.awayTeamLogo || getTeamLogo(currentPool.awayTeam);
     const homePredictions = calculateScenarioWinners(currentPool, 'home');
     const awayPredictions = calculateScenarioWinners(currentPool, 'away');
     const squaresRemaining = 100 - currentPool.squares.filter(s => s.owner).length;
