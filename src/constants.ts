@@ -53,6 +53,9 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
     half: null,
     q3: null,
     final: null,
+    gameStatus: 'pre',
+    clock: '0:00',
+    startTime: undefined, // Will be filled by sync
   },
   scoreEvents: [],
   scoreChangePayoutAmount: 5, // Default $5 per score change
