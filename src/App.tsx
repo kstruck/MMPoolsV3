@@ -153,6 +153,12 @@ const App: React.FC = () => {
   const currentPool = useMemo(() => route.id ? pools.find(p => p.id === route.id || (p.urlSlug && p.urlSlug.toLowerCase() === route.id.toLowerCase())) || null : null, [pools, route.id]);
 
   useEffect(() => {
+    // Only sync scores if user is the pool owner (has permission to update)
+    const isPoolOwner = user && currentPool?.ownerId === user.id;
+    if (!isPoolOwner) {
+      return; // Don't attempt score sync for non-owners
+    }
+
     // Fetch if gameId exists OR (homeTeam AND awayTeam exist for fuzzy match)
     const canFetch = currentPool?.gameId || (currentPool?.homeTeam && currentPool?.awayTeam);
     if (!canFetch || currentPool.manualScoreOverride || currentPool.scores.final) {
@@ -174,7 +180,7 @@ const App: React.FC = () => {
     doFetch();
     const interval = setInterval(doFetch, 60000);
     return () => clearInterval(interval);
-  }, [currentPool?.gameId, currentPool?.homeTeam, currentPool?.awayTeam, currentPool?.id, currentPool?.manualScoreOverride, currentPool?.scores.final]);
+  }, [user, currentPool?.ownerId, currentPool?.gameId, currentPool?.homeTeam, currentPool?.awayTeam, currentPool?.id, currentPool?.manualScoreOverride, currentPool?.scores.final]);
 
   const winners = useMemo(() => {
     if (!currentPool) return [];
