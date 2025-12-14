@@ -232,6 +232,44 @@ export const syncGameStatus = onSchedule({
                 ...transactionUpdates,
                 updatedAt: admin.firestore.Timestamp.now()
             });
+
+            // --- AUDIT LOGGING ---
+            // Only log significant score changes to avoid noise (e.g. only when period changes or quarter finalized)
+            const isScoreEvent = isQ1Final || isHalfFinal || isQ3Final || isGameFinal || pool.scores?.gameStatus !== state;
+
+            if (isScoreEvent) {
+                // Determine specific message
+                let msg = 'Score Updated';
+                let type: any = 'SCORES_UPDATED'; // Use generic or specific
+                if (isGameFinal) { msg = 'Game Finalized'; type = 'SCORE_FINALIZED'; }
+                else if (isQ3Final && !pool.scores?.q3) { msg = 'Q3 Finalized'; type = 'SCORE_FINALIZED'; }
+                else if (isHalfFinal && !pool.scores?.half) { msg = 'Halftime Finalized'; type = 'SCORE_FINALIZED'; }
+                else if (isQ1Final && !pool.scores?.q1) { msg = 'Q1 Finalized'; type = 'SCORE_FINALIZED'; }
+                else if (pool.scores?.gameStatus === 'pre' && state === 'in') { msg = 'Game Started'; type = 'POOL_STATUS_CHANGED'; }
+
+                const scoreHash = computeDigitsHash({ current: newScores.current, q: period, poolId: doc.id });
+
+                // Using new SCORES type if available or falling back
+                // We use SCORE_FINALIZED for all major score events to show up in "SCORES" tab
+                writeAuditEvent({
+                    poolId: doc.id,
+                    type: type === 'SCORES_UPDATED' ? 'SCORE_FINALIZED' : type, // Map to existing enum for now
+                    message: `${msg}: ${newScores.current.home}-${newScores.current.away}`,
+                    severity: 'INFO',
+                    actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
+                    payload: {
+                        period,
+                        clock: espnScores.clock,
+                        score: newScores.current,
+                        q1: newScores.q1,
+                        half: newScores.half,
+                        q3: newScores.q3,
+                        final: newScores.final
+                    },
+                    dedupeKey: `SCORE:${doc.id}:${period}:${scoreHash}`
+                }, transaction);
+
+            }
         });
     }
 });
