@@ -28,8 +28,20 @@ const safeInt = (val) => {
 };
 // Helper to get period score from linescores
 const getPeriodScore = (lines, period) => {
-    const found = lines.find((l) => l.period === period);
-    return found ? safeInt(found.value) : 0;
+    var _a, _b;
+    let val;
+    // Try finding by period property
+    const found = lines.find((l) => l.period == period);
+    if (found) {
+        val = (_a = found.value) !== null && _a !== void 0 ? _a : found.displayValue;
+    }
+    else {
+        // Fallback to index
+        const indexed = lines[period - 1];
+        if (indexed)
+            val = (_b = indexed.value) !== null && _b !== void 0 ? _b : indexed.displayValue;
+    }
+    return safeInt(val);
 };
 // Fetch and calculate scores from ESPN API
 async function fetchESPNScores(gameId, league) {

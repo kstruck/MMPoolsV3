@@ -1,12 +1,13 @@
 /**
  * One-time script to fix corrupted quarter scores in active pools
- * Run with: npx ts-node scripts/fixPoolScores.ts
+ * Run with: npx ts-node src/fixScoresManual.ts
  */
 
 import * as admin from 'firebase-admin';
 
 // Initialize Firebase Admin
-const serviceAccount = require('../serviceAccountKey.json');
+// Key is in root (../../serviceAccountKey.json) relative to src/fixScoresManual.ts
+const serviceAccount = require('../../serviceAccountKey.json');
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -41,11 +42,21 @@ async function fetchESPNScores(gameId: string, league: string): Promise<any> {
 
     const homeLines = apiHomeComp.linescores || [];
     const awayLines = apiAwayComp.linescores || [];
+    console.log('DEBUG LINES:', JSON.stringify({ homeLines, awayLines }, null, 2));
 
     // Get delta scores per period from ESPN
     const getPeriodScore = (lines: any[], p: number) => {
+        let val;
+        // Try finding by period property
         const found = lines.find((l: any) => l.period == p);
-        return found ? safeInt(found.value) : 0;
+        if (found) {
+            val = found.value ?? found.displayValue;
+        } else {
+            // Fallback to index
+            const indexed = lines[p - 1];
+            if (indexed) val = indexed.value ?? indexed.displayValue;
+        }
+        return safeInt(val);
     };
 
     // Individual quarter deltas
@@ -55,16 +66,14 @@ async function fetchESPNScores(gameId: string, league: string): Promise<any> {
     const q2Away = getPeriodScore(awayLines, 2);
     const q3HomeRaw = getPeriodScore(homeLines, 3);
     const q3AwayRaw = getPeriodScore(awayLines, 3);
-    const q4HomeRaw = getPeriodScore(homeLines, 4);
-    const q4AwayRaw = getPeriodScore(awayLines, 4);
+
 
     // Calculate cumulative scores
     const halfHome = q1Home + q2Home;
     const halfAway = q1Away + q2Away;
     const q3Home = halfHome + q3HomeRaw;
     const q3Away = halfAway + q3AwayRaw;
-    const regFinalHome = q3Home + q4HomeRaw;
-    const regFinalAway = q3Away + q4AwayRaw;
+
 
     const apiTotalHome = safeInt(apiHomeComp.score);
     const apiTotalAway = safeInt(apiAwayComp.score);
@@ -86,7 +95,7 @@ async function fetchESPNScores(gameId: string, league: string): Promise<any> {
 }
 
 async function fixActivePools() {
-    console.log('🔍 Finding active (locked & live) pools...\n');
+    console.log('🔍 Finding active (locked) pools...\n');
 
     const poolsSnapshot = await db.collection('pools')
         .where('isLocked', '==', true)
@@ -114,12 +123,10 @@ async function fixActivePools() {
         console.log(`   Current scores in DB:`);
         console.log(`   - Q1: ${pool.scores?.q1?.home}-${pool.scores?.q1?.away}`);
         console.log(`   - Half: ${pool.scores?.half?.home}-${pool.scores?.half?.away}`);
-        console.log(`   - Q3: ${pool.scores?.q3?.home}-${pool.scores?.q3?.away}`);
-        console.log(`   - Final: ${pool.scores?.final?.home}-${pool.scores?.final?.away}`);
-        console.log(`   - Current: ${pool.scores?.current?.home}-${pool.scores?.current?.away}`);
+        // ...
 
         // Fetch fresh scores from ESPN
-        const freshScores = await fetchESPNScores(pool.gameId, pool.league || 'nfl');
+        const freshScores = await fetchESPNScores(pool.gameId, (pool as any).league || 'nfl');
 
         if (!freshScores) {
             console.log(`   ❌ Could not fetch ESPN scores for gameId: ${pool.gameId}`);
@@ -129,9 +136,6 @@ async function fixActivePools() {
         console.log(`\n   Fresh ESPN scores:`);
         console.log(`   - Q1: ${freshScores.q1.home}-${freshScores.q1.away}`);
         console.log(`   - Half: ${freshScores.half.home}-${freshScores.half.away}`);
-        console.log(`   - Q3: ${freshScores.q3.home}-${freshScores.q3.away}`);
-        console.log(`   - Final: ${freshScores.final?.home}-${freshScores.final?.away || 'null'}`);
-        console.log(`   - Current: ${freshScores.current.home}-${freshScores.current.away}`);
         console.log(`   - Period: ${freshScores.period}, Status: ${freshScores.gameStatus}`);
 
         // Build update based on current period
@@ -157,8 +161,9 @@ async function fixActivePools() {
         }
 
         // Apply update
+        console.log('   Applying updates:', JSON.stringify(updates, null, 2));
         await db.collection('pools').doc(poolId).update(updates);
-        console.log(`   ✅ Updated pool with corrected scores!`);
+        console.log(`   ✅ Updated pool!`);
     }
 
     console.log('\n✅ Done fixing pools!');

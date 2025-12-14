@@ -72,10 +72,19 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     const awayLines = apiAwayComp.linescores || [];
 
     // Robust Helper to find score by period number
-    // ESPN API format: { period: 1, value: 7, ... }
+    // ESPN API format: { period: 1, value: 7, ... } or implied order
     const getPeriodScore = (lines: any[], p: number) => {
-      const found = lines.find((l: any) => l.period === p);
-      return found ? safeInt(found.value) : 0;
+      let val;
+      // 1. Try finding by period property (loose equality for string/number match)
+      const found = lines.find((l: any) => l.period == p);
+      if (found) {
+        val = found.value ?? found.displayValue;
+      } else {
+        // 2. Fallback to index (ESPN linescores are ordered)
+        const indexed = lines[p - 1];
+        if (indexed) val = indexed.value ?? indexed.displayValue;
+      }
+      return safeInt(val);
     };
 
     // 1. Calculate Individual Quarter Scores

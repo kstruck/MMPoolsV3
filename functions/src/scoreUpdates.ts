@@ -29,8 +29,17 @@ const safeInt = (val: any): number => {
 
 // Helper to get period score from linescores
 const getPeriodScore = (lines: any[], period: number): number => {
-    const found = lines.find((l: any) => l.period === period);
-    return found ? safeInt(found.value) : 0;
+    let val;
+    // Try finding by period property
+    const found = lines.find((l: any) => l.period == period);
+    if (found) {
+        val = found.value ?? found.displayValue;
+    } else {
+        // Fallback to index
+        const indexed = lines[period - 1];
+        if (indexed) val = indexed.value ?? indexed.displayValue;
+    }
+    return safeInt(val);
 };
 
 // Fetch and calculate scores from ESPN API
