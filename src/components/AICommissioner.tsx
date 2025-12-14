@@ -34,11 +34,14 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId }
         if (!userId) return;
         const q = query(
             collection(db, `pools/${poolId}/ai_requests`),
-            where('userId', '==', userId),
-            orderBy('createdAt', 'desc')
+            where('userId', '==', userId)
+            // Removed orderBy('createdAt', 'desc') to avoid needing a composite index
         );
         return onSnapshot(q, (snap) => {
-            setUserRequests(snap.docs.map(d => ({ ...d.data(), id: d.id } as AIRequest)));
+            const reqs = snap.docs
+                .map(d => ({ ...d.data(), id: d.id } as AIRequest))
+                .sort((a, b) => b.createdAt - a.createdAt); // Client-side sort
+            setUserRequests(reqs);
         });
     }, [poolId, userId]);
 
