@@ -2,21 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService'; // Assuming you have an exported db instance
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import type { AuditLogEvent, AuditEventType } from '../types';
-import { Shield, AlertTriangle, Info, FileJson, Clock, Lock, RefreshCw, Activity, DollarSign, User } from 'lucide-react';
+import { Shield, AlertTriangle, Info, FileJson, Clock, Lock, RefreshCw, Activity, DollarSign, User, Grid, Unlock } from 'lucide-react';
 
 interface AuditLogProps {
     poolId: string;
     onClose: () => void;
 }
 
-type FilterType = 'ALL' | 'DIGITS' | 'SCORES' | 'WINNERS' | 'PAYMENTS' | 'OVERRIDES';
+type FilterType = 'ALL' | 'SQUARES' | 'LOCK' | 'DIGITS' | 'SCORES' | 'WINNERS' | 'OVERRIDES';
 
 const FILTER_MAP: Record<FilterType, AuditEventType[]> = {
     'ALL': [],
+    'SQUARES': ['SQUARE_RESERVED', 'SQUARE_RELEASED'],
+    'LOCK': ['POOL_LOCKED', 'POOL_UNLOCKED', 'POOL_CREATED'],
     'DIGITS': ['DIGITS_GENERATED'],
-    'SCORES': ['SCORE_FINALIZED', 'POOL_STATUS_CHANGED'],
+    'SCORES': ['SCORE_FINALIZED'],
     'WINNERS': ['WINNER_COMPUTED'],
-    'PAYMENTS': ['SQUARE_MARKED_PAID', 'SQUARE_UNPAID_REVERTED'], // Assuming these types exist or map to modifications
     'OVERRIDES': ['ADMIN_OVERRIDE_SCORE', 'ADMIN_OVERRIDE_WINNER', 'ADMIN_OVERRIDE_DIGITS', 'ADMIN_OVERRIDE_SQUARE_STATE']
 };
 
@@ -50,11 +51,6 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
 
     const filteredEvents = events.filter(e => {
         if (filter === 'ALL') return true;
-
-        // Custom mapping for broad categories
-        if (filter === 'PAYMENTS') return e.type === 'SQUARE_MARKED_PAID'; // Example
-        if (filter === 'OVERRIDES') return e.type.startsWith('ADMIN_OVERRIDE');
-
         const types = FILTER_MAP[filter];
         return types.includes(e.type);
     });
@@ -68,10 +64,13 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
 
     const getIcon = (type: AuditEventType) => {
         if (type === 'POOL_LOCKED') return <Lock size={16} className="text-amber-400" />;
+        if (type === 'POOL_UNLOCKED') return <Unlock size={16} className="text-emerald-400" />;
+        if (type === 'POOL_CREATED') return <Grid size={16} className="text-indigo-400" />;
         if (type === 'DIGITS_GENERATED') return <RefreshCw size={16} className="text-indigo-400" />;
         if (type === 'SCORE_FINALIZED') return <Activity size={16} className="text-emerald-400" />;
         if (type === 'WINNER_COMPUTED') return <DollarSign size={16} className="text-yellow-400" />;
         if (type === 'SQUARE_RESERVED') return <User size={16} className="text-blue-400" />;
+        if (type === 'SQUARE_RELEASED') return <User size={16} className="text-slate-400" />;
         if (type.startsWith('ADMIN_OVERRIDE')) return <AlertTriangle size={16} className="text-rose-500" />;
         return <Info size={16} className="text-slate-400" />;
     };
@@ -81,6 +80,22 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
         const date = ts?.toDate ? ts.toDate() : new Date(ts);
         return date.toLocaleString();
     };
+
+    // Calculate counts for each filter tab
+    const getCounts = () => {
+        const counts: Record<FilterType, number> = {
+            'ALL': events.length,
+            'SQUARES': events.filter(e => FILTER_MAP['SQUARES'].includes(e.type)).length,
+            'LOCK': events.filter(e => FILTER_MAP['LOCK'].includes(e.type)).length,
+            'DIGITS': events.filter(e => FILTER_MAP['DIGITS'].includes(e.type)).length,
+            'SCORES': events.filter(e => FILTER_MAP['SCORES'].includes(e.type)).length,
+            'WINNERS': events.filter(e => FILTER_MAP['WINNERS'].includes(e.type)).length,
+            'OVERRIDES': events.filter(e => FILTER_MAP['OVERRIDES'].includes(e.type)).length,
+        };
+        return counts;
+    };
+
+    const counts = getCounts();
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex justify-end">
@@ -98,13 +113,16 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
 
                 {/* Filters */}
                 <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex gap-2 overflow-x-auto">
-                    {(['ALL', 'DIGITS', 'SCORES', 'WINNERS', 'OVERRIDES'] as FilterType[]).map(f => (
+                    {(['ALL', 'SQUARES', 'LOCK', 'DIGITS', 'SCORES', 'WINNERS', 'OVERRIDES'] as FilterType[]).map(f => (
                         <button
                             key={f}
                             onClick={() => setFilter(f)}
-                            className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${filter === f ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                            className={`px-3 py-1 rounded-full text-xs font-bold transition-colors whitespace-nowrap flex items-center gap-1 ${filter === f ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
                         >
                             {f}
+                            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${filter === f ? 'bg-indigo-500' : 'bg-slate-700'}`}>
+                                {counts[f]}
+                            </span>
                         </button>
                     ))}
                 </div>
