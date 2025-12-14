@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trophy, Zap, Shield, LayoutGrid, Calendar, CheckCircle2, Heart } from 'lucide-react';
+import { Trophy, Zap, Shield, LayoutGrid, Calendar, CheckCircle2, Heart, Globe } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { Footer } from './Footer';
 
@@ -148,23 +148,155 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
 
           {/* Hero Visual */}
           <div className="mt-16 md:mt-20 relative mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-20 duration-1000 delay-400">
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0A192F] via-transparent to-transparent z-20"></div>
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0A192F] via-transparent to-transparent z-20"></div>
             <div className="rounded-2xl p-2 shadow-2xl" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
               <div className="rounded-xl overflow-hidden relative group" style={{ backgroundColor: BRAND.navy }}>
                 <img
-                  src="/hero_dashboard.png"
+                  src="/hero-ui.png"
                   alt="10x10 Super Bowl squares grid example"
                   loading="lazy"
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0A192F] via-transparent to-transparent opacity-60"></div>
+                <div className="absolute inset-0 bg-gradient-to-b from-[#0A192F] via-transparent to-transparent opacity-60"></div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* SEO Content Section */}
+      {/* Feature Showcase Section */}
+      <section className="py-24 border-t relative overflow-hidden" style={{ backgroundColor: BRAND.navy, borderColor: '#334155' }}>
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-1/4 left-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20" style={{ backgroundColor: '#FF6600' }}></div>
+          <div className="absolute bottom-1/4 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20" style={{ backgroundColor: '#3B82F6' }}></div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-6 relative z-10 space-y-32">
+
+          {/* Feature 1: Live Grid */}
+          <div className="flex flex-col md:flex-row items-center gap-12 md:gap-20">
+            <div className="md:w-1/2 relative group">
+              <div className="absolute -inset-4 bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
+              <img
+                src="/feature-live-grid.png"
+                alt="Live 10x10 Super Bowl Squares Grid"
+                className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
+              />
+            </div>
+            <div className="md:w-1/2 space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider" style={{ backgroundColor: `${BRAND.orange}20`, color: BRAND.orange }}>
+                <LayoutGrid size={14} /> The Main Event
+              </div>
+              <h3 className="text-3xl md:text-4xl font-black text-white leading-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                Live, Interactive Grids. <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-400">Not Your Office Excel Sheet.</span>
+              </h3>
+              <p className="text-lg leading-relaxed text-slate-300">
+                Experience the classic 10x10 grid reimagined for the digital age. Track occupied squares, see who bought in, and watch winning squares light up in real-time as the score changes. No more squinting at handwriting.
+              </p>
+            </div>
+          </div>
+
+          {/* Feature 2: Scoreboard & Info */}
+          <div className="flex flex-col md:flex-row-reverse items-center gap-12 md:gap-20">
+            <div className="md:w-1/2 relative group">
+              <div className="absolute -inset-4 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
+              <img
+                src="/feature-scoreboard.png"
+                alt="Real-time Scoreboard and Pool Info"
+                className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
+              />
+            </div>
+            <div className="md:w-1/2 space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-500/20 text-blue-400">
+                <Zap size={14} /> Mission Control
+              </div>
+              <h3 className="text-3xl md:text-4xl font-black text-white leading-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                Everything You Need.<br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">All in One View.</span>
+              </h3>
+              <p className="text-lg leading-relaxed text-slate-300">
+                Stay glued to the action with our live scoreboard that syncs instantly with game data. View pool status, specific rules, manager instructions, and transparent payout structures—all alongside charity donation goals and progress.
+              </p>
+            </div>
+          </div>
+
+          {/* Feature 3: What If Scenarios */}
+          <div className="flex flex-col md:flex-row items-center gap-12 md:gap-20">
+            <div className="md:w-1/2 relative group">
+              <div className="absolute -inset-4 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
+              <img
+                src="/feature-scenarios.png"
+                alt="What If Scenarios and Payouts"
+                className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
+              />
+            </div>
+            <div className="md:w-1/2 space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400">
+                <Trophy size={14} /> Instant Calculations
+              </div>
+              <h3 className="text-3xl md:text-4xl font-black text-white leading-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                Know Who Wins.<br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">Before the Whistle Blows.</span>
+              </h3>
+              <p className="text-lg leading-relaxed text-slate-300">
+                "Who wins if they kick a field goal?" Stop doing math. Our "In the Money" tracker and "If Score Next" scenarios allow you to instantly visualize potential winners for every scoring possibility. It's the ultimate second-screen experience.
+              </p>
+            </div>
+          </div>
+
+          {/* Feature 4: Public Grid Finder */}
+          <div className="flex flex-col md:flex-row-reverse items-center gap-12 md:gap-20">
+            <div className="md:w-1/2 relative group">
+              <div className="absolute -inset-4 bg-gradient-to-r from-violet-500 to-purple-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
+              <img
+                src="/feature-public-finder.png"
+                alt="Public Pool Finder"
+                className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
+              />
+            </div>
+            <div className="md:w-1/2 space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-violet-500/20 text-violet-400">
+                <Globe size={14} /> Join the Community
+              </div>
+              <h3 className="text-3xl md:text-4xl font-black text-white leading-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                Find Your Perfect Game.<br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-purple-400">Or Keep It Private.</span>
+              </h3>
+              <p className="text-lg leading-relaxed text-slate-300">
+                Browse our Public Grid Finder to discover open pools by sport, entry cost, or charity support. Prefer a private game among friends? Lock your pool with a password and invite only those you choose.
+              </p>
+            </div>
+          </div>
+
+          {/* Feature 5: Setup Wizard */}
+          <div className="flex flex-col md:flex-row items-center gap-12 md:gap-20">
+            <div className="md:w-1/2 relative group">
+              <div className="absolute -inset-4 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
+              <img
+                src="/feature-setup-wizard.png"
+                alt="Pool Setup Wizard"
+                className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
+              />
+            </div>
+            <div className="md:w-1/2 space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-pink-500/20 text-pink-400">
+                <CheckCircle2 size={14} /> Be the Commissioner
+              </div>
+              <h3 className="text-3xl md:text-4xl font-black text-white leading-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                Launch in Minutes.<br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-rose-400">Your Rules, Your Way.</span>
+              </h3>
+              <p className="text-lg leading-relaxed text-slate-300">
+                Ready to host? Our intuitive Setup Wizard guides you through every step: selecting the game matchup, configuring payout percentages, setting reminder limits, and more. Creating a professional sports pool has never been easier.
+              </p>
+              <button
+                onClick={onSignup}
+                className="mt-4 px-8 py-3 rounded-full font-bold text-white transition-transform hover:scale-105 shadow-lg shadow-pink-500/25"
+                style={{ backgroundColor: '#DB2777' }} // Pink-600
+              >
+                Create Your Pool
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </section>
       <section className="py-20 border-t" style={{ backgroundColor: BRAND.navy, borderColor: '#334155' }}>
         <div className="max-w-4xl mx-auto px-6 space-y-16">
 
