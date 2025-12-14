@@ -46,8 +46,8 @@ export const writeAuditEvent = async (options: AuditOptions, existingTransaction
             message,
             severity,
             actor,
-            payload,
-            dedupeKey
+            ...(payload !== undefined && { payload }),
+            ...(dedupeKey !== undefined && { dedupeKey })
         };
 
         t.set(auditRef.doc(eventId), {

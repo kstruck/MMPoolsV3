@@ -21,17 +21,10 @@ const writeAuditEvent = async (options, existingTransaction) => {
             }
             t.set(dedupeRef, { timestamp: admin.firestore.Timestamp.now(), originalEventId: eventId });
         }
-        const event = {
-            id: eventId,
-            poolId,
-            timestamp: Date.now(),
-            type,
+        const event = Object.assign(Object.assign({ id: eventId, poolId, timestamp: Date.now(), type,
             message,
             severity,
-            actor,
-            payload,
-            dedupeKey
-        };
+            actor }, (payload !== undefined && { payload })), (dedupeKey !== undefined && { dedupeKey }));
         t.set(auditRef.doc(eventId), Object.assign(Object.assign({}, event), { createdAt: admin.firestore.Timestamp.now() }));
         return "WRITTEN";
     };
