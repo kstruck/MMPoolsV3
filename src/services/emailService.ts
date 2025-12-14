@@ -4,8 +4,8 @@ import { db } from '../firebase';
 // Generate promo signature with optional referral link
 const getPromoSignature = (ownerReferralCode?: string) => {
     const referralUrl = ownerReferralCode
-        ? `https://marchmeleepools.com?ref=${ownerReferralCode}`
-        : 'https://marchmeleepools.com';
+        ? `https://www.marchmeleepools.com?ref=${ownerReferralCode}`
+        : 'https://www.marchmeleepools.com';
 
     const text = `
 
