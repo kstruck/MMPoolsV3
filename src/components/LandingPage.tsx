@@ -328,11 +328,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <h3 className="text-2xl font-bold text-white mb-6">Phase 2 Roadmap</h3>
               <div className="space-y-4">
                 {[
-                  { label: 'Super Bowl Squares', status: 'Live Now', active: true, badge: '/squares_badge_dark.png' },
+                  { label: 'NFL Squares', status: 'Live Now', active: true, badge: '/squares_badge_dark.png' },
+                  { label: 'College Football Squares', status: 'Live Now', active: true, badge: '/squares_badge_dark.png' },
                   { label: 'March Madness Brackets', status: 'February 2026', active: false, badge: '/bracket_badge_dark.png' },
                   { label: "NFL Pick'em", status: 'August 2026', active: false, badge: '/pickem_badge_dark.png' },
                   { label: 'Survivor Pools', status: 'August 2026', active: false, badge: '/survivor_badge_dark.png' },
-                  { label: 'College Football Squares', status: 'August 2026', active: false, badge: '/squares_badge_dark.png' },
                 ].map((item, i) => (
                   <div key={i} className={`flex items-center justify-between p-4 rounded-xl border ${item.active ? 'border-emerald-500/30' : 'opacity-60'}`} style={{ backgroundColor: item.active ? `${BRAND.emerald}15` : BRAND.navy, borderColor: item.active ? undefined : '#334155' }}>
                     <span className="font-bold text-white flex items-center gap-3">
