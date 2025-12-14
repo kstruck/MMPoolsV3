@@ -312,40 +312,50 @@ const App: React.FC = () => {
     const s = currentPool.scores;
     const cur = sanitize(s.current?.[team]);
 
-    // Q1 score (delta - points scored in Q1 only)
-    // ESPN API returns delta per period, stored in q1
     const q1 = s.q1?.[team] !== undefined ? sanitize(s.q1[team]) : null;
-
-    // Half score (cumulative Q1+Q2)
     const half = s.half?.[team] !== undefined ? sanitize(s.half[team]) : null;
-
-    // Q3 score (cumulative Q1+Q2+Q3)
     const q3 = s.q3?.[team] !== undefined ? sanitize(s.q3[team]) : null;
-
-    // Final score (cumulative all quarters)
     const final = s.final?.[team] !== undefined ? sanitize(s.final[team]) : null;
 
-    // Display logic: Show DELTA (points scored in that specific quarter)
+    const currentPeriod = s.period || 1;
+    const isPost = s.gameStatus === 'post';
+
+    // Q1
     if (period === 1) {
-      // Q1: Return locked Q1 score, or 0 if not yet finalized (don't show live cumulative)
-      return q1 ?? 0;
+      if (currentPeriod > 1 || isPost) return q1 ?? 0;
+      return cur; // Current Live
     }
+    // Q2
     if (period === 2) {
-      // Q2: Half minus Q1, or live calc if half not locked
-      if (half !== null && q1 !== null) return half - q1;
-      if (q1 !== null) return Math.max(0, cur - q1); // Live Q2 = current total - Q1
-      return 0;
+      if (currentPeriod > 2 || isPost) {
+        if (half !== null) return half - (q1 ?? 0);
+        return 0;
+      }
+      if (currentPeriod === 2) {
+        return Math.max(0, cur - (q1 ?? 0));
+      }
+      return 0; // Future
     }
+    // Q3
     if (period === 3) {
-      // Q3: Q3 cumulative minus Half, or live calc
-      if (q3 !== null && half !== null) return q3 - half;
-      if (half !== null) return Math.max(0, cur - half); // Live Q3 = current total - half
+      if (currentPeriod > 3 || isPost) {
+        if (q3 !== null) return q3 - (half ?? 0);
+        return 0;
+      }
+      if (currentPeriod === 3) {
+        return Math.max(0, cur - (half ?? 0));
+      }
       return 0;
     }
+    // Q4
     if (period === 4) {
-      // Q4: Final minus Q3, or live calc
-      if (final !== null && q3 !== null) return final - q3;
-      if (q3 !== null) return Math.max(0, cur - q3); // Live Q4 = current total - Q3
+      if (currentPeriod > 4 || isPost) {
+        if (final !== null) return final - (q3 ?? 0);
+        return Math.max(0, (final ?? cur) - (q3 ?? 0));
+      }
+      if (currentPeriod >= 4) {
+        return Math.max(0, cur - (q3 ?? 0));
+      }
       return 0;
     }
     return 0;
