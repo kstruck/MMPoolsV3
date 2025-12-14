@@ -30,7 +30,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           {/* Logo */}
           <a href="/" className="flex items-center">
-            <img src="/mmp_logo.png" alt="March Melee Pools Logo" className="h-12 md:h-14" />
+            <img src="/mmp_logo.png" alt="March Melee Pools Logo" className="h-16 md:h-20" />
           </a>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -99,8 +99,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
           {/* Charity Stat Card */}
           {totalDonated > 0 && (
             <div className="mb-8 inline-flex items-center gap-4 rounded-2xl p-3 pr-6 shadow-xl animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
-              <div className="p-3 rounded-xl" style={{ backgroundColor: `${BRAND.orange}20` }}>
-                <Heart className="fill-current" size={24} style={{ color: BRAND.orange }} />
+              <div className="p-3 rounded-xl" style={{ backgroundColor: '#EF444420' }}>
+                <Heart className="fill-current" size={24} style={{ color: '#EF4444' }} />
               </div>
               <div className="text-left">
                 <p className="text-xs font-bold uppercase tracking-wider" style={{ color: BRAND.lightGray }}>Total Raised for Charity</p>
