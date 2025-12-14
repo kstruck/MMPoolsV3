@@ -7,7 +7,7 @@ export const Footer: React.FC = () => {
             <div className="max-w-7xl mx-auto px-6">
                 <div className="border-t border-slate-900 pt-8 flex flex-col md:flex-row justify-between items-center gap-6 opacity-60">
                     <div className="flex items-center gap-2">
-                        <Logo className="w-6 h-6" textClassName="text-sm" />
+                        <Logo height="h-8" />
                     </div>
                     <div className="text-sm text-slate-500">
                         © 2025 MarchMeleePools. All rights reserved.
