@@ -311,15 +311,43 @@ const App: React.FC = () => {
     if (!currentPool) return 0;
     const s = currentPool.scores;
     const cur = sanitize(s.current?.[team]);
+
+    // Q1 score (delta - points scored in Q1 only)
+    // ESPN API returns delta per period, stored in q1
     const q1 = s.q1?.[team] !== undefined ? sanitize(s.q1[team]) : null;
+
+    // Half score (cumulative Q1+Q2)
     const half = s.half?.[team] !== undefined ? sanitize(s.half[team]) : null;
+
+    // Q3 score (cumulative Q1+Q2+Q3)
     const q3 = s.q3?.[team] !== undefined ? sanitize(s.q3[team]) : null;
+
+    // Final score (cumulative all quarters)
     const final = s.final?.[team] !== undefined ? sanitize(s.final[team]) : null;
 
-    if (period === 1) return q1 ?? cur;
-    if (period === 2) return half !== null ? half - (q1 ?? 0) : (q1 !== null ? cur - q1 : 0);
-    if (period === 3) return q3 !== null ? q3 - (half ?? 0) : (half !== null ? cur - half : 0);
-    if (period === 4) return final !== null ? final - (q3 ?? 0) : (q3 !== null ? cur - q3 : 0);
+    // Display logic: Show DELTA (points scored in that specific quarter)
+    if (period === 1) {
+      // Q1: Return locked Q1 score, or 0 if not yet finalized (don't show live cumulative)
+      return q1 ?? 0;
+    }
+    if (period === 2) {
+      // Q2: Half minus Q1, or live calc if half not locked
+      if (half !== null && q1 !== null) return half - q1;
+      if (q1 !== null) return Math.max(0, cur - q1); // Live Q2 = current total - Q1
+      return 0;
+    }
+    if (period === 3) {
+      // Q3: Q3 cumulative minus Half, or live calc
+      if (q3 !== null && half !== null) return q3 - half;
+      if (half !== null) return Math.max(0, cur - half); // Live Q3 = current total - half
+      return 0;
+    }
+    if (period === 4) {
+      // Q4: Final minus Q3, or live calc
+      if (final !== null && q3 !== null) return final - q3;
+      if (q3 !== null) return Math.max(0, cur - q3); // Live Q4 = current total - Q3
+      return 0;
+    }
     return 0;
   };
 
