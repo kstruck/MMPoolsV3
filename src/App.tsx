@@ -736,7 +736,15 @@ const App: React.FC = () => {
                   );
 
                   const status = currentPool.scores.gameStatus;
-                  const isLive = status === 'in' || status === 'post';
+                  const isFinal = status === 'post' || !!currentPool.scores.final;
+                  const isLive = status === 'in';
+
+                  if (isFinal) return (
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-3 w-3"><span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>
+                      <div><p className="text-blue-500 font-bold text-sm leading-none">Locked - Final</p><p className="text-slate-500 text-[10px]">Game has completed</p></div>
+                    </div>
+                  );
 
                   if (isLive) return (
                     <div className="flex items-center gap-2">
