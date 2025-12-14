@@ -717,7 +717,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         onClick={handleInitiateCheckout}
                         className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-full font-bold shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
                      >
-                        Checkout <ArrowRight size={16} />
+                        Reserve <ArrowRight size={16} />
                      </button>
                   </div>
                </div>
