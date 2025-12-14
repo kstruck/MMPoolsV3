@@ -30,7 +30,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           {/* Logo */}
           <a href="/" className="flex items-center">
-            <img src="/mmp_logo.png" alt="March Melee Pools Logo" className="h-16 md:h-20" />
+            <img src="/mmp_logo.png" alt="March Melee Pools Logo" className="h-24 md:h-32" />
           </a>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -152,7 +152,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             <div className="rounded-2xl p-2 shadow-2xl" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
               <div className="rounded-xl overflow-hidden relative group" style={{ backgroundColor: BRAND.navy }}>
                 <img
-                  src="/hero-ui.png"
+                  src="/hero_dashboard.png"
                   alt="10x10 Super Bowl squares grid example"
                   loading="lazy"
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
