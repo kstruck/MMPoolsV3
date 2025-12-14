@@ -255,6 +255,25 @@ export const SuperAdmin: React.FC = () => {
                             <h3 className="text-slate-400 text-xs font-bold uppercase mb-2 tracking-wider">System Status</h3>
                             <p className="text-xl font-bold text-emerald-400 flex items-center gap-2"><Activity size={20} /> Operational</p>
                             <p className="text-xs text-slate-500 mt-1">Firestore Connected</p>
+                            <button
+                                onClick={async () => {
+                                    if (!confirm('Fix all active pool scores from ESPN? This will fetch fresh data and update quarter scores.')) return;
+                                    try {
+                                        const { getFunctions, httpsCallable } = await import('firebase/functions');
+                                        const functions = getFunctions();
+                                        const fixScores = httpsCallable(functions, 'fixPoolScores');
+                                        const result = await fixScores({}) as any;
+                                        console.log('Fix result:', result.data);
+                                        alert(`Fixed ${result.data?.pools?.filter((p: any) => p.status === 'fixed').length || 0} pools. Check console for details.`);
+                                    } catch (e: any) {
+                                        console.error(e);
+                                        alert('Fix failed: ' + e.message);
+                                    }
+                                }}
+                                className="mt-3 text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded transition-colors font-bold"
+                            >
+                                🔧 Fix Pool Scores
+                            </button>
                         </div>
                         <div className="bg-slate-800/50 p-6 rounded-xl border border-indigo-500/30 backdrop-blur-sm">
                             <h3 className="text-indigo-400 text-xs font-bold uppercase mb-2 tracking-wider flex items-center gap-2"><Users size={14} /> Referrals</h3>

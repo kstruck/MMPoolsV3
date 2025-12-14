@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
+exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -12,6 +12,7 @@ var squares_1 = require("./squares");
 Object.defineProperty(exports, "reserveSquare", { enumerable: true, get: function () { return squares_1.reserveSquare; } });
 var scoreUpdates_1 = require("./scoreUpdates");
 Object.defineProperty(exports, "syncGameStatus", { enumerable: true, get: function () { return scoreUpdates_1.syncGameStatus; } });
+Object.defineProperty(exports, "fixPoolScores", { enumerable: true, get: function () { return scoreUpdates_1.fixPoolScores; } });
 var aiCommissioner_1 = require("./aiCommissioner");
 Object.defineProperty(exports, "onWinnerUpdate", { enumerable: true, get: function () { return aiCommissioner_1.onWinnerUpdate; } });
 Object.defineProperty(exports, "onAIRequest", { enumerable: true, get: function () { return aiCommissioner_1.onAIRequest; } });
