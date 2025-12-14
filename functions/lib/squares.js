@@ -5,17 +5,28 @@ const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const audit_1 = require("./audit");
 exports.reserveSquare = (0, https_1.onCall)(async (request) => {
+    var _a;
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
-    // 1. Auth Check
-    if (!request.auth) {
-        throw new https_1.HttpsError("unauthenticated", "Must be logged in to reserve a square.");
-    }
     const { poolId, squareId, customerDetails } = request.data;
-    const userId = request.auth.uid;
-    // Get user display name from auth token (or default)
-    const userEmail = request.auth.token.email || "Unknown";
-    const userName = request.auth.token.name || userEmail.split("@")[0];
+    // 1. Determine user identity - allow unauthenticated users with customerDetails
+    const isAuthenticated = !!request.auth;
+    const userId = ((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) || "anonymous";
+    // Get user info from auth token OR from customerDetails for anonymous users
+    let userName;
+    let userEmail;
+    if (isAuthenticated && request.auth) {
+        userEmail = request.auth.token.email || (customerDetails === null || customerDetails === void 0 ? void 0 : customerDetails.email) || "Unknown";
+        userName = request.auth.token.name || (customerDetails === null || customerDetails === void 0 ? void 0 : customerDetails.name) || userEmail.split("@")[0];
+    }
+    else {
+        // Anonymous user - MUST provide name via customerDetails
+        if (!(customerDetails === null || customerDetails === void 0 ? void 0 : customerDetails.name)) {
+            throw new https_1.HttpsError("invalid-argument", "Name is required to reserve a square.");
+        }
+        userName = customerDetails.name;
+        userEmail = customerDetails.email || "Unknown";
+    }
     if (!poolId || squareId === undefined) {
         throw new https_1.HttpsError("invalid-argument", "Missing required fields.");
     }
@@ -66,7 +77,7 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
             updatedAt: admin.firestore.Timestamp.now()
         });
         // --- AUDIT LOGGING ---
-        const role = pool.ownerId === userId ? 'ADMIN' : 'USER';
+        const role = pool.ownerId === userId ? 'ADMIN' : (isAuthenticated ? 'USER' : 'GUEST');
         await (0, audit_1.writeAuditEvent)({
             poolId,
             type: 'SQUARE_RESERVED',

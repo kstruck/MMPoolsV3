@@ -198,7 +198,7 @@ export interface AuditLogEvent {
     severity: 'INFO' | 'WARNING' | 'CRITICAL';
     actor: {
         uid: string;
-        role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN';
+        role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST';
         label?: string;
     };
     payload?: any;

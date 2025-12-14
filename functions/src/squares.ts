@@ -8,19 +8,30 @@ export const reserveSquare = onCall(async (request) => {
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
 
-    // 1. Auth Check
-    if (!request.auth) {
-        throw new HttpsError(
-            "unauthenticated",
-            "Must be logged in to reserve a square."
-        );
-    }
-
     const { poolId, squareId, customerDetails } = request.data;
-    const userId = request.auth.uid;
-    // Get user display name from auth token (or default)
-    const userEmail = request.auth.token.email || "Unknown";
-    const userName = request.auth.token.name || userEmail.split("@")[0];
+
+    // 1. Determine user identity - allow unauthenticated users with customerDetails
+    const isAuthenticated = !!request.auth;
+    const userId = request.auth?.uid || "anonymous";
+
+    // Get user info from auth token OR from customerDetails for anonymous users
+    let userName: string;
+    let userEmail: string;
+
+    if (isAuthenticated && request.auth) {
+        userEmail = request.auth.token.email || customerDetails?.email || "Unknown";
+        userName = request.auth.token.name || customerDetails?.name || userEmail.split("@")[0];
+    } else {
+        // Anonymous user - MUST provide name via customerDetails
+        if (!customerDetails?.name) {
+            throw new HttpsError(
+                "invalid-argument",
+                "Name is required to reserve a square."
+            );
+        }
+        userName = customerDetails.name;
+        userEmail = customerDetails.email || "Unknown";
+    }
 
     if (!poolId || squareId === undefined) {
         throw new HttpsError("invalid-argument", "Missing required fields.");
@@ -90,7 +101,7 @@ export const reserveSquare = onCall(async (request) => {
         });
 
         // --- AUDIT LOGGING ---
-        const role = pool.ownerId === userId ? 'ADMIN' : 'USER';
+        const role = pool.ownerId === userId ? 'ADMIN' : (isAuthenticated ? 'USER' : 'GUEST');
         await writeAuditEvent({
             poolId,
             type: 'SQUARE_RESERVED',
