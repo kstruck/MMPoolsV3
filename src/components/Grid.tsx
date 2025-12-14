@@ -129,19 +129,29 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    };
 
    const [liabilityAccepted, setLiabilityAccepted] = useState(false);
+   const [isSubmitting, setIsSubmitting] = useState(false);
 
    const handleFinalizePurchase = async () => {
-      if (!liabilityAccepted) return; // double check
-      const result = await onClaimSquares(selectedSquares, playerInfo.name, playerInfo.details);
-      if (result.success) {
-         setSelectedSquares([]);
+      if (!liabilityAccepted) return;
+
+      setIsSubmitting(true);
+      try {
+         const result = await onClaimSquares(selectedSquares, playerInfo.name, playerInfo.details);
+         if (result.success) {
+            setSelectedSquares([]);
+            setIsConfirming(false);
+            setLiabilityAccepted(false);
+            setErrorMsg(null);
+         } else {
+            setErrorMsg(result.message || 'Error processing request');
+            setIsConfirming(false);
+            setIsIdentityOpen(true);
+         }
+      } catch (e) {
+         setErrorMsg('An unexpected error occurred.');
          setIsConfirming(false);
-         setLiabilityAccepted(false); // reset
-         setErrorMsg(null);
-      } else {
-         setErrorMsg(result.message || 'Error processing request');
-         setIsConfirming(false);
-         setIsIdentityOpen(true);
+      } finally {
+         setIsSubmitting(false);
       }
    };
 
@@ -291,8 +301,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full">
                   <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                     {onClaimSquares.name === 'mock' ? <Check className="text-emerald-400" /> : <Loader className="animate-spin text-emerald-400" />}
-                     Confirm Purchase
+                     {isSubmitting ? <Loader className="animate-spin text-emerald-400" /> : <Check className="text-emerald-400" />}
+                     Confirm Reservation
                   </h3>
 
                   <div className="bg-slate-900 rounded-lg p-4 mb-4 space-y-3">
@@ -323,7 +333,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            <Check size={14} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                         </div>
                         <p className="text-xs text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
-                           By checking this box and clicking confirm, I understand that MarchMeleePools does not administer any prizes. Any and all prizes won are awarded by the Pool Manager/Organizer.
+                           By checking this box and selecting Reserve Squares, I acknowledge and agree that MarchMeleePools does not administer, hold, or distribute prizes. Any prizes are provided solely by the Pool Manager/Organizer. Any questions, disputes, or claims related to prizes or pool outcomes must be resolved directly between the user and the Pool Manager/Organizer.
                         </p>
                      </label>
                   </div>
@@ -331,17 +341,17 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   <div className="flex gap-3">
                      <button
                         onClick={() => setIsConfirming(false)}
-                        disabled={onClaimSquares.length > 0 && false} // simplifying for visual check
+                        disabled={isSubmitting}
                         className="flex-1 py-3 text-slate-400 hover:bg-slate-700 rounded-lg font-bold transition-colors disabled:opacity-50"
                      >
                         Cancel
                      </button>
                      <button
                         onClick={handleFinalizePurchase}
-                        disabled={!liabilityAccepted}
+                        disabled={!liabilityAccepted || isSubmitting}
                         className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg font-bold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all"
                      >
-                        Reserve {selectedSquares.length} Squares
+                        {isSubmitting ? 'Reserving...' : `Reserve ${selectedSquares.length} Squares`}
                      </button>
                   </div>
                </div>
@@ -661,56 +671,58 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          </div>
 
          {/* --- STICKY FOOTER --- */}
-         {selectedSquares.length > 0 && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-2xl border border-indigo-500/30 flex items-center gap-6 z-40 animate-in slide-in-from-bottom-10 ring-1 ring-white/10">
-               <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Selected</span>
-                  <span className="font-bold text-xl leading-none">{selectedSquares.length} <span className="text-sm font-normal text-slate-400">sq</span></span>
-               </div>
-               <div className="h-8 w-px bg-slate-700"></div>
-               <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total</span>
-                  <span className="font-mono text-emerald-400 font-bold text-xl leading-none">${selectedSquares.length * gameState.costPerSquare}</span>
-               </div>
+         {
+            selectedSquares.length > 0 && (
+               <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-2xl border border-indigo-500/30 flex items-center gap-6 z-40 animate-in slide-in-from-bottom-10 ring-1 ring-white/10">
+                  <div className="flex flex-col">
+                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Selected</span>
+                     <span className="font-bold text-xl leading-none">{selectedSquares.length} <span className="text-sm font-normal text-slate-400">sq</span></span>
+                  </div>
+                  <div className="h-8 w-px bg-slate-700"></div>
+                  <div className="flex flex-col">
+                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total</span>
+                     <span className="font-mono text-emerald-400 font-bold text-xl leading-none">${selectedSquares.length * gameState.costPerSquare}</span>
+                  </div>
 
-               {/* LIMIT INDICATOR */}
-               <div className="h-8 w-px bg-slate-700"></div>
-               <div className="flex flex-col items-center min-w-[80px]">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1 tracking-wider">
-                     Limit <Shield size={10} />
-                  </span>
-                  <div className="flex items-end gap-1">
-                     <span className={`font-bold text-xl leading-none ${isLimitReached ? 'text-rose-400' : 'text-white'}`}>
-                        {currentTotal}
+                  {/* LIMIT INDICATOR */}
+                  <div className="h-8 w-px bg-slate-700"></div>
+                  <div className="flex flex-col items-center min-w-[80px]">
+                     <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1 tracking-wider">
+                        Limit <Shield size={10} />
                      </span>
-                     <span className="text-sm font-normal text-slate-500 mb-0.5">/ {maxPerPlayer}</span>
+                     <div className="flex items-end gap-1">
+                        <span className={`font-bold text-xl leading-none ${isLimitReached ? 'text-rose-400' : 'text-white'}`}>
+                           {currentTotal}
+                        </span>
+                        <span className="text-sm font-normal text-slate-500 mb-0.5">/ {maxPerPlayer}</span>
+                     </div>
+                     {/* Mini Progress Bar */}
+                     <div className="w-full h-1 bg-slate-700 rounded-full mt-1 overflow-hidden">
+                        <div
+                           className={`h-full rounded-full transition-all duration-500 ${isLimitReached ? 'bg-rose-500' : 'bg-indigo-500'}`}
+                           style={{ width: `${Math.min(100, (currentTotal / maxPerPlayer) * 100)}%` }}
+                        ></div>
+                     </div>
                   </div>
-                  {/* Mini Progress Bar */}
-                  <div className="w-full h-1 bg-slate-700 rounded-full mt-1 overflow-hidden">
-                     <div
-                        className={`h-full rounded-full transition-all duration-500 ${isLimitReached ? 'bg-rose-500' : 'bg-indigo-500'}`}
-                        style={{ width: `${Math.min(100, (currentTotal / maxPerPlayer) * 100)}%` }}
-                     ></div>
-                  </div>
-               </div>
 
-               <div className="flex items-center gap-3 ml-2">
-                  <button
-                     onClick={() => setSelectedSquares([])}
-                     className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
-                     title="Clear Selection"
-                  >
-                     <X size={20} />
-                  </button>
-                  <button
-                     onClick={handleInitiateCheckout}
-                     className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-full font-bold shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
-                  >
-                     Checkout <ArrowRight size={16} />
-                  </button>
+                  <div className="flex items-center gap-3 ml-2">
+                     <button
+                        onClick={() => setSelectedSquares([])}
+                        className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
+                        title="Clear Selection"
+                     >
+                        <X size={20} />
+                     </button>
+                     <button
+                        onClick={handleInitiateCheckout}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-full font-bold shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                     >
+                        Checkout <ArrowRight size={16} />
+                     </button>
+                  </div>
                </div>
-            </div>
-         )}
-      </div>
+            )
+         }
+      </div >
    );
 };
