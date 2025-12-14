@@ -166,6 +166,7 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
             continue;
         // --- TRANSACTION WRAPPER for Safety ---
         await db.runTransaction(async (transaction) => {
+            var _a, _b, _c, _d, _e;
             const freshDoc = await transaction.get(doc.ref);
             if (!freshDoc.exists)
                 return;
@@ -210,6 +211,54 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
             }
             // Apply updates
             transaction.update(doc.ref, Object.assign(Object.assign({}, transactionUpdates), { updatedAt: admin.firestore.Timestamp.now() }));
+            // --- AUDIT LOGGING ---
+            // Only log significant score changes to avoid noise (e.g. only when period changes or quarter finalized)
+            const isScoreEvent = isQ1Final || isHalfFinal || isQ3Final || isGameFinal || ((_a = pool.scores) === null || _a === void 0 ? void 0 : _a.gameStatus) !== state;
+            if (isScoreEvent) {
+                // Determine specific message
+                let msg = 'Score Updated';
+                let type = 'SCORES_UPDATED'; // Use generic or specific
+                if (isGameFinal) {
+                    msg = 'Game Finalized';
+                    type = 'SCORE_FINALIZED';
+                }
+                else if (isQ3Final && !((_b = pool.scores) === null || _b === void 0 ? void 0 : _b.q3)) {
+                    msg = 'Q3 Finalized';
+                    type = 'SCORE_FINALIZED';
+                }
+                else if (isHalfFinal && !((_c = pool.scores) === null || _c === void 0 ? void 0 : _c.half)) {
+                    msg = 'Halftime Finalized';
+                    type = 'SCORE_FINALIZED';
+                }
+                else if (isQ1Final && !((_d = pool.scores) === null || _d === void 0 ? void 0 : _d.q1)) {
+                    msg = 'Q1 Finalized';
+                    type = 'SCORE_FINALIZED';
+                }
+                else if (((_e = pool.scores) === null || _e === void 0 ? void 0 : _e.gameStatus) === 'pre' && state === 'in') {
+                    msg = 'Game Started';
+                    type = 'POOL_STATUS_CHANGED';
+                }
+                const scoreHash = (0, audit_1.computeDigitsHash)({ current: newScores.current, q: period, poolId: doc.id });
+                // Using new SCORES type if available or falling back
+                // We use SCORE_FINALIZED for all major score events to show up in "SCORES" tab
+                (0, audit_1.writeAuditEvent)({
+                    poolId: doc.id,
+                    type: type === 'SCORES_UPDATED' ? 'SCORE_FINALIZED' : type, // Map to existing enum for now
+                    message: `${msg}: ${newScores.current.home}-${newScores.current.away}`,
+                    severity: 'INFO',
+                    actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
+                    payload: {
+                        period,
+                        clock: espnScores.clock,
+                        score: newScores.current,
+                        q1: newScores.q1,
+                        half: newScores.half,
+                        q3: newScores.q3,
+                        final: newScores.final
+                    },
+                    dedupeKey: `SCORE:${doc.id}:${period}:${scoreHash}`
+                }, transaction);
+            }
         });
     }
 });

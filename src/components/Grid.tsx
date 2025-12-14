@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { GameState, Winner, PlayerDetails } from '../types';
-import { Lock, UserPlus, User, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield } from 'lucide-react';
+import { Lock, UserPlus, User, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader } from 'lucide-react';
 import { getTeamLogo } from '../constants';
 
 interface GridProps {
@@ -128,17 +128,20 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       setIsConfirming(true);
    };
 
+   const [liabilityAccepted, setLiabilityAccepted] = useState(false);
+
    const handleFinalizePurchase = async () => {
+      if (!liabilityAccepted) return; // double check
       const result = await onClaimSquares(selectedSquares, playerInfo.name, playerInfo.details);
       if (result.success) {
          setSelectedSquares([]);
          setIsConfirming(false);
+         setLiabilityAccepted(false); // reset
          setErrorMsg(null);
-         // We keep the identity set so they can buy more easily!
       } else {
          setErrorMsg(result.message || 'Error processing request');
          setIsConfirming(false);
-         setIsIdentityOpen(true); // Re-open just in case they need to fix name
+         setIsIdentityOpen(true);
       }
    };
 
@@ -287,9 +290,12 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          {isConfirming && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full">
-                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Check className="text-emerald-400" /> Confirm Purchase</h3>
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                     {onClaimSquares.name === 'mock' ? <Check className="text-emerald-400" /> : <Loader className="animate-spin text-emerald-400" />}
+                     Confirm Purchase
+                  </h3>
 
-                  <div className="bg-slate-900 rounded-lg p-4 mb-6 space-y-3">
+                  <div className="bg-slate-900 rounded-lg p-4 mb-4 space-y-3">
                      <div className="flex justify-between text-sm">
                         <span className="text-slate-400">Player:</span>
                         <span className="text-white font-bold">{playerInfo.name}</span>
@@ -304,9 +310,39 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      </div>
                   </div>
 
+                  {/* LIABILITY DISCLAIMER */}
+                  <div className="mb-6">
+                     <label className="flex items-start gap-3 cursor-pointer group">
+                        <div className="relative flex items-center">
+                           <input
+                              type="checkbox"
+                              checked={liabilityAccepted}
+                              onChange={(e) => setLiabilityAccepted(e.target.checked)}
+                              className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-slate-500 bg-slate-900 transition-all checked:border-emerald-500 checked:bg-emerald-500 hover:border-emerald-400"
+                           />
+                           <Check size={14} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
+                           By checking this box and clicking confirm, I understand that MarchMeleePools does not administer any prizes. Any and all prizes won are awarded by the Pool Manager/Organizer.
+                        </p>
+                     </label>
+                  </div>
+
                   <div className="flex gap-3">
-                     <button onClick={() => setIsConfirming(false)} className="flex-1 py-3 text-slate-400 hover:bg-slate-700 rounded-lg font-bold transition-colors">Cancel</button>
-                     <button onClick={handleFinalizePurchase} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold shadow-lg shadow-emerald-500/20">Confirm</button>
+                     <button
+                        onClick={() => setIsConfirming(false)}
+                        disabled={onClaimSquares.length > 0 && false} // simplifying for visual check
+                        className="flex-1 py-3 text-slate-400 hover:bg-slate-700 rounded-lg font-bold transition-colors disabled:opacity-50"
+                     >
+                        Cancel
+                     </button>
+                     <button
+                        onClick={handleFinalizePurchase}
+                        disabled={!liabilityAccepted}
+                        className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg font-bold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all"
+                     >
+                        Reserve {selectedSquares.length} Squares
+                     </button>
                   </div>
                </div>
             </div>
