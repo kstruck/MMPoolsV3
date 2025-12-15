@@ -26,11 +26,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
 
       {/* Navigation */}
-      <nav className="border-b border-white/10 bg-[#0A192F]/95 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+      <nav className="border-b border-white/10 bg-[#0A192F]/95 backdrop-blur-sm sticky top-0 z-50 transition-all duration-300">
+        <div className="max-w-7xl mx-auto px-6 h-24 md:h-28 flex items-center justify-between">
           {/* Logo */}
-          <a href="/" className="flex items-center">
-            <img src="/mmp_logo.png" alt="March Melee Pools Logo" className="h-24 md:h-32" />
+          <a href="/" className="flex items-center group">
+            <img
+              src="/mmp_logo.png"
+              alt="March Melee Pools Logo"
+              className="h-16 md:h-20 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
+            />
           </a>
           <div className="flex items-center gap-4">
             <ThemeToggle />
