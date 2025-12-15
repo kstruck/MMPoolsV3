@@ -128,7 +128,12 @@ export const onAIRequest = onDocumentCreated("pools/{poolId}/ai_requests/{reques
     if (!snapshot) return;
     const requestData = snapshot.data() as AIRequest;
 
-    if (!requestData || requestData.status !== 'PENDING') return;
+    console.log(`[AI-DEBUG] Triggered for request ${event.params.requestId}. Status: ${requestData?.status}`);
+
+    if (!requestData || requestData.status !== 'PENDING') {
+        console.log(`[AI-DEBUG] Skipping. Status is ${requestData?.status}`);
+        return;
+    }
 
     // 1. Gather Verified Facts (Similar to above but broader context)
     const poolRef = db.collection("pools").doc(poolId);
