@@ -27,7 +27,6 @@ const safeInt = (val: any): number => {
     return isNaN(parsed) ? 0 : parsed;
 };
 
-// Helper to get period score from linescores
 const getPeriodScore = (lines: any[], period: number): number => {
     let val;
     // Try finding by period property
@@ -41,6 +40,9 @@ const getPeriodScore = (lines: any[], period: number): number => {
     }
     return safeInt(val);
 };
+
+// Helper: Get last digit for squares logic
+const getLastDigit = (n: number) => Math.abs(n) % 10;
 
 // Fetch and calculate scores from ESPN API
 async function fetchESPNScores(gameId: string, league: string): Promise<any | null> {
@@ -247,10 +249,12 @@ export const syncGameStatus = onSchedule({
             // Only log significant score changes to avoid noise (e.g. only when period changes or quarter finalized)
             const isScoreEvent = isQ1Final || isHalfFinal || isQ3Final || isGameFinal || pool.scores?.gameStatus !== state;
 
+
             if (isScoreEvent) {
                 // Determine specific message
                 let msg = 'Score Updated';
                 let type: any = 'SCORES_UPDATED'; // Use generic or specific
+
                 if (isGameFinal) { msg = 'Game Finalized'; type = 'SCORE_FINALIZED'; }
                 else if (isQ3Final && !pool.scores?.q3) { msg = 'Q3 Finalized'; type = 'SCORE_FINALIZED'; }
                 else if (isHalfFinal && !pool.scores?.half) { msg = 'Halftime Finalized'; type = 'SCORE_FINALIZED'; }
@@ -261,7 +265,7 @@ export const syncGameStatus = onSchedule({
 
                 // Using new SCORES type if available or falling back
                 // We use SCORE_FINALIZED for all major score events to show up in "SCORES" tab
-                writeAuditEvent({
+                await writeAuditEvent({
                     poolId: doc.id,
                     type: type === 'SCORES_UPDATED' ? 'SCORE_FINALIZED' : type, // Map to existing enum for now
                     message: `${msg}: ${newScores.current.home}-${newScores.current.away}`,
@@ -278,6 +282,80 @@ export const syncGameStatus = onSchedule({
                     },
                     dedupeKey: `SCORE:${doc.id}:${period}:${scoreHash}`
                 }, transaction);
+
+                // --- DETERMINING WINNERS (Audit Log Only) ---
+                if (type === 'SCORE_FINALIZED' && freshPool.axisNumbers) {
+                    const handleWinnerLog = async (label: string, homeScore: number, awayScore: number) => {
+                        const hDigit = getLastDigit(homeScore);
+                        const aDigit = getLastDigit(awayScore);
+
+                        // Main Winner
+                        const axis = freshPool.axisNumbers;
+                        if (axis) { // Ensure axis exists
+                            const row = axis.away.indexOf(aDigit);
+                            const col = axis.home.indexOf(hDigit);
+
+                            if (row !== -1 && col !== -1) {
+                                const squareIndex = row * 10 + col;
+                                const square = freshPool.squares[squareIndex];
+                                const winnerName = square?.owner || 'Unsold';
+
+                                await writeAuditEvent({
+                                    poolId: doc.id,
+                                    type: 'WINNER_COMPUTED',
+                                    message: `${label} Winner: ${winnerName} (Home ${hDigit}, Away ${aDigit})`,
+                                    severity: 'INFO',
+                                    actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
+                                    payload: {
+                                        period: label,
+                                        homeScore,
+                                        awayScore,
+                                        homeDigit: hDigit,
+                                        awayDigit: aDigit,
+                                        winner: winnerName,
+                                        squareId: squareIndex
+                                    },
+                                    dedupeKey: `WINNER:${doc.id}:${label}:${hDigit}:${aDigit}`
+                                }, transaction);
+                            }
+
+                            // Reverse Winner
+                            if (freshPool.ruleVariations?.reverseWinners) {
+                                const rRow = axis.away.indexOf(hDigit); // Swap digits
+                                const rCol = axis.home.indexOf(aDigit);
+                                if (rRow !== -1 && rCol !== -1) {
+                                    const rSqIndex = rRow * 10 + rCol;
+                                    if (rSqIndex !== (row * 10 + col)) { // Don't verify if same square (e.g. 5-5)
+                                        const rSquare = freshPool.squares[rSqIndex];
+                                        const rWinnerName = rSquare?.owner || 'Unsold';
+
+                                        await writeAuditEvent({
+                                            poolId: doc.id,
+                                            type: 'WINNER_COMPUTED',
+                                            message: `${label} Reverse Winner: ${rWinnerName}`,
+                                            severity: 'INFO',
+                                            actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
+                                            payload: {
+                                                period: label,
+                                                type: 'REVERSE',
+                                                winner: rWinnerName,
+                                                squareId: rSqIndex
+                                            },
+                                            dedupeKey: `WINNER_REV:${doc.id}:${label}:${hDigit}:${aDigit}`
+                                        }, transaction);
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    // Check which period triggered this and log appropriate winner
+                    // Note: newScores contains the UPDATED state.
+                    if (msg === 'Q1 Finalized') await handleWinnerLog('Q1', newScores.q1.home, newScores.q1.away);
+                    if (msg === 'Halftime Finalized') await handleWinnerLog('Half', newScores.half.home, newScores.half.away);
+                    if (msg === 'Q3 Finalized') await handleWinnerLog('Q3', newScores.q3.home, newScores.q3.away);
+                    if (msg === 'Game Finalized') await handleWinnerLog('Final', newScores.final.home, newScores.final.away);
+                }
 
             }
         });
