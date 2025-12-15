@@ -53,6 +53,14 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // STATS:
+    // - Read: Everyone (Publicly displayed on Landing Page)
+    // - Write: Denied (Only updated via Cloud Functions/Admin SDK)
+    match /stats/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // EMAIL TRIGGERS:
     // - Public write allowed (for now, to support legacy client-side trigger)
     match /mail/{document=**} {
