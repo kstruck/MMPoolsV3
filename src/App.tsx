@@ -419,6 +419,18 @@ const App: React.FC = () => {
     }, 0);
   }, [pools]);
 
+  // Fetch Global Stats (Total Prizes)
+  const [totalPrizes, setTotalPrizes] = useState(0);
+  useEffect(() => {
+    // Subscribe to global stats
+    const unsubscribe = dbService.onGlobalStatsUpdate((stats: any) => {
+      if (stats?.totalPrizes) {
+        setTotalPrizes(stats.totalPrizes);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   // --- RENDER SWITCH ---
   if (route.view === 'home') {
     return (
@@ -429,6 +441,7 @@ const App: React.FC = () => {
           onBrowse={() => window.location.hash = '#browse'}
           isLoggedIn={!!user}
           totalDonated={totalCharity}
+          totalPrizes={totalPrizes}
         />
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
       </>

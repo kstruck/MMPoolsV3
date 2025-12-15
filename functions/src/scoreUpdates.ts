@@ -121,9 +121,10 @@ export const syncGameStatus = onSchedule({
 }, async (event) => {
     const db = admin.firestore();
 
-    // 1. Fetch Active Pools (locked and not finished)
+    // 1. Fetch Active Pools (regardless of lock status, as long as game is active)
+    // Note: We use a simpler query to avoid complex index requirements for now, and filter in memory.
+    // Querying for any pool where game is NOT 'post' (Final).
     const poolsSnap = await db.collection("pools")
-        .where("isLocked", "==", true)
         .where("scores.gameStatus", "!=", "post")
         .get();
 
@@ -134,6 +135,15 @@ export const syncGameStatus = onSchedule({
         const pool = doc.data() as GameState;
 
         if (!pool.gameId) continue;
+
+        // Optimization: If pool is unlocked AND game is 'pre' AND start time is > 2 hours away, skip to save costs
+        // We only want to aggressively sync unlocked pools if they are LIVE or close to starting.
+        if (!pool.isLocked && pool.scores?.gameStatus === 'pre') {
+            const now = Date.now();
+            const start = new Date(pool.scores.startTime || 0).getTime();
+            const twoHours = 2 * 60 * 60 * 1000;
+            if (start > now + twoHours) continue;
+        }
 
         // Fetch fresh scores from ESPN
         const espnScores = await fetchESPNScores(pool.gameId, (pool as any).league || 'nfl');
@@ -287,9 +297,10 @@ export const fixPoolScores = onCall({
     const db = admin.firestore();
     const results: any[] = [];
 
-    // Find all locked pools with active/completed games
+    // Find all active pools with a game assigned (regardless of lock status)
+    // We filter for gameId > "" to ensure we only get pools with a game.
     const poolsSnap = await db.collection("pools")
-        .where("isLocked", "==", true)
+        .where("gameId", ">", "")
         .get();
 
     for (const doc of poolsSnap.docs) {

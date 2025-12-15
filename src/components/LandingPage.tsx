@@ -9,6 +9,7 @@ interface LandingPageProps {
   onBrowse: () => void;
   isLoggedIn: boolean;
   totalDonated?: number;
+  totalPrizes?: number;
 }
 
 // Brand Colors
@@ -21,19 +22,19 @@ const BRAND = {
   lightGray: '#E5E7EB',
 };
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onBrowse, isLoggedIn, totalDonated = 0 }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onBrowse, isLoggedIn, totalDonated = 0, totalPrizes = 0 }) => {
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
 
       {/* Navigation */}
       <nav className="border-b border-white/10 bg-[#0A192F]/95 backdrop-blur-sm sticky top-0 z-50 transition-all duration-300">
-        <div className="max-w-7xl mx-auto px-6 h-24 md:h-28 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-32 md:h-44 flex items-center justify-between">
           {/* Logo */}
           <a href="/" className="flex items-center group">
             <img
-              src="/mmp_logo.png"
+              src="/mmp_logo_500x150_trans3.png"
               alt="March Melee Pools Logo"
-              className="h-16 md:h-20 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
+              className="h-24 md:h-36 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
             />
           </a>
           <div className="flex items-center gap-4">
@@ -100,18 +101,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             <span style={{ color: BRAND.orange }}>Super Bowl Squares & Sports Pools Online</span>
           </h1>
 
-          {/* Charity Stat Card */}
-          {totalDonated > 0 && (
-            <div className="mb-8 inline-flex items-center gap-4 rounded-2xl p-3 pr-6 shadow-xl animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
-              <div className="p-3 rounded-xl" style={{ backgroundColor: '#EF444420' }}>
-                <Heart className="fill-current" size={24} style={{ color: '#EF4444' }} />
+          {/* Stat Cards */}
+          <div className="flex flex-wrap justify-center gap-4 mb-8">
+            {totalDonated > 0 && (
+              <div className="inline-flex items-center gap-4 rounded-2xl p-3 pr-6 shadow-xl animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
+                <div className="p-3 rounded-xl" style={{ backgroundColor: '#EF444420' }}>
+                  <Heart className="fill-current" size={24} style={{ color: '#EF4444' }} />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: BRAND.lightGray }}>Total Raised for Charity</p>
+                  <p className="text-2xl font-black text-white">${totalDonated.toLocaleString()}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="inline-flex items-center gap-4 rounded-2xl p-3 pr-6 shadow-xl animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
+              <div className="p-3 rounded-xl" style={{ backgroundColor: '#10B98120' }}>
+                <Trophy className="fill-current" size={24} style={{ color: '#10B981' }} />
               </div>
               <div className="text-left">
-                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: BRAND.lightGray }}>Total Raised for Charity</p>
-                <p className="text-2xl font-black text-white">${totalDonated.toLocaleString()}</p>
+                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: BRAND.lightGray }}>Total Prizes Awarded</p>
+                <p className="text-2xl font-black text-white">${totalPrizes?.toLocaleString() || '0'}</p>
               </div>
             </div>
-          )}
+          </div>
 
           <p className="text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-700 delay-100" style={{ color: BRAND.lightGray }}>
             The professional platform for managing sports pools. Automated scoring, real-time payouts, and extensive customization for the ultimate grid experience.

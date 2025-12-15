@@ -16,6 +16,12 @@ import type { GameState, User } from "../types";
 
 export const dbService = {
     // --- POOLS ---
+    onGlobalStatsUpdate: (callback: (stats: any | null) => void) => {
+        return onSnapshot(doc(db, 'stats', 'global'), (doc) => {
+            callback(doc.exists() ? doc.data() : null);
+        });
+    },
+
     createPool: async (pool: GameState) => {
         try {
             const poolRef = doc(db, "pools", pool.id);

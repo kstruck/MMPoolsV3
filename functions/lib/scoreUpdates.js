@@ -113,11 +113,12 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
     timeoutSeconds: 60,
     memory: "256MiB"
 }, async (event) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     const db = admin.firestore();
-    // 1. Fetch Active Pools (locked and not finished)
+    // 1. Fetch Active Pools (regardless of lock status, as long as game is active)
+    // Note: We use a simpler query to avoid complex index requirements for now, and filter in memory.
+    // Querying for any pool where game is NOT 'post' (Final).
     const poolsSnap = await db.collection("pools")
-        .where("isLocked", "==", true)
         .where("scores.gameStatus", "!=", "post")
         .get();
     if (poolsSnap.empty)
@@ -127,6 +128,15 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
         const pool = doc.data();
         if (!pool.gameId)
             continue;
+        // Optimization: If pool is unlocked AND game is 'pre' AND start time is > 2 hours away, skip to save costs
+        // We only want to aggressively sync unlocked pools if they are LIVE or close to starting.
+        if (!pool.isLocked && ((_a = pool.scores) === null || _a === void 0 ? void 0 : _a.gameStatus) === 'pre') {
+            const now = Date.now();
+            const start = new Date(pool.scores.startTime || 0).getTime();
+            const twoHours = 2 * 60 * 60 * 1000;
+            if (start > now + twoHours)
+                continue;
+        }
         // Fetch fresh scores from ESPN
         const espnScores = await fetchESPNScores(pool.gameId, pool.league || 'nfl');
         if (!espnScores)
@@ -140,28 +150,28 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
         // Build new scores object, preserving existing locked scores
         const newScores = Object.assign(Object.assign({}, pool.scores), { current: espnScores.current, gameStatus: state, period: period, clock: espnScores.clock, startTime: espnScores.startTime });
         // Lock quarter scores when periods end (only if not already set)
-        if (isQ1Final && !((_a = pool.scores) === null || _a === void 0 ? void 0 : _a.q1)) {
+        if (isQ1Final && !((_b = pool.scores) === null || _b === void 0 ? void 0 : _b.q1)) {
             newScores.q1 = espnScores.q1;
         }
-        if (isHalfFinal && !((_b = pool.scores) === null || _b === void 0 ? void 0 : _b.half)) {
+        if (isHalfFinal && !((_c = pool.scores) === null || _c === void 0 ? void 0 : _c.half)) {
             newScores.half = espnScores.half;
         }
-        if (isQ3Final && !((_c = pool.scores) === null || _c === void 0 ? void 0 : _c.q3)) {
+        if (isQ3Final && !((_d = pool.scores) === null || _d === void 0 ? void 0 : _d.q3)) {
             newScores.q3 = espnScores.q3;
         }
-        if (isGameFinal && !((_d = pool.scores) === null || _d === void 0 ? void 0 : _d.final)) {
+        if (isGameFinal && !((_e = pool.scores) === null || _e === void 0 ? void 0 : _e.final)) {
             // Use API total for final (includes OT if applicable)
             newScores.final = pool.includeOvertime ? espnScores.apiTotal : espnScores.final;
         }
         // Check if anything changed
-        const isChanged = JSON.stringify(newScores.current) !== JSON.stringify((_e = pool.scores) === null || _e === void 0 ? void 0 : _e.current) ||
-            ((_f = pool.scores) === null || _f === void 0 ? void 0 : _f.gameStatus) !== state ||
-            ((_g = pool.scores) === null || _g === void 0 ? void 0 : _g.period) !== period ||
-            ((_h = pool.scores) === null || _h === void 0 ? void 0 : _h.clock) !== espnScores.clock ||
-            (isQ1Final && !((_j = pool.scores) === null || _j === void 0 ? void 0 : _j.q1)) ||
-            (isHalfFinal && !((_k = pool.scores) === null || _k === void 0 ? void 0 : _k.half)) ||
-            (isQ3Final && !((_l = pool.scores) === null || _l === void 0 ? void 0 : _l.q3)) ||
-            (isGameFinal && !((_m = pool.scores) === null || _m === void 0 ? void 0 : _m.final));
+        const isChanged = JSON.stringify(newScores.current) !== JSON.stringify((_f = pool.scores) === null || _f === void 0 ? void 0 : _f.current) ||
+            ((_g = pool.scores) === null || _g === void 0 ? void 0 : _g.gameStatus) !== state ||
+            ((_h = pool.scores) === null || _h === void 0 ? void 0 : _h.period) !== period ||
+            ((_j = pool.scores) === null || _j === void 0 ? void 0 : _j.clock) !== espnScores.clock ||
+            (isQ1Final && !((_k = pool.scores) === null || _k === void 0 ? void 0 : _k.q1)) ||
+            (isHalfFinal && !((_l = pool.scores) === null || _l === void 0 ? void 0 : _l.half)) ||
+            (isQ3Final && !((_m = pool.scores) === null || _m === void 0 ? void 0 : _m.q3)) ||
+            (isGameFinal && !((_o = pool.scores) === null || _o === void 0 ? void 0 : _o.final));
         if (!isChanged)
             continue;
         // --- TRANSACTION WRAPPER for Safety ---
@@ -274,9 +284,10 @@ exports.fixPoolScores = (0, https_1.onCall)({
     }
     const db = admin.firestore();
     const results = [];
-    // Find all locked pools with active/completed games
+    // Find all active pools with a game assigned (regardless of lock status)
+    // We filter for gameId > "" to ensure we only get pools with a game.
     const poolsSnap = await db.collection("pools")
-        .where("isLocked", "==", true)
+        .where("gameId", ">", "")
         .get();
     for (const doc of poolsSnap.docs) {
         const pool = doc.data();
