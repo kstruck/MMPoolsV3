@@ -1,7 +1,7 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
-import { GameState, AxisNumbers } from "./types";
+import { GameState, AxisNumbers, Winner } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 
 // Helper to generate random digits
@@ -283,15 +283,27 @@ export const syncGameStatus = onSchedule({
                     dedupeKey: `SCORE:${doc.id}:${period}:${scoreHash}`
                 }, transaction);
 
-                // --- DETERMINING WINNERS (Audit Log Only) ---
+                // --- DETERMINING WINNERS (Audit Log & AI Trigger) ---
                 if (type === 'SCORE_FINALIZED' && freshPool.axisNumbers) {
-                    const handleWinnerLog = async (label: string, homeScore: number, awayScore: number) => {
+                    const handleWinnerLog = async (periodKey: 'q1' | 'half' | 'q3' | 'final', homeScore: number, awayScore: number) => {
                         const hDigit = getLastDigit(homeScore);
                         const aDigit = getLastDigit(awayScore);
 
+                        // Calculate Payout Amount
+                        const soldSquares = freshPool.squares.filter(s => s.owner).length;
+                        const totalPot = soldSquares * freshPool.costPerSquare;
+                        const payoutPct = freshPool.payouts[periodKey] || 0;
+                        let amount = (totalPot * payoutPct) / 100;
+                        if (freshPool.ruleVariations?.reverseWinners) {
+                            amount = amount / 2; // Split pot logic approximation
+                        }
+
+                        // Label formatting for audit log
+                        const label = periodKey === 'q1' ? 'Q1' : periodKey === 'half' ? 'Halftime' : periodKey === 'q3' ? 'Q3' : 'Final';
+
                         // Main Winner
                         const axis = freshPool.axisNumbers;
-                        if (axis) { // Ensure axis exists
+                        if (axis) {
                             const row = axis.away.indexOf(aDigit);
                             const col = axis.home.indexOf(hDigit);
 
@@ -300,6 +312,7 @@ export const syncGameStatus = onSchedule({
                                 const square = freshPool.squares[squareIndex];
                                 const winnerName = square?.owner || 'Unsold';
 
+                                // 1. Audit Log
                                 await writeAuditEvent({
                                     poolId: doc.id,
                                     type: 'WINNER_COMPUTED',
@@ -313,10 +326,25 @@ export const syncGameStatus = onSchedule({
                                         homeDigit: hDigit,
                                         awayDigit: aDigit,
                                         winner: winnerName,
-                                        squareId: squareIndex
+                                        squareId: squareIndex,
+                                        amount
                                     },
-                                    dedupeKey: `WINNER:${doc.id}:${label}:${hDigit}:${aDigit}`
+                                    dedupeKey: `WINNER:${doc.id}:${periodKey}:${hDigit}:${aDigit}`
                                 }, transaction);
+
+                                // 2. Trigger AI Commissioner (Write to winners collection)
+                                const winnerDoc: Winner = {
+                                    period: periodKey,
+                                    squareId: squareIndex,
+                                    owner: winnerName,
+                                    amount: amount,
+                                    homeDigit: hDigit,
+                                    awayDigit: aDigit,
+                                    isReverse: false,
+                                    // Provide context for AI
+                                    description: `${label} Winner`
+                                };
+                                transaction.set(db.collection('pools').doc(doc.id).collection('winners').doc(periodKey), winnerDoc);
                             }
 
                             // Reverse Winner
@@ -341,8 +369,10 @@ export const syncGameStatus = onSchedule({
                                                 winner: rWinnerName,
                                                 squareId: rSqIndex
                                             },
-                                            dedupeKey: `WINNER_REV:${doc.id}:${label}:${hDigit}:${aDigit}`
+                                            dedupeKey: `WINNER_REV:${doc.id}:${periodKey}:${hDigit}:${aDigit}`
                                         }, transaction);
+                                        // Note: Not writing separate doc for reverse winner to 'winners' collection yet as it expects 1 doc per period.
+                                        // AI will analyze based on the main winner doc + audit logs.
                                     }
                                 }
                             }
@@ -351,10 +381,10 @@ export const syncGameStatus = onSchedule({
 
                     // Check which period triggered this and log appropriate winner
                     // Note: newScores contains the UPDATED state.
-                    if (msg === 'Q1 Finalized') await handleWinnerLog('Q1', newScores.q1.home, newScores.q1.away);
-                    if (msg === 'Halftime Finalized') await handleWinnerLog('Half', newScores.half.home, newScores.half.away);
-                    if (msg === 'Q3 Finalized') await handleWinnerLog('Q3', newScores.q3.home, newScores.q3.away);
-                    if (msg === 'Game Finalized') await handleWinnerLog('Final', newScores.final.home, newScores.final.away);
+                    if (msg === 'Q1 Finalized') await handleWinnerLog('q1', newScores.q1.home, newScores.q1.away);
+                    if (msg === 'Halftime Finalized') await handleWinnerLog('half', newScores.half.home, newScores.half.away);
+                    if (msg === 'Q3 Finalized') await handleWinnerLog('q3', newScores.q3.home, newScores.q3.away);
+                    if (msg === 'Game Finalized') await handleWinnerLog('final', newScores.final.home, newScores.final.away);
                 }
 
             }
