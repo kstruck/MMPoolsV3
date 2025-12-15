@@ -1,5 +1,5 @@
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
 // Helper to calculate total pot for a pool

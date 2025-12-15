@@ -48,13 +48,14 @@ exports.onPoolLocked = (0, firestore_1.onDocumentUpdated)("pools/{poolId}", asyn
 // Callable: Manually recalculate global stats from ALL existing locked/finished pools
 exports.recalculateGlobalStats = (0, https_1.onCall)({
     timeoutSeconds: 300,
-    memory: "512MiB"
+    memory: "512MiB",
+    cors: true // Explicitly enable CORS
 }, async (request) => {
-    // Only allow super admin
-    if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
-        throw new https_1.HttpsError('permission-denied', 'Only super admin can run this');
-    }
     try {
+        // Only allow super admin
+        if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
+            return { success: false, message: 'Permission Denied: Only super admin can run this' };
+        }
         const db = admin.firestore();
         // Fetch ALL pools that are locked (includes active and finished)
         const poolsSnap = await db.collection("pools")
@@ -66,6 +67,8 @@ exports.recalculateGlobalStats = (0, https_1.onCall)({
         for (const doc of poolsSnap.docs) {
             try {
                 const pool = doc.data();
+                if (!pool)
+                    continue; // Safety check
                 const pot = calculatePoolPot(pool);
                 if (!isNaN(pot)) {
                     totalAllTimePrizes += pot;
@@ -94,7 +97,12 @@ exports.recalculateGlobalStats = (0, https_1.onCall)({
     }
     catch (e) {
         console.error("Recalculate Error:", e);
-        throw new https_1.HttpsError('internal', `Recalc Failed: ${e.message}`);
+        // Return structured error instead of throwing to avoid CORS masking the message
+        return {
+            success: false,
+            message: `Recalc Failed: ${e.message}`,
+            totalPrizes: 0
+        };
     }
 });
 //# sourceMappingURL=statsTrigger.js.map
