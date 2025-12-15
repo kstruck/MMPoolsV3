@@ -466,7 +466,7 @@ const App: React.FC = () => {
           <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
             <div className="text-center">
               <p className="mb-4 text-slate-400">Please sign in to access the dashboard.</p>
-              <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In</button>
+              <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In to Manage Your Pool</button>
             </div>
           </div>
           <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
@@ -712,7 +712,7 @@ const App: React.FC = () => {
           <div className="flex gap-2">
             {!user && (
               <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="hidden md:block bg-indigo-900/50 hover:bg-indigo-800 text-indigo-200 border border-indigo-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors">
-                Sign In
+                Sign In to Manage Your Pool
               </button>
             )}
             <button onClick={() => openShare(currentPool.id)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Share</button>

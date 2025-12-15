@@ -40,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onOpenAuth, onLogout }) =>
                     </div>
                 ) : (
                     <div className="flex gap-2">
-                        <button onClick={onOpenAuth} className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 transition-colors">Sign In</button>
+                        <button onClick={onOpenAuth} className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 transition-colors">Sign In to Manage Your Pool</button>
                         <button onClick={onOpenAuth} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">Register</button>
                     </div>
                 )}

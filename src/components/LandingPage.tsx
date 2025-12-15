@@ -67,7 +67,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
                   onClick={onLogin}
                   className="text-sm font-bold text-white/80 hover:text-white transition-colors"
                 >
-                  Sign In
+                  Sign In to Manage Your Pool
                 </button>
                 <button
                   onClick={onSignup}

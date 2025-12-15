@@ -156,9 +156,8 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     // Final is set when game is over OR if we are in OT and treating it as live final
     if (statusState === 'post' || completed) {
       newScores.final = { home: finalHome, away: finalAway };
-    } else if (period >= 4) {
-      // Show live final in Q4/OT
-      newScores.final = { home: finalHome, away: finalAway };
+    } else {
+      newScores.final = null;
     }
 
     return { scores: newScores, status: matchedGame.shortName || 'Game' };
