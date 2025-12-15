@@ -424,9 +424,12 @@ const App: React.FC = () => {
   useEffect(() => {
     // Subscribe to global stats
     const unsubscribe = dbService.onGlobalStatsUpdate((stats: any) => {
+      // console.log("Stats update:", stats);
       if (stats?.totalPrizes) {
         setTotalPrizes(stats.totalPrizes);
       }
+    }, (error: any) => {
+      console.error("Failed to load global stats:", error);
     });
     return () => unsubscribe();
   }, []);

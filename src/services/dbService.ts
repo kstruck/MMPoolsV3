@@ -16,9 +16,12 @@ import type { GameState, User } from "../types";
 
 export const dbService = {
     // --- POOLS ---
-    onGlobalStatsUpdate: (callback: (stats: any | null) => void) => {
+    onGlobalStatsUpdate: (callback: (stats: any | null) => void, onError?: (error: any) => void) => {
         return onSnapshot(doc(db, 'stats', 'global'), (doc) => {
             callback(doc.exists() ? doc.data() : null);
+        }, (err) => {
+            console.error("Global Stats Subscription Error:", err);
+            if (onError) onError(err);
         });
     },
 

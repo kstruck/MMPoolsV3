@@ -51,61 +51,51 @@ exports.recalculateGlobalStats = (0, https_1.onCall)({
     memory: "512MiB",
     cors: true // Explicitly enable CORS
 }, async (request) => {
-    // DEBUG: Return immediate success to test connectivity/CORS
-    return {
-        success: true,
-        message: "DEBUG: Connectivity check passed.",
-        totalPrizes: 9999
-    };
-    /*
     try {
         // Only allow super admin
         if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
-             return { success: false, message: 'Permission Denied: Only super admin can run this' };
+            return { success: false, message: 'Permission Denied: Only super admin can run this' };
         }
-
         const db = admin.firestore();
-
         // Fetch ALL pools that are locked (includes active and finished)
         const poolsSnap = await db.collection("pools")
             .where("isLocked", "==", true)
             .get();
-
         let totalAllTimePrizes = 0;
         let count = 0;
         let errors = 0;
-
         for (const doc of poolsSnap.docs) {
             try {
                 const pool = doc.data();
-                if (!pool) continue; // Safety check
-
+                if (!pool)
+                    continue; // Safety check
                 const pot = calculatePoolPot(pool);
                 if (!isNaN(pot)) {
                     totalAllTimePrizes += pot;
                     count++;
-                } else {
+                }
+                else {
                     console.warn(`Pool ${doc.id} returned NaN pot`);
                 }
-            } catch (err) {
+            }
+            catch (err) {
                 console.error(`Error calculating pot for pool ${doc.id}:`, err);
                 errors++;
             }
         }
-
         // Overwrite the global stat with the recalculated total
         await db.doc("stats/global").set({
             totalPrizes: totalAllTimePrizes,
             lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
             recalculatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
-
         return {
             success: true,
             message: `Recalculated from ${count} pools. Skipped ${errors} errors.`,
             totalPrizes: totalAllTimePrizes
         };
-    } catch (e: any) {
+    }
+    catch (e) {
         console.error("Recalculate Error:", e);
         // Return structured error instead of throwing to avoid CORS masking the message
         return {
@@ -114,6 +104,5 @@ exports.recalculateGlobalStats = (0, https_1.onCall)({
             totalPrizes: 0
         };
     }
-    */
 });
 //# sourceMappingURL=statsTrigger.js.map
