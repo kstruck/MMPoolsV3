@@ -14,7 +14,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onOpenAuth, onLogout }) =>
     <header className="bg-white/80 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 backdrop-blur-md sticky top-0 z-50 shadow-sm dark:shadow-lg transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.hash = '#'}>
-                <Logo height="h-16" />
+                <Logo height="h-20" />
             </div>
             <div className="flex items-center gap-4 flex-wrap justify-center">
                 <ThemeToggle />
