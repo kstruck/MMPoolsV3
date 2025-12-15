@@ -52,14 +52,15 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
 // Callable: Manually recalculate global stats from ALL existing locked/finished pools
 export const recalculateGlobalStats = onCall({
     timeoutSeconds: 300,
-    memory: "512MiB"
+    memory: "512MiB",
+    cors: true // Explicitly enable CORS
 }, async (request) => {
-    // Only allow super admin
-    if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
-        throw new HttpsError('permission-denied', 'Only super admin can run this');
-    }
-
     try {
+        // Only allow super admin
+        if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
+            return { success: false, message: 'Permission Denied: Only super admin can run this' };
+        }
+
         const db = admin.firestore();
 
         // Fetch ALL pools that are locked (includes active and finished)
