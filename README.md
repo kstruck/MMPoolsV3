@@ -40,6 +40,14 @@ A military-grade audit logging system to ensure absolute fairness and transparen
 *   **Tamper-Resistant:** Firestore Security Rules (`read: true, write: false`) prevent ANY client (even Pool Managers) from altering the log. Only trusted Cloud Functions can write entries.
 *   **Public Verification:** A **"Fully Auditable"** badge on the pool view allows any player to inspect the complete, timestamped timeline of events, proving that numbers were generated fairly and payouts are accurate.
 
+### 💰 Global Stats & Prizes (NEW)
+*   **Total Prizes Tracker:** Persistent global counter on the landing page showing the total amount of prize money awarded across all pools.
+*   **Automated Tracking:** Secure Cloud Function (`onPoolCompleted`) automatically updates the global ledger whenever a pool is finalized, ensuring the total never decreases even if old pools are deleted.
+
+### 🎨 Design & Experience
+*   **Brand Refreshed:** Updated visual identity with a larger, cleaner logo and "collage-style" hero imagery.
+*   **Feature Showcase:** New interactive landing page section highlighting key features (Live Grid, Scoreboard, Scenarios) with a staggered, modern layout.
+
 ### 🤖 AI Commissioner (Powered by Gemini)
 A neutral, AI-driven referee that brings clarity and trust to the game.
 *   **"Why This Square Won":** Automatically generates clear, step-by-step explanations for every quarterly winner. It cites specific axis digits, the final score, and the grid intersection logic.
