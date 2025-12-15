@@ -74,6 +74,8 @@ export const recalculateGlobalStats = onCall({
         for (const doc of poolsSnap.docs) {
             try {
                 const pool = doc.data();
+                if (!pool) continue; // Safety check
+
                 const pot = calculatePoolPot(pool);
                 if (!isNaN(pot)) {
                     totalAllTimePrizes += pot;
@@ -101,6 +103,11 @@ export const recalculateGlobalStats = onCall({
         };
     } catch (e: any) {
         console.error("Recalculate Error:", e);
-        throw new HttpsError('internal', `Recalc Failed: ${e.message}`);
+        // Return structured error instead of throwing to avoid CORS masking the message
+        return {
+            success: false,
+            message: `Recalc Failed: ${e.message}`,
+            totalPrizes: 0
+        };
     }
 });
