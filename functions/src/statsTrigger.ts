@@ -1,60 +1,89 @@
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
-export const onPoolCompleted = onDocumentUpdated("pools/{poolId}", async (event) => {
+// Helper to calculate total pot for a pool
+const calculatePoolPot = (pool: any): number => {
+    let squaresSold = 0;
+    if (pool.squares && Array.isArray(pool.squares)) {
+        squaresSold = pool.squares.filter((s: any) => s.owner).length;
+    }
+
+    // Pot is squares * cost
+    const totalPot = squaresSold * (pool.costPerSquare || 0);
+
+    // Calculate total payout percentage (usually 1st Q + 2nd Q + 3rd Q + Final)
+    // If charity is involved, payouts usually sum to < 100%. 
+    // The prize amount is Total Pot * Total Payout %.
+    let totalPayoutPct = 0;
+    if (pool.payouts) {
+        totalPayoutPct = (pool.payouts.q1 || 0) + (pool.payouts.half || 0) + (pool.payouts.q3 || 0) + (pool.payouts.final || 0);
+    }
+
+    return totalPot * (totalPayoutPct / 100);
+};
+
+// Trigger: When a pool is LOCKED, add its pot to the global "Total Prizes"
+export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) => {
     if (!event.data) return;
 
     const before = event.data.before.data();
     const after = event.data.after.data();
 
-    const wasPost = before?.scores?.gameStatus === 'post';
-    const isPost = after?.scores?.gameStatus === 'post';
-
-    // Only run if transitioning to 'post' (Final)
-    // This simple logic satisfies the "never decrease" requirement by only adding when it *becomes* final.
-    // If it moves back to 'in' (unlikely) and then 'post' again, it would double count.
-    // To prevent double counting on re-finalization, we could check an idempotency flag on the pool doc, 
-    // but for now we assume 'post' is a terminal state reached once.
-    if (!wasPost && isPost) {
+    // Trigger only when transitioning from unlocked -> locked
+    if (!before.isLocked && after.isLocked) {
         const db = admin.firestore();
-        const pool = after;
-
-        // Calculate total prizes
-        // Total Pot = squaresSold * cost
-        // Prize Pool = Total Pot - (Total Pot * charity%) - (Total Pot * platformFee?)
-        // Actually, simpler: Total Pot * (sum of payouts / 100)
-
-        let squaresSold = 0;
-        if (pool.squares && Array.isArray(pool.squares)) {
-            squaresSold = pool.squares.filter((s: any) => s.owner).length;
-        }
-
-        const totalPot = squaresSold * (pool.costPerSquare || 0);
-
-        // Calculate total payout percentage
-        let totalPayoutPct = 0;
-        if (pool.payouts) {
-            // q1 + q2 + q3 + final
-            totalPayoutPct = (pool.payouts.q1 || 0) + (pool.payouts.half || 0) + (pool.payouts.q3 || 0) + (pool.payouts.final || 0);
-        }
-
-        const statsRef = db.doc("stats/global");
-
-        // Use a transaction or simple increment
-        // Provide a default payout of 100% if undefined, but usually it's defined.
-        // If there is a charity cut, usually payouts sum to < 100.
-        // Example: 50% charity -> payouts sum to 50%.
-        // So `totalPot * (totalPayoutPct / 100)` is correct.
-
-        const prizeAmount = totalPot * (totalPayoutPct / 100);
+        const prizeAmount = calculatePoolPot(after);
 
         if (prizeAmount > 0) {
-            await statsRef.set({
+            await db.doc("stats/global").set({
                 totalPrizes: admin.firestore.FieldValue.increment(prizeAmount),
                 lastUpdated: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
 
-            console.log(`Added $${prizeAmount} to global prizes for pool ${event.params.poolId}`);
+            console.log(`[Stats] Added $${prizeAmount} to global prizes for newly locked pool ${event.params.poolId}`);
         }
     }
+});
+
+// Callable: Manually recalculate global stats from ALL existing locked/finished pools
+export const recalculateGlobalStats = onCall({
+    timeoutSeconds: 300,
+    memory: "512MiB"
+}, async (request) => {
+    // Only allow super admin
+    if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
+        throw new HttpsError('permission-denied', 'Only super admin can run this');
+    }
+
+    const db = admin.firestore();
+
+    // Fetch ALL pools that are locked (includes active and finished)
+    // We do NOT filter by gameStatus because we want "All Time" prizes.
+    const poolsSnap = await db.collection("pools")
+        .where("isLocked", "==", true)
+        .get();
+
+    let totalAllTimePrizes = 0;
+    let count = 0;
+
+    for (const doc of poolsSnap.docs) {
+        const pool = doc.data();
+        const pot = calculatePoolPot(pool);
+        totalAllTimePrizes += pot;
+        count++;
+    }
+
+    // Overwrite the global stat with the recalculated total
+    await db.doc("stats/global").set({
+        totalPrizes: totalAllTimePrizes,
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+        recalculatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    return {
+        success: true,
+        message: `Recalculated from ${count} pools.`,
+        totalPrizes: totalAllTimePrizes
+    };
 });

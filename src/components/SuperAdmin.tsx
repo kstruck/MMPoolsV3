@@ -416,6 +416,22 @@ export const SuperAdmin: React.FC = () => {
                             >
                                 Force Sync
                             </button>
+                            {/* Admin Actions */}
+                            <button
+                                onClick={async () => {
+                                    if (confirm("Recalculate GLOBAL PRIZE STATS? This will scan all locked pools and reset the total prize counter.")) {
+                                        try {
+                                            const res = await dbService.recalculateGlobalStats();
+                                            alert(res.message + " Total: $" + res.totalPrizes);
+                                        } catch (e) {
+                                            alert("Error: " + e);
+                                        }
+                                    }
+                                }}
+                                className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-bold"
+                            >
+                                <Activity size={12} /> Recalculate Stats
+                            </button>
                             <button
                                 onClick={fetchUsers}
                                 className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"

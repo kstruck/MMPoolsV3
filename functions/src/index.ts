@@ -11,5 +11,4 @@ export { syncGameStatus, fixPoolScores } from "./scoreUpdates";
 export { onWinnerUpdate, onAIRequest } from "./aiCommissioner";
 export { onUserCreated, syncAllUsers } from "./userSync";
 export { runReminders, onWinnerComputed } from "./reminders";
-export { onPoolCompleted } from "./statsTrigger";
-
+export { onPoolLocked, recalculateGlobalStats } from "./statsTrigger";

@@ -73,6 +73,17 @@ export const dbService = {
         }
     },
 
+    recalculateGlobalStats: async (): Promise<any> => {
+        try {
+            const recalcFn = httpsCallable(functions, 'recalculateGlobalStats');
+            const result = await recalcFn();
+            return result.data;
+        } catch (error) {
+            console.error("Error calling recalculateGlobalStats:", error);
+            throw error;
+        }
+    },
+
     lockPool: async (poolId: string): Promise<void> => {
         try {
             const lockPoolFn = httpsCallable(functions, 'lockPool');
