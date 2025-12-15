@@ -55,18 +55,10 @@ export const recalculateGlobalStats = onCall({
     memory: "512MiB",
     cors: true // Explicitly enable CORS
 }, async (request) => {
-    // DEBUG: Return immediate success to test connectivity/CORS
-    return {
-        success: true,
-        message: "DEBUG: Connectivity check passed.",
-        totalPrizes: 9999
-    };
-
-    /*
     try {
         // Only allow super admin
         if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
-             return { success: false, message: 'Permission Denied: Only super admin can run this' };
+            return { success: false, message: 'Permission Denied: Only super admin can run this' };
         }
 
         const db = admin.firestore();
@@ -119,5 +111,4 @@ export const recalculateGlobalStats = onCall({
             totalPrizes: 0
         };
     }
-    */
 });
