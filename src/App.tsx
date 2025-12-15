@@ -161,7 +161,7 @@ const App: React.FC = () => {
 
     // Fetch if gameId exists OR (homeTeam AND awayTeam exist for fuzzy match)
     const canFetch = currentPool?.gameId || (currentPool?.homeTeam && currentPool?.awayTeam);
-    if (!canFetch || currentPool.manualScoreOverride || currentPool.scores.final) {
+    if (!canFetch || currentPool.manualScoreOverride || currentPool.scores.gameStatus === 'post') {
       setSyncStatus('idle');
       return;
     }
