@@ -15,12 +15,17 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     useEffect(() => {
         const unsubscribe = dbService.subscribeToPools((pools) => {
-            const participating = pools.filter(p => p.squares.some(s => s.reservedByUid === user.id || s.owner === user.name));
+            // Filter where user has reserved squares OR is the owner (legacy check)
+            // Ideally we use the 'participations' subcollection, but for MVP this client-side filter is fine.
+            const participating = pools.filter(p =>
+                p.squares.some(s => s.reservedByUid === user.id) ||
+                p.ownerId === user.id // Also show pools they own? Probably yes.
+            );
             setMyPools(participating);
             setIsLoading(false);
         });
         return () => unsubscribe();
-    }, [user.id, user.name]);
+    }, [user.id]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20">

@@ -126,6 +126,17 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                         </div>
                     </div>
 
+                    {/* Dashboard Link Banner */}
+                    <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                        <div>
+                            <h3 className="text-sm font-bold text-white">Participant Dashboard</h3>
+                            <p className="text-xs text-slate-400">View all pools you have joined.</p>
+                        </div>
+                        <button onClick={() => window.location.hash = '#participant'} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors">
+                            Open Dashboard
+                        </button>
+                    </div>
+
                     <form onSubmit={handleSubmit} className="p-6 space-y-6">
                         {message && (
                             <div className={`p-4 rounded-lg text-sm font-bold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>

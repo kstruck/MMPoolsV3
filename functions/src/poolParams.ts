@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
+import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
 
 
 export const lockPool = onCall(async (request) => {
@@ -29,14 +30,9 @@ export const lockPool = onCall(async (request) => {
 
     const poolData = poolSnap.data() as GameState;
 
-    // 2. Permission Check - Must be Owner
-    if (poolData.ownerId !== request.auth.uid) {
-        // Optional: Allow global admins here if you had a super-admin role
-        throw new HttpsError(
-            "permission-denied",
-            "Only the pool owner can lock the grid."
-        );
-    }
+
+    // 2. Permission Check - Owner or Super Admin
+    assertPoolOwnerOrSuperAdmin(poolData, request.auth.uid, request.auth.token.role);
 
     // 3. Generate Random Digits (Secure Server-Side RNG)
     const generateDigits = () => {

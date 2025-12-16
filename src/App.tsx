@@ -54,7 +54,7 @@ const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void; initialMode?: 
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
       <div className="w-full max-w-md relative">
         <button onClick={onClose} className="absolute -top-12 right-0 text-slate-400 hover:text-white transition-colors p-2"><X size={24} /></button>
-        <Auth onLogin={() => { onClose(); window.location.hash = '#admin'; }} defaultIsRegistering={initialMode === 'register'} />
+        <Auth onLogin={() => { onClose(); }} defaultIsRegistering={initialMode === 'register'} />
       </div>
     </div>
   );
@@ -190,8 +190,8 @@ const App: React.FC = () => {
   }, [currentPool]);
 
   // --- ACTIONS ---
-  const addNewPool = async (p: GameState) => {
-    await dbService.createPool(p);
+  const addNewPool = async (p: GameState): Promise<string> => {
+    return await dbService.createPool(p);
   };
 
   const updatePool = async (id: string, updates: Partial<GameState>) => {
@@ -223,8 +223,22 @@ const App: React.FC = () => {
         return;
       }
       const newPool = createNewPool(`Pool #${pools.length + 1}`, user.id, user.name, user.email);
-      await addNewPool(newPool); // Now creates in DB
-      window.location.hash = `#admin/${newPool.id}`;
+
+      const confirmMsg = user.role === 'PARTICIPANT'
+        ? "Creating a pool will upgrade your account to Pool Manager. Continue?"
+        : "Create a new pool?";
+
+      if (!confirm(confirmMsg)) return;
+
+      const poolId = await addNewPool(newPool); // Now creates in DB and returns ID
+      // Refresh User Profile to get new Role
+      const freshUser = await authService.getUserData(user.id);
+      if (freshUser) {
+        setUser(freshUser);
+        dbService.saveUser(freshUser);
+      }
+
+      window.location.hash = `#admin/${poolId}`;
     } catch (err: any) {
       console.error("Create failed", err);
       const isAuth = err.code === 'permission-denied';

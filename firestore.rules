@@ -23,8 +23,7 @@ service cloud.firestore {
       // Allow LIST only if you are the owner (Manager Dashboard)
       allow list: if request.auth != null && resource.data.ownerId == request.auth.uid;
 
-      // Create: Authenticated users
-      allow create: if request.auth != null;
+
       
       // Delete: Owner only
       allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
@@ -34,6 +33,9 @@ service cloud.firestore {
       // They must use Cloud Functions (reserveSquare, lockPool, etc.)
       allow update: if request.auth != null && request.auth.uid == resource.data.ownerId 
                     && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers', 'squares']));
+                    
+      // NO CREATE via Client (Must use createPool function)
+      allow create: if false;
 
       // PARTICIPANTS INDEX (Subcollection)
       // Read: Pool Owner OR The Participant themselves
@@ -68,7 +70,8 @@ service cloud.firestore {
     // USERS & PARTICIPATIONS:
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId
+                   && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])); // Deny role update
 
       // PARTICIPATIONS (Dashboard Index)
       match /participations/{poolId} {

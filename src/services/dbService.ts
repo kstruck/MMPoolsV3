@@ -25,16 +25,12 @@ export const dbService = {
         });
     },
 
-    createPool: async (pool: GameState) => {
+    createPool: async (pool: GameState): Promise<string> => {
         try {
-            const poolRef = doc(db, "pools", pool.id);
-            // Convert any non-serializable fields if necessary
-            const cleanPool = JSON.parse(JSON.stringify(pool));
-            await setDoc(poolRef, {
-                ...cleanPool,
-                createdAt: Timestamp.now(),
-                updatedAt: Timestamp.now()
-            });
+            const createPoolFn = httpsCallable(functions, 'createPool');
+            const result = await createPoolFn(pool);
+            const { poolId } = result.data as { success: boolean; poolId: string };
+            return poolId;
         } catch (error) {
             console.error("Error creating pool:", error);
             throw error;

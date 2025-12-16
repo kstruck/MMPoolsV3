@@ -13,3 +13,5 @@ export { onUserCreated, syncAllUsers } from "./userSync";
 export { runReminders, onWinnerComputed } from "./reminders";
 export { onPoolLocked, recalculateGlobalStats } from "./statsTrigger";
 export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
+export { createPool } from "./poolOps";
+export { backfillPools } from "./backfill";

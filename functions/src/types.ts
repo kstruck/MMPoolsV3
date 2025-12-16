@@ -141,6 +141,8 @@ export interface GameState {
         scoreChangePayout: boolean; // Pay fixed amount on every score change
     };
     ownerId?: string; // ID of the user who owns this pool
+    createdByUid?: string; // Required for RBAC
+    status?: 'DRAFT' | 'LOCKED' | 'LIVE' | 'FINAL';
     manualScoreOverride?: boolean;
     reminders?: ReminderSettings;
 }
@@ -171,6 +173,8 @@ export interface User {
     name: string;
     picture?: string | null; // Allow null for Firebase compatibility
     registrationMethod?: 'google' | 'email' | 'unknown';
+    role?: 'POOL_MANAGER' | 'PARTICIPANT' | 'SUPER_ADMIN';
+    provider?: 'password' | 'google';
 }
 
 // --- AUDIT LOG ---
