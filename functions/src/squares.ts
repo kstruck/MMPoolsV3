@@ -82,7 +82,7 @@ export const reserveSquare = onCall(async (request) => {
             if (s.id === squareId) {
                 return {
                     ...s,
-                    owner: userName, // Storing Name for display.
+                    owner: pickedAsName || userName, // Storing Name for display.
                     // Ideally we store ownerUid: userId too, but schema currently uses 'owner' string.
                     // We will stick to schema for now to avoid breaking UI.
                     playerDetails: {

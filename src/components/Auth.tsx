@@ -152,6 +152,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
                   placeholder="••••••••"
                 />
               </div>
+              {isRegistering && (
+                <p className="text-xs text-slate-500 mt-1 ml-1">Password must be at least 6 characters</p>
+              )}
             </div>
 
             <button

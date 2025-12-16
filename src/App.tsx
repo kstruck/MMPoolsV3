@@ -61,6 +61,7 @@ const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void; initialMode?: 
 };
 
 import { Header } from './components/Header';
+import { Footer } from './components/Footer';
 
 // --- MAIN APP ---
 
@@ -498,6 +499,7 @@ const App: React.FC = () => {
         <React.Suspense fallback={<div className="text-white p-10">Loading...</div>}>
           <SuperAdmin />
         </React.Suspense>
+        <Footer />
       </div>
     );
   }
@@ -628,6 +630,7 @@ const App: React.FC = () => {
           )}
         </main>
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+        <Footer />
       </div>
     );
   }
@@ -651,6 +654,7 @@ const App: React.FC = () => {
           checkSlugAvailable={(slug) => !pools.some(p => p.urlSlug === slug && p.id !== currentPool.id)}
         />
         <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
+        <Footer />
       </>
     );
   }
@@ -709,6 +713,7 @@ const App: React.FC = () => {
           />
         </main>
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+        <Footer />
       </div>
     );
   }
@@ -1157,6 +1162,7 @@ const App: React.FC = () => {
 
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
         {showAudit && <AuditLog poolId={currentPool.id} onClose={() => setShowAudit(false)} />}
+        <Footer />
       </div >
     );
   }

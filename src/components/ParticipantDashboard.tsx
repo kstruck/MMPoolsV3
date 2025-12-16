@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import type { User, GameState } from '../types';
 import { dbService } from '../services/dbService';
-import { LogOut, ExternalLink, Trophy, Grid as GridIcon, Loader, User as UserIcon } from 'lucide-react';
+import { ExternalLink, Trophy, Grid as GridIcon, Loader } from 'lucide-react';
 import { getTeamLogo } from '../constants';
+
+import { Header } from './Header';
+import { Footer } from './Footer';
 
 interface ParticipantDashboardProps {
     user: User;
@@ -18,8 +21,11 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             // Filter where user has reserved squares OR is the owner (legacy check)
             // Ideally we use the 'participations' subcollection, but for MVP this client-side filter is fine.
             const participating = pools.filter(p =>
-                p.squares.some(s => s.reservedByUid === user.id) ||
-                p.ownerId === user.id // Also show pools they own? Probably yes.
+                p.squares.some(s =>
+                    s.reservedByUid === user.id ||
+                    (user.email && typeof s.owner === 'string' && s.owner === user.email.split('@')[0])
+                ) ||
+                p.ownerId === user.id
             );
             setMyPools(participating);
             setIsLoading(false);
@@ -28,24 +34,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     }, [user.id]);
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20">
-            {/* HEADER */}
-            <header className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50 backdrop-blur-md bg-opacity-80">
-                <div className="max-w-6xl mx-auto flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                            <UserIcon className="text-white" size={24} />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-white leading-none">My Entries</h1>
-                            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Welcome, {user.name}</p>
-                        </div>
-                    </div>
-                    <button onClick={onLogout} className="text-slate-400 hover:text-white transition-colors flex items-center gap-2 text-sm font-bold">
-                        <LogOut size={16} /> Sign Out
-                    </button>
-                </div>
-            </header>
+        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
+            <Header user={user} onOpenAuth={() => { }} onLogout={onLogout} />
 
             <main className="max-w-6xl mx-auto p-6 md:p-8">
                 {isLoading ? (
@@ -75,7 +65,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {myPools.map(pool => {
-                                const mySquares = pool.squares.filter(s => s.reservedByUid === user.id || s.owner === user.name);
+                                const emailPrefix = user.email ? user.email.split('@')[0] : '';
+                                const mySquares = pool.squares.filter(s =>
+                                    s.reservedByUid === user.id ||
+                                    s.owner === user.name ||
+                                    (emailPrefix && s.owner === emailPrefix) // Handle legacy where owner might be email prefix
+                                );
                                 const homeLogo = pool.homeTeamLogo || getTeamLogo(pool.homeTeam);
                                 const awayLogo = pool.awayTeamLogo || getTeamLogo(pool.awayTeam);
 
@@ -125,6 +120,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     </div>
                 )}
             </main>
+            <Footer />
         </div>
     );
 };
