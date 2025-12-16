@@ -33,7 +33,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
           <a href="/" className="flex items-center group">
             <img
               src="/mmp_logo_500x150_trans3.png"
-              alt="March Melee Pools Logo"
+              alt="March Melee Pools logo"
               className="h-24 md:h-36 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
             />
           </a>
@@ -150,10 +150,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
           {/* Pool Type Badges */}
           <div className="mt-16 flex flex-wrap justify-center gap-6 md:gap-10 animate-in fade-in slide-in-from-bottom-16 duration-1000 delay-300">
             <div className="flex flex-col items-center gap-2 opacity-90 hover:opacity-100 transition-opacity">
-              <img src="/squares_badge_dark.png" alt="Squares Pool" className="h-16 md:h-20" />
+              <img src="/squares_badge_dark.png" alt="Super Bowl Squares Pool Badge" className="h-16 md:h-20" />
             </div>
             <div className="flex flex-col items-center gap-2 opacity-90 hover:opacity-100 transition-opacity">
-              <img src="/bracket_badge_dark.png" alt="Bracket Pool" className="h-16 md:h-20" />
+              <img src="/bracket_badge_dark.png" alt="March Madness Bracket Pool Badge" className="h-16 md:h-20" />
             </div>
             <div className="flex flex-col items-center gap-2 opacity-90 hover:opacity-100 transition-opacity">
               <img src="/pickem_badge_dark.png" alt="Pick'em Pool" className="h-16 md:h-20" />
@@ -170,7 +170,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="rounded-xl overflow-hidden relative group" style={{ backgroundColor: BRAND.navy }}>
                 <img
                   src="/hero-ui.png"
-                  alt="Interactive 10x10 Super Bowl Squares Grid with Real-Time Scoring"
+                  alt="Interactive 10x10 Super Bowl squares grid with live scoring and player names on March Melee Pools"
                   loading="lazy"
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
                 />
@@ -196,7 +196,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="absolute -inset-4 bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
               <img
                 src="/feature-live-grid.png"
-                alt="Live 10x10 Super Bowl Squares Grid with real-time updates"
+                alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
                 className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
@@ -219,7 +219,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="absolute -inset-4 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
               <img
                 src="/feature-scoreboard.png"
-                alt="Real-time Scoreboard showing Super Bowl scores and pool stats"
+                alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
                 className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
@@ -242,7 +242,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="absolute -inset-4 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
               <img
                 src="/feature-scenarios.png"
-                alt="Winning Scenarios and Payout Calculator for Sports Pools"
+                alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
                 className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
@@ -288,7 +288,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="absolute -inset-4 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
               <img
                 src="/feature-setup-wizard.png"
-                alt="Easy Pool Setup Wizard for commissioners"
+                alt="AI commissioner chat for customizing Super Bowl pool rules"
                 className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
