@@ -44,21 +44,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             <ThemeToggle />
             <button
               onClick={onBrowse}
-              className="hidden md:flex items-center gap-2 text-sm font-bold text-white/70 hover:text-white transition-colors"
+              className="hidden md:flex items-center text-sm font-bold text-white/70 hover:text-white transition-colors"
             >
-              <LayoutGrid size={18} /> Public Pools
+              Public Pools
             </button>
             <button
               onClick={() => window.location.hash = '#features'}
-              className="hidden md:flex items-center gap-2 text-sm font-bold text-white/70 hover:text-white transition-colors ml-4"
+              className="hidden md:flex items-center text-sm font-bold text-white/70 hover:text-white transition-colors ml-4"
             >
-              <Zap size={18} /> Features
+              Features
             </button>
             <div className="h-6 w-px bg-white/20 hidden md:block"></div>
 
             {isLoggedIn && user ? (
               <div className="flex items-center gap-4">
-                <span className="text-sm font-bold text-white/80 hidden sm:inline">Hi, {user.name}</span>
+
 
                 {/* SUPER ADMIN */}
                 {user.role === 'SUPER_ADMIN' && (
@@ -96,7 +96,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 </button>
 
                 <button onClick={() => window.location.hash = '#profile'} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold">
-                  <UserIcon size={12} /> Profile
+                  <UserIcon size={12} /> {user.name.split(' ')[0]}
                 </button>
 
                 {onLogout && (
