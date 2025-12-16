@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Shield, Brain, Zap, Lock, Mail, Layout, Globe, Users, Trophy, MessageCircle } from 'lucide-react';
+import { Shield, Brain, Zap, Lock, Mail, Layout, Users, Trophy, MessageCircle, Smartphone } from 'lucide-react';
 import { Header } from './Header';
 import type { User } from '../types';
 import { Footer } from './Footer';
@@ -120,32 +120,185 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                     </div>
                 </section>
 
-                {/* Modern Features Grid */}
-                <section className="py-20 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
-                    <div className="max-w-6xl mx-auto">
-                        <div className="text-center mb-16">
-                            <h2 className="text-4xl font-bold text-white mb-4">Everything You Need</h2>
-                            <p className="text-slate-400">Packed with features for both casual fans and power users.</p>
+                {/* Feature Deep Dive: Live Grid */}
+                <section className="py-20 px-4 bg-slate-900 border-b border-slate-800">
+                    <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12">
+                        <div className="md:w-1/2 space-y-6">
+                            <div className="inline-flex items-center gap-2 text-rose-400 font-bold uppercase tracking-wider text-sm">
+                                <Layout size={20} /> The Main Event
+                            </div>
+                            <h2 className="text-4xl font-bold text-white">Live 10x10 Grid. <br />No Refreshing Needed.</h2>
+                            <p className="text-slate-400 text-lg leading-relaxed">
+                                Experience the action in real-time. As the game clock ticks and points are scored, your grid updates instantly.
+                                Watch as winning squares light up and payouts are calculated automatically.
+                            </p>
+                            <ul className="space-y-3">
+                                {[
+                                    "Automatic Quarter & Final Winners",
+                                    "Player Name & Avatar Integration",
+                                    "Mobile-Optimized Touch Interface",
+                                    "Printable PDF Export Option"
+                                ].map((item, i) => (
+                                    <li key={i} className="flex items-center gap-3 text-slate-300">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            {[
-                                { title: 'Live Scoreboard', icon: <TimerIcon />, desc: 'Real-time syncing with ESPN. View quarters, clock, and possession instantly.', color: 'text-rose-400' },
-                                { title: 'Smart Notifications', icon: <Mail size={24} />, desc: 'Automated email confirmations for picks and pool invites.', color: 'text-sky-400' },
-                                { title: 'Charity Integration', icon: <Layout size={24} />, desc: 'Easily dedicate a % of the pot to a charity of your choice.', color: 'text-pink-400' },
-                                { title: 'Responsive Design', icon: <Globe size={24} />, desc: 'Look great on every device—desktop, tablet, or mobile.', color: 'text-purple-400' },
-                            ].map((feat, i) => (
-                                <div key={i} className="bg-black border border-slate-800 p-6 rounded-xl hover:border-indigo-500/50 transition-colors group">
-                                    <div className={`mb-4 ${feat.color} group-hover:scale-110 transition-transform duration-300`}>{feat.icon}</div>
-                                    <h3 className="text-lg font-bold text-white mb-2">{feat.title}</h3>
-                                    <p className="text-sm text-slate-500">{feat.desc}</p>
-                                </div>
-                            ))}
+                        <div className="md:w-1/2 relative group">
+                            <div className="absolute -inset-4 bg-rose-500/20 rounded-2xl blur-xl group-hover:bg-rose-500/30 transition-colors duration-500"></div>
+                            <img
+                                src="/feature-live-grid.png"
+                                alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
+                                className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.01] transition-transform duration-500"
+                            />
                         </div>
                     </div>
                 </section>
 
-                {/* CTA */}
+                {/* Feature Deep Dive: Scoreboard */}
+                <section className="py-20 px-4 bg-slate-950 border-b border-slate-800">
+                    <div className="max-w-6xl mx-auto flex flex-col md:flex-row-reverse items-center gap-12">
+                        <div className="md:w-1/2 space-y-6">
+                            <div className="inline-flex items-center gap-2 text-sky-400 font-bold uppercase tracking-wider text-sm">
+                                <Zap size={20} /> Mission Control
+                            </div>
+                            <h2 className="text-4xl font-bold text-white">Live Scoreboard & <br />Pool Stats.</h2>
+                            <p className="text-slate-400 text-lg leading-relaxed">
+                                Don't make your players switch apps. We integrate live game data directly into your pool dashboard.
+                                Track possession, quarter scores, and game status without missing a beat.
+                            </p>
+                            <ul className="space-y-3">
+                                {[
+                                    "Direct ESPN Data Feed (Zero Latency)",
+                                    "Quarter-by-Quarter Score Tracking",
+                                    "Live 'Current Winner' Indicator",
+                                    "Integrated Charity Fundraising Tracker"
+                                ].map((item, i) => (
+                                    <li key={i} className="flex items-center gap-3 text-slate-300">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-sky-500"></div>
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="md:w-1/2 relative group">
+                            <div className="absolute -inset-4 bg-sky-500/20 rounded-2xl blur-xl group-hover:bg-sky-500/30 transition-colors duration-500"></div>
+                            <img
+                                src="/feature-scoreboard.png"
+                                alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
+                                className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.01] transition-transform duration-500"
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                {/* Feature Deep Dive: Scenarios */}
+                <section className="py-20 px-4 bg-slate-900 border-b border-slate-800">
+                    <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12">
+                        <div className="md:w-1/2 space-y-6">
+                            <div className="inline-flex items-center gap-2 text-emerald-400 font-bold uppercase tracking-wider text-sm">
+                                <Brain size={20} /> Smart Math
+                            </div>
+                            <h2 className="text-4xl font-bold text-white">Winning Scenarios <br />Calculator.</h2>
+                            <p className="text-slate-400 text-lg leading-relaxed">
+                                "Who wins if the Chiefs score a TD?" Stop guessing. Our "If Score Next" tool calculates every possible outcome instantly.
+                                It's the ultimate second-screen experience for your pool members.
+                            </p>
+                            <ul className="space-y-3">
+                                {[
+                                    "Interactive 'What If' Adjusters",
+                                    "Instant 'In The Money' Probability",
+                                    "Visualize Payouts for Field Goals vs TDs",
+                                    "Eliminate Confusion on Close Games"
+                                ].map((item, i) => (
+                                    <li key={i} className="flex items-center gap-3 text-slate-300">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="md:w-1/2 relative group">
+                            <div className="absolute -inset-4 bg-emerald-500/20 rounded-2xl blur-xl group-hover:bg-emerald-500/30 transition-colors duration-500"></div>
+                            <img
+                                src="/feature-scenarios.png"
+                                alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
+                                className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.01] transition-transform duration-500"
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                {/* Feature Deep Dive: Setup Wizard */}
+                <section className="py-20 px-4 bg-slate-950 border-b border-slate-800">
+                    <div className="max-w-6xl mx-auto flex flex-col md:flex-row-reverse items-center gap-12">
+                        <div className="md:w-1/2 space-y-6">
+                            <div className="inline-flex items-center gap-2 text-amber-400 font-bold uppercase tracking-wider text-sm">
+                                <Shield size={20} /> Commissioner Tools
+                            </div>
+                            <h2 className="text-4xl font-bold text-white">Setup in Seconds. <br />Manage with Ease.</h2>
+                            <p className="text-slate-400 text-lg leading-relaxed">
+                                You don't need a PhD to run a pool. Our guided Setup Wizard handles all the technical details—from
+                                assigning random numbers to defining custom payout rules.
+                            </p>
+                            <ul className="space-y-3">
+                                {[
+                                    "Customizable Square Costs & Payout Allocation",
+                                    "Password Protection for Private Pools",
+                                    "Automated Email Invites & Reminder System",
+                                    "CSV Export of All Participant Data"
+                                ].map((item, i) => (
+                                    <li key={i} className="flex items-center gap-3 text-slate-300">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="md:w-1/2 relative group">
+                            <div className="absolute -inset-4 bg-amber-500/20 rounded-2xl blur-xl group-hover:bg-amber-500/30 transition-colors duration-500"></div>
+                            <img
+                                src="/feature-setup-wizard.png"
+                                alt="Easy Pool Setup Wizard for commissioners with customization options"
+                                className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.01] transition-transform duration-500"
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                {/* More Features Grid */}
+                <section className="py-20 px-4 bg-slate-900">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="text-center mb-12">
+                            <h2 className="text-3xl font-bold text-white mb-4">And Much More...</h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 flex flex-col items-center text-center">
+                                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400 mb-4">
+                                    <Smartphone size={24} />
+                                </div>
+                                <h3 className="text-lg font-bold text-white mb-2">Mobile Optimized</h3>
+                                <p className="text-slate-400 text-sm">Built for phones first. Checking your squares is as easy as checking your text messages.</p>
+                            </div>
+                            <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 flex flex-col items-center text-center">
+                                <div className="w-12 h-12 rounded-full bg-pink-500/10 flex items-center justify-center text-pink-400 mb-4">
+                                    <Mail size={24} />
+                                </div>
+                                <h3 className="text-lg font-bold text-white mb-2">Smart Notifications</h3>
+                                <p className="text-slate-400 text-sm">Automated email alerts for pool invites, pick confirmations, and winner announcements.</p>
+                            </div>
+                            <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 flex flex-col items-center text-center">
+                                <div className="w-12 h-12 rounded-full bg-teal-500/10 flex items-center justify-center text-teal-400 mb-4">
+                                    <Lock size={24} />
+                                </div>
+                                <h3 className="text-lg font-bold text-white mb-2">Private & Secure</h3>
+                                <p className="text-slate-400 text-sm">Password protect your pool and rely on enterprise-grade security for your data.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
                 <section className="py-20 text-center px-4">
                     <div className="max-w-3xl mx-auto bg-indigo-600 rounded-3xl p-12 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
@@ -165,7 +318,4 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
     );
 };
 
-// Helper Icon
-const TimerIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-);
+
