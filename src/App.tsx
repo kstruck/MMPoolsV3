@@ -248,11 +248,10 @@ const App: React.FC = () => {
       }
       const newPool = createNewPool(`Pool #${pools.length + 1}`, user.id, user.name, user.email);
 
-      const confirmMsg = user.role === 'PARTICIPANT'
-        ? "Creating a pool will upgrade your account to Pool Manager. Continue?"
-        : "Create a new pool?";
-
-      if (!confirm(confirmMsg)) return;
+      // Only warn if the user is a Participant AND not already a Manager (first-time upgrade)
+      if (!isManager && user.role === 'PARTICIPANT') {
+        if (!confirm("Creating a pool will upgrade your account to Pool Manager. Continue?")) return;
+      }
 
       const poolId = await addNewPool(newPool); // Now creates in DB and returns ID
       // Refresh User Profile to get new Role
