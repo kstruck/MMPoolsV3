@@ -96,9 +96,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             <span className="text-xs font-bold tracking-wide uppercase" style={{ color: BRAND.orange }}>Free for a Limited Time • Create Your Pool</span>
           </div>
 
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200 mb-8">
+            <button
+              onClick={onSignup}
+              className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-2 hover:brightness-110"
+              style={{ backgroundColor: BRAND.orange, boxShadow: `0 10px 40px ${BRAND.orange}40` }}
+            >
+              <Trophy size={20} /> Create a Free Pool Now
+            </button>
+            <button
+              onClick={onBrowse}
+              className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold border shadow-sm transition-all flex items-center justify-center gap-2 hover:bg-white/5"
+              style={{ borderColor: '#334155', backgroundColor: '#1E293B' }}
+            >
+              <LayoutGrid size={20} /> Browse Public Pools
+            </button>
+          </div>
+
           <h1 className="text-4xl md:text-7xl font-black text-white tracking-tight mb-6 md:mb-8 leading-tight animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ fontFamily: "'Montserrat', sans-serif" }}>
-            Create and Join <br />
-            <span style={{ color: BRAND.orange }}>Super Bowl Squares & Sports Pools Online</span>
+            Hosting your own Super Bowl Squares <br />
+            <span style={{ color: BRAND.orange }}>has never been easier</span>
           </h1>
 
           {/* Stat Cards */}
@@ -129,23 +146,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
           <p className="text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-700 delay-100" style={{ color: BRAND.lightGray }}>
             The professional platform for managing sports pools. Automated scoring, real-time payouts, and extensive customization for the ultimate grid experience.
           </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200">
-            <button
-              onClick={onSignup}
-              className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-2 hover:brightness-110"
-              style={{ backgroundColor: BRAND.orange, boxShadow: `0 10px 40px ${BRAND.orange}40` }}
-            >
-              <Trophy size={20} /> Create a Free Pool Now
-            </button>
-            <button
-              onClick={onBrowse}
-              className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold border shadow-sm transition-all flex items-center justify-center gap-2 hover:bg-white/5"
-              style={{ borderColor: '#334155', backgroundColor: '#1E293B' }}
-            >
-              <LayoutGrid size={20} /> Browse Public Pools
-            </button>
-          </div>
 
           {/* Pool Type Badges */}
           <div className="mt-16 flex flex-wrap justify-center gap-6 md:gap-10 animate-in fade-in slide-in-from-bottom-16 duration-1000 delay-300">
