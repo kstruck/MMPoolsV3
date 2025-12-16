@@ -74,7 +74,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
                   className="text-white px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-lg hover:brightness-110"
                   style={{ backgroundColor: BRAND.orange }}
                 >
-                  Get Started
+                  Register
                 </button>
               </div>
             )}

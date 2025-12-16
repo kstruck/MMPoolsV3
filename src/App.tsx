@@ -109,9 +109,12 @@ const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
   useEffect(() => {
     return authService.onAuthStateChanged((u) => {
       setUser(u);
+      setIsAuthLoading(false); // Auth check complete
       if (u) {
         setShowAuthModal(false);
         dbService.saveUser(u); // Sync user to Firestore
@@ -126,9 +129,6 @@ const App: React.FC = () => {
             .then(res => {
               if (res.success && res.warnings.length === 0) {
                 console.log("Automatically merged guest squares.");
-                // Clear key? No, prompt says "clears... after claiming". The cloud function does it?
-                // Cloud function sets `guestDeviceKey: null` on the square.
-                // But we keep the local key for other pools potentially.
               }
             })
             .catch(err => console.error("Auto-merge failed", err));
@@ -476,6 +476,16 @@ const App: React.FC = () => {
   }, []);
 
   // --- RENDER SWITCH ---
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+        <Loader className="animate-spin text-indigo-500 mb-4" size={40} />
+        <p className="text-slate-400 font-bold animate-pulse">Initializing March Melee Pools...</p>
+      </div>
+    );
+  }
+
   if (route.view === 'home') {
     return (
       <>
