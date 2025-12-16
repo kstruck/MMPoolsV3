@@ -114,8 +114,11 @@ exports.onAIRequest = (0, firestore_1.onDocumentCreated)("pools/{poolId}/ai_requ
     if (!snapshot)
         return;
     const requestData = snapshot.data();
-    if (!requestData || requestData.status !== 'PENDING')
+    console.log(`[AI-DEBUG] Triggered for request ${event.params.requestId}. Status: ${requestData === null || requestData === void 0 ? void 0 : requestData.status}`);
+    if (!requestData || requestData.status !== 'PENDING') {
+        console.log(`[AI-DEBUG] Skipping. Status is ${requestData === null || requestData === void 0 ? void 0 : requestData.status}`);
         return;
+    }
     // 1. Gather Verified Facts (Similar to above but broader context)
     const poolRef = db.collection("pools").doc(poolId);
     const poolSnap = await poolRef.get();
