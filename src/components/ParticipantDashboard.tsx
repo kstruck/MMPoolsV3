@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { User, GameState } from '../types';
 import { dbService } from '../services/dbService';
-import { LayoutGrid, Lock, User as UserIcon, Search, ChevronRight, Trophy, Grid as GridIcon, Loader, ExternalLink } from 'lucide-react';
+import { LayoutGrid, User as UserIcon, Search, ChevronRight, Loader } from 'lucide-react';
 import { getTeamLogo } from '../constants';
 import { Header } from './Header';
 import { Footer } from './Footer';
