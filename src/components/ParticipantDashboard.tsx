@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { User, GameState } from '../types';
 import { dbService } from '../services/dbService';
 import { LayoutGrid, User as UserIcon, Search, ChevronRight, Loader } from 'lucide-react';
-import { getTeamLogo } from '../constants';
 import { Header } from './Header';
 import { Footer } from './Footer';
 
@@ -147,7 +146,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             </>
                         ) : (
                             <>
-                                <GridIcon size={48} className="mx-auto text-slate-700 mb-4" />
+                                <LayoutGrid size={48} className="mx-auto text-slate-700 mb-4" />
                                 <h3 className="text-xl font-bold text-slate-300 mb-2">No pools found</h3>
                                 <p className="text-slate-500 max-w-md mx-auto mb-6">
                                     You don't have any {activeTab !== 'all' && activeTab} pools yet.
@@ -167,8 +166,6 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 s.owner === user.name ||
                                 (emailPrefix && s.owner === emailPrefix)
                             );
-                            const homeLogo = pool.homeTeamLogo || getTeamLogo(pool.homeTeam);
-                            const awayLogo = pool.awayTeamLogo || getTeamLogo(pool.awayTeam);
 
                             return (
                                 <div
@@ -206,7 +203,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                     </div>
 
                                     <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-700/50 pt-3">
-                                        <span className="flex items-center gap-1"><UserIcon size={10} /> Owner: {pool.ownerName || 'Unknown'}</span>
+                                        <span className="flex items-center gap-1"><UserIcon size={10} /> Owner: {pool.managerName || 'Unknown'}</span>
                                         <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1 text-emerald-400 font-bold">
                                             View Pool <ChevronRight size={10} />
                                         </span>
