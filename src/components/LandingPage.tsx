@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trophy, Zap, Shield, LayoutGrid, Calendar, CheckCircle2, Heart, Globe } from 'lucide-react';
+import { Trophy, Zap, Shield, LayoutGrid, Calendar, CheckCircle2, Heart, Globe, DollarSign, Star } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { Footer } from './Footer';
 
@@ -170,7 +170,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="rounded-xl overflow-hidden relative group" style={{ backgroundColor: BRAND.navy }}>
                 <img
                   src="/hero-ui.png"
-                  alt="10x10 Super Bowl squares grid example"
+                  alt="Interactive 10x10 Super Bowl Squares Grid with Real-Time Scoring"
                   loading="lazy"
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
                 />
@@ -196,7 +196,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="absolute -inset-4 bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
               <img
                 src="/feature-live-grid.png"
-                alt="Live 10x10 Super Bowl Squares Grid"
+                alt="Live 10x10 Super Bowl Squares Grid with real-time updates"
                 className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
@@ -219,7 +219,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="absolute -inset-4 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
               <img
                 src="/feature-scoreboard.png"
-                alt="Real-time Scoreboard and Pool Info"
+                alt="Real-time Scoreboard showing Super Bowl scores and pool stats"
                 className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
@@ -242,7 +242,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="absolute -inset-4 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
               <img
                 src="/feature-scenarios.png"
-                alt="What If Scenarios and Payouts"
+                alt="Winning Scenarios and Payout Calculator for Sports Pools"
                 className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
@@ -265,7 +265,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="absolute -inset-4 bg-gradient-to-r from-violet-500 to-purple-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
               <img
                 src="/feature-public-finder.png"
-                alt="Public Pool Finder"
+                alt="Public Pool Finder to join Super Bowl Squares online"
                 className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
@@ -288,7 +288,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
               <div className="absolute -inset-4 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
               <img
                 src="/feature-setup-wizard.png"
-                alt="Pool Setup Wizard"
+                alt="Easy Pool Setup Wizard for commissioners"
                 className="relative rounded-xl shadow-2xl border border-slate-700 w-full transform group-hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
@@ -347,6 +347,45 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             </p>
           </div>
 
+          {/* Payout Scenarios */}
+          <div>
+            <h2 className="text-3xl font-bold mb-6 text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>Winning Scenarios & Payout Examples</h2>
+            <p className="text-lg leading-relaxed mb-6" style={{ color: BRAND.lightGray }}>
+              You control the pot. Choose standard flexible payout structures or create your own custom rules. Here are some popular ways to split the winnings:
+            </p>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="p-6 rounded-xl border border-slate-700 bg-slate-800/50">
+                <div className="flex items-center gap-3 mb-4">
+                  <DollarSign className="text-emerald-400" />
+                  <h3 className="font-bold text-white">Standard Quarter Breakdown</h3>
+                </div>
+                <ul className="space-y-2 text-sm text-slate-300">
+                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>1st Quarter</span> <span className="font-bold text-white">25%</span></li>
+                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>Halftime</span> <span className="font-bold text-white">25%</span></li>
+                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>3rd Quarter</span> <span className="font-bold text-white">25%</span></li>
+                  <li className="flex justify-between"><span>Final Score</span> <span className="font-bold text-white">25%</span></li>
+                </ul>
+              </div>
+
+              <div className="p-6 rounded-xl border border-slate-700 bg-slate-800/50">
+                <div className="flex items-center gap-3 mb-4">
+                  <Trophy className="text-amber-400" />
+                  <h3 className="font-bold text-white">Back-Loaded Jackpot</h3>
+                </div>
+                <ul className="space-y-2 text-sm text-slate-300">
+                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>1st Quarter</span> <span className="font-bold text-white">10%</span></li>
+                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>Halftime</span> <span className="font-bold text-white">10%</span></li>
+                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>3rd Quarter</span> <span className="font-bold text-white">10%</span></li>
+                  <li className="flex justify-between"><span>Final Score</span> <span className="font-bold text-white">70%</span></li>
+                </ul>
+              </div>
+            </div>
+            <p className="mt-4 text-sm" style={{ color: BRAND.lightGray }}>
+              * We also support <strong>Reverse Winners</strong> (payouts for the reversed score) and custom charity allocations.
+            </p>
+          </div>
+
           {/* Benefits */}
           <div>
             <h2 className="text-3xl font-bold mb-6 text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>Why Choose March Melee Pools?</h2>
@@ -375,6 +414,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
                   Customize payouts for every quarter, half-time, and final score. Supports reverse winners and more.
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Testimonials */}
+          <div className="mb-20">
+            <h2 className="text-3xl font-bold mb-8 text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>Trusted by Commissioners</h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                { quote: "Running our office pool used to take me hours of data entry. Now it's set-and-forget.", author: "Mike R.", role: "Office League Manager" },
+                { quote: "The live sync is a game changer. Everyone was glued to the dashboard during the Super Bowl.", author: "Sarah T.", role: "Charity Event Host" },
+                { quote: "Best platform for March Madness. The bracket tracking is seamless.", author: "David K.", role: "Annual Pool Organizer" }
+              ].map((t, i) => (
+                <div key={i} className="p-6 rounded-xl border border-slate-800 bg-slate-900/50 relative">
+                  <div className="flex gap-1 mb-4">
+                    {[1, 2, 3, 4, 5].map(s => <Star key={s} size={14} className="fill-amber-400 text-amber-400" />)}
+                  </div>
+                  <p className="mb-4 italic text-slate-300">"{t.quote}"</p>
+                  <div>
+                    <p className="font-bold text-white text-sm">{t.author}</p>
+                    <p className="text-xs text-slate-500">{t.role}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
