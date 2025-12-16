@@ -500,6 +500,7 @@ const App: React.FC = () => {
           onLogin={() => { setAuthMode('login'); setShowAuthModal(true); }}
           onSignup={() => { setAuthMode('register'); setShowAuthModal(true); }}
           onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
           onBrowse={() => window.location.hash = '#browse'}
           onGoToDashboard={() => window.location.hash = '#participant'}
           isLoggedIn={!!user}
@@ -514,7 +515,13 @@ const App: React.FC = () => {
   if (route.view === 'super-admin') {
     return (
       <div className="min-h-screen bg-slate-950 pb-20">
-        <Header user={user} isManager={isManager} onLogout={() => authService.logout().then(() => window.location.reload())} onOpenAuth={() => setShowAuthModal(true)} />
+        <Header
+          user={user}
+          isManager={isManager}
+          onLogout={() => authService.logout().then(() => window.location.reload())}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onCreatePool={handleCreatePool}
+        />
         <React.Suspense fallback={<div className="text-white p-10">Loading...</div>}>
           <SuperAdmin />
         </React.Suspense>
@@ -540,7 +547,13 @@ const App: React.FC = () => {
     const userPools = pools.filter(p => p.ownerId === user.id);
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-        <Header user={user} isManager={isManager} onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }} onLogout={authService.logout} />
+        <Header
+          user={user}
+          isManager={isManager}
+          onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }}
+          onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
+        />
         <main className="max-w-5xl mx-auto p-6">
           <div className="flex justify-between items-end mb-8">
             <div><h2 className="text-3xl font-bold text-white">Manage My Pools</h2><p className="text-slate-400">Pools you created and control</p></div>
@@ -721,7 +734,13 @@ const App: React.FC = () => {
     if (!user) { window.location.hash = '#'; return null; }
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-        <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
+        <Header
+          user={user}
+          isManager={isManager}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
+        />
         <main className="max-w-4xl mx-auto p-6 mt-10">
           <UserProfile
             user={user}

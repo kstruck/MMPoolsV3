@@ -9,9 +9,10 @@ interface HeaderProps {
     isManager?: boolean;
     onOpenAuth: () => void;
     onLogout: () => void;
+    onCreatePool?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenAuth, onLogout }) => (
+export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenAuth, onLogout, onCreatePool }) => (
     <header className="bg-white/80 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 backdrop-blur-md sticky top-0 z-50 shadow-sm dark:shadow-lg transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.hash = '#'}>
@@ -54,6 +55,15 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                             title="Pools you have joined as a participant"
                         >
                             <LayoutGrid size={14} /> My Entries
+                        </button>
+
+                        {/* CREATE POOL (All Logged In Users) */}
+                        <button
+                            onClick={onCreatePool}
+                            className="text-xs bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold"
+                            title="Create a new pool"
+                        >
+                            <LayoutGrid size={14} /> Create Pool
                         </button>
 
                         <button onClick={() => window.location.hash = '#profile'} className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded transition-colors flex items-center gap-1">

@@ -9,6 +9,7 @@ interface LandingPageProps {
   onLogin: () => void;
   onSignup: () => void;
   onLogout?: () => void;
+  onCreatePool?: () => void;
   onBrowse: () => void;
   onGoToDashboard?: () => void;
   isLoggedIn: boolean;
@@ -24,7 +25,7 @@ const BRAND = {
   amber: '#FBBF24',
   lightGray: '#E5E7EB',
 };
-export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onBrowse, onGoToDashboard, isLoggedIn, totalDonated = 0, totalPrizes = 0 }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, onGoToDashboard, isLoggedIn, totalDonated = 0, totalPrizes = 0 }) => {
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
 
@@ -79,10 +80,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <button
                   onClick={onGoToDashboard}
                   className="text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all hover:scale-105 shadow-lg flex items-center gap-1"
-                  style={{ backgroundColor: BRAND.orange }}
+                  style={{ backgroundColor: BRAND.emerald }}
                   title="My Entries"
                 >
                   <LayoutGrid size={12} /> My Entries
+                </button>
+
+                <button
+                  onClick={onCreatePool}
+                  className="text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all hover:scale-105 shadow-lg flex items-center gap-1"
+                  style={{ backgroundColor: BRAND.orange }}
+                  title="Create a New Pool"
+                >
+                  <LayoutGrid size={12} /> Create Pool
                 </button>
 
                 <button onClick={() => window.location.hash = '#profile'} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold">
