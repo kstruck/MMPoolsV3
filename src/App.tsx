@@ -486,11 +486,17 @@ const App: React.FC = () => {
     );
   }
 
+  // Calculate isManager once
+  const isManager = useMemo(() => {
+    return !!user && (user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN' || pools.some(p => p.ownerId === user.id));
+  }, [user, pools]);
+
   if (route.view === 'home') {
     return (
       <>
         <LandingPage
           user={user}
+          isManager={isManager}
           onLogin={() => { setAuthMode('login'); setShowAuthModal(true); }}
           onSignup={() => { setAuthMode('register'); setShowAuthModal(true); }}
           onLogout={authService.logout}
@@ -508,7 +514,7 @@ const App: React.FC = () => {
   if (route.view === 'super-admin') {
     return (
       <div className="min-h-screen bg-slate-950 pb-20">
-        <Header user={user} onLogout={() => authService.logout().then(() => window.location.reload())} onOpenAuth={() => setShowAuthModal(true)} />
+        <Header user={user} isManager={isManager} onLogout={() => authService.logout().then(() => window.location.reload())} onOpenAuth={() => setShowAuthModal(true)} />
         <React.Suspense fallback={<div className="text-white p-10">Loading...</div>}>
           <SuperAdmin />
         </React.Suspense>
@@ -534,7 +540,7 @@ const App: React.FC = () => {
     const userPools = pools.filter(p => p.ownerId === user.id);
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-        <Header user={user} onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }} onLogout={authService.logout} />
+        <Header user={user} isManager={isManager} onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }} onLogout={authService.logout} />
         <main className="max-w-5xl mx-auto p-6">
           <div className="flex justify-between items-end mb-8">
             <div><h2 className="text-3xl font-bold text-white">Manage My Pools</h2><p className="text-slate-400">Pools you created and control</p></div>

@@ -5,6 +5,7 @@ import { Footer } from './Footer';
 
 interface LandingPageProps {
   user?: User | null;
+  isManager?: boolean;
   onLogin: () => void;
   onSignup: () => void;
   onLogout?: () => void;
@@ -23,7 +24,7 @@ const BRAND = {
   amber: '#FBBF24',
   lightGray: '#E5E7EB',
 };
-export const LandingPage: React.FC<LandingPageProps> = ({ user, onLogin, onSignup, onLogout, onBrowse, onGoToDashboard, isLoggedIn, totalDonated = 0, totalPrizes = 0 }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onBrowse, onGoToDashboard, isLoggedIn, totalDonated = 0, totalPrizes = 0 }) => {
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
 
@@ -66,7 +67,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, onLogin, onSignu
                 )}
 
                 {/* POOL MANANGER */}
-                {(user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') && (
+                {(isManager || user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') && (
                   <button
                     onClick={() => window.location.hash = '#admin'}
                     className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold"
