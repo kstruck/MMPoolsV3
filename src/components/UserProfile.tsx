@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types';
 import { dbService } from '../services/dbService';
-import { authService } from '../services/authService';
+
 import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon } from 'lucide-react';
 
 interface UserProfileProps {
@@ -83,11 +83,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                 {/* Header */}
                 <div className="flex items-center gap-6 pb-6 border-b border-slate-800">
                     <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center border-2 border-slate-700 shadow-xl overflow-hidden">
-                        {user.photoURL ? (
-                            <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
-                        ) : (
-                            <UserIcon size={40} className="text-slate-500" />
-                        )}
+                        <UserIcon size={40} className="text-slate-500" />
                     </div>
                     <div>
                         <h1 className="text-3xl font-bold text-white mb-1">Your Profile</h1>
