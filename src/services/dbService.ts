@@ -97,12 +97,34 @@ export const dbService = {
         }
     },
 
-    reserveSquare: async (poolId: string, squareId: number, customerDetails?: any): Promise<void> => {
+    reserveSquare: async (poolId: string, squareId: number, customerDetails?: any, guestDeviceKey?: string, pickedAsName?: string): Promise<void> => {
         try {
             const reserveSquareFn = httpsCallable(functions, 'reserveSquare');
-            await reserveSquareFn({ poolId, squareId, customerDetails });
+            await reserveSquareFn({ poolId, squareId, customerDetails, guestDeviceKey, pickedAsName });
         } catch (error) {
             console.error("Error calling reserveSquare function:", error);
+            throw error;
+        }
+    },
+
+    createClaimCode: async (poolId: string, guestDeviceKey: string): Promise<{ claimCode: string; claimId: string }> => {
+        try {
+            const fn = httpsCallable(functions, 'createClaimCode');
+            const result = await fn({ poolId, guestDeviceKey });
+            return result.data as { claimCode: string; claimId: string };
+        } catch (error) {
+            console.error("Error creating claim code:", error);
+            throw error;
+        }
+    },
+
+    claimByCode: async (claimCode: string): Promise<{ success: boolean; poolId: string }> => {
+        try {
+            const fn = httpsCallable(functions, 'claimByCode');
+            const result = await fn({ claimCode });
+            return result.data as { success: boolean; poolId: string };
+        } catch (error) {
+            console.error("Error claiming by code:", error);
             throw error;
         }
     },

@@ -17,6 +17,7 @@ import { AICommissioner } from './components/AICommissioner';
 
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
+const ParticipantDashboard = React.lazy(() => import('./components/ParticipantDashboard').then(m => ({ default: m.ParticipantDashboard })));
 import { UserProfile } from './components/UserProfile';
 import { BrowsePools } from './components/BrowsePools';
 import { FeaturesPage } from './components/FeaturesPage';
@@ -140,6 +141,7 @@ const App: React.FC = () => {
       return parts.length === 2 ? { view: 'admin-editor', id: parts[1] } : { view: 'admin-dashboard', id: null };
     }
     if (hash.startsWith('#super-admin')) return { view: 'super-admin', id: null };
+    if (hash.startsWith('#participant')) return { view: 'participant', id: null };
     if (hash.startsWith('#pool')) return { view: 'pool', id: hash.split('/')[1] };
     if (hash.startsWith('#browse')) return { view: 'browse', id: null };
     if (hash.startsWith('#features')) return { view: 'features', id: null };
@@ -244,7 +246,7 @@ const App: React.FC = () => {
     setShowShareModal(true);
   };
 
-  const handleClaimSquares = async (ids: number[], name: string, details: PlayerDetails): Promise<{ success: boolean; message?: string }> => {
+  const handleClaimSquares = async (ids: number[], name: string, details: PlayerDetails, guestKey?: string): Promise<{ success: boolean; message?: string }> => {
     if (!currentPool) return { success: false };
     const normalizedName = name.trim();
     if (!normalizedName) return { success: false, message: 'Name required' };
@@ -255,7 +257,13 @@ const App: React.FC = () => {
     if (currentOwned + ids.length > limit && currentPool.ownerId !== user?.id) return { success: false, message: `Limit exceeded. Max ${limit}.` };
 
     try {
-      const promises = ids.map(id => dbService.reserveSquare(currentPool.id, id, { ...details, name: normalizedName }));
+      const promises = ids.map(id => dbService.reserveSquare(
+        currentPool.id,
+        id,
+        { ...details, name: normalizedName },
+        guestKey, // Pass Guest Key
+        normalizedName // pickedAsName
+      ));
       await Promise.all(promises);
     } catch (error: any) {
       console.error("Reserve failed", error);
@@ -619,6 +627,25 @@ const App: React.FC = () => {
     return <BrowsePools user={user} pools={pools} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />;
   }
 
+  if (route.view === 'participant') {
+    if (!user) {
+      // Force login
+      return (
+        <>
+          <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+            <p className="text-slate-500">Redirecting to login...</p>
+          </div>
+          <AuthModal isOpen={true} onClose={() => window.location.hash = '#'} initialMode='login' />
+        </>
+      );
+    }
+    return (
+      <React.Suspense fallback={<div className="text-white p-10 flex justify-center"><Loader className="animate-spin" /></div>}>
+        <ParticipantDashboard user={user} onLogout={authService.logout} />
+      </React.Suspense>
+    );
+  }
+
   if (route.view === 'features') {
     return <FeaturesPage user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />;
   }
@@ -974,10 +1001,14 @@ const App: React.FC = () => {
             <div className="flex-1 overflow-x-auto">
               <Grid
                 gameState={currentPool}
-                onClaimSquares={(ids, name, details) => handleClaimSquares(ids, name, details)}
+                onClaimSquares={(ids, name, details, guestKey) => handleClaimSquares(ids, name, details, guestKey)}
                 winners={winners}
                 highlightHomeDigit={getLastDigit(currentPool.scores.current?.home ?? 0)}
                 highlightAwayDigit={getLastDigit(currentPool.scores.current?.away ?? 0)}
+                currentUser={user}
+                onLogin={() => { setAuthMode('login'); setShowAuthModal(true); }}
+                onCreateClaimCode={(k) => dbService.createClaimCode(currentPool.id, k)}
+                onClaimByCode={(c) => dbService.claimByCode(c)}
               />
             </div>
             {/* Home Logo (Right - Matches Cols) */}

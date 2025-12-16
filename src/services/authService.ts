@@ -33,6 +33,8 @@ const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
     email: firebaseUser.email || "",
     picture: firebaseUser.photoURL || undefined,
     registrationMethod: method,
+    role: 'PARTICIPANT', // Default, will be overwritten by Firestore data if exists
+    provider: method === 'email' ? 'password' : 'google',
     referralCode: firebaseUser.uid // Use UID as referral code
   };
 };
@@ -54,7 +56,9 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
       registrationMethod: user.registrationMethod,
       referralCode: user.id,
       referralCount: 0,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      role: user.role,
+      provider: user.provider
     };
 
     if (referredBy && referredBy !== user.id) {
@@ -78,7 +82,7 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
       name: user.name,
       picture: user.picture || null
     }, { merge: true });
-    return { ...existingData, name: user.name, picture: user.picture };
+    return { ...existingData, name: user.name, picture: user.picture, role: existingData.role || 'PARTICIPANT', provider: existingData.provider || 'password' };
   }
 };
 
@@ -142,7 +146,7 @@ export const authService = {
   login: async (email: string, password?: string): Promise<User> => {
     // Handle Demo Login specifically for testing
     if (email === 'admin@test.com' && password === 'password') {
-      const demoUser: User = { id: 'demo_admin', name: 'Demo Admin', email: 'admin@test.com' };
+      const demoUser: User = { id: 'demo_admin', name: 'Demo Admin', email: 'admin@test.com', role: 'SUPER_ADMIN', provider: 'password', registrationMethod: 'email' };
       localStorage.setItem('sbSquaresUser', JSON.stringify(demoUser));
       return demoUser;
     }

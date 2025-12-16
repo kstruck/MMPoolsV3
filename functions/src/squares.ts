@@ -8,7 +8,7 @@ export const reserveSquare = onCall(async (request) => {
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
 
-    const { poolId, squareId, customerDetails } = request.data;
+    const { poolId, squareId, customerDetails, guestDeviceKey, pickedAsName } = request.data;
 
     // 1. Determine user identity - allow unauthenticated users with customerDetails
     const isAuthenticated = !!request.auth;
@@ -89,7 +89,9 @@ export const reserveSquare = onCall(async (request) => {
                         email: userEmail,
                         ...customerDetails
                     },
-                    isPaid: false
+                    isPaid: false,
+                    guestDeviceKey: guestDeviceKey || null,
+                    pickedAsName: pickedAsName || userName,
                 };
             }
             return s;

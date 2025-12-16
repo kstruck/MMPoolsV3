@@ -15,17 +15,37 @@ service cloud.firestore {
     //     - So: allow update if request.auth.uid == resource.data.ownerId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers']))
     // - DELETE: Owner only
     
+    // POOLS:
     match /pools/{poolId} {
-      allow read: if true;
+      // Allow GET by anyone (Guest Access via Link)
+      allow get: if true;
+      
+      // Allow LIST only if you are the owner (Manager Dashboard)
+      allow list: if request.auth != null && resource.data.ownerId == request.auth.uid;
+
+      // Create: Authenticated users
       allow create: if request.auth != null;
+      
+      // Delete: Owner only
       allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
+      
+      // Update: Owner only, but filtered fields
+      // Prevent CLIENTS from writing to 'squares', 'axisNumbers', 'participants' directly
+      // They must use Cloud Functions (reserveSquare, lockPool, etc.)
       allow update: if request.auth != null && request.auth.uid == resource.data.ownerId 
-                    && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers']));
+                    && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers', 'squares']));
 
+      // PARTICIPANTS INDEX (Subcollection)
+      // Read: Pool Owner OR The Participant themselves
+      match /participants/{participantId} {
+        allow read: if request.auth != null && (
+          request.auth.uid == participantId || 
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid
+        );
+        allow write: if false; // Only via Cloud Functions
+      }
 
-      // AUDIT LOGS: Encapsulated logic
-      // - Read: Everyone
-      // - Write/Delete: NO ONE (Clients). Only Server (Admin SDK) bypasses this.
+      // AUDIT LOGS: Encapsulated logic (No Client Writes)
       match /audit/{auditId} {
         allow read: if true;
         allow write, delete: if false; 
@@ -34,7 +54,7 @@ service cloud.firestore {
       // AI COMMISSIONER
       match /ai_artifacts/{docId} {
         allow read: if true;
-        allow write: if false; // Only server writes
+        allow write: if false;
       }
       
       match /ai_requests/{docId} {
@@ -45,17 +65,25 @@ service cloud.firestore {
       }
     }
     
-    // USERS:
-    // - Read: Authenticated users (so SuperAdmin can list them)
-    // - Write: Self only
+    // USERS & PARTICIPATIONS:
     match /users/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == userId;
+
+      // PARTICIPATIONS (Dashboard Index)
+      match /participations/{poolId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if false; // Only via Cloud Functions
+      }
+    }
+
+    // POOL CLAIMS (Cross-Device Merge)
+    // Completely secure, only accessed via Cloud Functions
+    match /poolClaims/{claimId} {
+      allow read, write: if false;
     }
 
     // STATS:
-    // - Read: Everyone (Publicly displayed on Landing Page)
-    // - Write: Denied (Only updated via Cloud Functions/Admin SDK)
     match /stats/{document=**} {
       allow read: if true;
       allow write: if false;

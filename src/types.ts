@@ -12,11 +12,28 @@ export interface PlayerDetails {
   referral?: string;
 }
 
+export interface ClaimCode {
+  claimId: string;
+  claimCode: string;
+  createdAt: number;
+  guestClaimId: string;
+  poolId?: string;
+  uses: number;
+  lastUsedAt?: number;
+}
+
 export interface Square {
   id: number; // 0-99
   owner: string | null; // Name of owner
   playerDetails?: PlayerDetails;
   isPaid?: boolean;
+  pickedAsName?: string;
+  guestDeviceKey?: string | null;
+  guestClaimId?: string | null;
+  reservedAt?: number | null;
+  paidAt?: number | null;
+  reservedByUid?: string | null;
+  paidByUid?: string | null;
 }
 
 export interface GameScore {
@@ -177,6 +194,8 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  role: 'POOL_MANAGER' | 'PARTICIPANT' | 'SUPER_ADMIN';
+  provider: 'password' | 'google';
   picture?: string | null; // Allow null for Firebase compatibility
   registrationMethod?: 'google' | 'email' | 'unknown';
   phone?: string;

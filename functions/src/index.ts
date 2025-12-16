@@ -12,3 +12,4 @@ export { onWinnerUpdate, onAIRequest } from "./aiCommissioner";
 export { onUserCreated, syncAllUsers } from "./userSync";
 export { runReminders, onWinnerComputed } from "./reminders";
 export { onPoolLocked, recalculateGlobalStats } from "./statsTrigger";
+export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
