@@ -208,6 +208,11 @@ const App: React.FC = () => {
     return calculateWinners(currentPool);
   }, [currentPool]);
 
+  // Calculate isManager once
+  const isManager = useMemo(() => {
+    return !!user && (user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN' || pools.some(p => p.ownerId === user.id));
+  }, [user, pools]);
+
   // --- ACTIONS ---
   const addNewPool = async (p: GameState): Promise<string> => {
     return await dbService.createPool(p);
@@ -485,11 +490,6 @@ const App: React.FC = () => {
       </div>
     );
   }
-
-  // Calculate isManager once
-  const isManager = useMemo(() => {
-    return !!user && (user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN' || pools.some(p => p.ownerId === user.id));
-  }, [user, pools]);
 
   if (route.view === 'home') {
     return (
