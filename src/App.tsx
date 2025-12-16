@@ -490,9 +490,12 @@ const App: React.FC = () => {
     return (
       <>
         <LandingPage
+          user={user}
           onLogin={() => { setAuthMode('login'); setShowAuthModal(true); }}
           onSignup={() => { setAuthMode('register'); setShowAuthModal(true); }}
+          onLogout={authService.logout}
           onBrowse={() => window.location.hash = '#browse'}
+          onGoToDashboard={() => window.location.hash = '#participant'}
           isLoggedIn={!!user}
           totalDonated={totalCharity}
           totalPrizes={totalPrizes}

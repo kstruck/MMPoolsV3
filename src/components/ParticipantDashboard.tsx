@@ -20,13 +20,21 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         const unsubscribe = dbService.subscribeToPools((pools) => {
             // Filter where user has reserved squares OR is the owner (legacy check)
             // Ideally we use the 'participations' subcollection, but for MVP this client-side filter is fine.
-            const participating = pools.filter(p =>
-                p.squares.some(s =>
-                    s.reservedByUid === user.id ||
-                    (user.email && typeof s.owner === 'string' && s.owner === user.email.split('@')[0])
-                ) ||
-                p.ownerId === user.id
-            );
+            // Filter for pools where the user participates (has squares) or is the owner
+            const participating = pools.filter(p => {
+                const isOwner = p.ownerId === user.id;
+                const matchesId = p.squares.some(s => s.reservedByUid === user.id);
+                // Legacy check: match by name or email prefix if uid is missing on square
+                const matchesName = p.squares.some(s =>
+                    !s.reservedByUid && s.owner && (
+                        s.owner === user.name ||
+                        (user.email && s.owner === user.email) ||
+                        (user.email && s.owner.toLowerCase() === user.email.split('@')[0].toLowerCase())
+                    )
+                );
+
+                return isOwner || matchesId || matchesName;
+            });
             setMyPools(participating);
             setIsLoading(false);
         });

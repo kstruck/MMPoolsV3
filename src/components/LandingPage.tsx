@@ -1,17 +1,19 @@
-import React from 'react';
-import { Trophy, Zap, Shield, LayoutGrid, Calendar, CheckCircle2, Heart, Globe, DollarSign, Star } from 'lucide-react';
+import type { User } from '../types';
+import { Trophy, Zap, Shield, LayoutGrid, Calendar, CheckCircle2, Heart, Globe, DollarSign, Star, LogOut, User as UserIcon } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { Footer } from './Footer';
 
 interface LandingPageProps {
+  user?: User | null;
   onLogin: () => void;
   onSignup: () => void;
+  onLogout?: () => void;
   onBrowse: () => void;
+  onGoToDashboard?: () => void;
   isLoggedIn: boolean;
   totalDonated?: number;
   totalPrizes?: number;
 }
-
 // Brand Colors
 const BRAND = {
   navy: '#0A192F',
@@ -21,8 +23,7 @@ const BRAND = {
   amber: '#FBBF24',
   lightGray: '#E5E7EB',
 };
-
-export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onBrowse, isLoggedIn, totalDonated = 0, totalPrizes = 0 }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ user, onLogin, onSignup, onLogout, onBrowse, onGoToDashboard, isLoggedIn, totalDonated = 0, totalPrizes = 0 }) => {
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
 
@@ -53,14 +54,46 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             </button>
             <div className="h-6 w-px bg-white/20 hidden md:block"></div>
 
-            {isLoggedIn ? (
-              <button
-                onClick={onLogin}
-                className="text-white px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-lg"
-                style={{ backgroundColor: BRAND.orange }}
-              >
-                Go to Dashboard
-              </button>
+            {isLoggedIn && user ? (
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-bold text-white/80 hidden sm:inline">Hi, {user.name}</span>
+
+                {/* SUPER ADMIN */}
+                {user.role === 'SUPER_ADMIN' && (
+                  <button onClick={() => window.location.hash = '#super-admin'} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold">
+                    <Shield size={12} /> Super Admin
+                  </button>
+                )}
+
+                {/* POOL MANANGER */}
+                {(user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') && (
+                  <button
+                    onClick={() => window.location.hash = '#admin'}
+                    className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold"
+                  >
+                    <LayoutGrid size={12} /> Manage My Pools
+                  </button>
+                )}
+
+                <button
+                  onClick={onGoToDashboard}
+                  className="text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all hover:scale-105 shadow-lg flex items-center gap-1"
+                  style={{ backgroundColor: BRAND.orange }}
+                  title="My Entries"
+                >
+                  <LayoutGrid size={12} /> My Entries
+                </button>
+
+                <button onClick={() => window.location.hash = '#profile'} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold">
+                  <UserIcon size={12} /> Profile
+                </button>
+
+                {onLogout && (
+                  <button onClick={onLogout} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-white transition-colors">
+                    <LogOut size={12} />
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="flex items-center gap-3">
                 <button
@@ -83,12 +116,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
       </nav>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-12 md:pt-20 pb-20 md:pb-32">
+      < section className="relative overflow-hidden pt-12 md:pt-20 pb-20 md:pb-32" >
         {/* Background Gradients */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none">
+        < div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none" >
           <div className="absolute top-20 right-0 w-[500px] h-[500px] rounded-full blur-[120px]" style={{ backgroundColor: `${BRAND.orange}15` }}></div>
           <div className="absolute bottom-0 left-0 w-[500px] h-[500px] rounded-full blur-[120px]" style={{ backgroundColor: '#3B82F615' }}></div>
-        </div>
+        </div >
 
         <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ backgroundColor: `${BRAND.orange}20`, border: `1px solid ${BRAND.orange}40` }}>
@@ -179,10 +212,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
             </div>
           </div>
         </div>
-      </section>
+      </section >
 
       {/* Feature Showcase Section */}
-      <section className="py-24 border-t relative overflow-hidden" style={{ backgroundColor: BRAND.navy, borderColor: '#334155' }}>
+      < section className="py-24 border-t relative overflow-hidden" style={{ backgroundColor: BRAND.navy, borderColor: '#334155' }}>
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-1/4 left-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20" style={{ backgroundColor: '#FF6600' }}></div>
           <div className="absolute bottom-1/4 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20" style={{ backgroundColor: '#3B82F6' }}></div>
@@ -313,7 +346,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
           </div>
 
         </div>
-      </section>
+      </section >
       <section className="py-20 border-t" style={{ backgroundColor: BRAND.navy, borderColor: '#334155' }}>
         <div className="max-w-4xl mx-auto px-6 space-y-16">
 
@@ -576,6 +609,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup, onB
       </div>
 
       <Footer />
-    </div>
+    </div >
   );
 };
