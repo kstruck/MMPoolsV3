@@ -114,6 +114,17 @@ export const dbService = {
         }
     },
 
+    claimMySquares: async (poolId: string, guestDeviceKey: string): Promise<{ success: boolean; warnings: string[] }> => {
+        try {
+            const fn = httpsCallable(functions, 'claimMySquares');
+            const result = await fn({ poolId, guestDeviceKey });
+            return result.data as { success: boolean; warnings: string[] };
+        } catch (error) {
+            console.error("Error claiming guest squares:", error);
+            throw error;
+        }
+    },
+
     claimByCode: async (claimCode: string): Promise<{ success: boolean; poolId: string }> => {
         try {
             const fn = httpsCallable(functions, 'claimByCode');

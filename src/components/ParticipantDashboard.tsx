@@ -37,7 +37,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             <UserIcon className="text-white" size={24} />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold text-white leading-none">Participant Dashboard</h1>
+                            <h1 className="text-xl font-bold text-white leading-none">My Entries</h1>
                             <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Welcome, {user.name}</p>
                         </div>
                     </div>
@@ -56,7 +56,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 ) : myPools.length === 0 ? (
                     <div className="text-center py-20 bg-slate-900/50 rounded-2xl border border-slate-800 border-dashed">
                         <GridIcon size={48} className="mx-auto text-slate-700 mb-4" />
-                        <h2 className="text-xl font-bold text-slate-300 mb-2">No Pools Found</h2>
+                        <h2 className="text-xl font-bold text-slate-300 mb-2">No Entries Found</h2>
                         <p className="text-slate-500 mb-6 max-w-md mx-auto">You haven't joined any pools yet. Join a pool to see your squares here.</p>
                         <button onClick={() => window.location.hash = '#browse'} className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20">
                             Browse Public Pools
@@ -66,7 +66,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     <div className="space-y-8">
                         <div className="flex items-center justify-between">
                             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                                <Trophy className="text-amber-400" size={24} /> Your Pools ({myPools.length})
+                                <Trophy className="text-amber-400" size={24} /> My Entries ({myPools.length})
                             </h2>
                             <button onClick={() => window.location.hash = '#browse'} className="text-indigo-400 hover:text-indigo-300 text-sm font-bold flex items-center gap-1">
                                 Find More <ExternalLink size={14} />

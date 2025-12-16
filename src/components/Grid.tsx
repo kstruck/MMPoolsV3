@@ -298,9 +298,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            <input
                               type="text"
                               value={playerInfo.name}
-                              disabled={!!currentUser}
                               onChange={(e) => { setPlayerInfo(prev => ({ ...prev, name: e.target.value })); setErrorMsg(null); }}
-                              className={`w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none text-lg placeholder:text-slate-600 ${currentUser ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              className={`w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none text-lg placeholder:text-slate-600`}
                               placeholder="e.g. John Smith"
                            />
                         </div>

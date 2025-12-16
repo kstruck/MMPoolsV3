@@ -114,6 +114,24 @@ const App: React.FC = () => {
       if (u) {
         setShowAuthModal(false);
         dbService.saveUser(u); // Sync user to Firestore
+
+        // Attempt to merge guest squares if we have context
+        const guestKey = localStorage.getItem('mmp_guest_key');
+        const hash = window.location.hash;
+        if (guestKey && hash.startsWith('#pool/')) {
+          const poolId = hash.replace('#pool/', '');
+          // Silent merge attempt
+          dbService.claimMySquares(poolId, guestKey)
+            .then(res => {
+              if (res.success && res.warnings.length === 0) {
+                console.log("Automatically merged guest squares.");
+                // Clear key? No, prompt says "clears... after claiming". The cloud function does it?
+                // Cloud function sets `guestDeviceKey: null` on the square.
+                // But we keep the local key for other pools potentially.
+              }
+            })
+            .catch(err => console.error("Auto-merge failed", err));
+        }
       }
     });
   }, []);
@@ -504,7 +522,7 @@ const App: React.FC = () => {
         <Header user={user} onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }} onLogout={authService.logout} />
         <main className="max-w-5xl mx-auto p-6">
           <div className="flex justify-between items-end mb-8">
-            <div><h2 className="text-3xl font-bold text-white">Dashboard</h2><p className="text-slate-400">Manage your pools</p></div>
+            <div><h2 className="text-3xl font-bold text-white">Manage My Pools</h2><p className="text-slate-400">Pools you created and control</p></div>
             <button onClick={handleCreatePool} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20"><Plus size={18} /> Create Pool</button>
           </div>
           {connectionError && (

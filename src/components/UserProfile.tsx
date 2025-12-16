@@ -129,11 +129,11 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                     {/* Dashboard Link Banner */}
                     <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
                         <div>
-                            <h3 className="text-sm font-bold text-white">Participant Dashboard</h3>
+                            <h3 className="text-sm font-bold text-white">My Entries</h3>
                             <p className="text-xs text-slate-400">View all pools you have joined.</p>
                         </div>
                         <button onClick={() => window.location.hash = '#participant'} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors">
-                            Open Dashboard
+                            View Entries
                         </button>
                     </div>
 
