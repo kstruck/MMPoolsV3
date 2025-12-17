@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.lockPool = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const poolOps_1 = require("./poolOps");
 exports.lockPool = (0, https_1.onCall)(async (request) => {
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
@@ -20,11 +21,8 @@ exports.lockPool = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError("not-found", "Pool not found.");
     }
     const poolData = poolSnap.data();
-    // 2. Permission Check - Must be Owner
-    if (poolData.ownerId !== request.auth.uid) {
-        // Optional: Allow global admins here if you had a super-admin role
-        throw new https_1.HttpsError("permission-denied", "Only the pool owner can lock the grid.");
-    }
+    // 2. Permission Check - Owner or Super Admin
+    (0, poolOps_1.assertPoolOwnerOrSuperAdmin)(poolData, request.auth.uid, request.auth.token.role);
     // 3. Generate Random Digits (Secure Server-Side RNG)
     const generateDigits = () => {
         const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];

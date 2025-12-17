@@ -708,7 +708,7 @@ const App: React.FC = () => {
     }
     return (
       <React.Suspense fallback={<div className="text-white p-10 flex justify-center"><Loader className="animate-spin" /></div>}>
-        <ParticipantDashboard user={user} onLogout={authService.logout} />
+        <ParticipantDashboard user={user} onLogout={authService.logout} onCreatePool={handleCreatePool} />
       </React.Suspense>
     );
   }
@@ -800,7 +800,7 @@ const App: React.FC = () => {
 
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative">
-        <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
+        <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} onCreatePool={handleCreatePool} />
         <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
         {/* Header Content */}
         <div className="max-w-[1400px] mx-auto px-4 pt-6 flex justify-between items-center">

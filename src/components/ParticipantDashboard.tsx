@@ -8,9 +8,10 @@ import { Footer } from './Footer';
 interface ParticipantDashboardProps {
     user: User;
     onLogout: () => void;
+    onCreatePool?: () => void;
 }
 
-export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user, onLogout }) => {
+export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user, onLogout, onCreatePool }) => {
     const [myPools, setMyPools] = useState<GameState[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'all' | 'open' | 'live' | 'completed'>('all');
@@ -78,7 +79,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col">
-            <Header user={user} onOpenAuth={() => { }} onLogout={onLogout} />
+            <Header user={user} onOpenAuth={() => { }} onLogout={onLogout} onCreatePool={onCreatePool} />
 
             <main className="flex-grow max-w-7xl mx-auto w-full p-4 md:p-8">
                 {/* Header Section */}

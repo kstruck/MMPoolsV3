@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
+exports.backfillPools = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -25,4 +25,14 @@ Object.defineProperty(exports, "onWinnerComputed", { enumerable: true, get: func
 var statsTrigger_1 = require("./statsTrigger");
 Object.defineProperty(exports, "onPoolLocked", { enumerable: true, get: function () { return statsTrigger_1.onPoolLocked; } });
 Object.defineProperty(exports, "recalculateGlobalStats", { enumerable: true, get: function () { return statsTrigger_1.recalculateGlobalStats; } });
+var participant_1 = require("./participant");
+Object.defineProperty(exports, "createParticipantProfile", { enumerable: true, get: function () { return participant_1.onUserCreated; } });
+Object.defineProperty(exports, "createClaimCode", { enumerable: true, get: function () { return participant_1.createClaimCode; } });
+Object.defineProperty(exports, "claimMySquares", { enumerable: true, get: function () { return participant_1.claimMySquares; } });
+Object.defineProperty(exports, "claimByCode", { enumerable: true, get: function () { return participant_1.claimByCode; } });
+Object.defineProperty(exports, "syncParticipantIndices", { enumerable: true, get: function () { return participant_1.syncParticipantIndices; } });
+var poolOps_1 = require("./poolOps");
+Object.defineProperty(exports, "createPool", { enumerable: true, get: function () { return poolOps_1.createPool; } });
+var backfill_1 = require("./backfill");
+Object.defineProperty(exports, "backfillPools", { enumerable: true, get: function () { return backfill_1.backfillPools; } });
 //# sourceMappingURL=index.js.map

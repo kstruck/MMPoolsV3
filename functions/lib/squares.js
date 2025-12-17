@@ -8,7 +8,7 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
     var _a;
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
-    const { poolId, squareId, customerDetails } = request.data;
+    const { poolId, squareId, customerDetails, guestDeviceKey, pickedAsName } = request.data;
     // 1. Determine user identity - allow unauthenticated users with customerDetails
     const isAuthenticated = !!request.auth;
     const userId = ((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) || "anonymous";
@@ -65,10 +65,10 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
         // Reserve
         const updatedSquares = squares.map((s) => {
             if (s.id === squareId) {
-                return Object.assign(Object.assign({}, s), { owner: userName, 
+                return Object.assign(Object.assign({}, s), { owner: pickedAsName || userName, 
                     // Ideally we store ownerUid: userId too, but schema currently uses 'owner' string.
                     // We will stick to schema for now to avoid breaking UI.
-                    playerDetails: Object.assign({ email: userEmail }, customerDetails), isPaid: false });
+                    playerDetails: Object.assign({ email: userEmail }, customerDetails), isPaid: false, guestDeviceKey: guestDeviceKey || null, pickedAsName: pickedAsName || userName });
             }
             return s;
         });
