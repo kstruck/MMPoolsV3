@@ -532,7 +532,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 {[
                   { label: 'NFL Squares', status: 'Live Now', active: true, badge: '/squares_badge_dark.png' },
                   { label: 'College Football Squares', status: 'Live Now', active: true, badge: '/squares_badge_dark.png' },
-                  { label: 'March Madness Brackets', status: 'February 2026', active: false, badge: '/bracket_badge_dark.png' },
+                  { label: 'March Madness Brackets', status: 'Live Now', active: true, badge: '/bracket_badge_dark.png' },
                   { label: "NFL Pick'em", status: 'August 2026', active: false, badge: '/pickem_badge_dark.png' },
                   { label: 'Survivor Pools', status: 'August 2026', active: false, badge: '/survivor_badge_dark.png' },
                 ].map((item, i) => (

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Filter, Heart, DollarSign, Trophy, Plus, Zap, Globe, Lock, Trash2, LayoutDashboard } from 'lucide-react';
-import type { GameState } from '../types';
+import type { GameState, Pool } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
@@ -8,7 +8,7 @@ import { Loader } from 'lucide-react';
 
 interface ManagerDashboardProps {
     user: any; // Using any for User type for simplicity as imports might vary, strictly it's User
-    pools: GameState[];
+    pools: Pool[];
     isLoading: boolean;
     connectionError: string | null;
     onCreatePool: () => void;
@@ -38,21 +38,34 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
         return pools.filter(p => {
             // Search Match
             const searchLower = searchTerm.toLowerCase();
+            const isBracket = p.type === 'BRACKET';
             const matchesSearch =
                 p.name.toLowerCase().includes(searchLower) ||
-                p.homeTeam.toLowerCase().includes(searchLower) ||
-                p.awayTeam.toLowerCase().includes(searchLower);
+                (!isBracket && (p as GameState).homeTeam.toLowerCase().includes(searchLower)) ||
+                (!isBracket && (p as GameState).awayTeam.toLowerCase().includes(searchLower));
 
             if (!matchesSearch) return false;
 
             // Charity Filter
-            if (filterCharity && !p.charity?.enabled) return false;
+            if (filterCharity && (isBracket || !(p as GameState).charity?.enabled)) return false;
 
             // Status Filter
             if (filterStatus !== 'all') {
-                const isClosed = p.scores.gameStatus === 'post';
-                const isLive = p.scores.gameStatus === 'in';
-                const isLocked = p.isLocked;
+                let isClosed = false;
+                let isLive = false;
+                let isLocked = false;
+
+                if (isBracket) {
+                    const bp = p as any; // BracketPool
+                    isClosed = bp.status === 'COMPLETED';
+                    isLocked = bp.status === 'LOCKED' || bp.status === 'COMPLETED';
+                    // isLive not really applicable or checked via dates
+                } else {
+                    const sp = p as GameState;
+                    isClosed = sp.scores.gameStatus === 'post';
+                    isLive = sp.scores.gameStatus === 'in';
+                    isLocked = sp.isLocked;
+                }
 
                 if (filterStatus === 'open' && isLocked) return false;
                 if (filterStatus === 'locked' && (!isLocked || isLive || isClosed)) return false;
@@ -62,7 +75,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
 
             // Price Filter
             if (filterPrice !== 'all') {
-                const cost = p.costPerSquare;
+                const cost = isBracket ? (p as any).settings?.entryFee : (p as GameState).costPerSquare;
                 if (filterPrice === 'low' && cost >= 20) return false;
                 if (filterPrice === 'mid' && (cost < 20 || cost > 50)) return false;
                 if (filterPrice === 'high' && cost <= 50) return false;
@@ -70,7 +83,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
 
             // League Filter
             if (selectedLeague !== 'all') {
-                const poolLeague = p.league || 'nfl'; // Default to NFL if undefined
+                const poolLeague = (p as any).league || 'nfl'; // Default to NFL if undefined
                 // Normalize for "NCAA Football"
                 const isCollege = poolLeague === 'college' || poolLeague === 'ncaa';
                 const isNfl = poolLeague === 'nfl';
@@ -196,9 +209,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                 <div className="space-y-2">
                                     {[
                                         { id: 'all', label: 'All Pools', count: pools.length },
-                                        { id: 'open', label: 'Open for Entry', count: pools.filter(p => !p.isLocked).length },
-                                        { id: 'live', label: 'Live Now', count: pools.filter(p => p.scores.gameStatus === 'in').length },
-                                        { id: 'final', label: 'Completed', count: pools.filter(p => p.scores.gameStatus === 'post').length },
+                                        { id: 'open', label: 'Open for Entry', count: pools.filter(p => p.type === 'BRACKET' ? p.status === 'PUBLISHED' : !(p as GameState).isLocked).length },
+                                        { id: 'live', label: 'Live Now', count: pools.filter(p => p.type !== 'BRACKET' && (p as GameState).scores.gameStatus === 'in').length },
+                                        { id: 'final', label: 'Completed', count: pools.filter(p => p.type === 'BRACKET' ? p.status === 'COMPLETED' : (p as GameState).scores.gameStatus === 'post').length },
                                     ].map((stat) => (
                                         <label key={stat.id} className="flex items-center justify-between cursor-pointer group p-2 rounded hover:bg-slate-800 transition-colors">
                                             <div className="flex items-center gap-3">
@@ -261,14 +274,42 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     {filteredPools.map(pool => {
-                                        const filled = pool.squares.filter(s => s.owner).length;
-                                        const pct = Math.round((filled / 100) * 100);
-                                        const homeLogo = pool.homeTeamLogo || getTeamLogo(pool.homeTeam);
-                                        const awayLogo = pool.awayTeamLogo || getTeamLogo(pool.awayTeam);
+                                        const isBracket = pool.type === 'BRACKET';
+                                        let filled = 0;
+                                        let pct = 0;
+                                        let homeLogo = null;
+                                        let awayLogo = null;
+                                        let homeTeam = '';
+                                        let awayTeam = '';
+                                        let cost = 0;
+                                        let isLocked = false;
+                                        let charityEnabled = false;
+
+                                        if (isBracket) {
+                                            const bp = pool as any; // BracketPool
+                                            filled = bp.entryCount || 0;
+                                            const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal; // Mock 100 if unlimited for progress
+                                            pct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round((filled / max) * 100);
+                                            homeTeam = 'Tournament';
+                                            awayTeam = 'Bracket';
+                                            cost = bp.settings.entryFee;
+                                            isLocked = bp.status !== 'DRAFT' && bp.status !== 'PUBLISHED';
+                                        } else {
+                                            const sp = pool as GameState;
+                                            filled = sp.squares.filter(s => s.owner).length;
+                                            pct = Math.round((filled / 100) * 100);
+                                            homeTeam = sp.homeTeam;
+                                            awayTeam = sp.awayTeam;
+                                            homeLogo = sp.homeTeamLogo || getTeamLogo(sp.homeTeam);
+                                            awayLogo = sp.awayTeamLogo || getTeamLogo(sp.awayTeam);
+                                            cost = sp.costPerSquare;
+                                            isLocked = sp.isLocked;
+                                            charityEnabled = !!sp.charity?.enabled;
+                                        }
 
                                         return (
                                             <div key={pool.id} className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 rounded-xl p-5 transition-all relative overflow-hidden flex flex-col">
-                                                {pool.charity?.enabled && (
+                                                {charityEnabled && (
                                                     <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
                                                         <Heart size={100} className="fill-rose-500 text-rose-500" />
                                                     </div>
@@ -285,17 +326,17 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                             <div>
                                                                 <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1 flex items-center gap-2">
                                                                     {pool.name}
-                                                                    {!pool.isPublic && <Lock size={12} className="text-amber-500" />}
+                                                                    {!(isBracket ? (pool as any).isListedPublic : (pool as GameState).isPublic) && <Lock size={12} className="text-amber-500" />}
                                                                 </h3>
                                                                 <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
-                                                                    <span>Hosted by You</span>
-                                                                    {pool.charity?.enabled && <span className="text-rose-400 flex items-center gap-1">• <Heart size={10} className="fill-rose-400" /> Charity</span>}
+                                                                    <span>{isBracket ? 'Bracket Pool' : 'Squares Pool'}</span>
+                                                                    {charityEnabled && <span className="text-rose-400 flex items-center gap-1">• <Heart size={10} className="fill-rose-400" /> Charity</span>}
                                                                 </div>
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <span className="block text-xl font-bold text-emerald-400 font-mono">${pool.costPerSquare}</span>
-                                                            <span className="text-[10px] text-slate-500 uppercase font-bold">Per Square</span>
+                                                            <span className="block text-xl font-bold text-emerald-400 font-mono">${cost}</span>
+                                                            <span className="text-[10px] text-slate-500 uppercase font-bold">{isBracket ? 'Entry Fee' : 'Per Square'}</span>
                                                         </div>
                                                     </div>
 
@@ -303,11 +344,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                     <div className="bg-black/30 rounded-lg p-3 border border-slate-800/50 mb-4 flex items-center justify-between relative z-10">
                                                         <div className="flex items-center gap-2">
                                                             {awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain opacity-80" />}
-                                                            <span className="text-sm font-bold text-slate-300">{pool.awayTeam}</span>
+                                                            <span className="text-sm font-bold text-slate-300">{awayTeam}</span>
                                                         </div>
                                                         <span className="text-xs text-slate-600 font-bold uppercase">VS</span>
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-sm font-bold text-slate-300">{pool.homeTeam}</span>
+                                                            <span className="text-sm font-bold text-slate-300">{homeTeam}</span>
                                                             {homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain opacity-80" />}
                                                         </div>
                                                     </div>
@@ -319,13 +360,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                                 <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                                                                     <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }}></div>
                                                                 </div>
-                                                                <span>{100 - filled} Left</span>
+                                                                <span>{isBracket ? `${filled} Entries` : `${100 - filled} Left`}</span>
                                                             </div>
                                                         </div>
 
                                                         <div className="flex items-center gap-2">
-                                                            {!pool.isLocked ? (
-                                                                <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Open Setup</span>
+                                                            {!isLocked ? (
+                                                                <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Open</span>
                                                             ) : (
                                                                 <span className="text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Locked</span>
                                                             )}
@@ -335,8 +376,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
 
                                                 {/* ACTION BUTTONS */}
                                                 <div className="grid grid-cols-6 gap-2 relative z-20 pt-4 border-t border-slate-800/50">
-                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#admin/${pool.id}`; }} className="col-span-3 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage Pool</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#pool/${pool.id}`; }} className="col-span-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View Grid</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#admin/${pool.id}`; }} className="col-span-3 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#pool/${pool.id}`; }} className="col-span-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View</button>
                                                     <button onClick={(e) => { e.stopPropagation(); onDeletePool(pool.id); }} className="col-span-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/50 rounded-lg flex items-center justify-center transition-all"><Trash2 size={16} /></button>
                                                 </div>
                                             </div>

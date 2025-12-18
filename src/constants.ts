@@ -8,6 +8,7 @@ export const DEFAULT_SQUARES = Array.from({ length: 100 }, (_, i) => ({
 
 export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: string, managerName: string = '', contactEmail: string = ''): GameState => ({
   id: Math.random().toString(36).substring(2, 9),
+  type: 'SQUARES',
   name,
   urlSlug: Math.random().toString(36).substring(2, 7),
   contactEmail: contactEmail,

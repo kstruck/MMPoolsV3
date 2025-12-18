@@ -248,3 +248,100 @@ export interface AIRequest {
     createdAt: number;
     updatedAt?: number;
 }
+
+
+// --- BRACKET POOL TYPES ---
+
+export interface BracketPool {
+    id: string;
+    type: 'BRACKET';
+    slug: string;
+    slugLower: string;
+    isListedPublic: boolean;
+    passwordHash?: string; // If protected
+    lockAt: number; // Timestamp
+    status: 'DRAFT' | 'PUBLISHED' | 'LOCKED' | 'COMPLETED';
+
+    settings: {
+        maxEntriesTotal: number; // -1 for unlimited
+        maxEntriesPerUser: number; // -1 for unlimited
+        entryFee: number;
+        paymentInstructions: string;
+        scoringSystem: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
+        customScoring?: number[]; // [R64, R32, S16, E8, F4, CHAMPS]
+        tieBreakers: {
+            closestAbsolute: boolean;
+            closestUnder: boolean;
+        };
+    };
+
+    name: string;
+    description?: string;
+    managerUid: string;
+    seasonYear: number;
+
+    // Counts for easy display
+    participantCount?: number;
+    entryCount?: number;
+
+    createdAt: number;
+    updatedAt?: number;
+}
+
+export interface BracketEntry {
+    id: string;
+    poolId: string;
+    ownerUid: string;
+    name: string;
+    picks: Record<string, string>; // slotId -> teamId
+    tieBreakerPrediction?: number; // Total score of championship
+    status: 'DRAFT' | 'SUBMITTED';
+    paidStatus: 'PAID' | 'UNPAID';
+    score: number;
+    rank?: number;
+
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface Tournament {
+    id: string; // e.g. "mens-2025"
+    seasonYear: number;
+    gender: 'mens' | 'womens';
+    isFinalized: boolean; // Tournament over?
+
+    games: Record<string, Game>;
+    slots: Record<string, TournamentSlot>;
+}
+
+export interface Game {
+    id: string;
+    startTime: string; // ISO
+    status: 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL';
+    homeTeamId: string;
+    awayTeamId: string;
+    homeScore: number;
+    awayScore: number;
+    winnerTeamId?: string;
+    round: number; // 0=FirstFour, 1=R64, 2=R32...
+    region?: string;
+}
+
+export interface TournamentSlot {
+    id: string; // e.g. "R1-W1"
+    gameId: string;
+    nextSlotId?: string; // Where winner goes
+
+    // If play-in mapping
+    isPlayInPlaceholder?: boolean;
+    playInGameId?: string;
+}
+
+export interface Team {
+    id: string;
+    name: string;
+    seed: number;
+    region: string;
+    logoUrl?: string;
+}
+

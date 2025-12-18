@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
-import type { GameState, User } from '../types';
-import { Trash2, Shield, Activity, Heart, Users } from 'lucide-react';
+import { settingsService } from '../services/settingsService';
+import type { GameState, User, SystemSettings } from '../types';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle } from 'lucide-react';
 
 export const SuperAdmin: React.FC = () => {
     const [pools, setPools] = useState<GameState[]>([]);
@@ -187,7 +188,19 @@ export const SuperAdmin: React.FC = () => {
     };
 
     // Tab state
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'settings'>('overview');
+    const [settings, setSettings] = useState<SystemSettings | null>(null);
+
+    useEffect(() => {
+        // Placeholder for a general data loading function if needed
+        const loadData = async () => {
+            // You might fetch other initial data here if loadData is meant to be comprehensive
+        };
+        loadData();
+        // Subscribe to settings
+        const unsub = settingsService.subscribe(setSettings);
+        return () => unsub();
+    }, []);
 
     // Group pools by sport/league (using existing league field from setup wizard)
     const getLeagueDisplayName = (league: string | undefined) => {
@@ -481,6 +494,111 @@ export const SuperAdmin: React.FC = () => {
             )}
 
             {/* ============ REFERRALS TAB ============ */}
+            {activeTab === 'settings' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400"><Settings size={24} /></div>
+                            <h3 className="text-xl font-bold text-white">Feature Flags</h3>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                                <div>
+                                    <h4 className="font-bold text-white">Enable Bracket Pools</h4>
+                                    <p className="text-sm text-slate-400">Allow managers to create bracket pools.</p>
+                                </div>
+                                <button
+                                    onClick={() => settingsService.update({ enableBracketPools: !settings?.enableBracketPools })}
+                                    className={`transition-colors ${settings?.enableBracketPools ? 'text-emerald-400' : 'text-slate-500'}`}
+                                >
+                                    {settings?.enableBracketPools ? <ToggleRight size={40} className="fill-emerald-500/20" /> : <ToggleLeft size={40} />}
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                                <div>
+                                    <h4 className="font-bold text-white">Maintenance Mode</h4>
+                                    <p className="text-sm text-slate-400">Disable all write actions for users.</p>
+                                </div>
+                                <button
+                                    onClick={() => settingsService.update({ maintenanceMode: !settings?.maintenanceMode })}
+                                    className={`transition-colors ${settings?.maintenanceMode ? 'text-amber-400' : 'text-slate-500'}`}
+                                >
+                                    {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-amber-500/20" /> : <ToggleLeft size={40} />}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-pink-500/20 rounded-lg text-pink-400"><PlayCircle size={24} /></div>
+                            <h3 className="text-xl font-bold text-white">Simulation Tools</h3>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                                <h4 className="font-bold text-white mb-2">Tournament Data</h4>
+                                <div className="flex flex-col gap-2">
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm("Overwrite 'tournaments/2025' with test data? This will RESET all current brackets.")) return;
+                                            try {
+                                                const { seedTestTournament } = await import('../utils/simulationUtils');
+                                                await seedTestTournament(2025);
+                                                alert("Tournament seeded successfully.");
+                                            } catch (e: any) {
+                                                alert("Error: " + e.message);
+                                            }
+                                        }}
+                                        className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold text-sm transition-colors text-left"
+                                    >
+                                        1. Seed Test Tournament (Teams & R64)
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                                <h4 className="font-bold text-white mb-2">Advance Tournament</h4>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm("Simulate scores for current round?")) return;
+                                            try {
+                                                const { simulateRound } = await import('../utils/simulationUtils');
+                                                const res = await simulateRound(2025);
+                                                alert(res);
+                                            } catch (e: any) {
+                                                console.error(e);
+                                                alert("Error: " + e.message);
+                                            }
+                                        }}
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors"
+                                    >
+                                        Simulate Round
+                                    </button>
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm("RESET tournament scores?")) return;
+                                            try {
+                                                const { resetTournament } = await import('../utils/simulationUtils');
+                                                await resetTournament(2025);
+                                                alert("Tournament reset.");
+                                            } catch (e: any) {
+                                                alert("Error: " + e.message);
+                                            }
+                                        }}
+                                        className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors"
+                                    >
+                                        Reset Scores
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             {activeTab === 'referrals' && (
                 <div className="bg-slate-800 rounded-xl border border-indigo-500/30 overflow-hidden shadow-xl">
                     <div className="p-4 border-b border-slate-700 bg-indigo-900/20 flex justify-between items-center">
