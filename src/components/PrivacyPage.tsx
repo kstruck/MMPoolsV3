@@ -123,7 +123,22 @@ export const PrivacyPage: React.FC = () => {
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">11. Contact Us</h2>
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">11. Google User Data & Limited Use</h2>
+                        <p className="text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
+                            March Melee Pools' use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" className="text-indigo-600 dark:text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.
+                        </p>
+                        <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                            Specifically:
+                        </p>
+                        <ul className="list-disc pl-6 space-y-2 text-slate-600 dark:text-slate-400 mt-2">
+                            <li>We only request appropriate scopes (profile, email) to authenticate your identity.</li>
+                            <li>We do not transfer this data to third-party AI models.</li>
+                            <li>We do not sell this data to advertisers or data brokers.</li>
+                        </ul>
+                    </section>
+
+                    <section>
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">12. Contact Us</h2>
                         <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
                             If you have questions about this Privacy Policy, please contact us at:
                         </p>

@@ -456,7 +456,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
               className="text-white px-8 py-3 rounded-full text-lg font-bold hover:scale-105 transition-transform"
               style={{ backgroundColor: BRAND.orange }}
             >
-              Sign Up to Join
+              Create a Free Pool Now
             </button>
           </div>
 
