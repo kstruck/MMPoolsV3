@@ -35,7 +35,11 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         entryFee: number;
         paymentInstructions: string;
         scoringSystem: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
-        tieBreakers: { closestAbsolute: boolean; closestUnder: boolean; };
+        tieBreaker: 'CLOSEST_ABSOLUTE' | 'CLOSEST_UNDER';
+        payouts: {
+            places: { rank: number; percentage: number }[];
+            bonuses: { name: string; percentage: number }[];
+        };
     }>({
         name: `${user.name}'s Bracket Pool`,
         slug: '',
@@ -47,10 +51,14 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         entryFee: 0,
         paymentInstructions: '',
         scoringSystem: 'CLASSIC',
-        tieBreakers: { closestAbsolute: true, closestUnder: false }
+        tieBreaker: 'CLOSEST_ABSOLUTE',
+        payouts: {
+            places: [{ rank: 1, percentage: 70 }, { rank: 2, percentage: 30 }],
+            bonuses: []
+        }
     });
 
-    const TOTAL_STEPS = 6;
+    const TOTAL_STEPS = 7;
 
     const handleNext = () => setStep(s => Math.min(TOTAL_STEPS, s + 1));
     const handleBack = () => setStep(s => Math.max(1, s - 1));
@@ -58,6 +66,40 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     const update = (field: string, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
+
+    const addPlace = () => {
+        const nextRank = formData.payouts.places.length + 1;
+        update('payouts', { ...formData.payouts, places: [...formData.payouts.places, { rank: nextRank, percentage: 0 }] });
+    };
+
+    const removePlace = (index: number) => {
+        const newPlaces = formData.payouts.places.filter((_, i) => i !== index).map((p, i) => ({ ...p, rank: i + 1 }));
+        update('payouts', { ...formData.payouts, places: newPlaces });
+    };
+
+    const updatePlace = (index: number, val: number) => {
+        const newPlaces = [...formData.payouts.places];
+        newPlaces[index].percentage = val;
+        update('payouts', { ...formData.payouts, places: newPlaces });
+    };
+
+    const addBonus = () => {
+        update('payouts', { ...formData.payouts, bonuses: [...formData.payouts.bonuses, { name: 'Bonus', percentage: 0 }] });
+    };
+
+    const removeBonus = (index: number) => {
+        const newBonuses = formData.payouts.bonuses.filter((_, i) => i !== index);
+        update('payouts', { ...formData.payouts, bonuses: newBonuses });
+    };
+
+    const updateBonus = (index: number, field: 'name' | 'percentage', val: any) => {
+        const newBonuses = [...formData.payouts.bonuses];
+        // @ts-ignore
+        newBonuses[index][field] = val;
+        update('payouts', { ...formData.payouts, bonuses: newBonuses });
+    };
+
+    const totalPercentage = [...formData.payouts.places, ...formData.payouts.bonuses].reduce((sum, p) => sum + p.percentage, 0);
 
     const handlePublish = async () => {
         setLoading(true);
@@ -74,7 +116,11 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     entryFee: formData.entryFee,
                     paymentInstructions: formData.paymentInstructions,
                     scoringSystem: formData.scoringSystem,
-                    tieBreakers: formData.tieBreakers
+                    tieBreakers: {
+                        closestAbsolute: formData.tieBreaker === 'CLOSEST_ABSOLUTE',
+                        closestUnder: formData.tieBreaker === 'CLOSEST_UNDER'
+                    },
+                    payouts: formData.payouts
                 }
             });
             const { poolId } = createRes.data as { poolId: string };
@@ -215,19 +261,88 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
                             <div className="mt-8 border-t border-slate-800 pt-6">
                                 <h3 className="font-bold mb-4">Tiebreakers</h3>
-                                <label className="flex items-center gap-3 mb-2 cursor-pointer">
-                                    <input type="checkbox" checked={formData.tieBreakers.closestAbsolute} onChange={(e) => update('tieBreakers', { ...formData.tieBreakers, closestAbsolute: e.target.checked })} className="w-5 h-5 bg-slate-950 border-slate-700 rounded text-indigo-500" />
-                                    <span>Closest to Total Score (Absolute Diff)</span>
-                                </label>
-                                <label className="flex items-center gap-3 cursor-pointer">
-                                    <input type="checkbox" checked={formData.tieBreakers.closestUnder} onChange={(e) => update('tieBreakers', { ...formData.tieBreakers, closestUnder: e.target.checked })} className="w-5 h-5 bg-slate-950 border-slate-700 rounded text-indigo-500" />
-                                    <span>Closest without going over (Price is Right rules)</span>
-                                </label>
+                                <div className="space-y-4 max-w-lg">
+                                    <label className="block text-sm text-slate-400 mb-1">Select Tiebreaker Rule</label>
+                                    <select
+                                        value={formData.tieBreaker}
+                                        onChange={(e) => update('tieBreaker', e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none"
+                                    >
+                                        <option value="CLOSEST_ABSOLUTE">Closest to Total Score (Absolute Diff)</option>
+                                        <option value="CLOSEST_UNDER">Closest without going over (Price is Right)</option>
+                                    </select>
+                                    <p className="text-xs text-slate-500">Determines who wins if multiple entries have the same bracket score.</p>
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {step === 5 && (
+                        <div className="animate-in fade-in slide-in-from-right-4">
+                            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><DollarSign className="text-fuchsia-400" /> Payout Structure</h2>
+                            <div className="space-y-6 max-w-lg">
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="block text-sm text-slate-400">Place Payouts</label>
+                                        <button onClick={addPlace} className="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-indigo-400">+ Add Place</button>
+                                    </div>
+                                    {formData.payouts.places.map((place, idx) => (
+                                        <div key={idx} className="flex gap-2 mb-2">
+                                            <div className="bg-slate-800 px-3 py-2 rounded text-slate-400 min-w-[60px] flex items-center justify-center font-bold">
+                                                {place.rank}{place.rank === 1 ? 'st' : place.rank === 2 ? 'nd' : place.rank === 3 ? 'rd' : 'th'}
+                                            </div>
+                                            <div className="flex-1 relative">
+                                                <input
+                                                    type="number"
+                                                    value={place.percentage}
+                                                    onChange={(e) => updatePlace(idx, parseFloat(e.target.value))}
+                                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none pr-8"
+                                                />
+                                                <span className="absolute right-3 top-2 text-slate-500">%</span>
+                                            </div>
+                                            {idx > 0 && <button onClick={() => removePlace(idx)} className="text-rose-500 hover:text-rose-400 px-2">×</button>}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="block text-sm text-slate-400">Bonus Payouts</label>
+                                        <button onClick={addBonus} className="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-pink-400">+ Add Bonus</button>
+                                    </div>
+                                    {formData.payouts.bonuses.map((bonus, idx) => (
+                                        <div key={idx} className="flex gap-2 mb-2">
+                                            <input
+                                                type="text"
+                                                value={bonus.name}
+                                                onChange={(e) => updateBonus(idx, 'name', e.target.value)}
+                                                placeholder="Outcome Name"
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none"
+                                            />
+                                            <div className="w-24 relative">
+                                                <input
+                                                    type="number"
+                                                    value={bonus.percentage}
+                                                    onChange={(e) => updateBonus(idx, 'percentage', parseFloat(e.target.value))}
+                                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none pr-8"
+                                                />
+                                                <span className="absolute right-3 top-2 text-slate-500">%</span>
+                                            </div>
+                                            <button onClick={() => removeBonus(idx)} className="text-rose-500 hover:text-rose-400 px-2">×</button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className={`p-4 rounded-lg flex justify-between items-center ${totalPercentage === 100 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                                    <span className="font-bold">Total Allocation</span>
+                                    <span className="font-mono text-xl">{totalPercentage}%</span>
+                                </div>
+                                {totalPercentage !== 100 && <p className="text-xs text-amber-500">Total must equal 100% to publish.</p>}
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 6 && (
                         <div className="animate-in fade-in slide-in-from-right-4">
                             <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><DollarSign className="text-green-400" /> Payment & Fees</h2>
                             <div className="space-y-6 max-w-lg">
@@ -244,7 +359,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                         </div>
                     )}
 
-                    {step === 6 && (
+                    {step === 7 && (
                         <div className="animate-in fade-in slide-in-from-right-4">
                             <h2 className="text-2xl font-bold mb-6">Review & Publish</h2>
                             <div className="bg-slate-950 border border-slate-800 rounded-lg p-6 space-y-4 text-sm text-slate-300">
@@ -268,11 +383,19 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                     <span>Scoring</span>
                                     <span className="font-bold text-white">{formData.scoringSystem}</span>
                                 </div>
+                                <div className="flex justify-between border-b border-slate-800 pb-2">
+                                    <span>Payouts</span>
+                                    <div className="text-right">
+                                        {formData.payouts.places.map(p => <div key={p.rank}>{p.rank === 1 ? '1st' : p.rank + 'th'}: {p.percentage}%</div>)}
+                                        {formData.payouts.bonuses.map(b => <div key={b.name} className="text-xs text-pink-400">{b.name}: {b.percentage}%</div>)}
+                                    </div>
+                                </div>
                             </div>
 
-                            <button onClick={handlePublish} disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl mt-8 flex items-center justify-center gap-2 transition-all">
+                            <button onClick={handlePublish} disabled={loading || totalPercentage !== 100} className={`w-full font-bold py-4 rounded-xl mt-8 flex items-center justify-center gap-2 transition-all ${totalPercentage === 100 ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}>
                                 {loading ? <span className="animate-pulse">Creating Pool...</span> : <><Shield size={20} /> Publish Pool</>}
                             </button>
+                            {totalPercentage !== 100 && <p className="text-center text-xs text-rose-500 mt-2">Payouts must equal 100%.</p>}
                             <p className="text-center text-xs text-slate-500 mt-4">By publishing, you agree to manage this pool responsibly.</p>
                         </div>
                     )}

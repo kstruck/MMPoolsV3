@@ -1,16 +1,29 @@
-
 import React, { useEffect, useState } from 'react';
-import { Trophy, Grid3X3, Lock, ArrowRight } from 'lucide-react';
+import { Trophy, Grid3X3, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
 import { settingsService } from '../services/settingsService';
+import { Header } from './Header';
+import { Footer } from './Footer';
 import type { SystemSettings, User } from '../types';
 
 interface CreatePoolSelectionProps {
     onSelectSquares: () => void;
     onSelectBracket: () => void;
     user: User | null;
+    isManager: boolean;
+    onOpenAuth: () => void;
+    onLogout: () => void;
+    onCreatePool: () => void;
 }
 
-export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({ onSelectSquares, onSelectBracket, user }) => {
+export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
+    onSelectSquares,
+    onSelectBracket,
+    user,
+    isManager,
+    onOpenAuth,
+    onLogout,
+    onCreatePool
+}) => {
     const [settings, setSettings] = useState<SystemSettings | null>(null);
 
     useEffect(() => {
@@ -21,24 +34,31 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({ onSele
     const isBracketEnabled = settings?.enableBracketPools || user?.role === 'SUPER_ADMIN';
 
     return (
-        <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-            <header className="bg-slate-950 border-b border-slate-800 p-4 sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <button onClick={() => window.history.back()} className="text-slate-400 hover:text-white font-bold flex items-center gap-2">
-                        ← Back
+        <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col">
+            <Header
+                user={user}
+                isManager={isManager}
+                onOpenAuth={onOpenAuth}
+                onLogout={onLogout}
+                onCreatePool={onCreatePool}
+            />
+
+            <main className="flex-grow max-w-4xl mx-auto p-6 md:p-12 mt-8 w-full">
+                <div className="mb-6">
+                    <button onClick={() => window.history.back()} className="text-slate-400 hover:text-white font-bold flex items-center gap-2 transition-colors">
+                        <ArrowLeft size={20} /> Back
                     </button>
-                    <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+                </div>
+
+                <div className="text-center mb-12">
+                    <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent mb-2">
                         Start a New Pool
                     </h1>
-                    <div className="w-16"></div>
+                    <h2 className="text-3xl md:text-5xl font-black text-white mb-6">Choose Your Game</h2>
+                    <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+                        Select the type of pool you want to host. You can manage multiple pools of different types from your dashboard.
+                    </p>
                 </div>
-            </header>
-
-            <main className="max-w-4xl mx-auto p-6 md:p-12 mt-8">
-                <h2 className="text-3xl md:text-5xl font-black text-center text-white mb-6">Choose Your Game</h2>
-                <p className="text-center text-slate-400 text-lg mb-12 max-w-2xl mx-auto">
-                    Select the type of pool you want to host. You can manage multiple pools of different types from your dashboard.
-                </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* SQUARES OPTION */}
@@ -66,8 +86,8 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({ onSele
                         onClick={() => isBracketEnabled && onSelectBracket()}
                         disabled={!isBracketEnabled}
                         className={`group relative border-2 rounded-2xl p-8 text-left transition-all shadow-xl ${isBracketEnabled
-                                ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 hover:border-orange-500 hover:-translate-y-1'
-                                : 'bg-slate-900 border-slate-800 opacity-60 cursor-not-allowed'
+                            ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 hover:border-orange-500 hover:-translate-y-1'
+                            : 'bg-slate-900 border-slate-800 opacity-60 cursor-not-allowed'
                             }`}
                     >
                         <div className={`absolute top-4 right-4 p-3 rounded-xl transition-colors ${isBracketEnabled ? 'bg-orange-500/20 group-hover:bg-orange-500' : 'bg-slate-800'}`}>
@@ -100,6 +120,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({ onSele
                     </button>
                 </div>
             </main>
+            <Footer />
         </div>
     );
 };

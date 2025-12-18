@@ -103,6 +103,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // SYSTEM SETTINGS (Feature Flags)
+    match /system/config {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // TOURNAMENTS (March Madness Data)
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
     // STATS:
     match /stats/{document=**} {
       allow read: if true;

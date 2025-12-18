@@ -877,8 +877,12 @@ const App: React.FC = () => {
     return (
       <CreatePoolSelection
         user={user}
+        isManager={isManager}
         onSelectSquares={handleSquaresPoolCreate}
         onSelectBracket={() => { window.location.hash = '#bracket-wizard'; }}
+        onOpenAuth={() => setShowAuthModal(true)}
+        onLogout={authService.logout}
+        onCreatePool={handleCreatePool}
       />
     );
   }

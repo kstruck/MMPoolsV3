@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backfillPools = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
+exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -35,4 +35,12 @@ var poolOps_1 = require("./poolOps");
 Object.defineProperty(exports, "createPool", { enumerable: true, get: function () { return poolOps_1.createPool; } });
 var backfill_1 = require("./backfill");
 Object.defineProperty(exports, "backfillPools", { enumerable: true, get: function () { return backfill_1.backfillPools; } });
+var bracketPools_1 = require("./bracketPools");
+Object.defineProperty(exports, "createBracketPool", { enumerable: true, get: function () { return bracketPools_1.createBracketPool; } });
+Object.defineProperty(exports, "publishBracketPool", { enumerable: true, get: function () { return bracketPools_1.publishBracketPool; } });
+Object.defineProperty(exports, "joinBracketPool", { enumerable: true, get: function () { return bracketPools_1.joinBracketPool; } });
+var bracketEntries_1 = require("./bracketEntries");
+Object.defineProperty(exports, "createBracketEntry", { enumerable: true, get: function () { return bracketEntries_1.createBracketEntry; } });
+Object.defineProperty(exports, "updateBracketEntry", { enumerable: true, get: function () { return bracketEntries_1.updateBracketEntry; } });
+Object.defineProperty(exports, "submitBracketEntry", { enumerable: true, get: function () { return bracketEntries_1.submitBracketEntry; } });
 //# sourceMappingURL=index.js.map

@@ -329,6 +329,7 @@ export interface BracketPool {
       closestAbsolute: boolean;
       closestUnder: boolean;
     };
+    payouts: PayoutSettings;
   };
 
   name: string;
@@ -342,6 +343,11 @@ export interface BracketPool {
 
   createdAt: number;
   updatedAt?: number;
+}
+
+export interface PayoutSettings {
+  places: { rank: number; percentage: number }[]; // e.g. [{rank: 1, percentage: 70}]
+  bonuses: { name: string; percentage: number }[]; // e.g. [{name: "Underdog", percentage: 5}]
 }
 
 export interface BracketEntry {

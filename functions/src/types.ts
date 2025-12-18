@@ -250,43 +250,7 @@ export interface AIRequest {
 }
 
 
-// --- BRACKET POOL TYPES ---
 
-export interface BracketPool {
-    id: string;
-    type: 'BRACKET';
-    slug: string;
-    slugLower: string;
-    isListedPublic: boolean;
-    passwordHash?: string; // If protected
-    lockAt: number; // Timestamp
-    status: 'DRAFT' | 'PUBLISHED' | 'LOCKED' | 'COMPLETED';
-
-    settings: {
-        maxEntriesTotal: number; // -1 for unlimited
-        maxEntriesPerUser: number; // -1 for unlimited
-        entryFee: number;
-        paymentInstructions: string;
-        scoringSystem: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
-        customScoring?: number[]; // [R64, R32, S16, E8, F4, CHAMPS]
-        tieBreakers: {
-            closestAbsolute: boolean;
-            closestUnder: boolean;
-        };
-    };
-
-    name: string;
-    description?: string;
-    managerUid: string;
-    seasonYear: number;
-
-    // Counts for easy display
-    participantCount?: number;
-    entryCount?: number;
-
-    createdAt: number;
-    updatedAt?: number;
-}
 
 export interface BracketEntry {
     id: string;
@@ -343,5 +307,48 @@ export interface Team {
     seed: number;
     region: string;
     logoUrl?: string;
+}
+
+// --- BRACKET POOL TYPES ---
+
+export interface BracketPool {
+    id: string;
+    type: 'BRACKET';
+    slug: string;
+    slugLower: string;
+    isListedPublic: boolean;
+    passwordHash?: string;
+    lockAt: number;
+    status: 'DRAFT' | 'PUBLISHED' | 'LOCKED' | 'COMPLETED';
+
+    settings: {
+        maxEntriesTotal: number;
+        maxEntriesPerUser: number;
+        entryFee: number;
+        paymentInstructions: string;
+        scoringSystem: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
+        customScoring?: number[];
+        tieBreakers: {
+            closestAbsolute: boolean;
+            closestUnder: boolean;
+        };
+        payouts: PayoutSettings;
+    };
+
+    name: string;
+    description?: string;
+    managerUid: string;
+    seasonYear: number;
+
+    participantCount?: number;
+    entryCount?: number;
+
+    createdAt: number;
+    updatedAt?: number;
+}
+
+export interface PayoutSettings {
+    places: { rank: number; percentage: number }[];
+    bonuses: { name: string; percentage: number }[];
 }
 
