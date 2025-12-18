@@ -23,20 +23,21 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                 <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                     Public Pools
                 </button>
-                <button onClick={() => window.location.hash = '#features'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
-                    Features
-                </button>
+                {!user && (
+                    <button onClick={() => window.location.hash = '#features'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                        Features
+                    </button>
+                )}
                 {user ? (
                     <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => window.location.hash = '#participant'}
+                            className="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
+                            title="Pools you have joined as a participant"
+                        >
+                            <LayoutGrid size={14} /> My Entries
+                        </button>
 
-                        {/* SUPER ADMIN */}
-                        {user.role === 'SUPER_ADMIN' && (
-                            <button onClick={() => window.location.hash = '#super-admin'} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold">
-                                <Shield size={12} /> Super Admin
-                            </button>
-                        )}
-
-                        {/* POOL MANANGER (and Super Admin) */}
                         {(isManager || user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') && (
                             <button
                                 onClick={() => window.location.hash = '#admin'}
@@ -47,23 +48,19 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                             </button>
                         )}
 
-                        {/* ALL USERS (Participants) */}
-                        <button
-                            onClick={() => window.location.hash = '#participant'}
-                            className="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
-                            title="Pools you have joined as a participant"
-                        >
-                            <LayoutGrid size={14} /> My Entries
-                        </button>
-
-                        {/* CREATE POOL (All Logged In Users) */}
                         <button
                             onClick={onCreatePool}
                             className="text-xs bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold"
                             title="Create a new pool"
                         >
-                            <LayoutGrid size={14} /> Create Pool
+                            <LayoutGrid size={14} /> Create a New Pool
                         </button>
+
+                        {user.role === 'SUPER_ADMIN' && (
+                            <button onClick={() => window.location.hash = '#super-admin'} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold">
+                                <Shield size={12} /> SuperAdmin Dashboard
+                            </button>
+                        )}
 
                         <button onClick={() => window.location.hash = '#profile'} className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-bold">
                             <UserIcon size={14} /> {user.name.split(' ')[0]}
