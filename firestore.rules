@@ -81,7 +81,12 @@ service cloud.firestore {
       // 1. User editing themselves (BUT denying role change)
       // 2. SuperAdmin editing anyone (Allowed to change roles too)
       allow write: if request.auth != null && (
-        (request.auth.uid == userId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))) ||
+        (request.auth.uid == userId && (
+          // CREATE: Allow if creating self, provided role is PARTICIPANT (prevent self-promotion)
+          (resource == null && request.resource.data.role == 'PARTICIPANT') ||
+          // UPDATE: Allow if updating self, provided role is NOT changed
+          (resource != null && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+        )) ||
         isSuperAdmin()
       );
 
