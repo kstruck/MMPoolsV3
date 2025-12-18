@@ -155,24 +155,26 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-400 uppercase">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 text-slate-500" size={18} />
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  placeholder="••••••••"
-                />
+            {!isResetting && (
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-400 uppercase">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 text-slate-500" size={18} />
+                  <input
+                    type="password"
+                    required={!isResetting}
+                    minLength={6}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    placeholder="••••••••"
+                  />
+                </div>
+                {isRegistering && (
+                  <p className="text-xs text-slate-500 mt-1 ml-1">Password must be at least 6 characters</p>
+                )}
               </div>
-              {isRegistering && (
-                <p className="text-xs text-slate-500 mt-1 ml-1">Password must be at least 6 characters</p>
-              )}
-            </div>
+            )}
 
             <button
               type="submit"
@@ -183,7 +185,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
                 <Loader2 className="animate-spin" size={20} />
               ) : (
                 <>
-                  {isRegistering ? 'Create Account' : 'Sign In'}
+                  {isResetting ? 'Send Reset Link' : (isRegistering ? 'Create Account' : 'Sign In')}
                   <ArrowRight size={18} />
                 </>
               )}
