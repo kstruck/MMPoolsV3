@@ -241,6 +241,7 @@ const App: React.FC = () => {
     if (hash.startsWith('#profile')) return { view: 'profile', id: null };
     if (hash.startsWith('#privacy')) return { view: 'privacy', id: null };
     if (hash.startsWith('#terms')) return { view: 'terms', id: null };
+    if (hash.startsWith('#how-it-works')) return { view: 'how-it-works', id: null };
     if (hash.startsWith('#support')) return { view: 'support', id: null };
     return { view: 'home', id: null };
   }, [hash]);
