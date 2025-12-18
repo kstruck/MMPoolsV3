@@ -28,16 +28,24 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                     </div>
                     <div className="flex items-center gap-4 flex-wrap justify-center">
                         <ThemeToggle />
-                        <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
-                            Public Pools
-                        </button>
-                        {!user && (
-                            <button onClick={() => window.location.hash = '#features'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
-                                Features
-                            </button>
-                        )}
-                        {user ? (
+                        {!user ? (
+                            <>
+                                <button onClick={() => window.location.hash = '#features'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                    Features
+                                </button>
+                                <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                    Public Pools
+                                </button>
+                                <div className="flex gap-2">
+                                    <button onClick={onOpenAuth} className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 transition-colors">Sign In / Register</button>
+                                </div>
+                            </>
+                        ) : (
                             <div className="flex items-center gap-4">
+                                <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                    Public Pools
+                                </button>
+
                                 <button
                                     onClick={() => window.location.hash = '#participant'}
                                     className="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
@@ -61,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     className="text-xs bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold"
                                     title="Create a new pool"
                                 >
-                                    <LayoutGrid size={14} /> Manage/Create Pool
+                                    <LayoutGrid size={14} /> {(isManager || user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') ? "Create a New Pool" : "Create your own pool"}
                                 </button>
 
                                 {user.role === 'SUPER_ADMIN' && (
@@ -75,10 +83,6 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 </button>
 
                                 <button onClick={onLogout} className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded transition-colors"><LogOut size={14} /></button>
-                            </div>
-                        ) : (
-                            <div className="flex gap-2">
-                                <button onClick={onOpenAuth} className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 transition-colors">Sign In</button>
                             </div>
                         )}
                     </div>
