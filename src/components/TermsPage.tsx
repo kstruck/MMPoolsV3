@@ -1,22 +1,20 @@
 import React from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { Header } from './Header';
 import { Footer } from './Footer';
+import type { User } from '../types';
 
-export const TermsPage: React.FC = () => {
+interface Props {
+    user: User | null;
+    isManager?: boolean;
+    onOpenAuth: () => void;
+    onLogout: () => void;
+    onCreatePool: () => void;
+}
+
+export const TermsPage: React.FC<Props> = (props) => {
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-            {/* Header */}
-            <nav className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-                    <button
-                        onClick={() => window.location.hash = '#'}
-                        className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-                    >
-                        <ArrowLeft size={20} />
-                        <span className="font-bold">Back to Home</span>
-                    </button>
-                </div>
-            </nav>
+            <Header {...props} />
 
             {/* Content */}
             <div className="max-w-4xl mx-auto px-6 py-16">

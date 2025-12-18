@@ -23,6 +23,7 @@ import { BrowsePools } from './components/BrowsePools';
 import { FeaturesPage } from './components/FeaturesPage';
 import { PrivacyPage } from './components/PrivacyPage';
 import { TermsPage } from './components/TermsPage';
+import { HowItWorksPage } from './components/HowItWorksPage'; // Added import
 import { SupportPage } from './components/SupportPage';
 import { ManagerDashboard } from './components/ManagerDashboard';
 
@@ -772,11 +773,39 @@ const App: React.FC = () => {
   }
 
   if (route.view === 'privacy') {
-    return <PrivacyPage />;
+    return (
+      <PrivacyPage
+        user={user}
+        isManager={isManager}
+        onOpenAuth={() => setShowAuthModal(true)}
+        onLogout={authService.logout}
+        onCreatePool={handleCreatePool}
+      />
+    );
   }
 
   if (route.view === 'terms') {
-    return <TermsPage />;
+    return (
+      <TermsPage
+        user={user}
+        isManager={isManager}
+        onOpenAuth={() => setShowAuthModal(true)}
+        onLogout={authService.logout}
+        onCreatePool={handleCreatePool}
+      />
+    );
+  }
+
+  if (route.view === 'how-it-works') {
+    return (
+      <HowItWorksPage
+        user={user}
+        isManager={isManager}
+        onOpenAuth={() => setShowAuthModal(true)}
+        onLogout={authService.logout}
+        onCreatePool={handleCreatePool}
+      />
+    );
   }
 
   if (route.view === 'support') {

@@ -33,6 +33,9 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => window.location.hash = '#features'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Features
                                 </button>
+                                <button onClick={() => window.location.hash = '#how-it-works'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                    How it Works
+                                </button>
                                 <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Public Pools
                                 </button>
