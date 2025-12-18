@@ -249,6 +249,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
               </button>
             )}
           </div>
+
+          <div className="mt-6 pt-6 border-t border-slate-700/50 text-center">
+            <p className="text-xs text-slate-500">
+              By continuing, you agree to our <a href="#terms" className="underline hover:text-slate-400">Terms</a> and acknowledge our <a href="#privacy" className="underline hover:text-slate-400">Privacy Policy</a>.
+            </p>
+          </div>
         </div>
       </div>
     </div>
