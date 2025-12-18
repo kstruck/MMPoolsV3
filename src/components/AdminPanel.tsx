@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { GameState, Scores, PayoutConfig, Square } from '../types';
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Activity, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download } from 'lucide-react';
+import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Activity, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
@@ -980,6 +980,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-xl font-bold text-white mb-2">Basic Information</h3>
         <p className="text-slate-400 text-sm mb-6">Let's verify the core details of your pool.</p>
+
+        {/* Public Visibility Toggle */}
+        <div className="mb-6 bg-slate-950 border border-slate-800 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${gameState.isPublic ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
+              <Globe size={24} />
+            </div>
+            <div>
+              <h4 className={`font-bold ${gameState.isPublic ? 'text-white' : 'text-slate-400'}`}>Public Visibility</h4>
+              <p className="text-xs text-slate-500">
+                {gameState.isPublic
+                  ? "Your pool is listed in the 'Browse Pools' directory."
+                  : "Only people with the link can access this pool."}
+              </p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!gameState.isPublic}
+              onChange={(e) => updateConfig({ isPublic: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label><DebouncedInput value={gameState.name} onChange={(val) => updateConfig({ name: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Enter Pool Name" /></div>
 
