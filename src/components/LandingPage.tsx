@@ -368,6 +368,44 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
           </div>
 
+
+          {/* Charity / Fundraising Section */}
+          <div className="mb-20">
+            <div className="p-8 md:p-12 rounded-2xl border relative overflow-hidden" style={{ backgroundColor: `${BRAND.navy}`, borderColor: '#334155' }}>
+              <div className="absolute top-0 right-0 p-8 opacity-10">
+                <Heart size={200} fill="white" />
+              </div>
+
+              <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 rounded-full bg-pink-600/20 text-pink-500">
+                    <Heart size={32} fill="currentColor" />
+                  </div>
+                  <h2 className="text-3xl font-bold text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>Raise Money for Your Cause</h2>
+                </div>
+
+                <p className="text-lg md:text-xl max-w-2xl mb-8 leading-relaxed" style={{ color: BRAND.lightGray }}>
+                  Turn any big game into a fundraising event. Our platform makes it simple to run a <strong>Charity Squares Pool</strong> to support your favorite cause, youth sports team, or community group.
+                </p>
+
+                <div className="grid md:grid-cols-3 gap-6 mb-8">
+                  <div className="bg-slate-900/50 p-5 rounded-lg border border-slate-700/50">
+                    <h4 className="font-bold text-white mb-2">1. Set Donation %</h4>
+                    <p className="text-sm text-slate-400">Designate 10%, 50%, or even 100% of the pot to go directly to your charity.</p>
+                  </div>
+                  <div className="bg-slate-900/50 p-5 rounded-lg border border-slate-700/50">
+                    <h4 className="font-bold text-white mb-2">2. Engage Supporters</h4>
+                    <p className="text-sm text-slate-400">Perfect for Church Groups, PTAs, and Youth Leagues. Gamify your fundraising.</p>
+                  </div>
+                  <div className="bg-slate-900/50 p-5 rounded-lg border border-slate-700/50">
+                    <h4 className="font-bold text-white mb-2">3. Automatic Tracking</h4>
+                    <p className="text-sm text-slate-400">We clearly display the "Donation Amount" vs "Prize Pot" so everyone knows their impact.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Testimonials */}
           <div className="mb-20">
             <h2 className="text-3xl font-bold mb-8 text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>Trusted by Commissioners</h2>
