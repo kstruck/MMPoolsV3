@@ -1,6 +1,6 @@
 import type { User } from '../types';
-import { Trophy, Zap, Shield, LayoutGrid, Calendar, CheckCircle2, Heart, Globe, DollarSign, Star, LogOut, User as UserIcon } from 'lucide-react';
-import { ThemeToggle } from './ThemeToggle';
+import { Trophy, Zap, Shield, LayoutGrid, Calendar, CheckCircle2, Heart, Globe, DollarSign, Star } from 'lucide-react';
+import { Header } from './Header';
 import { Footer } from './Footer';
 
 interface LandingPageProps {
@@ -25,99 +25,20 @@ const BRAND = {
   amber: '#FBBF24',
   lightGray: '#E5E7EB',
 };
-export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, onGoToDashboard, isLoggedIn, totalDonated = 0, totalPrizes = 0 }) => {
+
+export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
 
-      {/* Navigation */}
-      <nav className="border-b border-white/10 bg-[#0A192F]/95 backdrop-blur-sm sticky top-0 z-50 transition-all duration-300">
-        <div className="max-w-7xl mx-auto px-6 h-32 md:h-44 flex items-center justify-between">
-          {/* Logo */}
-          <a href="/" className="flex items-center group">
-            <img
-              src="/mmp_logo_500x150_trans3.png"
-              alt="March Melee Pools logo"
-              className="h-24 md:h-36 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
-            />
-          </a>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <button
-              onClick={onBrowse}
-              className="hidden md:flex items-center text-sm font-bold text-white/70 hover:text-white transition-colors"
-            >
-              Public Pools
-            </button>
-            <button
-              onClick={() => window.location.hash = '#features'}
-              className="hidden md:flex items-center text-sm font-bold text-white/70 hover:text-white transition-colors ml-4"
-            >
-              Features
-            </button>
-            <div className="h-6 w-px bg-white/20 hidden md:block"></div>
+      {/* Shared Header for Consistency */}
+      <Header
+        user={user || null}
+        isManager={isManager}
+        onOpenAuth={onLogin}
+        onLogout={onLogout || (() => { })}
+        onCreatePool={onCreatePool}
+      />
 
-            {isLoggedIn && user ? (
-              <div className="flex items-center gap-4">
-
-
-                {/* SUPER ADMIN */}
-                {user.role === 'SUPER_ADMIN' && (
-                  <button onClick={() => window.location.hash = '#super-admin'} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold">
-                    <Shield size={12} /> Super Admin
-                  </button>
-                )}
-
-                {/* POOL MANANGER */}
-                {(isManager || user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') && (
-                  <button
-                    onClick={() => window.location.hash = '#admin'}
-                    className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold"
-                  >
-                    <LayoutGrid size={12} /> Manage My Pools
-                  </button>
-                )}
-
-                <button
-                  onClick={onGoToDashboard}
-                  className="text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all hover:scale-105 shadow-lg flex items-center gap-1"
-                  style={{ backgroundColor: BRAND.emerald }}
-                  title="My Entries"
-                >
-                  <LayoutGrid size={12} /> My Entries
-                </button>
-
-                <button
-                  onClick={onCreatePool}
-                  className="text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all hover:scale-105 shadow-lg flex items-center gap-1"
-                  style={{ backgroundColor: BRAND.orange }}
-                  title="Create a New Pool"
-                >
-                  <LayoutGrid size={12} /> Manage/Create Pool
-                </button>
-
-                <button onClick={() => window.location.hash = '#profile'} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold">
-                  <UserIcon size={12} /> {user.name.split(' ')[0]} <span className="text-[10px] text-gray-400">({user.role})</span>
-                </button>
-
-                {onLogout && (
-                  <button onClick={onLogout} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-white transition-colors">
-                    <LogOut size={12} />
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={onLogin}
-                  className="text-sm font-bold text-white/80 hover:text-white transition-colors"
-                >
-                  Sign In
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </nav>
 
       {/* Hero Section */}
       < section className="relative overflow-hidden pt-12 md:pt-20 pb-20 md:pb-32" >
