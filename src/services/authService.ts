@@ -224,5 +224,7 @@ export const authService = {
     if (code) {
       localStorage.setItem(REFERRAL_STORAGE_KEY, code);
     }
-  }
+  },
+
+  syncUserToFirestore: syncUserToFirestore
 };

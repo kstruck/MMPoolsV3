@@ -124,12 +124,13 @@ const App: React.FC = () => {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   useEffect(() => {
-    return authService.onAuthStateChanged((u) => {
-      setUser(u);
-      setIsAuthLoading(false); // Auth check complete
+    return authService.onAuthStateChanged(async (u) => {
       if (u) {
+        // Fetch full profile from DB to get the correct ROLE
+        const fullProfile = await authService.syncUserToFirestore(u);
+        setUser(fullProfile);
         setShowAuthModal(false);
-        dbService.saveUser(u); // Sync user to Firestore
+        dbService.saveUser(fullProfile);
 
         // Attempt to merge guest squares if we have context
         const guestKey = localStorage.getItem('mmp_guest_key');
@@ -145,7 +146,10 @@ const App: React.FC = () => {
             })
             .catch(err => console.error("Auto-merge failed", err));
         }
+      } else {
+        setUser(null);
       }
+      setIsAuthLoading(false);
     });
   }, []);
 
