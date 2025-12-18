@@ -163,6 +163,17 @@ export const authService = {
     }
   },
 
+  // Reset Password
+  resetPassword: async (email: string): Promise<void> => {
+    try {
+      const { sendPasswordResetEmail } = await import('firebase/auth');
+      await sendPasswordResetEmail(auth, email);
+    } catch (error) {
+      console.error("Reset Password Error", error);
+      throw error;
+    }
+  },
+
   // Logout
   logout: async () => {
     try {

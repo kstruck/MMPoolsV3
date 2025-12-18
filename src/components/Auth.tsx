@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { authService } from '../services/authService';
-import { Mail, Lock, User, Chrome, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User, Chrome, ArrowRight, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface AuthProps {
   onLogin: () => void;
@@ -9,8 +9,10 @@ interface AuthProps {
 
 export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = false }) => {
   const [isRegistering, setIsRegistering] = useState(defaultIsRegistering);
+  const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -22,8 +24,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setSuccessMsg(null);
 
     try {
+      if (isResetting) {
+        await authService.resetPassword(formData.email);
+        setSuccessMsg("If an account exists, a password reset link has been sent to your email.");
+        setIsLoading(false);
+        return;
+      }
+
       if (isRegistering) {
         await authService.register(formData.name, formData.email, formData.password);
       } else {
@@ -45,7 +55,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
         setError(err.message || "Authentication failed. Please try again.");
       }
     } finally {
-      setIsLoading(false);
+      if (!isResetting) setIsLoading(false);
     }
   };
 
@@ -64,16 +74,15 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
   };
 
 
-
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
         <div className="p-8 text-center border-b border-slate-700 bg-slate-900/50">
           <h2 className="text-2xl font-bold text-white mb-2">
-            {isRegistering ? 'Create Account' : 'Welcome Back'}
+            {isResetting ? 'Reset Password' : (isRegistering ? 'Create Account' : 'Welcome Back')}
           </h2>
           <p className="text-slate-400 text-sm">
-            {isRegistering ? 'Sign up to create and manage pools' : 'Sign in to access your dashboard'}
+            {isResetting ? "Enter your email to receive a reset link" : (isRegistering ? 'Sign up to create and manage pools' : 'Sign in to access your dashboard')}
           </p>
         </div>
 
@@ -83,6 +92,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
             <div className="bg-rose-500/10 border border-rose-500/50 rounded-lg p-3 flex items-start gap-3 text-rose-200 text-sm">
               <AlertCircle size={18} className="shrink-0 mt-0.5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {/* Success Banner */}
+          {successMsg && (
+            <div className="bg-emerald-500/10 border border-emerald-500/50 rounded-lg p-3 flex items-start gap-3 text-emerald-200 text-sm">
+              <CheckCircle size={18} className="shrink-0 mt-0.5" />
+              <span>{successMsg}</span>
             </div>
           )}
 
@@ -175,14 +192,35 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
 
 
 
-          <div className="text-center pt-2">
-            <button
-              type="button"
-              onClick={() => { setIsRegistering(!isRegistering); setError(null); }}
-              className="text-indigo-400 hover:text-indigo-300 text-sm font-bold transition-colors"
-            >
-              {isRegistering ? 'Already have an account? Sign In' : "Don't have an account? Register"}
-            </button>
+          <div className="text-center pt-2 space-y-2">
+            {!isResetting ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { setIsRegistering(!isRegistering); setError(null); }}
+                  className="text-indigo-400 hover:text-indigo-300 text-sm font-bold transition-colors block w-full"
+                >
+                  {isRegistering ? 'Already have an account? Sign In' : "Don't have an account? Register"}
+                </button>
+                {!isRegistering && (
+                  <button
+                    type="button"
+                    onClick={() => { setIsResetting(true); setError(null); }}
+                    className="text-slate-500 hover:text-white text-xs transition-colors"
+                  >
+                    Forgot Password?
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setIsResetting(false); setError(null); }}
+                className="text-slate-500 hover:text-white text-xs transition-colors"
+              >
+                Back to Sign In
+              </button>
+            )}
           </div>
         </div>
       </div>
