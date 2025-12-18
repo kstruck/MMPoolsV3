@@ -38,6 +38,21 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                         )}
                         {user ? (
                             <div className="flex items-center gap-4">
+                                {/* Debug / Verification Button */}
+                                {!user.emailVerified && user.provider === 'password' && (
+                                    <button
+                                        onClick={async () => {
+                                            console.log('User clicking Resend Verify');
+                                            const { authService } = await import('../services/authService');
+                                            await authService.sendVerificationEmail(await authService.getCurrentUser());
+                                            alert('Verification email request sent! Check console.');
+                                        }}
+                                        className="bg-amber-500 hover:bg-amber-600 text-white text-xs px-2 py-1 rounded font-bold"
+                                    >
+                                        Resend Verification
+                                    </button>
+                                )}
+
                                 <button
                                     onClick={() => window.location.hash = '#participant'}
                                     className="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
