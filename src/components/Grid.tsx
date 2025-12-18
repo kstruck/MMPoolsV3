@@ -282,7 +282,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         <div className="mb-6 p-4 bg-indigo-900/20 rounded-lg border border-indigo-500/20 flex flex-col md:flex-row items-center justify-between gap-4">
                            <div className="text-sm text-indigo-200">
                               <p className="font-bold flex items-center gap-2"><Info size={14} /> Why Sign In?</p>
-                              <p className="opacity-70">Create an account to save your squares permanently and access the dashboard.</p>
+                              <p className="opacity-70">Creating an account allows you to access to your personal dashboard showing the pools you have entered allowing quick access to those pools. You are not required to create an account to play in a pool.</p>
                            </div>
                            {onLogin && (
                               <button onClick={onLogin} className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
@@ -315,7 +315,6 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               placeholder="john@example.com"
                            />
                         </div>
-                        {/* Other inputs remain same structure, hiding logic same? */}
                         {gameState.collectPhone && (
                            <div>
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Phone Number</label>
@@ -328,18 +327,19 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               />
                            </div>
                         )}
-                        {/* ... */}
                      </div>
 
                      <div className="flex justify-between items-center border-t border-slate-700 pt-4">
                         <div className="flex gap-4">
-                           {/* Claim Code UI - Only for Guests? Or logged in too? */}
-                           {/* Req: "Enter code to claim/merge" */}
+                           {/* Claim Code UI Refined with Tooltip */}
                            <div className="relative group">
-                              <button className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
-                                 <Key size={14} /> Claim / Merge
+                              <button className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-help">
+                                 <Key size={14} /> Claim / Merge <Info size={10} className="opacity-50" />
                               </button>
-                              {/* Tooltip/popover for claiming could be here or separate modal. Simplified for now: */}
+                              {/* Tooltip */}
+                              <div className="absolute bottom-full left-0 mb-2 w-48 bg-slate-800 text-white text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                                 Already have squares? Use this to restore your history or merge squares from another device.
+                              </div>
                            </div>
                         </div>
 
@@ -353,13 +353,27 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
                      {/* CLAIM CODE SECTION */}
                      <div className="mt-4 pt-4 border-t border-slate-800">
-                        <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Cross-Device Guest Access</h4>
+                        <div className="flex items-center gap-2 mb-2">
+                           <h4 className="text-xs font-bold text-slate-500 uppercase">Cross-Device Guest Access</h4>
+                           <div className="group relative">
+                              <Info size={12} className="text-slate-600 hover:text-indigo-400 cursor-help" />
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-slate-800 text-white text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                                 Want to switch devices (e.g. Phone to Laptop) without signing up? Use these tools to move your "Guest" identity.
+                              </div>
+                           </div>
+                        </div>
+
                         <div className="flex flex-col md:flex-row gap-4">
                            {/* Generate Code */}
                            {!generatedCode ? (
-                              <button onClick={handleGenerateCode} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded border border-slate-700 flex items-center gap-2">
-                                 <Save size={14} /> Get Code to Move Device
-                              </button>
+                              <div className="group relative">
+                                 <button onClick={handleGenerateCode} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded border border-slate-700 flex items-center gap-2">
+                                    <Save size={14} /> Get Code to Move Device
+                                 </button>
+                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-800 text-white text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                                    Generates a specialized code for this device. Enter this code on your OTHER device to move your squares there.
+                                 </div>
+                              </div>
                            ) : (
                               <div className="text-xs bg-emerald-900/20 text-emerald-400 px-3 py-2 rounded border border-emerald-500/30">
                                  Code: <span className="font-mono font-bold text-lg select-all">{generatedCode}</span>
@@ -367,7 +381,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            )}
 
                            {/* Input Code */}
-                           <div className="flex items-center gap-2">
+                           <div className="flex items-center gap-2 group relative">
                               <input
                                  type="text"
                                  value={inputCode}
@@ -378,6 +392,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               <button onClick={handleClaimCode} disabled={isClaimingCode} className="text-xs bg-indigo-900/50 hover:bg-indigo-800 text-indigo-300 px-3 py-1.5 rounded border border-indigo-500/30">
                                  {isClaimingCode ? '...' : 'Merge'}
                               </button>
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-800 text-white text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 focus-within:opacity-100 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                                 If you generated a code on another device, enter it here to import your squares.
+                              </div>
                            </div>
                         </div>
                         {claimMsg && <p className={`text-xs mt-2 ${claimMsg.type === 'error' ? 'text-rose-400' : 'text-emerald-400'}`}>{claimMsg.text}</p>}
