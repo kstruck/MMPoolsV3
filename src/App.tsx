@@ -10,7 +10,7 @@ import { calculateWinners, calculateScenarioWinners, getLastDigit } from './serv
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, Plus, ArrowRight, LogOut, Zap, Globe, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, Trash2, X, Loader, Heart, Shield, HelpCircle } from 'lucide-react';
+import { Share2, ArrowRight, LogOut, Zap, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Heart, Shield, HelpCircle } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
@@ -24,6 +24,7 @@ import { FeaturesPage } from './components/FeaturesPage';
 import { PrivacyPage } from './components/PrivacyPage';
 import { TermsPage } from './components/TermsPage';
 import { SupportPage } from './components/SupportPage';
+import { ManagerDashboard } from './components/ManagerDashboard';
 
 // --- SHARED COMPONENTS ---
 
@@ -167,20 +168,64 @@ const App: React.FC = () => {
 
   // Real-time subscription to pools
   useEffect(() => {
-    const unsubscribe = dbService.subscribeToPools(
-      (updatedPools) => {
-        setPools(updatedPools);
-        setIsPoolsLoading(false);
+    // We need two subscriptions:
+    // 1. All Public Pools (for browsing)
+    // 2. My Pools (for management, including private ones)
+    // We merge them into one list.
+
+    let publicPools: GameState[] = [];
+    let myPools: GameState[] = [];
+
+    // Helper to merge and set
+    const updateMergedPools = () => {
+      // Merge arrays and deduplicate by ID
+      const map = new Map();
+      [...publicPools, ...myPools].forEach(p => map.set(p.id, p));
+      setPools(Array.from(map.values()));
+      setIsPoolsLoading(false);
+    };
+
+    // Sub 1: Public Pools
+    const unsubPublic = dbService.subscribeToPools(
+      (p) => {
+        publicPools = p;
+        updateMergedPools();
         setConnectionError(null);
       },
       (error) => {
-        console.error("DB Error", error);
-        setIsPoolsLoading(false);
-        setConnectionError("Failed to connect to database. Please check configuration.");
+        console.error("Public Pool Sup Error", error);
+        // Don't block app if public sub fails, might be just connection
+        if (!user) { // Only set global error if we have no user fallback
+          setIsPoolsLoading(false);
+          setConnectionError("Failed to connect to database.");
+        }
       }
+      // No ownerFilter -> implies "isPublic == true" per dbService change
     );
-    return () => unsubscribe();
-  }, []);
+
+    let unsubMine = () => { };
+
+    if (user) {
+      unsubMine = dbService.subscribeToPools(
+        (p) => {
+          myPools = p;
+          updateMergedPools();
+        },
+        (error) => {
+          console.error("My Pool Sub Error", error);
+        },
+        user.id
+      );
+    } else {
+      myPools = [];
+      updateMergedPools();
+    }
+
+    return () => {
+      unsubPublic();
+      unsubMine();
+    };
+  }, [user?.id]); // Re-run when user changes (login/logout)
 
   const route = useMemo(() => {
     if (hash.startsWith('#admin')) {
@@ -199,7 +244,69 @@ const App: React.FC = () => {
     return { view: 'home', id: null };
   }, [hash]);
 
-  const currentPool = useMemo(() => route.id ? pools.find(p => p.id === route.id || (p.urlSlug && p.urlSlug.toLowerCase() === route.id.toLowerCase())) || null : null, [pools, route.id]);
+  // Single Pool Subscription (for robust Deep Linking & Guest Access)
+  const [singlePool, setSinglePool] = useState<GameState | null>(null);
+  const [isSinglePoolLoading, setIsSinglePoolLoading] = useState(false);
+  const [singlePoolError, setSinglePoolError] = useState<any>(null);
+
+  useEffect(() => {
+    if ((route.view === 'pool' || route.view === 'admin-editor') && route.id) {
+      setIsSinglePoolLoading(true);
+      setSinglePoolError(null);
+      const unsub = dbService.subscribeToPool(route.id, (p) => {
+        setSinglePool(p);
+        setIsSinglePoolLoading(false);
+      }, (err) => {
+        setSinglePoolError(err);
+        setIsSinglePoolLoading(false);
+      });
+      return () => unsub();
+    } else {
+      setSinglePool(null);
+      setIsSinglePoolLoading(false);
+      setSinglePoolError(null);
+      return undefined;
+    }
+  }, [route.view, route.id]);
+
+
+
+  const currentPool = useMemo(() => {
+    // Priority 1: Directly fetched single pool (most robust for deep links)
+    if (singlePool && route.id && (singlePool.id === route.id || singlePool.urlSlug === route.id)) return singlePool;
+
+    // Priority 2: Find in the global list (fallback if single fetch failed or is loading, but list has it)
+    if (route.id) {
+      return pools.find(p => p.id === route.id || (p.urlSlug && p.urlSlug.toLowerCase() === route.id.toLowerCase())) || null;
+    }
+    return null;
+  }, [pools, singlePool, route.id]);
+
+  // State for Password Gate
+  const [enteredPassword, setEnteredPassword] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+
+  const handlePasswordSubmit = () => {
+    if (currentPool && currentPool.gridPassword) {
+      if (enteredPassword === currentPool.gridPassword) {
+        setIsUnlocked(true);
+        setPasswordError(false);
+      } else {
+        setPasswordError(true);
+      }
+      return;
+    }
+    setPasswordError(true);
+  };
+
+  useEffect(() => {
+    if (currentPool) {
+      setIsUnlocked(!currentPool.gridPassword);
+    }
+  }, [currentPool?.id]);
+
+
 
   useEffect(() => {
     // Only sync scores if user is the pool owner (has permission to update)
@@ -242,6 +349,8 @@ const App: React.FC = () => {
   }, [user, pools]);
 
   // --- ACTIONS ---
+
+
   const addNewPool = async (p: GameState): Promise<string> => {
     return await dbService.createPool(p);
   };
@@ -268,7 +377,7 @@ const App: React.FC = () => {
     window.location.hash = '';
   };
 
-  const handleCreatePool = async () => {
+  async function handleCreatePool() {
     try {
       if (!user) {
         setPendingAction('create_pool');
@@ -511,6 +620,27 @@ const App: React.FC = () => {
 
   // --- RENDER SWITCH ---
 
+  const renderPasswordGate = () => (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 max-w-md w-full text-center">
+        <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6"><Lock size={32} className="text-indigo-500" /></div>
+        <h2 className="text-2xl font-bold text-white mb-2">Password Protected</h2>
+        <p className="text-slate-400 mb-6">This pool is private. Please enter the password to view it.</p>
+        {passwordError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-lg text-sm mb-4">Incorrect password.</div>}
+        <div className="flex gap-2">
+          <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()} />
+          <button onClick={handlePasswordSubmit} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-lg">Unlock</button>
+        </div>
+        <div className="mt-6 pt-6 border-t border-slate-800"><p className="text-xs text-slate-500">Contact the pool manager for access.</p></div>
+      </div>
+    </div>
+  );
+
+  // Permission Error Check (Private Pools w/o Read Access)
+  if (singlePoolError?.code === 'permission-denied' || singlePoolError?.message?.includes('permission')) {
+    return renderPasswordGate();
+  }
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
@@ -566,7 +696,7 @@ const App: React.FC = () => {
           <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
             <div className="text-center">
               <p className="mb-4 text-slate-400">Please sign in to access the dashboard.</p>
-              <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In to Manage Your Pool</button>
+              <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="bg-indigo-600 px-4 py-2 rounded-lg text-white font-bold">Sign In</button>
             </div>
           </div>
           <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
@@ -575,128 +705,21 @@ const App: React.FC = () => {
     }
     const userPools = pools.filter(p => p.ownerId === user.id);
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-        <Header
-          user={user}
-          isManager={isManager}
-          onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }}
-          onLogout={authService.logout}
-          onCreatePool={handleCreatePool}
-        />
-        <main className="max-w-5xl mx-auto p-6">
-          <div className="flex justify-between items-end mb-8">
-            <div><h2 className="text-3xl font-bold text-white">Manage My Pools</h2><p className="text-slate-400">Pools you created and control</p></div>
-            <button onClick={handleCreatePool} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20"><Plus size={18} /> Create Pool</button>
-          </div>
-          {connectionError && (
-            <div className="bg-rose-500/10 border border-rose-500 text-rose-400 p-4 rounded mb-6 flex items-center gap-3">
-              <Zap className="text-rose-500" />
-              <div>
-                <p className="font-bold">Connection Fail</p>
-                <p className="text-sm">{connectionError}. Check your configuration.</p>
-              </div>
-            </div>
-          )}
-          {isPoolsLoading ? (
-            <div className="text-center py-20"><Loader className="animate-spin inline-block mb-2" /> <p>Loading your pools...</p></div>
-          ) : userPools.length === 0 ? (
-            <div className="text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700 border-dashed">
-              <Globe size={48} className="mx-auto text-slate-600 mb-4" /><p className="text-slate-400 font-medium">You haven't created any pools yet.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {userPools.map(pool => {
-                const filled = pool.squares.filter(s => s.owner).length;
-                const pct = Math.round((filled / 100) * 100);
-                const homeLogo = pool.homeTeamLogo || getTeamLogo(pool.homeTeam);
-                const awayLogo = pool.awayTeamLogo || getTeamLogo(pool.awayTeam);
-
-                return (
-                  <div key={pool.id} className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 rounded-xl p-5 transition-all relative overflow-hidden flex flex-col">
-                    {pool.charity?.enabled && (
-                      <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                        <Heart size={100} className="fill-rose-500 text-rose-500" />
-                      </div>
-                    )}
-
-                    {/* CLICKABLE AREA FOR MANAGE */}
-                    <div className="cursor-pointer flex-1" onClick={() => window.location.hash = `#admin/${pool.id}`}>
-                      <div className="flex justify-between items-start mb-4 relative z-10">
-                        <div className="flex items-center gap-3">
-                          {/* Initial Icon */}
-                          <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-lg font-bold text-indigo-400 group-hover:scale-105 transition-transform">
-                            {pool.name.substring(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1 flex items-center gap-2">
-                              {pool.name}
-                              {!pool.isPublic && <Lock size={12} className="text-amber-500" />}
-                            </h3>
-                            <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
-                              <span>Hosted by You</span>
-                              {pool.charity?.enabled && <span className="text-rose-400 flex items-center gap-1">• <Heart size={10} className="fill-rose-400" /> Charity</span>}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="block text-xl font-bold text-emerald-400 font-mono">${pool.costPerSquare}</span>
-                          <span className="text-[10px] text-slate-500 uppercase font-bold">Per Square</span>
-                        </div>
-                      </div>
-
-                      {/* Matchup */}
-                      <div className="bg-black/30 rounded-lg p-3 border border-slate-800/50 mb-4 flex items-center justify-between relative z-10">
-                        <div className="flex items-center gap-2">
-                          {awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain opacity-80" />}
-                          <span className="text-sm font-bold text-slate-300">{pool.awayTeam}</span>
-                        </div>
-                        <span className="text-xs text-slate-600 font-bold uppercase">VS</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-slate-300">{pool.homeTeam}</span>
-                          {homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain opacity-80" />}
-                        </div>
-                      </div>
-
-                      {/* Progress & Meta */}
-                      <div className="flex items-center justify-between text-xs font-medium text-slate-400 relative z-10 mb-6">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                              <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }}></div>
-                            </div>
-                            <span>{100 - filled} Left</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {!pool.isLocked ? (
-                            <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Open Setup</span>
-                          ) : (
-                            <span className="text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Locked</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ACTION BUTTONS */}
-                    <div className="grid grid-cols-6 gap-2 relative z-20 pt-4 border-t border-slate-800/50">
-                      <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#admin/${pool.id}`; }} className="col-span-3 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage Pool</button>
-                      <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#pool/${pool.id}`; }} className="col-span-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View Grid</button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeletePool(pool.id); }} className="col-span-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/50 rounded-lg flex items-center justify-center transition-all"><Trash2 size={16} /></button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </main>
-        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-        <Footer />
-      </div>
+      <ManagerDashboard
+        user={user}
+        pools={userPools}
+        isLoading={isPoolsLoading}
+        connectionError={connectionError}
+        onCreatePool={handleCreatePool}
+        onDeletePool={handleDeletePool}
+        onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }}
+        onLogout={authService.logout}
+      />
     );
   }
 
   if (route.view === 'admin-editor') {
+    if (isPoolsLoading || isSinglePoolLoading) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
     if (!user) return <AuthModal isOpen={true} onClose={() => window.location.hash = '#'} />;
     if (!currentPool) return <div className="text-white p-10">Pool Not Found</div>;
     if (currentPool.ownerId && currentPool.ownerId !== user.id && user.email !== 'kstruck@gmail.com') return <div className="text-white p-10">Unauthorized</div>;
@@ -787,7 +810,7 @@ const App: React.FC = () => {
   }
 
   if (route.view === 'pool') {
-    if (isPoolsLoading) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
+    if (isPoolsLoading || isSinglePoolLoading) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
     if (!currentPool) {
       return (
         <div className="text-white p-10 font-mono flex flex-col items-center justify-center min-h-[50vh]">
@@ -815,6 +838,13 @@ const App: React.FC = () => {
           </div>
         </div>
       );
+    }
+
+
+
+    // Password Check (Public Pools w/ Password)
+    if (currentPool.gridPassword && !isUnlocked) {
+      return renderPasswordGate();
     }
 
     const q1Data = getQuarterData('q1');

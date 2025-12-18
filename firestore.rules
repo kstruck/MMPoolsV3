@@ -15,34 +15,40 @@ service cloud.firestore {
     //     - So: allow update if request.auth.uid == resource.data.ownerId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers']))
     // - DELETE: Owner only
     
+    function isSuperAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SUPER_ADMIN';
+    }
+
     // POOLS:
     match /pools/{poolId} {
       // Allow GET by anyone (Guest Access via Link)
       allow get: if true;
       
-      // Allow LIST only if you are the owner (Manager Dashboard)
-      allow list: if request.auth != null && resource.data.ownerId == request.auth.uid;
-
+      // Allow LIST only if you are the owner (Manager Dashboard) OR SuperAdmin
+      allow list: if request.auth != null && (resource.data.ownerId == request.auth.uid || isSuperAdmin());
 
       
-      // Delete: Owner only
-      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
+      // Delete: Owner only OR SuperAdmin
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.ownerId || isSuperAdmin());
       
-      // Update: Owner only, but filtered fields
+      // Update: Owner only (filtered) OR SuperAdmin (unrestricted)
       // Prevent CLIENTS from writing to 'squares', 'axisNumbers', 'participants' directly
       // They must use Cloud Functions (reserveSquare, lockPool, etc.)
-      allow update: if request.auth != null && request.auth.uid == resource.data.ownerId 
-                    && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers', 'squares']));
+      allow update: if request.auth != null && (
+        (request.auth.uid == resource.data.ownerId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers', 'squares']))) 
+        || isSuperAdmin()
+      );
                     
       // NO CREATE via Client (Must use createPool function)
       allow create: if false;
 
       // PARTICIPANTS INDEX (Subcollection)
-      // Read: Pool Owner OR The Participant themselves
+      // Read: Pool Owner OR The Participant themselves OR SuperAdmin
       match /participants/{participantId} {
         allow read: if request.auth != null && (
           request.auth.uid == participantId || 
-          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          isSuperAdmin()
         );
         allow write: if false; // Only via Cloud Functions
       }
@@ -70,8 +76,14 @@ service cloud.firestore {
     // USERS & PARTICIPATIONS:
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId
-                   && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])); // Deny role update
+
+      // Allow write if:
+      // 1. User editing themselves (BUT denying role change)
+      // 2. SuperAdmin editing anyone (Allowed to change roles too)
+      allow write: if request.auth != null && (
+        (request.auth.uid == userId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))) ||
+        isSuperAdmin()
+      );
 
       // PARTICIPATIONS (Dashboard Index)
       match /participations/{poolId} {

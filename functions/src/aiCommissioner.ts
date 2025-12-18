@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 import { onDocumentWritten, onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as crypto from "crypto";
-import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT } from "./gemini";
+import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
 import { writeAuditEvent } from "./audit";
 import { GameState, Winner, AIArtifact, AIRequest } from "./types";
 
@@ -14,7 +14,10 @@ const computeFactsHash = (facts: any): string => {
 };
 
 // --- WINNER EXPLANATION TRIGGER ---
-export const onWinnerUpdate = onDocumentWritten("pools/{poolId}/winners/{periodId}", async (event) => {
+export const onWinnerUpdate = onDocumentWritten({
+    document: "pools/{poolId}/winners/{periodId}",
+    secrets: [geminiApiKey]
+}, async (event) => {
     const periodId = event.params.periodId; // 'q1', 'half', 'q3', 'final'
     const poolId = event.params.poolId;
     const winnerData = event.data?.after.data() as Winner | undefined;
@@ -50,9 +53,15 @@ export const onWinnerUpdate = onDocumentWritten("pools/{poolId}/winners/{periodI
 
     const relevantAuditLogs = auditSnap.docs.map(d => {
         const data = d.data();
+        let millis = Date.now();
+        if (typeof data.timestamp === 'number') {
+            millis = data.timestamp;
+        } else if (data.timestamp && typeof data.timestamp.toMillis === 'function') {
+            millis = data.timestamp.toMillis();
+        }
         return {
             type: data.type,
-            timestamp: new Date(data.timestamp.toMillis()).toISOString(),
+            timestamp: new Date(millis).toISOString(),
             message: data.message
         };
     });
@@ -121,7 +130,10 @@ export const onWinnerUpdate = onDocumentWritten("pools/{poolId}/winners/{periodI
 });
 
 // --- DISPUTE RESOLUTION TRIGGER ---
-export const onAIRequest = onDocumentCreated("pools/{poolId}/ai_requests/{requestId}", async (event) => {
+export const onAIRequest = onDocumentCreated({
+    document: "pools/{poolId}/ai_requests/{requestId}",
+    secrets: [geminiApiKey]
+}, async (event) => {
     const poolId = event.params.poolId;
     const snapshot = event.data;
 
@@ -140,11 +152,20 @@ export const onAIRequest = onDocumentCreated("pools/{poolId}/ai_requests/{reques
     const poolSnap = await poolRef.get();
     const pool = poolSnap.data() as GameState;
     const auditSnap = await poolRef.collection("audit").orderBy("timestamp", "desc").limit(50).get();
-    const auditTrail = auditSnap.docs.map(d => ({
-        type: d.data().type,
-        time: new Date(d.data().timestamp.toMillis()).toISOString(),
-        msg: d.data().message
-    }));
+    const auditTrail = auditSnap.docs.map(d => {
+        const data = d.data();
+        let millis = Date.now();
+        if (typeof data.timestamp === 'number') {
+            millis = data.timestamp;
+        } else if (data.timestamp && typeof data.timestamp.toMillis === 'function') {
+            millis = data.timestamp.toMillis();
+        }
+        return {
+            type: data.type,
+            time: new Date(millis).toISOString(),
+            msg: data.message
+        };
+    });
 
     const facts = {
         context: "DISPUTE_RESOLUTION",

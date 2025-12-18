@@ -166,7 +166,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
                 <Loader2 className="animate-spin" size={20} />
               ) : (
                 <>
-                  {isRegistering ? 'Create Account' : 'Sign In to Manage Your Pool'}
+                  {isRegistering ? 'Create Account' : 'Sign In'}
                   <ArrowRight size={18} />
                 </>
               )}

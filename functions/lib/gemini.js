@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.COMMISSIONER_SYSTEM_PROMPT = exports.generateAIResponse = void 0;
+exports.COMMISSIONER_SYSTEM_PROMPT = exports.generateAIResponse = exports.geminiApiKey = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const params_1 = require("firebase-functions/params");
-const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
+exports.geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
 const OUTPUT_SCHEMA = {
     type: generative_ai_1.SchemaType.OBJECT,
     properties: {
@@ -27,8 +27,11 @@ const OUTPUT_SCHEMA = {
     },
     required: ["headline", "summaryBullets", "explanationSteps", "confidence"],
 };
+// TODO: For Production, use: firebase functions:secrets:set GEMINI_API_KEY
+// For Development/Quick Start, we are hardcoding it below.
 const generateAIResponse = async (systemInstruction, facts, jsonSchema = OUTPUT_SCHEMA) => {
-    const apiKey = geminiApiKey.value();
+    const apiKey = exports.geminiApiKey.value();
+    // const apiKey = "AIzaSyDSWcKMjOaxlZPeXcSYni3MSNmAyeznV-w";
     if (!apiKey) {
         throw new Error("GEMINI_API_KEY is not set.");
     }

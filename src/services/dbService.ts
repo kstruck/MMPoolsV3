@@ -7,6 +7,7 @@ import {
     deleteDoc,
     onSnapshot,
     query,
+    where,
     Timestamp
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -137,14 +138,35 @@ export const dbService = {
     },
 
     // Real-time listener for ALL public pools OR user's pools
-    subscribeToPools: (callback: (pools: GameState[]) => void, onError?: (error: any) => void) => {
-        const q = query(collection(db, "pools"));
+    subscribeToPools: (callback: (pools: GameState[]) => void, onError?: (error: any) => void, ownerId?: string) => {
+        let q;
+        if (ownerId) {
+            q = query(collection(db, "pools"), where("ownerId", "==", ownerId));
+        } else {
+            // Default: Fetch only PUBLIC pools (compliance with security rules)
+            q = query(collection(db, "pools"), where("isPublic", "==", true));
+        }
         return onSnapshot(q, (snapshot) => {
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GameState));
             callback(pools);
         }, (error) => {
             console.error("Pool Subscription Error:", error);
             if (onError) onError(error);
+        });
+    },
+
+    // Real-time listener for a SINGLE pool (Robust deep-linking)
+    subscribeToPool: (poolId: string, callback: (pool: GameState | null) => void, onError?: (error: any) => void) => {
+        return onSnapshot(doc(db, "pools", poolId), (docSnap) => {
+            if (docSnap.exists()) {
+                callback({ ...docSnap.data(), id: docSnap.id } as GameState);
+            } else {
+                callback(null);
+            }
+        }, (error) => {
+            console.error("Single Pool Subscription Error:", error);
+            if (onError) onError(error);
+            else callback(null);
         });
     },
 

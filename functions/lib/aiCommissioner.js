@@ -13,7 +13,10 @@ const computeFactsHash = (facts) => {
     return crypto.createHash("sha256").update(stableString).digest("hex");
 };
 // --- WINNER EXPLANATION TRIGGER ---
-exports.onWinnerUpdate = (0, firestore_1.onDocumentWritten)("pools/{poolId}/winners/{periodId}", async (event) => {
+exports.onWinnerUpdate = (0, firestore_1.onDocumentWritten)({
+    document: "pools/{poolId}/winners/{periodId}",
+    secrets: [gemini_1.geminiApiKey]
+}, async (event) => {
     var _a;
     const periodId = event.params.periodId; // 'q1', 'half', 'q3', 'final'
     const poolId = event.params.poolId;
@@ -46,9 +49,16 @@ exports.onWinnerUpdate = (0, firestore_1.onDocumentWritten)("pools/{poolId}/winn
         .get();
     const relevantAuditLogs = auditSnap.docs.map(d => {
         const data = d.data();
+        let millis = Date.now();
+        if (typeof data.timestamp === 'number') {
+            millis = data.timestamp;
+        }
+        else if (data.timestamp && typeof data.timestamp.toMillis === 'function') {
+            millis = data.timestamp.toMillis();
+        }
         return {
             type: data.type,
-            timestamp: new Date(data.timestamp.toMillis()).toISOString(),
+            timestamp: new Date(millis).toISOString(),
             message: data.message
         };
     });
@@ -108,7 +118,10 @@ exports.onWinnerUpdate = (0, firestore_1.onDocumentWritten)("pools/{poolId}/winn
     }
 });
 // --- DISPUTE RESOLUTION TRIGGER ---
-exports.onAIRequest = (0, firestore_1.onDocumentCreated)("pools/{poolId}/ai_requests/{requestId}", async (event) => {
+exports.onAIRequest = (0, firestore_1.onDocumentCreated)({
+    document: "pools/{poolId}/ai_requests/{requestId}",
+    secrets: [gemini_1.geminiApiKey]
+}, async (event) => {
     const poolId = event.params.poolId;
     const snapshot = event.data;
     if (!snapshot)
@@ -124,11 +137,21 @@ exports.onAIRequest = (0, firestore_1.onDocumentCreated)("pools/{poolId}/ai_requ
     const poolSnap = await poolRef.get();
     const pool = poolSnap.data();
     const auditSnap = await poolRef.collection("audit").orderBy("timestamp", "desc").limit(50).get();
-    const auditTrail = auditSnap.docs.map(d => ({
-        type: d.data().type,
-        time: new Date(d.data().timestamp.toMillis()).toISOString(),
-        msg: d.data().message
-    }));
+    const auditTrail = auditSnap.docs.map(d => {
+        const data = d.data();
+        let millis = Date.now();
+        if (typeof data.timestamp === 'number') {
+            millis = data.timestamp;
+        }
+        else if (data.timestamp && typeof data.timestamp.toMillis === 'function') {
+            millis = data.timestamp.toMillis();
+        }
+        return {
+            type: data.type,
+            time: new Date(millis).toISOString(),
+            msg: data.message
+        };
+    });
     const facts = {
         context: "DISPUTE_RESOLUTION",
         userQuestion: requestData.question,

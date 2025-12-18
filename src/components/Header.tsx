@@ -55,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 className="text-xs bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold"
                                 title="Create a new pool"
                             >
-                                <LayoutGrid size={14} /> Create a New Pool
+                                <LayoutGrid size={14} /> Manage/Create Pool
                             </button>
 
                             {user.role === 'SUPER_ADMIN' && (
@@ -72,8 +72,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                         </div>
                     ) : (
                         <div className="flex gap-2">
-                            <button onClick={onOpenAuth} className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 transition-colors">Sign In to Manage Your Pool</button>
-                            <button onClick={onOpenAuth} className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors">Register</button>
+                            <button onClick={onOpenAuth} className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 transition-colors">Sign In</button>
                         </div>
                     )}
                 </div>

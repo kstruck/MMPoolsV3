@@ -92,7 +92,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                   style={{ backgroundColor: BRAND.orange }}
                   title="Create a New Pool"
                 >
-                  <LayoutGrid size={12} /> Create a New Pool
+                  <LayoutGrid size={12} /> Manage/Create Pool
                 </button>
 
                 <button onClick={() => window.location.hash = '#profile'} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full text-white transition-colors flex items-center gap-1 font-bold">
@@ -111,14 +111,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                   onClick={onLogin}
                   className="text-sm font-bold text-white/80 hover:text-white transition-colors"
                 >
-                  Sign In to Manage Your Pool
-                </button>
-                <button
-                  onClick={onSignup}
-                  className="text-white px-5 py-2.5 rounded-full text-sm font-bold transition-all transform hover:scale-105 shadow-lg hover:brightness-110"
-                  style={{ backgroundColor: BRAND.orange }}
-                >
-                  Register
+                  Sign In
                 </button>
               </div>
             )}
