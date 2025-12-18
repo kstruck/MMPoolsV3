@@ -64,8 +64,10 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 
 // --- MAIN APP ---
+import { BUILD_TIMESTAMP } from './version';
 
 const App: React.FC = () => {
+  console.log('App Version:', BUILD_TIMESTAMP);
   const [hash, setHash] = useState(window.location.hash);
   const [user, setUser] = useState<User | null>(authService.getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
