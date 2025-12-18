@@ -199,10 +199,20 @@
 
   <script type="module" src="/src/main.tsx"></script>
   <script>
+    console.log("Checking for Service Workers to remove...");
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function (registrations) {
-        for (let registration of registrations) {
-          registration.unregister();
+        if (registrations.length > 0) {
+          console.log("Found " + registrations.length + " service workers. Unregistering...");
+          for (let registration of registrations) {
+            registration.unregister().then(function (boolean) {
+              console.log("Service Worker Unregistered: " + boolean);
+              // Force reload if we found one, to get fresh cache
+              // window.location.reload(); 
+            });
+          }
+        } else {
+          console.log("No Service Workers found.");
         }
       });
     }
