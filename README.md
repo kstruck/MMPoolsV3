@@ -18,6 +18,12 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 *   **How it Works Guide:** **NEW!** Comprehensive, step-by-step interactive guide for new users, accessible directly from the main menu.
 *   **User Accounts:** Secure Google Authentication and email registration via Firebase.
 
+### March Madness Brackets (Beta)
+*   **64-Team Bracket Challenge:** Full support for the Men's NCAA Tournament.
+*   **Interactive Builder:** Mobile-friendly bracket picker with drag-and-drop-like ease.
+*   **Live Scoring:** Round-by-round scoring updates with active leaderboard.
+*   **Feature Gating:** Controlled via SuperAdmin feature flags for phased rollout.
+
 ### Pool Management
 *   **Setup Wizard:** Enhanced 7-step flow to configure teams, costs, reminder rules, and payouts.
 *   **Charity & Fundraising:** ❤️ **NEW!** Dedicate a percentage of the pot to a charity of your choice. Includes automated "Off The Top" calculations and public support badges.
@@ -71,11 +77,11 @@ Built-in viral growth mechanism to help pool managers expand their reach.
 ### Super Admin Dashboard
 *   **System Overview:** View all pools and registered users.
 *   **User Management:** Edit user details or delete accounts.
-*   **Simulation Mode:** Built-in simulation tool to populate a test pool and simulate a game:
-    *   Fills empty squares with test users.
-    *   Locks pool & generates Q1 numbers.
-    *   Simulates game flow (Q1 -> Half -> Q3 -> Final) over ~12 seconds.
-    *   **Auto-Generates Quarterly Numbers** for "4 Sets" pools during the sim.
+*   **System Configuration:** **NEW!** Global feature flags to toggle "Bracket Pools" and "Maintenance Mode" in real-time without redeployment.
+*   **Simulation Tools:** Advanced verification suite to test the full lifecycle:
+    *   **Seed Test Tournament:** Populates a dummy 64-team bracket (Year 2025) with teams and R64 matchups.
+    *   **Simulate Round:** Randomly decides winners for the current active round and advances the tournament state to test scoring and progressions.
+    *   **Reset Scores:** Wipes simulation data to start fresh.
 
 ### Verification & Compliance
 *   **Google OAuth Verified:** Fully compliant with Google API Services User Data Policy, including "Limited Use" disclosure.
