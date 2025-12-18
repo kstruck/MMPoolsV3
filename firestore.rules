@@ -24,8 +24,8 @@ service cloud.firestore {
       // Allow GET by anyone (Guest Access via Link)
       allow get: if true;
       
-      // Allow LIST only if you are the owner (Manager Dashboard) OR SuperAdmin
-      allow list: if request.auth != null && (resource.data.ownerId == request.auth.uid || isSuperAdmin());
+      // Allow LIST if you are owner, superadmin, OR if querying for public pools
+      allow list: if (resource.data.isPublic == true) || (request.auth != null && (resource.data.ownerId == request.auth.uid || isSuperAdmin()));
 
       
       // Delete: Owner only OR SuperAdmin
