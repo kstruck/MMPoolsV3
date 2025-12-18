@@ -1,6 +1,6 @@
 # March Melee Pools (MMPoolsV3)
 
-A modern, real-time sports pool application ("Super Bowl Squares") built for performance, aesthetics, and ease of use. This application allows users to create and manage betting grids with automated scoring, real-time updates, and extensive customization options.
+A modern, real-time sports pool application supporting both **Super Bowl Squares** and **NCAA March Madness Brackets**. Built for performance, aesthetics, and ease of use, this application allows users to create and manage betting grids and bracket challenges with automated scoring, real-time updates, and extensive customization options.
 
 ## 🚀 Features
 
