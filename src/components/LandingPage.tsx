@@ -142,7 +142,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200 mb-8">
             <button
-              onClick={onSignup}
+              onClick={onCreatePool}
               className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-2 hover:brightness-110"
               style={{ backgroundColor: BRAND.orange, boxShadow: `0 10px 40px ${BRAND.orange}40` }}
             >

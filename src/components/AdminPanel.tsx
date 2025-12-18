@@ -15,7 +15,62 @@ interface AdminPanelProps {
   onBack: () => void;
   onShare: () => void;
   checkSlugAvailable: (slug: string) => boolean;
+  checkNameAvailable: (name: string) => boolean;
 }
+
+// Internal Debounced Input Component to fix cursor jumping
+const DebouncedInput = ({ value, onChange, className, placeholder, type = "text" }: { value: string, onChange: (val: string) => void, className?: string, placeholder?: string, type?: string }) => {
+  const [localValue, setLocalValue] = useState(value);
+
+  React.useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localValue !== value) {
+        onChange(localValue);
+      }
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [localValue, value, onChange]);
+
+  return (
+    <input
+      type={type}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      className={className}
+      placeholder={placeholder}
+    />
+  );
+};
+
+const DebouncedTextarea = ({ value, onChange, className, placeholder }: { value: string, onChange: (val: string) => void, className?: string, placeholder?: string }) => {
+  const [localValue, setLocalValue] = useState(value);
+
+  React.useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localValue !== value) {
+        onChange(localValue);
+      }
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [localValue, value, onChange]);
+
+  return (
+    <textarea
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      className={className}
+      placeholder={placeholder}
+    />
+  );
+};
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   gameState,
@@ -24,7 +79,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   generateNumbers,
   onBack,
   onShare,
-  checkSlugAvailable
+  checkSlugAvailable,
+  checkNameAvailable
 }) => {
   const [aiIdea, setAiIdea] = useState<string>('');
   const [isThinking, setIsThinking] = useState(false);
@@ -33,15 +89,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Updated Tab Order and Default
   const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'communications'>('settings');
 
-  const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''); // Enforce safe chars
-    if (val && !checkSlugAvailable(val)) {
-      setSlugError("Slug is already taken");
-    } else {
-      setSlugError(null);
-    }
-    updateConfig({ urlSlug: val });
-  };
+  /* handleSlugChange removed in favor of inline DebouncedInput handler */
 
   const [wizardStep, setWizardStep] = useState(1);
   const TOTAL_STEPS = 6;
@@ -364,7 +412,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       winner: { enabled: true, channels: ['email'], includeDigits: true, includeCharityImpact: true }
     };
 
+    // Auto-Name Logic
+    let candidateName = `${away.displayName} @ ${home.displayName}`;
+    let counter = 2;
+    // Check if taken (simple loop)
+    // Note: checkNameAvailable returns TRUE if available, FALSE if taken
+    if (!checkNameAvailable(candidateName)) {
+      while (!checkNameAvailable(`${candidateName} (${counter})`)) {
+        counter++;
+      }
+      candidateName = `${candidateName} (${counter})`;
+    }
+
     updateConfig({
+      name: candidateName, // Set the auto-generated unique name
       homeTeam: home.displayName,
       awayTeam: away.displayName,
       gameId: game.id,
@@ -738,32 +799,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     </div>
   );
 
-  const renderWizardStep1 = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-2">Basic Information</h3>
-        <p className="text-slate-400 text-sm mb-6">Let's verify the core details of your pool.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label><input type="text" value={gameState.name} onChange={(e) => updateConfig({ name: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Enter Pool Name" /></div>
-          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Sport / League</label><select value={gameState.league || 'nfl'} onChange={(e) => updateConfig({ league: e.target.value as any })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"><option value="nfl">NFL (Pro)</option><option value="college">College Football (NCAA)</option></select></div>
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">URL Slug</label>
-            <div className="relative">
-              <span className="absolute left-3 top-3 text-slate-600 font-mono text-sm">/</span>
-              <input type="text" value={gameState.urlSlug || ''} onChange={handleSlugChange} className={`w-full bg-slate-950 border ${slugError ? 'border-rose-500 focus:ring-rose-500' : 'border-slate-700 focus:ring-indigo-500'} rounded pl-6 pr-4 py-3 text-white focus:ring-1 outline-none`} placeholder="unique-id" />
-            </div>
-            {slugError && <p className="text-rose-500 text-xs mt-1 font-bold">{slugError}</p>}
-            <p className="text-slate-500 text-[10px] mt-1">Lowercase letters, numbers, and dashes only.</p>
-          </div>
-          <div className="md:col-span-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Manager Name</label><input type="text" value={gameState.managerName || ''} onChange={(e) => updateConfig({ managerName: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Your Name" /></div>
-          <div className="md:col-span-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contact Email</label><input type="email" value={gameState.contactEmail} onChange={(e) => updateConfig({ contactEmail: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="admin@example.com" /></div>
-          <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payment Instructions</label><textarea value={gameState.paymentInstructions} onChange={(e) => updateConfig({ paymentInstructions: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-24 resize-none" /></div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderWizardStep2 = () => {
+  // Render Wizard STep 1 (Now Matchup)
+  const renderWizardStep1 = () => {
     // Prefer API logos, fallback to local map
     const homeLogo = gameState.homeTeamLogo || getTeamLogo(gameState.homeTeam);
     const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam);
@@ -799,14 +836,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   } else {
                     setWeek('1');
                   }
-                }} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none">
+                }} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none">
                   <option value="1">Preseason</option>
                   <option value="2">Regular Season</option>
                   <option value="3">Postseason</option>
                 </select>
 
                 <span className="text-slate-500 text-sm">Week</span>
-                <select value={week} onChange={(e) => setWeek(e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none">
+                <select value={week} onChange={(e) => setWeek(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none">
                   {seasonType === '2' && Array.from({ length: 18 }).map((_, i) => {
                     const w = i + 1;
                     return <option key={i} value={w}>Week {w}</option>;
@@ -828,14 +865,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
 
                 {(gameState.league === 'college' || gameState.league === 'ncaa') && (
-                  <select value={cfbConference} onChange={(e) => setCfbConference(e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none w-32">
+                  <select value={cfbConference} onChange={(e) => setCfbConference(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none max-w-[150px]">
                     {CFB_CONFERENCES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 )}
 
-                <button onClick={fetchSchedule} disabled={isLoadingSchedule} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded text-sm font-bold ml-2">{isLoadingSchedule ? 'Loading...' : 'Load Games'}</button>
+                <button onClick={fetchSchedule} disabled={isLoadingSchedule} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-sm font-bold ml-auto flex items-center gap-2">
+                  {isLoadingSchedule ? 'Loading...' : <><RefreshCw size={14} /> Refresh</>}
+                </button>
               </div>
-              <div className="max-h-60 overflow-y-auto grid-scroll grid grid-cols-1 gap-2">
+              <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
                 {scheduleGames.length === 0 && !isLoadingSchedule && (
                   <div className="text-slate-500 text-sm text-center py-4">No future games found for this week.</div>
                 )}
@@ -843,19 +882,91 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   const comp = game.competitions[0];
                   const home = comp.competitors.find((c: any) => c.homeAway === 'home').team;
                   const away = comp.competitors.find((c: any) => c.homeAway === 'away').team;
-                  return (<div key={game.id} onClick={() => selectGame(game)} className="cursor-pointer bg-slate-900 hover:bg-indigo-900/20 p-3 rounded flex justify-between items-center border border-slate-800 hover:border-indigo-500/50 transition-all"><div className="flex items-center gap-4"><span className="text-slate-400 text-xs w-20">{new Date(game.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span><div className="flex items-center gap-2"><img src={away.logo} alt="" className="w-6 h-6 object-contain" /><span className="font-bold text-white">{away.displayName}</span><span className="text-slate-600 text-xs">@</span><img src={home.logo} alt="" className="w-6 h-6 object-contain" /><span className="font-bold text-white">{home.displayName}</span></div></div></div>);
+                  const dateStr = new Date(game.date).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                  return (
+                    <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-slate-800 cursor-pointer border border-transparent hover:border-indigo-500/30 group transition-all">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-500 w-24">{dateStr}</span>
+                        <div className="flex items-center gap-2">
+                          <img src={away.logo} className="w-5 h-5 object-contain" />
+                          <span className="text-sm text-slate-300 font-bold">{away.abbreviation}</span>
+                        </div>
+                        <span className="text-xs text-slate-600">@</span>
+                        <div className="flex items-center gap-2">
+                          <img src={home.logo} className="w-5 h-5 object-contain" />
+                          <span className="text-sm text-slate-300 font-bold">{home.abbreviation}</span>
+                        </div>
+                      </div>
+                      <span className="text-xs text-indigo-400 opacity-0 group-hover:opacity-100 font-bold transition-opacity">Select</span>
+                    </div>
+                  );
                 })}
               </div>
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-indigo-500/50 transition-colors"><label className="block text-xs font-bold text-indigo-400 uppercase mb-4 text-center">Column Team (Top)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div><input type="text" value={gameState.awayTeam} onChange={(e) => updateConfig({ awayTeam: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="e.g. Away Team" /></div></div>
-            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-rose-500/50 transition-colors"><label className="block text-xs font-bold text-rose-400 uppercase mb-4 text-center">Row Team (Left)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div><input type="text" value={gameState.homeTeam} onChange={(e) => updateConfig({ homeTeam: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="e.g. Home Team" /></div></div>
+            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-indigo-500/50 transition-colors"><label className="block text-xs font-bold text-indigo-400 uppercase mb-4 text-center">Column Team (Top)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div>
+              <DebouncedInput
+                value={gameState.awayTeam}
+                onChange={(val) => {
+                  updateConfig({ awayTeam: val });
+                  if (!gameState.name || gameState.name === 'New Pool') {
+                    updateConfig({ name: `${val} vs ${gameState.homeTeam || 'Home'} Squares` });
+                  }
+                }}
+                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none"
+                placeholder="e.g. Away Team"
+              />
+            </div></div>
+            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-rose-500/50 transition-colors"><label className="block text-xs font-bold text-rose-400 uppercase mb-4 text-center">Row Team (Left)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div>
+              <DebouncedInput
+                value={gameState.homeTeam}
+                onChange={(val) => {
+                  updateConfig({ homeTeam: val });
+                  if (!gameState.name || gameState.name === 'New Pool') {
+                    updateConfig({ name: `${gameState.awayTeam || 'Away'} vs ${val} Squares` });
+                  }
+                }}
+                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none"
+                placeholder="e.g. Home Team"
+              />
+            </div></div>
           </div>
         </div>
       </div >
     )
   };
+
+  // Step 2 is now Basic Information
+  const renderWizardStep2 = () => (
+    <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <h3 className="text-xl font-bold text-white mb-2">Basic Information</h3>
+        <p className="text-slate-400 text-sm mb-6">Let's verify the core details of your pool.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label><DebouncedInput value={gameState.name} onChange={(val) => updateConfig({ name: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Enter Pool Name" /></div>
+          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Sport / League</label><select value={gameState.league || 'nfl'} onChange={(e) => updateConfig({ league: e.target.value as any })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"><option value="nfl">NFL (Pro)</option><option value="college">College Football (NCAA)</option></select></div>
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">URL Slug</label>
+            <div className="relative">
+              <span className="absolute left-3 top-3 text-slate-600 font-mono text-sm">/</span>
+              <DebouncedInput value={gameState.urlSlug || ''} onChange={(val) => {
+                const safe = val.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                if (safe && !checkSlugAvailable(safe)) setSlugError("Slug is already taken");
+                else setSlugError(null);
+                updateConfig({ urlSlug: safe });
+              }} className={`w-full bg-slate-950 border ${slugError ? 'border-rose-500 focus:ring-rose-500' : 'border-slate-700 focus:ring-indigo-500'} rounded pl-6 pr-4 py-3 text-white focus:ring-1 outline-none`} placeholder="unique-id" />
+            </div>
+            {slugError && <p className="text-rose-500 text-xs mt-1 font-bold">{slugError}</p>}
+            <p className="text-slate-500 text-[10px] mt-1">Lowercase letters, numbers, and dashes only.</p>
+          </div>
+          <div className="md:col-span-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Manager Name</label><DebouncedInput value={gameState.managerName || ''} onChange={(val) => updateConfig({ managerName: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Your Name" /></div>
+          <div className="md:col-span-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contact Email</label><DebouncedInput value={gameState.contactEmail} onChange={(val) => updateConfig({ contactEmail: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="admin@example.com" /></div>
+          <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payment Instructions</label><DebouncedTextarea value={gameState.paymentInstructions} onChange={(val) => updateConfig({ paymentInstructions: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-24 resize-none" /></div>
+        </div>
+      </div>
+    </div>
+  );
 
   const renderWizardStep3 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
@@ -1144,8 +1255,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {/* Clickable Wizard Progress Indicators */}
               <div className="flex justify-between text-xs font-bold uppercase text-slate-500 mb-2">
                 {[
-                  { step: 1, label: '1. Basics' },
-                  { step: 2, label: '2. Matchup' },
+                  { step: 1, label: '1. Matchup' },
+                  { step: 2, label: '2. Basics' },
                   { step: 3, label: '3. Rules' },
                   { step: 4, label: '4. Payouts' },
                   { step: 5, label: '5. Reminders' },

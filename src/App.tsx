@@ -74,6 +74,18 @@ const App: React.FC = () => {
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [showAudit, setShowAudit] = useState(false); // New State
+  const [pendingAction, setPendingActionState] = useState<'create_pool' | null>(() => {
+    return localStorage.getItem('pendingAction') as 'create_pool' | null;
+  });
+
+  const setPendingAction = (action: 'create_pool' | null) => {
+    setPendingActionState(action);
+    if (action) {
+      localStorage.setItem('pendingAction', action);
+    } else {
+      localStorage.removeItem('pendingAction');
+    }
+  };
   const [syncStatus, setSyncStatus] = useState<'idle' | 'searching' | 'found' | 'not-found' | 'error'>('idle');
 
   const [pools, setPools] = useState<GameState[]>([]);
@@ -136,6 +148,16 @@ const App: React.FC = () => {
       }
     });
   }, []);
+
+  // Effect to handle pending actions after login
+  useEffect(() => {
+    // Check both state and localStorage for robustness
+    const action = pendingAction || localStorage.getItem('pendingAction');
+    if (user && action === 'create_pool') {
+      setPendingAction(null); // Clear pending action first to prevent loops
+      handleCreatePool();
+    }
+  }, [user, pendingAction]);
 
   // Real-time subscription to pools
   useEffect(() => {
@@ -243,7 +265,9 @@ const App: React.FC = () => {
   const handleCreatePool = async () => {
     try {
       if (!user) {
-        alert("You must be logged in to create a pool.");
+        setPendingAction('create_pool');
+        setAuthMode('register');
+        setShowAuthModal(true);
         return;
       }
       const newPool = createNewPool(`Pool #${pools.length + 1}`, user.id, user.name, user.email);
@@ -683,6 +707,7 @@ const App: React.FC = () => {
           onBack={() => window.location.hash = '#admin'}
           onShare={() => openShare(currentPool.id)}
           checkSlugAvailable={(slug) => !pools.some(p => p.urlSlug === slug && p.id !== currentPool.id)}
+          checkNameAvailable={(name) => !pools.some(p => p.name === name && p.id !== currentPool.id)}
         />
         <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
         <Footer />

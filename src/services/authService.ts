@@ -184,8 +184,14 @@ export const authService = {
         const user = mapUser(firebaseUser);
         if (user) {
           // Sync to Firestore (will create if new)
-          const syncedUser = await syncUserToFirestore(user);
-          callback(syncedUser);
+          try {
+            const syncedUser = await syncUserToFirestore(user);
+            callback(syncedUser);
+          } catch (err) {
+            console.error("Auth Sync Failed", err);
+            // Fallback: Proceed with basic user data so they aren't stuck "logged out"
+            callback(user);
+          }
         } else {
           callback(null);
         }
