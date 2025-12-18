@@ -36,6 +36,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
 
       if (isRegistering) {
         await authService.register(formData.name, formData.email, formData.password);
+        setSuccessMsg("Account created! Verify your email to unlock all features.");
+        // Optional: Keep them on screen to read message? 
+        // Or onLogin() will redirect them.
+        // Let's delay redirection slightly or show a banner in the App instead.
+        // For now, let's just proceed to onLogin() which starts the session.
+        // The App header will show "Verify Email" if we implement that.
       } else {
         await authService.login(formData.email, formData.password);
       }

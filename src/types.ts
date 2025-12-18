@@ -211,6 +211,8 @@ export interface User {
   referredBy?: string; // UID of the user who referred this user
   referralCount?: number; // Number of users this user has referred
   createdAt?: number; // Timestamp of account creation
+  emailVerified?: boolean; // Is email verified by Firebase?
+  welcomeEmailSent?: boolean; // Has the welcome email been sent?
 }
 
 export interface Winner {

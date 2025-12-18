@@ -11,6 +11,7 @@ import {
 import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
 import type { User } from "../types";
+import { emailService } from "./emailService";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -35,7 +36,8 @@ const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
     registrationMethod: method,
     role: 'PARTICIPANT', // Default, will be overwritten by Firestore data if exists
     provider: method === 'email' ? 'password' : 'google',
-    referralCode: firebaseUser.uid // Use UID as referral code
+    referralCode: firebaseUser.uid, // Use UID as referral code
+    emailVerified: firebaseUser.emailVerified
   };
 };
 
@@ -74,15 +76,44 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
 
     await setDoc(userRef, newUserData);
     localStorage.removeItem(REFERRAL_STORAGE_KEY); // Clear after use
+
+    // NEW USER: If Google user (auto-verified), send welcome email immediately
+    if (user.emailVerified) {
+      // We can treat this as "verified"
+      await emailService.sendWelcomeEmail(user.email, user.name, user.id);
+      await updateDoc(userRef, { welcomeEmailSent: true });
+      newUserData.welcomeEmailSent = true;
+    }
+
     return { ...user, ...newUserData };
   } else {
     // EXISTING USER - Merge updates (name, picture)
     const existingData = userSnap.data() as User;
+
+    // Check for Verification Event
+    let welcomeSent = existingData.welcomeEmailSent;
+    if (user.emailVerified && !welcomeSent) {
+      console.log("User verified! Sending welcome email...");
+      await emailService.sendWelcomeEmail(user.email, user.name || existingData.name, user.id);
+      welcomeSent = true;
+    }
+
     await setDoc(userRef, {
       name: user.name,
-      picture: user.picture || null
+      picture: user.picture || null,
+      emailVerified: user.emailVerified, // Sync Verification Status
+      welcomeEmailSent: welcomeSent || false
     }, { merge: true });
-    return { ...existingData, name: user.name, picture: user.picture, role: existingData.role || 'PARTICIPANT', provider: existingData.provider || 'password' };
+
+    return {
+      ...existingData,
+      name: user.name,
+      picture: user.picture,
+      role: existingData.role || 'PARTICIPANT',
+      provider: existingData.provider || 'password',
+      emailVerified: user.emailVerified,
+      welcomeEmailSent: welcomeSent
+    };
   }
 };
 
@@ -134,11 +165,24 @@ export const authService = {
       const result = await createUserWithEmailAndPassword(auth, email, password);
       // Update the user profile with their name
       await updateProfile(result.user, { displayName: name });
+
+      // Send Verification Email
+      await authService.sendVerificationEmail(result.user);
+
       const user = mapUser({ ...result.user, displayName: name }) as User;
       return await syncUserToFirestore(user);
     } catch (error) {
       console.error("Registration Error", error);
       throw error;
+    }
+  },
+
+  sendVerificationEmail: async (user: any) => {
+    try {
+      const { sendEmailVerification } = await import('firebase/auth');
+      await sendEmailVerification(user);
+    } catch (e) {
+      console.error("Error sending verification email:", e);
     }
   },
 

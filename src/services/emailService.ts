@@ -168,5 +168,50 @@ Check the grid to see your luck: ${link}`;
         `;
 
         return emailService.sendEmail(playerEmail, subject, text, html, { ownerReferralCode });
+    },
+
+    sendWelcomeEmail: async (
+        email: string,
+        name: string,
+        referralCode: string
+    ) => {
+        const link = "https://www.marchmeleepools.com";
+        const subject = "Welcome to March Melee Pools!";
+
+        const text = `Hi ${name},
+
+Welcome to March Melee Pools! Your account has been verified.
+
+You can now:
+- Create your own pool
+- Join public pools
+- Manage your squares
+
+Get started here: ${link}
+
+Your Referral Code: ${referralCode}
+Share the fun!`;
+
+        const html = `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <h1 style="color: #4f46e5;">Welcome to March Melee Pools!</h1>
+                <p>Hi ${name},</p>
+                <p>Your account has been successfully verified.</p>
+                <p>You can now:</p>
+                <ul>
+                    <li>Create specific pools for any game</li>
+                    <li>Join pools with your friends</li>
+                    <li>Track live scores and winners automatically</li>
+                </ul>
+                <div style="margin: 30px 0;">
+                    <a href="${link}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Go to Dashboard</a>
+                </div>
+                <p style="font-size: 14px; color: #666;">Your Referral Code: <strong>${referralCode}</strong></p>
+            </div>
+        `;
+
+        // Send with referral code attached to the sender context (self-referral for signature?)
+        // Actually, just send it.
+        return emailService.sendEmail(email, subject, text, html, { ownerReferralCode: referralCode });
     }
 };
