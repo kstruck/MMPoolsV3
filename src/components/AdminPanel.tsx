@@ -552,12 +552,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   ];
 
   /* Helper to estimate current NFL week */
+  /* Helper to estimate current NFL week */
   const getEstimatedWeek = () => {
     const now = new Date();
-    const seasonStart = new Date(now.getFullYear(), 8, 5); // Approx Sept 5th
+    // Week 1 is roughly first week of Sept.
+    // If we are in Jan/Feb, we are late season (Week 18+ or playoffs)
+    // 2024 season started Sept 5.
+    // Let's assume current season starts first thursday of Sept.
+
+    let year = now.getFullYear();
+    if (now.getMonth() < 6) year--; // If Jan-June, we are in the tail of previous year's season
+
+    const seasonStart = new Date(year, 8, 5); // Approx Sept 5th
     const diff = now.getTime() - seasonStart.getTime();
+
+    // If before season start, return 1
+    if (diff < 0) return 1;
+
     const weekNum = Math.ceil(diff / (1000 * 60 * 60 * 24 * 7));
-    return Math.max(1, Math.min(18, weekNum));
+    // Cap at 18
+    return Math.max(1, weekNum);
   };
 
   const currentEstimatedWeek = getEstimatedWeek();
@@ -827,6 +841,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {showSchedule && (
             <div className="mb-6 bg-slate-950 border border-slate-700 rounded-xl p-4 animate-in fade-in">
               <div className="flex flex-wrap items-center gap-2 mb-4">
+                <select value={gameState.league || 'nfl'} onChange={(e) => updateConfig({ league: e.target.value as any })} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none font-bold">
+                  <option value="nfl">NFL (Pro)</option>
+                  <option value="college">College (NCAA)</option>
+                </select>
+
                 <select value={seasonType} onChange={(e) => {
                   const newType = e.target.value;
                   setSeasonType(newType);
@@ -844,10 +863,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <span className="text-slate-500 text-sm">Week</span>
                 <select value={week} onChange={(e) => setWeek(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none">
-                  {seasonType === '2' && Array.from({ length: 18 }).map((_, i) => {
-                    const w = i + 1;
-                    return <option key={i} value={w}>Week {w}</option>;
-                  })}
+                  {seasonType === '2' ? (
+                    Array.from({ length: 18 }).map((_, i) => {
+                      const w = i + 1;
+                      if (w < currentEstimatedWeek) return null;
+                      return <option key={i} value={w}>Week {w}</option>;
+                    })
+                  ) : (
+                    seasonType === '1' ? Array.from({ length: 4 }).map((_, i) => <option key={i} value={i + 1}>Week {i + 1}</option>) : null
+                  )}
                   {seasonType === '3' && (
                     <>
                       <option value="1">Wild Card</option>
@@ -857,12 +881,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <option value="5">Super Bowl</option>
                     </>
                   )}
-                  {seasonType === '1' && Array.from({ length: 4 }).map((_, i) => (
-                    <option key={i} value={i + 1}>Week {i + 1}</option>
-                  ))}
                 </select>
-
-
 
                 {(gameState.league === 'college' || gameState.league === 'ncaa') && (
                   <select value={cfbConference} onChange={(e) => setCfbConference(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none max-w-[150px]">
@@ -944,8 +963,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <h3 className="text-xl font-bold text-white mb-2">Basic Information</h3>
         <p className="text-slate-400 text-sm mb-6">Let's verify the core details of your pool.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label><DebouncedInput value={gameState.name} onChange={(val) => updateConfig({ name: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Enter Pool Name" /></div>
-          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Sport / League</label><select value={gameState.league || 'nfl'} onChange={(e) => updateConfig({ league: e.target.value as any })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"><option value="nfl">NFL (Pro)</option><option value="college">College Football (NCAA)</option></select></div>
+          <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label><DebouncedInput value={gameState.name} onChange={(val) => updateConfig({ name: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Enter Pool Name" /></div>
+
+          {/* League Selector Moved to Step 1 */}
+
           <div>
             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">URL Slug</label>
             <div className="relative">
@@ -1598,6 +1619,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <div>
                             <h4 className="font-bold text-white text-sm">{player.name}</h4>
                             <div className="flex gap-2 text-xs">
+                              {!!gameState.charity?.enabled && (
+                                <div className="flex items-center gap-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
+                                  <div className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center">
+                                    <Heart size={16} className="text-rose-500" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-slate-500 font-bold uppercase">Charity</div>
+                                    <div className="text-sm font-bold text-white">{gameState.charity?.name || 'Not Set'}</div>
+                                  </div>
+                                </div>
+                              )}
                               <span className="text-slate-400">{player.squares.length} Squares</span>
                               {player.totalOwed > 0 && <span className="text-rose-400 font-bold">Owes ${player.totalOwed}</span>}
                               {player.totalOwed === 0 && <span className="text-emerald-400 font-bold">Paid in Full</span>}
