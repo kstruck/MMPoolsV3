@@ -209,11 +209,9 @@ export const authService = {
 
   // Reset Password
   resetPassword: async (email: string): Promise<void> => {
-    console.log(`[AuthService] Attempting to send reset password email to: ${email}`);
     try {
       const { sendPasswordResetEmail } = await import('firebase/auth');
       await sendPasswordResetEmail(auth, email);
-      console.log(`[AuthService] Reset password email sent successfully to: ${email}`);
     } catch (error) {
       console.error("[AuthService] Reset Password Error", error);
       throw error;
