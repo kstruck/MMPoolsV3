@@ -15,6 +15,7 @@ A modern, real-time sports pool application ("Super Bowl Squares") built for per
 *   **Enhanced Visualization:** **NEW!** Dynamic grid highlighting for active rows/columns, winning squares, and paid (Emerald) vs. reserved (Amber) status.
 *   **Dynamic Layouts:** Smart responsive design that adapts to pool settings (e.g., auto-centering status cards when Charity is disabled).
 *   **Mobile-Responsive:** fully optimized design for desktop, tablet, and mobile devices.
+*   **How it Works Guide:** **NEW!** Comprehensive, step-by-step interactive guide for new users, accessible directly from the main menu.
 *   **User Accounts:** Secure Google Authentication and email registration via Firebase.
 
 ### Pool Management
@@ -75,6 +76,11 @@ Built-in viral growth mechanism to help pool managers expand their reach.
     *   Locks pool & generates Q1 numbers.
     *   Simulates game flow (Q1 -> Half -> Q3 -> Final) over ~12 seconds.
     *   **Auto-Generates Quarterly Numbers** for "4 Sets" pools during the sim.
+
+### Verification & Compliance
+*   **Google OAuth Verified:** Fully compliant with Google API Services User Data Policy, including "Limited Use" disclosure.
+*   **Legal Center:** Integrated Privacy Policy and Terms of Service pages with consistent site navigation and "Back to Home" functionality.
+*   **Brand Compliance:** Uses official Google Sign-In branding and color palettes.
 
 ## 🛠️ Tech Stack
 
