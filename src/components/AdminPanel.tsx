@@ -576,242 +576,257 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const currentEstimatedWeek = getEstimatedWeek();
 
-  const renderWizardReminders = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-          <Bell size={20} className="text-amber-400" /> Payment Reminders
-        </h3>
-        <p className="text-slate-400 text-sm mb-6">Automate follow-ups for unpaid squares.</p>
+  const renderWizardReminders = () => {
+    // Safe access with defaults to prevent crashes
+    const defaultReminders = {
+      payment: { enabled: false, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false },
+      lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: undefined as number | undefined },
+      winner: { enabled: true, channels: ['email'] as ('email' | 'in-app')[], includeDigits: true, includeCharityImpact: true }
+    };
 
-        <div className="space-y-4">
-          <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
-            <div>
-              <span className="font-bold text-slate-200 block">Enable Auto-Reminders</span>
-              <span className="text-xs text-slate-500">System checks every 15 mins for unpaid reservations.</span>
-            </div>
-            <input
-              type="checkbox"
-              checked={gameState.reminders?.payment?.enabled || false}
-              onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, payment: { ...(gameState.reminders?.payment || { graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false }), enabled: e.target.checked } } })}
-              className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-            />
-          </label>
+    const safeReminders = {
+      payment: { ...defaultReminders.payment, ...(gameState.reminders?.payment || {}) },
+      lock: { ...defaultReminders.lock, ...(gameState.reminders?.lock || {}) },
+      winner: { ...defaultReminders.winner, ...(gameState.reminders?.winner || {}) }
+    };
 
-          {gameState.reminders?.payment?.enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+    return (
+      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+            <Bell size={20} className="text-amber-400" /> Payment Reminders
+          </h3>
+          <p className="text-slate-400 text-sm mb-6">Automate follow-ups for unpaid squares.</p>
+
+          <div className="space-y-4">
+            <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Grace Period (Minutes)</label>
-                <input
-                  type="number"
-                  value={gameState.reminders.payment.graceMinutes}
-                  onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, payment: { ...gameState.reminders!.payment, graceMinutes: parseInt(e.target.value) || 0 } } })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Wait time after reservation before nagging.</p>
+                <span className="font-bold text-slate-200 block">Enable Auto-Reminders</span>
+                <span className="text-xs text-slate-500">System checks every 15 mins for unpaid reservations.</span>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Repeat Every (Hours)</label>
-                <input
-                  type="number"
-                  value={gameState.reminders.payment.repeatEveryHours}
-                  onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, payment: { ...gameState.reminders!.payment, repeatEveryHours: parseInt(e.target.value) || 0 } } })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Frequency of follow-up emails.</p>
+              <input
+                type="checkbox"
+                checked={safeReminders.payment.enabled}
+                onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, enabled: e.target.checked } } })}
+                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+              />
+            </label>
+
+            {safeReminders.payment.enabled && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Grace Period (Minutes)</label>
+                  <input
+                    type="number"
+                    value={safeReminders.payment.graceMinutes}
+                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, graceMinutes: parseInt(e.target.value) || 0 } } })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Wait time after reservation before nagging.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Repeat Every (Hours)</label>
+                  <input
+                    type="number"
+                    value={safeReminders.payment.repeatEveryHours}
+                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, repeatEveryHours: parseInt(e.target.value) || 0 } } })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Frequency of follow-up emails.</p>
+                </div>
+                <label className="md:col-span-2 flex items-center gap-3 cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={safeReminders.payment.notifyUsers}
+                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, notifyUsers: e.target.checked } } })}
+                    className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600"
+                  />
+                  <span className="text-sm text-slate-300">Also email the <strong>Participants</strong> directly (not just Host summary)</span>
+                </label>
               </div>
-              <label className="md:col-span-2 flex items-center gap-3 cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800">
-                <input
-                  type="checkbox"
-                  checked={gameState.reminders.payment.notifyUsers}
-                  onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, payment: { ...gameState.reminders!.payment, notifyUsers: e.target.checked } } })}
-                  className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600"
-                />
-                <span className="text-sm text-slate-300">Also email the <strong>Participants</strong> directly (not just Host summary)</span>
-              </label>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-          <Clock size={20} className="text-rose-400" /> Auto-Lock & Number Generation
-        </h3>
-        <p className="text-slate-400 text-sm mb-6">Automatically lock the grid and reveal numbers.</p>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+            <Clock size={20} className="text-rose-400" /> Auto-Lock & Number Generation
+          </h3>
+          <p className="text-slate-400 text-sm mb-6">Automatically lock the grid and reveal numbers.</p>
 
-        <div className="space-y-4">
-          <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Trigger Time</label>
-            <select
-              className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white mb-4 outline-none focus:border-indigo-500"
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === 'manual') {
-                  updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: undefined } } });
-                } else if (val === 'custom') {
-                  // Default to Game Start Time if available, otherwise Now + 1 Hour
-                  let defaultTime = new Date();
-                  if (gameState.scores.startTime) {
-                    defaultTime = new Date(gameState.scores.startTime);
+          <div className="space-y-4">
+            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Trigger Time</label>
+              <select
+                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white mb-4 outline-none focus:border-indigo-500"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'manual') {
+                    updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: undefined } } });
+                  } else if (val === 'custom') {
+                    // Default to Game Start Time if available, otherwise Now + 1 Hour
+                    let defaultTime = new Date();
+                    if (gameState.scores.startTime) {
+                      defaultTime = new Date(gameState.scores.startTime);
+                    } else {
+                      defaultTime.setMinutes(defaultTime.getMinutes() + 60);
+                    }
+                    updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: defaultTime.getTime() } } });
                   } else {
-                    defaultTime.setMinutes(defaultTime.getMinutes() + 60);
+                    const offsetMins = parseInt(val);
+                    if (gameState.scores.startTime) {
+                      const start = new Date(gameState.scores.startTime).getTime();
+                      updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: start - (offsetMins * 60 * 1000) } } });
+                    }
                   }
-                  updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: defaultTime.getTime() } } });
-                } else {
-                  const offsetMins = parseInt(val);
-                  if (gameState.scores.startTime) {
-                    const start = new Date(gameState.scores.startTime).getTime();
-                    updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: start - (offsetMins * 60 * 1000) } } });
-                  }
+                }}
+                value={
+                  !safeReminders.lock.lockAt ? 'manual' :
+                    gameState.scores.startTime && Math.abs(safeReminders.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 3600000)) < 10000 ? '60' :
+                      gameState.scores.startTime && Math.abs(safeReminders.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 1800000)) < 10000 ? '30' :
+                        gameState.scores.startTime && Math.abs(safeReminders.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 900000)) < 10000 ? '15' :
+                          gameState.scores.startTime && Math.abs(safeReminders.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 300000)) < 10000 ? '5' :
+                            'custom'
                 }
-              }}
-              value={
-                !gameState.reminders!.lock.lockAt ? 'manual' :
-                  gameState.scores.startTime && Math.abs(gameState.reminders!.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 3600000)) < 10000 ? '60' :
-                    gameState.scores.startTime && Math.abs(gameState.reminders!.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 1800000)) < 10000 ? '30' :
-                      gameState.scores.startTime && Math.abs(gameState.reminders!.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 900000)) < 10000 ? '15' :
-                        gameState.scores.startTime && Math.abs(gameState.reminders!.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 300000)) < 10000 ? '5' :
-                          'custom'
-              }
-            >
-              <option value="manual">Manual (I will click 'Lock')</option>
-              <option value="60" disabled={!gameState.scores.startTime}>1 Hour Before Kickoff</option>
-              <option value="30" disabled={!gameState.scores.startTime}>30 Minutes Before Kickoff</option>
-              <option value="15" disabled={!gameState.scores.startTime}>15 Minutes Before Kickoff</option>
-              <option value="5" disabled={!gameState.scores.startTime}>5 Minutes Before Kickoff</option>
-              <option value="custom">Custom Date & Time...</option>
-            </select>
+              >
+                <option value="manual">Manual (I will click 'Lock')</option>
+                <option value="60" disabled={!gameState.scores.startTime}>1 Hour Before Kickoff</option>
+                <option value="30" disabled={!gameState.scores.startTime}>30 Minutes Before Kickoff</option>
+                <option value="15" disabled={!gameState.scores.startTime}>15 Minutes Before Kickoff</option>
+                <option value="5" disabled={!gameState.scores.startTime}>5 Minutes Before Kickoff</option>
+                <option value="custom">Custom Date & Time...</option>
+              </select>
 
-            {gameState.reminders!.lock.lockAt && (
-              <div className="animate-in fade-in slide-in-from-top-2 border-t border-slate-800 pt-4 mt-2">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Date</label>
-                    <input
-                      type="date"
-                      value={new Date(gameState.reminders!.lock.lockAt).toISOString().split('T')[0]}
-                      onChange={(e) => {
-                        if (!e.target.value) return;
-                        const [y, m, d] = e.target.value.split('-').map(Number);
-                        const current = new Date(gameState.reminders!.lock.lockAt!);
-                        current.setFullYear(y);
-                        current.setMonth(m - 1);
-                        current.setDate(d);
-                        updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: current.getTime() } } });
-                      }}
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Time</label>
-                    <div className="flex bg-slate-900 border border-slate-700 rounded px-1">
-                      <select
-                        className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
-                        value={(() => {
-                          let h = new Date(gameState.reminders!.lock.lockAt).getHours();
-                          if (h === 0) h = 12;
-                          else if (h > 12) h -= 12;
-                          return h;
-                        })()}
+              {safeReminders.lock.lockAt && (
+                <div className="animate-in fade-in slide-in-from-top-2 border-t border-slate-800 pt-4 mt-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Date</label>
+                      <input
+                        type="date"
+                        value={new Date(safeReminders.lock.lockAt).toISOString().split('T')[0]}
                         onChange={(e) => {
-                          const newH = parseInt(e.target.value);
-                          const current = new Date(gameState.reminders!.lock.lockAt!);
-                          const isPM = current.getHours() >= 12;
-                          let h = newH;
-                          if (isPM && newH !== 12) h += 12;
-                          if (!isPM && newH === 12) h = 0;
-                          current.setHours(h);
-                          updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: current.getTime() } } });
+                          if (!e.target.value) return;
+                          const [y, m, d] = e.target.value.split('-').map(Number);
+                          const current = new Date(safeReminders.lock.lockAt!);
+                          current.setFullYear(y);
+                          current.setMonth(m - 1);
+                          current.setDate(d);
+                          updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
                         }}
-                      >
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h} className="bg-slate-900 text-white">{h}</option>)}
-                      </select>
-                      <span className="py-2 text-slate-500">:</span>
-                      <select
-                        className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
-                        value={Math.floor(new Date(gameState.reminders!.lock.lockAt).getMinutes() / 5) * 5}
-                        onChange={(e) => {
-                          const m = parseInt(e.target.value);
-                          const current = new Date(gameState.reminders!.lock.lockAt!);
-                          current.setMinutes(m);
-                          updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: current.getTime() } } });
-                        }}
-                      >
-                        {Array.from({ length: 12 }, (_, i) => i * 5).map(m => <option key={m} value={m} className="bg-slate-900 text-white">{m.toString().padStart(2, '0')}</option>)}
-                      </select>
-                      <select
-                        className="bg-transparent text-indigo-400 outline-none font-bold py-2 pl-2"
-                        value={new Date(gameState.reminders!.lock.lockAt).getHours() >= 12 ? 'PM' : 'AM'}
-                        onChange={(e) => {
-                          const isPM = e.target.value === 'PM';
-                          const current = new Date(gameState.reminders!.lock.lockAt!);
-                          let h = current.getHours();
-                          if (isPM && h < 12) h += 12;
-                          if (!isPM && h >= 12) h -= 12;
-                          current.setHours(h);
-                          updateConfig({ reminders: { ...gameState.reminders!, lock: { ...gameState.reminders!.lock, lockAt: current.getTime() } } });
-                        }}
-                      >
-                        <option value="AM" className="bg-slate-900 text-white">AM</option>
-                        <option value="PM" className="bg-slate-900 text-white">PM</option>
-                      </select>
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Time</label>
+                      <div className="flex bg-slate-900 border border-slate-700 rounded px-1">
+                        <select
+                          className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
+                          value={(() => {
+                            let h = new Date(safeReminders.lock.lockAt!).getHours();
+                            if (h === 0) h = 12;
+                            else if (h > 12) h -= 12;
+                            return h;
+                          })()}
+                          onChange={(e) => {
+                            const newH = parseInt(e.target.value);
+                            const current = new Date(safeReminders.lock.lockAt!);
+                            const isPM = current.getHours() >= 12;
+                            let h = newH;
+                            if (isPM && newH !== 12) h += 12;
+                            if (!isPM && newH === 12) h = 0;
+                            current.setHours(h);
+                            updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
+                          }}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h} className="bg-slate-900 text-white">{h}</option>)}
+                        </select>
+                        <span className="py-2 text-slate-500">:</span>
+                        <select
+                          className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
+                          value={Math.floor(new Date(safeReminders.lock.lockAt).getMinutes() / 5) * 5}
+                          onChange={(e) => {
+                            const m = parseInt(e.target.value);
+                            const current = new Date(safeReminders.lock.lockAt!);
+                            current.setMinutes(m);
+                            updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
+                          }}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i * 5).map(m => <option key={m} value={m} className="bg-slate-900 text-white">{m.toString().padStart(2, '0')}</option>)}
+                        </select>
+                        <select
+                          className="bg-transparent text-indigo-400 outline-none font-bold py-2 pl-2"
+                          value={new Date(safeReminders.lock.lockAt).getHours() >= 12 ? 'PM' : 'AM'}
+                          onChange={(e) => {
+                            const isPM = e.target.value === 'PM';
+                            const current = new Date(safeReminders.lock.lockAt!);
+                            let h = current.getHours();
+                            if (isPM && h < 12) h += 12;
+                            if (!isPM && h >= 12) h -= 12;
+                            current.setHours(h);
+                            updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
+                          }}
+                        >
+                          <option value="AM" className="bg-slate-900 text-white">AM</option>
+                          <option value="PM" className="bg-slate-900 text-white">PM</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
+                  <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
+                    <CheckCircle size={10} /> Grid will automatically lock and numbers will be generated at this time.
+                  </p>
                 </div>
-                <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
-                  <CheckCircle size={10} /> Grid will automatically lock and numbers will be generated at this time.
-                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+            <Sparkles size={20} className="text-emerald-400" /> Winner Announcements
+          </h3>
+          <p className="text-slate-400 text-sm mb-6">Instant alerts when a quarter closes.</p>
+          <div className="space-y-4">
+            <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+              <div>
+                <span className="font-bold text-slate-200 block">Enable Winner Emails</span>
+                <span className="text-xs text-slate-500">Auto-email all participants when a winner is calculated.</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={safeReminders.winner.enabled}
+                onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, enabled: e.target.checked } } })}
+                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+              />
+            </label>
+            {safeReminders.winner.enabled && (
+              <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={safeReminders.winner.includeDigits}
+                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, includeDigits: e.target.checked } } })}
+                    className="w-5 h-5 rounded bg-slate-800 border-slate-600"
+                  />
+                  <span className="text-sm text-slate-300">Include Winning Digits</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={safeReminders.winner.includeCharityImpact}
+                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, includeCharityImpact: e.target.checked } } })}
+                    className="w-5 h-5 rounded bg-slate-800 border-slate-600"
+                  />
+                  <span className="text-sm text-slate-300">Include Charity Impact</span>
+                </label>
               </div>
             )}
           </div>
         </div>
       </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-          <Sparkles size={20} className="text-emerald-400" /> Winner Announcements
-        </h3>
-        <p className="text-slate-400 text-sm mb-6">Instant alerts when a quarter closes.</p>
-        <div className="space-y-4">
-          <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
-            <div>
-              <span className="font-bold text-slate-200 block">Enable Winner Emails</span>
-              <span className="text-xs text-slate-500">Auto-email all participants when a winner is calculated.</span>
-            </div>
-            <input
-              type="checkbox"
-              checked={gameState.reminders?.winner?.enabled || false}
-              onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, winner: { ...(gameState.reminders?.winner || { channels: ['email'], includeDigits: true, includeCharityImpact: true }), enabled: e.target.checked } } })}
-              className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-            />
-          </label>
-          {gameState.reminders?.winner?.enabled && (
-            <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={gameState.reminders.winner.includeDigits}
-                  onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, winner: { ...gameState.reminders!.winner, includeDigits: e.target.checked } } })}
-                  className="w-5 h-5 rounded bg-slate-800 border-slate-600"
-                />
-                <span className="text-sm text-slate-300">Include Winning Digits</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={gameState.reminders.winner.includeCharityImpact}
-                  onChange={(e) => updateConfig({ reminders: { ...gameState.reminders!, winner: { ...gameState.reminders!.winner, includeCharityImpact: e.target.checked } } })}
-                  className="w-5 h-5 rounded bg-slate-800 border-slate-600"
-                />
-                <span className="text-sm text-slate-300">Include Charity Impact</span>
-              </label>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // Render Wizard STep 1 (Now Matchup)
   const renderWizardStep1 = () => {
