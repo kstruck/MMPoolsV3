@@ -25,7 +25,7 @@ export const SuperAdmin: React.FC = () => {
 
     useEffect(() => {
         // Subscribe to pools - this updates independently
-        const unsub = dbService.subscribeToPools(setPools);
+        const unsub = dbService.subscribeToAllPools(setPools);
         fetchUsers();
         return () => unsub();
     }, []);
@@ -360,6 +360,7 @@ export const SuperAdmin: React.FC = () => {
                                                 <th className="p-4 font-bold tracking-wider">Pool Name</th>
                                                 <th className="p-4 font-bold tracking-wider">Created</th>
                                                 <th className="p-4 font-bold tracking-wider">Matchup</th>
+                                                <th className="p-4 font-bold tracking-wider">Game Time</th>
                                                 <th className="p-4 font-bold tracking-wider">Owner</th>
                                                 <th className="p-4 font-bold tracking-wider">Filled</th>
                                                 <th className="p-4 font-bold tracking-wider">Actions</th>
@@ -408,6 +409,13 @@ export const SuperAdmin: React.FC = () => {
                                                             {createdAt}
                                                         </td>
                                                         <td className="p-4 font-bold text-sm">{matchUp}</td>
+                                                        <td className="p-4 text-xs text-slate-400 font-mono">
+                                                            {isBracket ? (
+                                                                (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD'
+                                                            ) : (
+                                                                (pool as GameState).scores.startTime ? new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD'
+                                                            )}
+                                                        </td>
                                                         <td className="p-4 text-slate-400 text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
                                                         <td className="p-4">
                                                             <div className="flex items-center gap-2">
@@ -491,6 +499,7 @@ export const SuperAdmin: React.FC = () => {
                                 <tr>
                                     <th className="p-4 tracking-wider">Name</th>
                                     <th className="p-4 tracking-wider">Email</th>
+                                    <th className="p-4 tracking-wider">Role</th>
                                     <th className="p-4 tracking-wider">Method</th>
                                     <th className="p-4 tracking-wider">Referrals</th>
                                     <th className="p-4 tracking-wider">ID</th>
@@ -504,6 +513,11 @@ export const SuperAdmin: React.FC = () => {
                                             <button onClick={() => handleViewUser(u)} className="hover:text-indigo-400 hover:underline font-bold text-left">{u.name}</button>
                                         </td>
                                         <td className="p-4 text-slate-400">{u.email}</td>
+                                        <td className="p-4">
+                                            <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'POOL_MANAGER' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                                                {u.role || 'USER'}
+                                            </span>
+                                        </td>
                                         <td className="p-4">
                                             <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
                                                 {u.registrationMethod || 'EMAIL'}

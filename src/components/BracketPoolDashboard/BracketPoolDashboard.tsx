@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import type { BracketPool, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Settings, Share2, PlusCircle, ArrowLeft } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
+import { StandingsTable } from './StandingsTable';
 
 interface BracketPoolDashboardProps {
     pool: BracketPool;
@@ -18,6 +19,13 @@ const MOCK_TOURNAMENT: any = {
     games: {},
     teams: {}
 };
+
+// MOCK ENTRIES for visualization
+const MOCK_ENTRIES: any[] = [
+    { id: '1', name: 'Winner Winner', score: 120, ownerUid: 'other' },
+    { id: '2', name: 'My Bracket', score: 90, ownerUid: 'me' },
+    { id: '3', name: 'Cinderella Story', score: 85, ownerUid: 'other' },
+];
 
 export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool, user, onBack, onShare }) => {
     const [activeTab, setActiveTab] = useState<'dashboard' | 'standings' | 'entries' | 'settings'>('dashboard');
@@ -109,17 +117,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 {activeTab === 'standings' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4">
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                            <div className="p-4 bg-slate-950 border-b border-slate-800 font-bold text-slate-400 grid grid-cols-12 gap-4 text-sm">
-                                <div className="col-span-1">Rank</div>
-                                <div className="col-span-7">Entry Name</div>
-                                <div className="col-span-2 text-right">Points</div>
-                                <div className="col-span-2 text-right">Possible</div>
-                            </div>
-                            <div className="p-8 text-center text-slate-500 italic">
-                                No entries yet.
-                            </div>
-                        </div>
+                        <StandingsTable entries={MOCK_ENTRIES} maxScore={320} />
                     </div>
                 )}
 

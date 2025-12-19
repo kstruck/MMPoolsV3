@@ -346,15 +346,26 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                     </div>
 
                                                     {/* Matchup */}
-                                                    <div className="bg-black/30 rounded-lg p-3 border border-slate-800/50 mb-4 flex items-center justify-between relative z-10">
-                                                        <div className="flex items-center gap-2">
-                                                            {awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain opacity-80" />}
-                                                            <span className="text-sm font-bold text-slate-300">{awayTeam}</span>
+                                                    <div className="bg-black/30 rounded-lg p-3 border border-slate-800/50 mb-4 relative z-10">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                {awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain opacity-80" />}
+                                                                <span className="text-sm font-bold text-slate-300">{awayTeam}</span>
+                                                            </div>
+                                                            <span className="text-xs text-slate-600 font-bold uppercase">VS</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-bold text-slate-300">{homeTeam}</span>
+                                                                {homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain opacity-80" />}
+                                                            </div>
                                                         </div>
-                                                        <span className="text-xs text-slate-600 font-bold uppercase">VS</span>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-sm font-bold text-slate-300">{homeTeam}</span>
-                                                            {homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain opacity-80" />}
+                                                        <div className="text-center">
+                                                            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                                                                {isBracket ? (
+                                                                    (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD'
+                                                                ) : (
+                                                                    (pool as GameState).scores.startTime ? new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD'
+                                                                )}
+                                                            </span>
                                                         </div>
                                                     </div>
 

@@ -42,6 +42,7 @@ export const createBracketPool = onCall(async (request) => {
         slug, // temporary, finalized on publish
         slugLower: slug.toLowerCase(),
         managerUid: uid,
+        ownerId: uid, // Added for backward compatibility/rules
         seasonYear,
         gender: gender || 'mens',
         isListedPublic: false,

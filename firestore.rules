@@ -25,17 +25,17 @@ service cloud.firestore {
       allow get: if true;
       
       // Allow LIST if you are owner, superadmin, OR if querying for public pools
-      allow list: if (resource.data.isPublic == true) || (request.auth != null && (resource.data.ownerId == request.auth.uid || isSuperAdmin()));
+      allow list: if (resource.data.isPublic == true) || (request.auth != null && (resource.data.ownerId == request.auth.uid || resource.data.managerUid == request.auth.uid || isSuperAdmin()));
 
       
       // Delete: Owner only OR SuperAdmin
-      allow delete: if request.auth != null && (request.auth.uid == resource.data.ownerId || isSuperAdmin());
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid || isSuperAdmin());
       
       // Update: Owner only (filtered) OR SuperAdmin (unrestricted)
       // Prevent CLIENTS from writing to 'squares', 'axisNumbers', 'participants' directly
       // They must use Cloud Functions (reserveSquare, lockPool, etc.)
       allow update: if request.auth != null && (
-        (request.auth.uid == resource.data.ownerId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers', 'squares']))) 
+        ((request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers', 'squares']))) 
         || isSuperAdmin()
       );
                     

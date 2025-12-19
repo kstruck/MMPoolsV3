@@ -8,6 +8,7 @@ import {
     onSnapshot,
     query,
     where,
+    or,
     Timestamp
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -141,7 +142,7 @@ export const dbService = {
     subscribeToPools: (callback: (pools: GameState[]) => void, onError?: (error: any) => void, ownerId?: string) => {
         let q;
         if (ownerId) {
-            q = query(collection(db, "pools"), where("ownerId", "==", ownerId));
+            q = query(collection(db, "pools"), or(where("ownerId", "==", ownerId), where("managerUid", "==", ownerId)));
         } else {
             // Default: Fetch only PUBLIC pools (compliance with security rules)
             q = query(collection(db, "pools"), where("isPublic", "==", true));
@@ -151,6 +152,18 @@ export const dbService = {
             callback(pools);
         }, (error) => {
             console.error("Pool Subscription Error:", error);
+            if (onError) onError(error);
+        });
+    },
+
+    // Admin: Fetch ALL pools (relies on SuperAdmin permissions)
+    subscribeToAllPools: (callback: (pools: GameState[]) => void, onError?: (error: any) => void) => {
+        const q = query(collection(db, "pools"));
+        return onSnapshot(q, (snapshot) => {
+            const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GameState));
+            callback(pools);
+        }, (error) => {
+            console.error("Admin Pool Subscription Error:", error);
             if (onError) onError(error);
         });
     },

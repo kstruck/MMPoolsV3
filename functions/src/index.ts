@@ -17,3 +17,4 @@ export { createPool } from "./poolOps";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
 export { createBracketEntry, updateBracketEntry, submitBracketEntry } from "./bracketEntries";
+export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";

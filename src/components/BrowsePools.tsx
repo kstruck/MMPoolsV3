@@ -1,9 +1,10 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Trophy } from 'lucide-react';
+import { Search, Trophy, Heart, DollarSign } from 'lucide-react';
 import type { GameState, User, BracketPool } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
+import { getTeamLogo } from '../constants';
 
 interface BrowsePoolsProps {
     user: User | null;
@@ -15,6 +16,8 @@ interface BrowsePoolsProps {
 export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAuth, onLogout }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedLeague, setSelectedLeague] = useState<string>('all');
+    const [filterCharity, setFilterCharity] = useState(false);
+    const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 10, mid 10-50, high > 50
 
     // Filter Logic
     const filteredPools = useMemo(() => {
@@ -40,7 +43,16 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
 
             if (!matchesSearch) return false;
 
+            // Charity Filter
+            if (filterCharity && (isBracket || !(p as GameState).charity?.enabled)) return false;
 
+            // Price Filter
+            if (filterPrice !== 'all') {
+                const cost = isBracket ? (p as any).settings?.entryFee : (p as GameState).costPerSquare;
+                if (filterPrice === 'low' && cost >= 20) return false;
+                if (filterPrice === 'mid' && (cost < 20 || cost > 50)) return false;
+                if (filterPrice === 'high' && cost <= 50) return false;
+            }
 
             // League Filter
             if (selectedLeague !== 'all') {
@@ -55,7 +67,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
 
             return true;
         });
-    }, [pools, searchTerm, selectedLeague]);
+    }, [pools, searchTerm, selectedLeague, filterCharity, filterPrice]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
@@ -117,6 +129,42 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                 ))}
                             </div>
                         </div>
+
+                        {/* Price Filter */}
+                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <DollarSign size={14} /> Entry Cost
+                            </h3>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { id: 'all', label: 'Any' },
+                                    { id: 'low', label: '< $20' },
+                                    { id: 'mid', label: '$20 - $50' },
+                                    { id: 'high', label: '$50+' },
+                                ].map((price) => (
+                                    <button
+                                        key={price.id}
+                                        onClick={() => setFilterPrice(price.id as any)}
+                                        className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-all ${filterPrice === price.id ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'}`}
+                                    >
+                                        {price.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Toggles */}
+                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                            <label className="flex items-center justify-between cursor-pointer group">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-1.5 rounded-lg transition-colors ${filterCharity ? 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-500'}`}><Heart size={16} className={filterCharity ? "fill-white" : ""} /></div>
+                                    <span className={`text-sm font-medium ${filterCharity ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`}>Charity Pools Only</span>
+                                </div>
+                                <div className={`w-10 h-5 rounded-full relative transition-colors ${filterCharity ? 'bg-rose-500' : 'bg-slate-700'}`} onClick={() => setFilterCharity(!filterCharity)}>
+                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${filterCharity ? 'left-6' : 'left-1'}`} />
+                                </div>
+                            </label>
+                        </div>
                     </div>
 
                     {/* Results */}
@@ -124,25 +172,100 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {filteredPools.map(pool => {
                                 const isBracket = pool.type === 'BRACKET';
-                                const cost = isBracket ? (pool as BracketPool).settings.entryFee : (pool as GameState).costPerSquare;
+                                let filled = 0;
+                                let pct = 0;
+                                let homeLogo = null;
+                                let awayLogo = null;
+                                let homeTeam = '';
+                                let awayTeam = '';
+                                let cost = 0;
+                                let isLocked = false;
+                                let charityEnabled = false;
+
+                                if (isBracket) {
+                                    const bp = pool as any; // BracketPool
+                                    filled = bp.entryCount || 0;
+                                    const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal; // Mock 100 if unlimited for progress
+                                    pct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round((filled / max) * 100);
+                                    homeTeam = 'Tournament';
+                                    awayTeam = 'Bracket';
+                                    cost = bp.settings.entryFee;
+                                    isLocked = bp.status !== 'DRAFT' && bp.status !== 'PUBLISHED';
+                                } else {
+                                    const sp = pool as GameState;
+                                    filled = sp.squares.filter(s => s.owner).length;
+                                    pct = Math.round((filled / 100) * 100);
+                                    homeTeam = sp.homeTeam;
+                                    awayTeam = sp.awayTeam;
+                                    homeLogo = sp.homeTeamLogo || getTeamLogo(sp.homeTeam);
+                                    awayLogo = sp.awayTeamLogo || getTeamLogo(sp.awayTeam);
+                                    cost = sp.costPerSquare;
+                                    isLocked = sp.isLocked;
+                                    charityEnabled = !!sp.charity?.enabled;
+                                }
 
                                 return (
-                                    <div key={pool.id} onClick={() => window.location.hash = `#pool/${pool.id}`} className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 rounded-xl p-5 cursor-pointer transition-all relative overflow-hidden">
+                                    <div key={pool.id}
+                                        onClick={() => window.location.hash = `#pool/${pool.id}`}
+                                        className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 rounded-xl p-5 cursor-pointer transition-all relative overflow-hidden flex flex-col"
+                                    >
+                                        {charityEnabled && (
+                                            <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+                                                <Heart size={100} className="fill-rose-500 text-rose-500" />
+                                            </div>
+                                        )}
+
                                         <div className="flex justify-between items-start mb-4 relative z-10">
                                             <div className="flex items-center gap-3">
                                                 <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-lg font-bold group-hover:scale-105 transition-transform ${isBracket ? 'bg-amber-900/20 border-amber-500/30 text-amber-500' : 'bg-slate-800 border-slate-700 text-indigo-400'}`}>
                                                     {isBracket ? <Trophy size={20} /> : pool.name.substring(0, 2).toUpperCase()}
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1">{pool.name}</h3>
+                                                    <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1 flex items-center gap-2">
+                                                        {pool.name}
+                                                    </h3>
                                                     <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
                                                         {isBracket ? <span className="text-amber-500">March Madness Bracket</span> : <span>Super Bowl Squares</span>}
+                                                        {charityEnabled && <span className="text-rose-400 flex items-center gap-1">• <Heart size={10} className="fill-rose-400" /> Charity</span>}
                                                     </div>
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <span className="block text-xl font-bold text-emerald-400 font-mono">${cost}</span>
-                                                <span className="text-[10px] text-slate-500 uppercase font-bold">Entry</span>
+                                                <span className="text-[10px] text-slate-500 uppercase font-bold">{isBracket ? 'Entry Fee' : 'Per Square'}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Matchup */}
+                                        <div className="bg-black/30 rounded-lg p-3 border border-slate-800/50 mb-4 flex items-center justify-between relative z-10">
+                                            <div className="flex items-center gap-2">
+                                                {awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain opacity-80" />}
+                                                <span className="text-sm font-bold text-slate-300">{awayTeam}</span>
+                                            </div>
+                                            <span className="text-xs text-slate-600 font-bold uppercase">VS</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-slate-300">{homeTeam}</span>
+                                                {homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain opacity-80" />}
+                                            </div>
+                                        </div>
+
+                                        {/* Progress & Meta */}
+                                        <div className="flex items-center justify-between text-xs font-medium text-slate-400 relative z-10">
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }}></div>
+                                                    </div>
+                                                    <span>{isBracket ? `${filled} Entries` : `${100 - filled} Left`}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                {!isLocked ? (
+                                                    <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Open</span>
+                                                ) : (
+                                                    <span className="text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Locked</span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

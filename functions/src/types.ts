@@ -338,6 +338,7 @@ export interface BracketPool {
     name: string;
     description?: string;
     managerUid: string;
+    ownerId?: string; // Back-compat / Rules
     seasonYear: number;
     gender: 'mens' | 'womens';
 
