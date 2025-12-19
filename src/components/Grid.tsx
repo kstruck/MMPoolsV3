@@ -645,10 +645,24 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               }
                            } else if (isOwned) {
                               if (square.isPaid) {
-                                 // PAID = Green
-                                 bgClass = "bg-emerald-600 shadow-inner";
-                                 borderClass = "border-emerald-500";
-                                 textClass = "text-white font-bold";
+                                 // PAID
+                                 const isMySquare = currentUser && (
+                                    square.reservedByUid === currentUser.id ||
+                                    square.paidByUid === currentUser.id ||
+                                    (square.owner && currentUser.name && square.owner.toLowerCase() === currentUser.name.toLowerCase())
+                                 );
+
+                                 if (isMySquare) {
+                                    // Highlight Current User's Paid Squares
+                                    bgClass = "bg-cyan-600 shadow-[0_0_15px_rgba(8,145,178,0.5)] z-20 scale-[1.02]";
+                                    borderClass = "border-2 border-cyan-400";
+                                    textClass = "text-white font-bold text-shadow-sm";
+                                 } else {
+                                    // Standard Paid
+                                    bgClass = "bg-emerald-600 shadow-inner";
+                                    borderClass = "border-emerald-500";
+                                    textClass = "text-white font-bold";
+                                 }
                               } else {
                                  // UNPAID = Orange
                                  bgClass = "bg-orange-500 shadow-inner";
@@ -745,6 +759,15 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   </div>
                   <span className="text-sm font-bold text-slate-300">Paid & Confirmed</span>
                </div>
+
+               {currentUser && (
+                  <div className="flex items-center gap-3">
+                     <div className="w-6 h-6 rounded bg-cyan-600 border border-cyan-400 shadow-[0_0_10px_rgba(8,145,178,0.5)] flex items-center justify-center">
+                        <UserIcon size={14} className="text-white" />
+                     </div>
+                     <span className="text-sm font-bold text-cyan-400">Your Squares</span>
+                  </div>
+               )}
 
                <div className="flex items-center gap-3">
                   <div className="w-6 h-6 rounded bg-orange-500 border border-orange-400 shadow-sm flex items-center justify-center">
