@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Trophy, Grid3X3, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
-import { settingsService } from '../services/settingsService';
+// import { settingsService } from '../services/settingsService';
 import { Header } from './Header';
 import { Footer } from './Footer';
-import type { SystemSettings, User } from '../types';
+import type { User } from '../types';
 
 interface CreatePoolSelectionProps {
     onSelectSquares: () => void;
@@ -24,14 +24,14 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
     onLogout,
     onCreatePool
 }) => {
-    const [settings, setSettings] = useState<SystemSettings | null>(null);
+    // const [settings, setSettings] = useState<SystemSettings | null>(null);
 
-    useEffect(() => {
-        const unsub = settingsService.subscribe(setSettings);
-        return () => unsub();
-    }, []);
+    // useEffect(() => {
+    //     const unsub = settingsService.subscribe(setSettings);
+    //     return () => unsub();
+    // }, []);
 
-    const isBracketEnabled = settings?.enableBracketPools || user?.role === 'SUPER_ADMIN';
+    const isBracketEnabled = user?.role === 'SUPER_ADMIN';
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col">
@@ -69,7 +69,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                         <div className="absolute top-4 right-4 bg-indigo-500/20 p-3 rounded-xl group-hover:bg-indigo-500 transition-colors">
                             <Grid3X3 size={32} className="text-indigo-400 group-hover:text-white" />
                         </div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Super Bowl Squares</h3>
+                        <h3 className="text-2xl font-bold text-white mb-2">Gameday Squares</h3>
                         <p className="text-slate-400 mb-6 min-h-[48px]">Classic 10x10 grid. Random numbers per quarter. Perfect for the big game.</p>
                         <ul className="text-sm text-slate-500 space-y-2 mb-8">
                             <li className="flex items-center gap-2">✓ Automated scoring</li>
