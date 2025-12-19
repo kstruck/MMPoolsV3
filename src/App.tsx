@@ -13,7 +13,7 @@ import { calculateWinners, calculateScenarioWinners, getLastDigit } from './serv
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, ArrowRight, LogOut, Zap, Lock, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Heart, Shield, HelpCircle } from 'lucide-react';
+import { Trash2, User as UserIcon, Trophy, Calendar, Grid as GridIcon, Share2, HelpCircle, AlertCircle, Info, Zap, Settings, Lock, Heart, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
@@ -509,7 +509,8 @@ const App: React.FC = () => {
           normalizedName,
           (currentPool as GameState).contactEmail,
           currentPool.id,
-          ownerId // Pool owner's referral code
+          ownerId, // Pool owner's referral code
+          squaresPool.paymentHandles // Add payment handles
         ).then((res) => console.log('[App] Email Service Response:', res))
           .catch(err => console.error('[App] Email failed', err));
       }).catch(err => console.error('[App] Failed to import emailService', err));
@@ -1098,6 +1099,29 @@ const App: React.FC = () => {
                   <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
                 </button>
               </div>
+              {(currentPool.paymentHandles?.venmo || currentPool.paymentHandles?.googlePay) && (
+                <div className="mb-4">
+                  <h3 className="text-slate-500 font-bold uppercase text-xs mb-2">Payment Options:</h3>
+                  <div className="flex flex-col gap-2">
+                    {currentPool.paymentHandles?.venmo && (
+                      <a
+                        href={`https://venmo.com/u/${currentPool.paymentHandles.venmo.replace('@', '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors w-fit"
+                      >
+                        Venmo: {currentPool.paymentHandles.venmo} <ExternalLink size={14} />
+                      </a>
+                    )}
+                    {currentPool.paymentHandles?.googlePay && (
+                      <div className="bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 w-fit">
+                        <span className="text-slate-400 text-xs uppercase mr-1">GPay:</span>
+                        {currentPool.paymentHandles.googlePay}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{squaresPool.paymentInstructions}</p></div>
             </div>
 

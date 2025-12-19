@@ -97,10 +97,30 @@ export const emailService = {
         playerName: string,
         _poolOwnerEmail: string,
         poolId: string,
-        ownerReferralCode?: string
+        ownerReferralCode?: string,
+        paymentHandles?: { venmo?: string, googlePay?: string }
     ) => {
         const link = `${window.location.origin}/#pool/${poolId}`;
         const subject = `Confirmation: You joined "${poolName}"`;
+
+        let paymentText = '';
+        let paymentHtml = '';
+
+        if (paymentHandles?.venmo || paymentHandles?.googlePay) {
+            paymentText += '\n\nPayment Options:';
+            paymentHtml += '<div style="margin-top: 20px; padding: 15px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;"><strong>Payment Options:</strong><br>';
+
+            if (paymentHandles.venmo) {
+                const vUser = paymentHandles.venmo.replace('@', '');
+                paymentText += `\nVenmo: https://venmo.com/u/${vUser}`;
+                paymentHtml += `<div style="margin-top: 8px;"><a href="https://venmo.com/u/${vUser}" style="background-color: #008CFF; color: white; padding: 6px 12px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">Pay with Venmo (@${vUser})</a></div>`;
+            }
+            if (paymentHandles.googlePay) {
+                paymentText += `\nGoogle Pay: ${paymentHandles.googlePay}`;
+                paymentHtml += `<div style="margin-top: 8px; color: #475569;"><strong>Google Pay:</strong> ${paymentHandles.googlePay}</div>`;
+            }
+            paymentHtml += '</div>';
+        }
 
         const text = `Hi ${playerName},
 
@@ -108,7 +128,7 @@ You have successfully claimed ${squaresInitials.length} square(s) in "${poolName
 
 Squares: ${squaresInitials.join(', ')}
 
-View the pool here: ${link}
+View the pool here: ${link}${paymentText}
 
 Good luck!`;
 
@@ -117,6 +137,7 @@ Good luck!`;
             <p>You have successfully claimed <strong>${squaresInitials.length} square(s)</strong> in "<strong>${poolName}</strong>".</p>
             <p><strong>Squares:</strong> ${squaresInitials.join(', ')}</p>
             <p><a href="${link}">View Pool</a></p>
+            ${paymentHtml}
             <p>Good luck!</p>
         `;
 

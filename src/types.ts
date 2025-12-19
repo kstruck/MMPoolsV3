@@ -97,6 +97,10 @@ export interface GameState {
   urlSlug: string;
   gridUsername?: string;
   gridPassword?: string;
+  paymentHandles?: {
+    venmo?: string;
+    googlePay?: string;
+  };
   contactEmail: string;
   managerName: string; // Name of the pool manager
   paymentInstructions: string; // Instructions for payment (Venmo, etc.)

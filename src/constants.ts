@@ -17,6 +17,10 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
   theme: 'Default Theme',
   gridUsername: '',
   gridPassword: '',
+  paymentHandles: {
+    venmo: '',
+    googlePay: ''
+  },
 
   homeTeam: '',
   awayTeam: '',
