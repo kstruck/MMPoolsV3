@@ -23,11 +23,13 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'error'>('idle');
 
     const [formData, setFormData] = useState<{
         name: string;
         slug: string; // generated or custom
         seasonYear: number;
+        gender: 'mens' | 'womens';
         isListedPublic: boolean;
         password: '';
         maxEntriesTotal: number; // -1 unlimited
@@ -35,6 +37,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         entryFee: number;
         paymentInstructions: string;
         scoringSystem: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
+        customScoring: number[];
         tieBreaker: 'CLOSEST_ABSOLUTE' | 'CLOSEST_UNDER';
         payouts: {
             places: { rank: number; percentage: number }[];
@@ -44,6 +47,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         name: `${user.name}'s Bracket Pool`,
         slug: '',
         seasonYear: 2025,
+        gender: 'mens' as 'mens' | 'womens',
         isListedPublic: false,
         password: '',
         maxEntriesTotal: -1,
@@ -51,6 +55,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         entryFee: 0,
         paymentInstructions: '',
         scoringSystem: 'CLASSIC',
+        customScoring: [1, 2, 4, 8, 16, 32],
         tieBreaker: 'CLOSEST_ABSOLUTE',
         payouts: {
             places: [{ rank: 1, percentage: 70 }, { rank: 2, percentage: 30 }],
@@ -110,12 +115,14 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
             const createRes = await createFn({
                 name: formData.name,
                 seasonYear: formData.seasonYear,
+                gender: formData.gender,
                 settings: {
                     maxEntriesTotal: formData.maxEntriesTotal,
                     maxEntriesPerUser: formData.maxEntriesPerUser,
                     entryFee: formData.entryFee,
                     paymentInstructions: formData.paymentInstructions,
                     scoringSystem: formData.scoringSystem,
+                    customScoring: formData.scoringSystem === 'CUSTOM' ? formData.customScoring : undefined,
                     tieBreakers: {
                         closestAbsolute: formData.tieBreaker === 'CLOSEST_ABSOLUTE',
                         closestUnder: formData.tieBreaker === 'CLOSEST_UNDER'
@@ -177,8 +184,27 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 </div>
                                 <div>
                                     <label className="block text-sm text-slate-400 mb-1">Season</label>
-                                    <div className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-slate-500">
-                                        {formData.seasonYear} Men's Basketball
+                                    <div className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-slate-500 cursor-not-allowed">
+                                        {formData.seasonYear} Season (Current)
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm text-slate-400 mb-2">Tournament</label>
+                                    <div className="flex gap-4">
+                                        <button
+                                            onClick={() => update('gender', 'mens')}
+                                            className={`flex-1 py-3 px-4 rounded-lg border font-bold transition-all ${formData.gender === 'mens' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'}`}
+                                        >
+                                            Men's Tournament
+                                        </button>
+                                        <button
+                                            disabled
+                                            className="flex-1 py-3 px-4 rounded-lg border border-slate-800 bg-slate-900/50 text-slate-600 cursor-not-allowed font-medium relative overflow-hidden"
+                                        >
+                                            Women's Tournament
+                                            <span className="absolute inset-0 bg-slate-950/20 backdrop-blur-[1px]"></span>
+                                            <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 text-xs px-2 py-1 rounded border border-slate-700 opacity-90">Coming Soon</span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -204,10 +230,45 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
                                 <div>
                                     <label className="block text-sm text-slate-400 mb-1">Custom URL Slug</label>
-                                    <div className="flex">
+                                    <div className="flex relative">
                                         <span className="bg-slate-800 border border-r-0 border-slate-700 rounded-l-lg px-3 py-3 text-slate-400">marchmelee.com/#pool/</span>
-                                        <input type="text" value={formData.slug} onChange={(e) => update('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder={formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-')} className="flex-1 bg-slate-950 border border-slate-700 rounded-r-lg px-4 py-3 focus:border-indigo-500 outline-none font-mono text-sm" />
+                                        <input
+                                            type="text"
+                                            value={formData.slug}
+                                            onChange={(e) => {
+                                                const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                                                update('slug', val);
+                                                // Reset availability check on change
+                                                setSlugStatus('idle');
+                                            }}
+                                            onBlur={async () => {
+                                                if (!formData.slug) return;
+                                                setSlugStatus('checking');
+                                                try {
+                                                    const { doc, getDoc } = await import('firebase/firestore');
+                                                    const { db } = await import('../../firebase');
+                                                    const slugRef = doc(db, 'slugs', formData.slug);
+                                                    const slugSnap = await getDoc(slugRef);
+                                                    if (slugSnap.exists()) {
+                                                        setSlugStatus('taken');
+                                                    } else {
+                                                        setSlugStatus('available');
+                                                    }
+                                                } catch (err) {
+                                                    console.error("Slug check failed", err);
+                                                    setSlugStatus('error');
+                                                }
+                                            }}
+                                            placeholder={formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}
+                                            className={`flex-1 bg-slate-950 border rounded-r-lg px-4 py-3 outline-none font-mono text-sm ${slugStatus === 'taken' ? 'border-rose-500 text-rose-500' : slugStatus === 'available' ? 'border-emerald-500 text-emerald-500' : 'border-slate-700 focus:border-indigo-500'}`}
+                                        />
+                                        <div className="absolute right-3 top-3">
+                                            {slugStatus === 'checking' && <span className="text-slate-500 animate-pulse">Running check...</span>}
+                                            {slugStatus === 'taken' && <span className="text-rose-500 font-bold">✕ Taken</span>}
+                                            {slugStatus === 'available' && <span className="text-emerald-500 font-bold">✓ Available</span>}
+                                        </div>
                                     </div>
+                                    <p className="text-xs text-slate-500 mt-2">Alphanumeric and hyphens only. We'll check if it's available.</p>
                                 </div>
                             </div>
                         </div>
@@ -225,6 +286,9 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                         <option value={3}>3 Entries</option>
                                         <option value={5}>5 Entries</option>
                                         <option value={10}>10 Entries</option>
+                                        <option value={20}>20 Entries</option>
+                                        <option value={25}>25 Entries</option>
+                                        <option value={50}>50 Entries</option>
                                         <option value={-1}>Unlimited</option>
                                     </select>
                                 </div>
@@ -259,7 +323,30 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 ))}
                             </div>
 
-                            <div className="mt-8 border-t border-slate-800 pt-6">
+                            <div className="mt-6 border-t border-slate-800 pt-6">
+                                {formData.scoringSystem === 'CUSTOM' && (
+                                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 mb-6 animate-in fade-in zoom-in-95">
+                                        <h3 className="font-bold mb-4 text-indigo-400">Custom Round Scoring</h3>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                            {['R64', 'R32', 'Sweet 16', 'Elite 8', 'Final 4', 'Champ'].map((label, i) => (
+                                                <div key={label}>
+                                                    <label className="block text-xs text-slate-500 mb-1">{label}</label>
+                                                    <input
+                                                        type="number"
+                                                        value={formData.customScoring[i]}
+                                                        onChange={(e) => {
+                                                            const newScores = [...formData.customScoring];
+                                                            newScores[i] = parseInt(e.target.value) || 0;
+                                                            update('customScoring', newScores);
+                                                        }}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-2 text-center font-mono focus:border-indigo-500 outline-none"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <h3 className="font-bold mb-4">Tiebreakers</h3>
                                 <div className="space-y-4 max-w-lg">
                                     <label className="block text-sm text-slate-400 mb-1">Select Tiebreaker Rule</label>
@@ -312,13 +399,15 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                     </div>
                                     {formData.payouts.bonuses.map((bonus, idx) => (
                                         <div key={idx} className="flex gap-2 mb-2">
-                                            <input
-                                                type="text"
+                                            <select
                                                 value={bonus.name}
                                                 onChange={(e) => updateBonus(idx, 'name', e.target.value)}
-                                                placeholder="Outcome Name"
-                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none"
-                                            />
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none text-sm"
+                                            >
+                                                <option value="Select Bonus...">Select Bonus...</option>
+                                                <option value="Highest Percentage Correct">Highest Percentage Correct</option>
+                                                <option value="Most Correct in Round 1">Most Correct in Round 1</option>
+                                            </select>
                                             <div className="w-24 relative">
                                                 <input
                                                     type="number"

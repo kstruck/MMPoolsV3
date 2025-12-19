@@ -15,10 +15,15 @@ export const createBracketPool = onCall(async (request) => {
         throw new HttpsError("unauthenticated", "User must be logged in.");
     }
 
-    const { name, settings, seasonYear } = request.data;
+    const { name, settings, seasonYear, gender } = request.data;
     const uid = request.auth.uid;
 
+    // Debug logs
+    console.log("createBracketPool called by:", uid);
+    console.log("Request Data:", JSON.stringify(request.data, null, 2));
+
     if (!name || !seasonYear) {
+        console.error("Missing required fields");
         throw new HttpsError("invalid-argument", "Missing required fields.");
     }
 
@@ -29,6 +34,7 @@ export const createBracketPool = onCall(async (request) => {
     const poolRef = db.collection("pools").doc();
     const now = Timestamp.now().toMillis();
 
+    console.log("Constructing new pool object...");
     const newPool: BracketPool = {
         id: poolRef.id,
         type: "BRACKET",
@@ -37,6 +43,7 @@ export const createBracketPool = onCall(async (request) => {
         slugLower: slug.toLowerCase(),
         managerUid: uid,
         seasonYear,
+        gender: gender || 'mens',
         isListedPublic: false,
         status: "DRAFT",
         lockAt: 0, // Set on publish or specific date
@@ -46,7 +53,8 @@ export const createBracketPool = onCall(async (request) => {
             entryFee: settings?.entryFee ?? 0,
             paymentInstructions: settings?.paymentInstructions ?? "",
             scoringSystem: settings?.scoringSystem ?? "CLASSIC",
-            customScoring: settings?.customScoring,
+            // Firestore doesn't like undefined. Use null or omit.
+            customScoring: settings?.scoringSystem === 'CUSTOM' ? (settings.customScoring || null) : null,
             tieBreakers: settings?.tieBreakers ?? {
                 closestAbsolute: true,
                 closestUnder: false,
@@ -60,8 +68,10 @@ export const createBracketPool = onCall(async (request) => {
         createdAt: now,
         updatedAt: now,
     };
+    console.log("New Pool Object:", JSON.stringify(newPool, null, 2));
 
     await poolRef.set(newPool);
+    console.log("Pool created successfully:", poolRef.id);
 
     // Add audit log
     await db.collection("audit").add({

@@ -14,9 +14,13 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "User must be logged in.");
     }
-    const { name, settings, seasonYear } = request.data;
+    const { name, settings, seasonYear, gender } = request.data;
     const uid = request.auth.uid;
+    // Debug logs
+    console.log("createBracketPool called by:", uid);
+    console.log("Request Data:", JSON.stringify(request.data, null, 2));
     if (!name || !seasonYear) {
+        console.error("Missing required fields");
         throw new https_1.HttpsError("invalid-argument", "Missing required fields.");
     }
     // Create a base slug suggestion
@@ -24,6 +28,7 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
     const slug = `${baseSlug}-${Math.floor(1000 + Math.random() * 9000)}`;
     const poolRef = db.collection("pools").doc();
     const now = firestore_1.Timestamp.now().toMillis();
+    console.log("Constructing new pool object...");
     const newPool = {
         id: poolRef.id,
         type: "BRACKET",
@@ -32,10 +37,13 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
         slugLower: slug.toLowerCase(),
         managerUid: uid,
         seasonYear,
+        gender: gender || 'mens',
         isListedPublic: false,
         status: "DRAFT",
         lockAt: 0, // Set on publish or specific date
-        settings: Object.assign({ maxEntriesTotal: (_a = settings === null || settings === void 0 ? void 0 : settings.maxEntriesTotal) !== null && _a !== void 0 ? _a : -1, maxEntriesPerUser: (_b = settings === null || settings === void 0 ? void 0 : settings.maxEntriesPerUser) !== null && _b !== void 0 ? _b : -1, entryFee: (_c = settings === null || settings === void 0 ? void 0 : settings.entryFee) !== null && _c !== void 0 ? _c : 0, paymentInstructions: (_d = settings === null || settings === void 0 ? void 0 : settings.paymentInstructions) !== null && _d !== void 0 ? _d : "", scoringSystem: (_e = settings === null || settings === void 0 ? void 0 : settings.scoringSystem) !== null && _e !== void 0 ? _e : "CLASSIC", customScoring: settings === null || settings === void 0 ? void 0 : settings.customScoring, tieBreakers: (_f = settings === null || settings === void 0 ? void 0 : settings.tieBreakers) !== null && _f !== void 0 ? _f : {
+        settings: Object.assign({ maxEntriesTotal: (_a = settings === null || settings === void 0 ? void 0 : settings.maxEntriesTotal) !== null && _a !== void 0 ? _a : -1, maxEntriesPerUser: (_b = settings === null || settings === void 0 ? void 0 : settings.maxEntriesPerUser) !== null && _b !== void 0 ? _b : -1, entryFee: (_c = settings === null || settings === void 0 ? void 0 : settings.entryFee) !== null && _c !== void 0 ? _c : 0, paymentInstructions: (_d = settings === null || settings === void 0 ? void 0 : settings.paymentInstructions) !== null && _d !== void 0 ? _d : "", scoringSystem: (_e = settings === null || settings === void 0 ? void 0 : settings.scoringSystem) !== null && _e !== void 0 ? _e : "CLASSIC", 
+            // Firestore doesn't like undefined. Use null or omit.
+            customScoring: (settings === null || settings === void 0 ? void 0 : settings.scoringSystem) === 'CUSTOM' ? (settings.customScoring || null) : null, tieBreakers: (_f = settings === null || settings === void 0 ? void 0 : settings.tieBreakers) !== null && _f !== void 0 ? _f : {
                 closestAbsolute: true,
                 closestUnder: false,
             }, payouts: (_g = settings === null || settings === void 0 ? void 0 : settings.payouts) !== null && _g !== void 0 ? _g : {
@@ -45,7 +53,9 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
         createdAt: now,
         updatedAt: now,
     };
+    console.log("New Pool Object:", JSON.stringify(newPool, null, 2));
     await poolRef.set(newPool);
+    console.log("Pool created successfully:", poolRef.id);
     // Add audit log
     await db.collection("audit").add({
         poolId: poolRef.id,

@@ -83,13 +83,17 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
 
             // League Filter
             if (selectedLeague !== 'all') {
-                const poolLeague = (p as any).league || 'nfl'; // Default to NFL if undefined
-                // Normalize for "NCAA Football"
-                const isCollege = poolLeague === 'college' || poolLeague === 'ncaa';
-                const isNfl = poolLeague === 'nfl';
+                if (selectedLeague === 'brackets') {
+                    if (!isBracket) return false;
+                } else {
+                    if (isBracket) return false;
+                    const poolLeague = (p as any).league || 'nfl';
+                    const isCollege = poolLeague === 'college' || poolLeague === 'ncaa';
+                    const isNfl = poolLeague === 'nfl';
 
-                if (selectedLeague === 'nfl' && !isNfl) return false;
-                if (selectedLeague === 'college' && !isCollege) return false;
+                    if (selectedLeague === 'nfl' && !isNfl) return false;
+                    if (selectedLeague === 'college' && !isCollege) return false;
+                }
             }
 
             return true;
@@ -180,6 +184,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         { id: 'all', label: 'All Sports', active: true },
                                         { id: 'nfl', label: 'NFL Football', active: true },
                                         { id: 'college', label: 'NCAA Football', active: true },
+                                        { id: 'brackets', label: 'March Madness', active: true },
                                         { id: 'nba', label: 'NBA', active: false },
                                         { id: 'ncaa_bb', label: 'NCAA Basketball', active: false },
                                     ].map((sport) => (

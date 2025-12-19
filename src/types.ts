@@ -336,6 +336,7 @@ export interface BracketPool {
   description?: string;
   managerUid: string;
   seasonYear: number;
+  gender: 'mens' | 'womens';
 
   // Counts for easy display
   participantCount?: number;

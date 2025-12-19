@@ -103,6 +103,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // SLUGS (For availability check)
+    match /slugs/{slug} {
+      allow get: if true;
+    }
+
     // SYSTEM SETTINGS (Feature Flags)
     match /system/config {
       allow read: if true;

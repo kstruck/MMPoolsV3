@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
-import type { GameState, User, SystemSettings } from '../types';
+import type { GameState, Pool, User, SystemSettings } from '../types';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle } from 'lucide-react';
 
 export const SuperAdmin: React.FC = () => {
-    const [pools, setPools] = useState<GameState[]>([]);
+    const [pools, setPools] = useState<Pool[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [usersLoading, setUsersLoading] = useState(true);
 
@@ -67,7 +67,7 @@ export const SuperAdmin: React.FC = () => {
 
 
     // Pool Edit/View State
-    const [viewingPool, setViewingPool] = useState<GameState | null>(null);
+    const [viewingPool, setViewingPool] = useState<Pool | null>(null);
 
     const handleRunSim = async (pool: GameState) => {
         const confirmSim = confirm(`Run simulation for ${pool.name}? This will advance the game state.`);
@@ -213,11 +213,17 @@ export const SuperAdmin: React.FC = () => {
     };
 
     const poolsBySport = pools.reduce((acc, pool) => {
-        const sport = getLeagueDisplayName(pool.league);
+        let sport = 'Other';
+        if (pool.type === 'BRACKET') {
+            sport = 'March Madness';
+        } else {
+            sport = getLeagueDisplayName(pool.league);
+        }
+
         if (!acc[sport]) acc[sport] = [];
         acc[sport].push(pool);
         return acc;
-    }, {} as Record<string, GameState[]>);
+    }, {} as Record<string, Pool[]>);
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: <Activity size={16} /> },
@@ -360,43 +366,69 @@ export const SuperAdmin: React.FC = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-700/50">
-                                            {[...sportPools].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).map(pool => (
-                                                <tr key={pool.id} className="hover:bg-slate-700/30 transition-colors">
-                                                    <td className="p-4">
-                                                        <button
-                                                            onClick={() => setViewingPool(pool)}
-                                                            className="font-bold text-white hover:text-indigo-400 hover:underline flex items-center gap-2 text-left"
-                                                        >
-                                                            {pool.name}
-                                                            {pool.charity?.enabled && (
-                                                                <div title="Charity Pool">
-                                                                    <Heart size={12} className="text-rose-500 fill-rose-500" />
+                                            {[...sportPools].sort((a, b) => {
+                                                const timeA = typeof a.createdAt === 'number' ? a.createdAt : a.createdAt?.seconds || 0;
+                                                const timeB = typeof b.createdAt === 'number' ? b.createdAt : b.createdAt?.seconds || 0;
+                                                return timeB - timeA;
+                                            }).map(pool => {
+                                                const isBracket = pool.type === 'BRACKET';
+                                                // Normalize data access
+                                                const createdAt = typeof pool.createdAt === 'number' ? new Date(pool.createdAt).toLocaleDateString() : (pool.createdAt?.seconds ? new Date(pool.createdAt.seconds * 1000).toLocaleDateString() : 'N/A');
+                                                const matchUp = isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} @ ${(pool as GameState).homeTeam}`;
+                                                const ownerId = isBracket ? (pool as any).managerUid : (pool as any).ownerId;
+                                                const contact = users.find(u => u.id === ownerId)?.email || (isBracket ? 'N/A' : (pool as GameState).contactEmail);
+
+                                                let filledPct = 0;
+                                                if (isBracket) {
+                                                    const bp = pool as any;
+                                                    const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal;
+                                                    filledPct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round(((bp.entryCount || 0) / max) * 100);
+                                                } else {
+                                                    const sp = pool as GameState;
+                                                    filledPct = sp.squares.filter(s => s.owner).length;
+                                                }
+
+                                                return (
+                                                    <tr key={pool.id} className="hover:bg-slate-700/30 transition-colors">
+                                                        <td className="p-4">
+                                                            <button
+                                                                onClick={() => setViewingPool(pool as GameState)} // Type assertion or update setViewingPool type
+                                                                className="font-bold text-white hover:text-indigo-400 hover:underline flex items-center gap-2 text-left"
+                                                            >
+                                                                {pool.name}
+                                                                {!isBracket && (pool as GameState).charity?.enabled && (
+                                                                    <div title="Charity Pool">
+                                                                        <Heart size={12} className="text-rose-500 fill-rose-500" />
+                                                                    </div>
+                                                                )}
+                                                            </button>
+                                                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">{pool.id}</div>
+                                                        </td>
+                                                        <td className="p-4 text-slate-400 text-sm">
+                                                            {createdAt}
+                                                        </td>
+                                                        <td className="p-4 font-bold text-sm">{matchUp}</td>
+                                                        <td className="p-4 text-slate-400 text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
+                                                        <td className="p-4">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                                                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${filledPct}%` }}></div>
                                                                 </div>
-                                                            )}
-                                                        </button>
-                                                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{pool.id}</div>
-                                                    </td>
-                                                    <td className="p-4 text-slate-400 text-sm">
-                                                        {pool.createdAt ? new Date(pool.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}
-                                                    </td>
-                                                    <td className="p-4 font-bold text-sm">{pool.awayTeam} @ {pool.homeTeam}</td>
-                                                    <td className="p-4 text-slate-400 text-sm max-w-[150px] truncate" title={pool.contactEmail}>{pool.contactEmail}</td>
-                                                    <td className="p-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-                                                                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pool.squares.filter(s => s.owner).length}%` }}></div>
+                                                                <span className="text-xs text-slate-500">{filledPct}%</span>
                                                             </div>
-                                                            <span className="text-xs text-slate-500">{pool.squares.filter(s => s.owner).length}%</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-4 flex gap-2">
-                                                        <a href={`#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</a>
-                                                        <button onClick={() => handleRunSim(pool)} className="text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 px-2 py-1 rounded">Sim</button>
-                                                        <button onClick={() => handleDeletePool(pool.id)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                        </td>
+                                                        <td className="p-4 flex gap-2">
+                                                            <a href={`#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</a>
+                                                            {!isBracket && (
+                                                                <button onClick={() => handleRunSim(pool as GameState)} className="text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 px-2 py-1 rounded">Sim</button>
+                                                            )}
+                                                            <button onClick={() => handleDeletePool(pool.id)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
+                                        {/* Close for loop and tbody */}
                                     </table>
                                 </div>
                             </div>
@@ -715,7 +747,7 @@ export const SuperAdmin: React.FC = () => {
                                 <div>
                                     <h2 className="text-2xl font-bold text-white mb-1 flex items-center gap-2">
                                         {viewingPool.name}
-                                        {viewingPool.charity?.enabled && <Heart size={20} className="text-rose-500 fill-rose-500" />}
+                                        {viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && <Heart size={20} className="text-rose-500 fill-rose-500" />}
                                     </h2>
                                     <p className="text-slate-400 text-sm">
                                         ID: <span className="font-mono text-slate-500">{viewingPool.id}</span>
@@ -733,17 +765,21 @@ export const SuperAdmin: React.FC = () => {
                                     <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
                                         <h4 className="text-slate-400 text-xs font-bold uppercase mb-1">Created At</h4>
                                         <p className="font-medium text-white">
-                                            {viewingPool.createdAt?.seconds
-                                                ? new Date(viewingPool.createdAt.seconds * 1000).toLocaleString()
-                                                : <span className="italic text-slate-500">Unknown Date</span>}
+                                            {typeof viewingPool.createdAt === 'number'
+                                                ? new Date(viewingPool.createdAt).toLocaleString()
+                                                : (viewingPool.createdAt?.seconds
+                                                    ? new Date(viewingPool.createdAt.seconds * 1000).toLocaleString()
+                                                    : <span className="italic text-slate-500">Unknown Date</span>)}
                                         </p>
                                     </div>
                                     <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
                                         <h4 className="text-slate-400 text-xs font-bold uppercase mb-1">Owner</h4>
                                         <p className="font-medium text-white">
-                                            {users.find(u => u.id === viewingPool.ownerId)?.name || 'Unknown User'}
+                                            {users.find(u => u.id === (viewingPool.type === 'BRACKET' ? (viewingPool as any).managerUid : (viewingPool as any).ownerId))?.name || 'Unknown User'}
                                         </p>
-                                        <p className="text-xs text-slate-500 font-mono mt-0.5">{viewingPool.ownerId}</p>
+                                        <p className="text-xs text-slate-500 font-mono mt-0.5">
+                                            {viewingPool.type === 'BRACKET' ? (viewingPool as any).managerUid : (viewingPool as any).ownerId}
+                                        </p>
                                     </div>
                                 </div>
 
@@ -752,35 +788,45 @@ export const SuperAdmin: React.FC = () => {
                                     <h4 className="text-slate-400 text-xs font-bold uppercase mb-2">Pool Status</h4>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                         <div>
-                                            <div className="text-xs text-slate-500">Game State</div>
-                                            <div className={viewingPool.isLocked ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"}>
-                                                {viewingPool.isLocked ? "LOCKED" : "OPEN"}
+                                            <div className="text-xs text-slate-500">State</div>
+                                            <div className="text-white font-bold">
+                                                {viewingPool.type === 'BRACKET'
+                                                    ? (viewingPool as any).status
+                                                    : ((viewingPool as GameState).isLocked ? "LOCKED" : "OPEN")}
                                             </div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-slate-500">Squares details</div>
-                                            <div className="text-white font-bold">{viewingPool.squares.filter(s => s.owner).length} / 100 sold</div>
+                                            <div className="text-xs text-slate-500">Filled</div>
+                                            <div className="text-white font-bold">
+                                                {viewingPool.type === 'BRACKET'
+                                                    ? `${(viewingPool as any).entryCount || 0} Entries`
+                                                    : `${(viewingPool as GameState).squares.filter(s => s.owner).length} / 100`}
+                                            </div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-slate-500">Price / Square</div>
-                                            <div className="text-white font-bold">${viewingPool.costPerSquare}</div>
+                                            <div className="text-xs text-slate-500">Price</div>
+                                            <div className="text-white font-bold">
+                                                ${viewingPool.type === 'BRACKET' ? (viewingPool as any).settings.entryFee : (viewingPool as GameState).costPerSquare}
+                                            </div>
                                         </div>
                                         <div>
                                             <div className="text-xs text-slate-500">Total Pot</div>
                                             <div className="text-emerald-400 font-bold font-mono">
-                                                ${viewingPool.squares.filter(s => s.owner).length * viewingPool.costPerSquare}
+                                                ${viewingPool.type === 'BRACKET'
+                                                    ? ((viewingPool as any).entryCount || 0) * (viewingPool as any).settings.entryFee
+                                                    : (viewingPool as GameState).squares.filter(s => s.owner).length * (viewingPool as GameState).costPerSquare}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Charity Info */}
-                                {viewingPool.charity?.enabled && (
+                                {viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && (
                                     <div className="bg-rose-900/10 p-4 rounded-xl border border-rose-500/20">
                                         <h4 className="text-rose-400 text-xs font-bold uppercase mb-2 flex items-center gap-1"><Heart size={12} fill="currentColor" /> Fundraising for Charity</h4>
-                                        <p className="text-white font-bold">{viewingPool.charity.name}</p>
-                                        <a href={viewingPool.charity.url} target="_blank" rel="noreferrer" className="text-rose-400 text-sm hover:underline truncate block">{viewingPool.charity.url}</a>
-                                        <p className="text-xs text-rose-300/70 mt-2">Donating {viewingPool.charity.percentage}% of the pot</p>
+                                        <p className="text-white font-bold">{(viewingPool as GameState).charity?.name}</p>
+                                        <a href={(viewingPool as GameState).charity?.url} target="_blank" rel="noreferrer" className="text-rose-400 text-sm hover:underline truncate block">{(viewingPool as GameState).charity?.url}</a>
+                                        <p className="text-xs text-rose-300/70 mt-2">Donating {(viewingPool as GameState).charity?.percentage}% of the pot</p>
                                     </div>
                                 )}
 
@@ -849,47 +895,67 @@ export const SuperAdmin: React.FC = () => {
                                     <Activity size={20} className="text-indigo-400" /> Pools Managed by {viewingUser.name.split(' ')[0]}
                                 </h3>
 
-                                {pools.filter(p => p.ownerId === viewingUser.id).length === 0 ? (
+                                {pools.filter(p => {
+                                    const owner = p.type === 'BRACKET' ? (p as any).managerUid : (p as any).ownerId;
+                                    return owner === viewingUser.id;
+                                }).length === 0 ? (
                                     <div className="p-8 text-center bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
                                         <p className="text-slate-500 font-medium">No pools found for this user.</p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {pools.filter(p => p.ownerId === viewingUser.id).map(pool => (
-                                            <div key={pool.id} className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-indigo-500/50 transition-colors group">
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <div>
-                                                        <h4 className="font-bold text-white text-lg group-hover:text-indigo-400 transition-colors">{pool.name}</h4>
-                                                        <p className="text-xs text-slate-400 uppercase font-bold mt-1">{pool.awayTeam} vs {pool.homeTeam}</p>
+                                        {pools.filter(p => {
+                                            const owner = p.type === 'BRACKET' ? (p as any).managerUid : (p as any).ownerId;
+                                            return owner === viewingUser.id;
+                                        }).map(pool => {
+                                            const isBracket = pool.type === 'BRACKET';
+                                            return (
+                                                <div key={pool.id} className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-indigo-500/50 transition-colors group">
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div>
+                                                            <h4 className="font-bold text-white text-lg group-hover:text-indigo-400 transition-colors">{pool.name}</h4>
+                                                            <p className="text-xs text-slate-400 uppercase font-bold mt-1">
+                                                                {isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} vs ${(pool as GameState).homeTeam}`}
+                                                            </p>
+                                                        </div>
+                                                        {!isBracket && (pool as GameState).charity?.enabled && <Heart size={16} className="text-rose-500 fill-rose-500" />}
                                                     </div>
-                                                    {pool.charity?.enabled && <Heart size={16} className="text-rose-500 fill-rose-500" />}
-                                                </div>
 
-                                                <div className="grid grid-cols-2 gap-2 text-sm text-slate-400 mb-4 bg-slate-900/50 p-3 rounded-lg">
-                                                    <div>Squares: <span className="text-white font-mono">{pool.squares.filter(s => s.owner).length}/100</span></div>
-                                                    <div>Status: <span className={pool.isLocked ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"}>{pool.isLocked ? 'LOCKED' : 'OPEN'}</span></div>
-                                                </div>
+                                                    <div className="grid grid-cols-2 gap-2 text-sm text-slate-400 mb-4 bg-slate-900/50 p-3 rounded-lg">
+                                                        {isBracket ? (
+                                                            <>
+                                                                <div>Entries: <span className="text-white font-mono">{(pool as any).entryCount || 0}</span></div>
+                                                                <div>Status: <span className={(pool as any).status === 'LOCKED' ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"}>{(pool as any).status || 'OPEN'}</span></div>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <div>Squares: <span className="text-white font-mono">{(pool as GameState).squares.filter(s => s.owner).length}/100</span></div>
+                                                                <div>Status: <span className={(pool as GameState).isLocked ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"}>{(pool as GameState).isLocked ? 'LOCKED' : 'OPEN'}</span></div>
+                                                            </>
+                                                        )}
+                                                    </div>
 
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => {
-                                                            window.location.hash = `#admin/${pool.id}`;
-                                                            setViewingUser(null);
-                                                        }}
-                                                        className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded font-bold text-sm transition-colors text-center"
-                                                    >
-                                                        Manage Pool
-                                                    </button>
-                                                    <a
-                                                        href={`#pool/${pool.id}`}
-                                                        target="_blank"
-                                                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded font-bold text-sm transition-colors text-center"
-                                                    >
-                                                        View Grid
-                                                    </a>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                window.location.hash = `#admin/${pool.id}`;
+                                                                setViewingUser(null);
+                                                            }}
+                                                            className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded font-bold text-sm transition-colors text-center"
+                                                        >
+                                                            Manage Pool
+                                                        </button>
+                                                        <a
+                                                            href={`#pool/${pool.id}`}
+                                                            target="_blank"
+                                                            className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded font-bold text-sm transition-colors text-center"
+                                                        >
+                                                            {isBracket ? 'View Bracket' : 'View Grid'}
+                                                        </a>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
