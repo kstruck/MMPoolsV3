@@ -27,11 +27,12 @@ A modern, real-time sports pool application supporting both **Gameday Squares** 
 
 ### Pool Management
 *   **Setup Wizard:** Enhanced 7-step flow to configure teams, costs, reminder rules, and payouts.
+*   **Integrated Payments:** **NEW!** Pool managers can now add their **Venmo** handle and **Google Pay** details directly in the setup wizard. Participants see clickable payment links directly on the specific pool card.
 *   **Charity & Fundraising:** ❤️ **NEW!** Dedicate a percentage of the pot to a charity of your choice. Includes automated "Off The Top" calculations and public support badges.
 *   **Unclaimed Prize Handling:** **NEW!** Choose how to handle empty winning squares:
     *   **Rollover:** Unclaimed money automatically moves to the next quarter's pot.
     *   **Random Draw:** **NEW!** Activate a "Randomizer" button for the Final Prize to pick a lucky winner from occupied squares. **Security-Enhanced:** Only available when the game is over AND the final winning square is empty, ensuring fairness. The UI remains visible with a grayed-out button and condition checklist, ensuring transparency about when the feature will unlock.
-*   **Email Broadcast Tool:** **NEW!** Pool managers can send mass emails to participants with recipient filtering (All, Paid, Unpaid), dynamic content inclusion (Rules, Payouts, Link), BCC for privacy, and 15-minute rate limiting.
+*   **Email Broadcast Tool:** **NEW!** Pool managers can send mass emails to participants with recipient filtering (All, Paid, Unpaid), dynamic content inclusion (Rules, Payouts, Link), BCC for privacy, and 15-minute rate limiting. Payment links are automatically included in confirmation emails.
 *   **Quarterly Numbers ('4 Sets'):** Optional mode to generate brand new axis numbers for every quarter. Numbers are generated transactionally by the server.
 *   **College Football Support:** **NEW!** Full support for NCAA/CFB pools including conference filters and automatic logo fetching.
 *   **Public Grids Sport Filter:** **NEW!** Filter active pools by NFL, NCAA Football, or view all. (NBA/NCAA Basketball coming soon).
@@ -40,6 +41,12 @@ A modern, real-time sports pool application supporting both **Gameday Squares** 
 *   **Manager Controls:** Lock/unlock grid, mark squares as paid, manual score overrides, new "Fix Pool Scores" emergency tool, and legacy "Force Sync" options.
 *   **Pool Setup:** Automated pre-filling of manager contact info for streamlined creation.
 *   **Date & Time Display:** **NEW!** Pool cards now explicitly show the scheduled Game Time or Bracket Lock Time.
+
+### 🃏 Enhanced Status Card (NEW)
+*   **Tabbed Interface:** The pool status card has been completely refactored into a sleek, tabbed design ("Overview", "Rules", "Payment") to organize critical information without clutter.
+*   **Live Countdown Timer:** A dynamic countdown timer shows the exact time until kickoff.
+    *   **Color-Coded Urgency:** The timer changes color based on proximity to the start time (Green > 1h, Amber < 1h, Red < 10m).
+    *   **Status Updates:** Automatically switches to "Game In Progress" or "Game Complete" based on live status.
 
 ### 🔔 Smart Reminder System & Notifications
 *   **Automated Payment Reminders:** Scheduled system that identifies users with unpaid squares and sends focused email reminders.
