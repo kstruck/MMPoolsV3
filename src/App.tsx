@@ -65,6 +65,57 @@ const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void; initialMode?: 
   );
 };
 
+const PoolTimer = ({ targetDate, gameStatus, isLocked }: { targetDate?: string | number, gameStatus?: string, isLocked: boolean }) => {
+  const [timeLeft, setTimeLeft] = useState<{ d: number, h: number, m: number, s: number } | null>(null);
+
+  useEffect(() => {
+    if (!targetDate || gameStatus === 'in' || gameStatus === 'post') {
+      setTimeLeft(null);
+      return;
+    }
+
+    const target = new Date(targetDate).getTime();
+    const update = () => {
+      const now = Date.now();
+      const diff = target - now;
+      if (diff <= 0) {
+        setTimeLeft({ d: 0, h: 0, m: 0, s: 0 });
+        return;
+      }
+      setTimeLeft({
+        d: Math.floor(diff / (1000 * 60 * 60 * 24)),
+        h: Math.floor((diff / (1000 * 60 * 60)) % 24),
+        m: Math.floor((diff / 1000 / 60) % 60),
+        s: Math.floor((diff / 1000) % 60)
+      });
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [targetDate, gameStatus]);
+
+  if (gameStatus === 'post' || gameStatus === 'final') return <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">Game Complete</span>;
+  if (gameStatus === 'in') return <span className="text-emerald-400 font-bold uppercase tracking-wider text-xs animate-pulse">Game In Progress</span>;
+  if (!timeLeft) return <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">{isLocked ? "Pool Locked" : "Waiting for Schedule"}</span>;
+
+  // Determine color
+  const totalHours = timeLeft.d * 24 + timeLeft.h;
+  let color = 'text-emerald-400';
+  if (totalHours === 0 && timeLeft.m < 10) color = 'text-rose-500 animate-pulse';
+  else if (totalHours === 0) color = 'text-amber-500';
+
+  return (
+    <div className={`font-mono font-bold text-xl ${color}`}>
+      {timeLeft.d > 0 && <span>{timeLeft.d}d </span>}
+      <span>{timeLeft.h.toString().padStart(2, '0')}h </span>
+      <span>{timeLeft.m.toString().padStart(2, '0')}m </span>
+      <span>{timeLeft.s.toString().padStart(2, '0')}s</span>
+      <p className="text-[10px] text-slate-500 font-sans uppercase tracking-widest mt-1">Time Until Kickoff</p>
+    </div>
+  );
+};
+
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 
@@ -79,6 +130,7 @@ const App: React.FC = () => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [showShareModal, setShowShareModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
+  const [statusTab, setStatusTab] = useState<'overview' | 'rules' | 'payment'>('overview');
   const [shareUrl, setShareUrl] = useState('');
   const [showAudit, setShowAudit] = useState(false); // New State
   const [pendingAction, setPendingActionState] = useState<'create_pool' | null>(() => {
@@ -1041,88 +1093,132 @@ const App: React.FC = () => {
         {/* INFO & PAYOUTS ROW */}
         <div className="max-w-[1400px] mx-auto px-4 py-6">
           <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 ${squaresPool.charity?.enabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2 max-w-5xl mx-auto'}`}>
-            {/* 1. Grid Owner */}
-            <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
-              {/* Pool Status Display */}
-              <div className="mb-4">
-                <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Status:</h3>
-                {(() => {
-                  if (!squaresPool.isLocked) return (
-                    <div className="flex items-center gap-2">
-                      <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span></span>
-                      <div><p className="text-emerald-400 font-bold text-sm leading-none">Open</p><p className="text-slate-500 text-[10px]">Grid is available to choose squares</p></div>
-                    </div>
-                  );
-
-                  const status = squaresPool.scores.gameStatus;
-                  const isFinal = status === 'post' || !!squaresPool.scores.final;
-                  const isLive = status === 'in';
-
-                  if (isFinal) return (
-                    <div className="flex items-center gap-2">
-                      <span className="relative flex h-3 w-3"><span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>
-                      <div><p className="text-blue-500 font-bold text-sm leading-none">Locked - Final</p><p className="text-slate-500 text-[10px]">Game has completed</p></div>
-                    </div>
-                  );
-
-                  if (isLive) return (
-                    <div className="flex items-center gap-2">
-                      <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span></span>
-                      <div><p className="text-rose-500 font-bold text-sm leading-none">Locked - Live</p><p className="text-slate-500 text-[10px]">Game has started</p></div>
-                    </div>
-                  );
-
-                  return (
-                    <div className="flex items-center gap-2">
-                      <Lock size={14} className="text-amber-500" />
-                      <div><p className="text-amber-500 font-bold text-sm leading-none">Locked - Pending</p><p className="text-slate-500 text-[10px]">Waiting for kickoff</p></div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
-              <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Cost Per Square:</h3><p className="text-white font-medium text-sm">${currentPool.costPerSquare}</p></div>
-              <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
-              <div className="mb-4">
-                <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Unclaimed Rules:</h3>
-                <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left">
-                  {currentPool.ruleVariations.quarterlyRollover ? (
-                    <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
-                      <Zap size={12} className="fill-emerald-400" /> Rollover Active
-                    </div>
-                  ) : (
-                    <div className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold">
-                      Standard
-                    </div>
-                  )}
-                  <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
+            {/* 1. Status Card (Tabbed) */}
+            <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
+              {/* Tabs Header */}
+              <div className="flex border-b border-slate-800">
+                <button
+                  onClick={() => setStatusTab('overview')}
+                  className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'overview' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}
+                >
+                  Overview
+                </button>
+                <button
+                  onClick={() => setStatusTab('rules')}
+                  className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'rules' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}
+                >
+                  Rules
+                </button>
+                <button
+                  onClick={() => setStatusTab('payment')}
+                  className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'payment' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}
+                >
+                  Payment
                 </button>
               </div>
-              {(currentPool.paymentHandles?.venmo || currentPool.paymentHandles?.googlePay) && (
-                <div className="mb-4">
-                  <h3 className="text-slate-500 font-bold uppercase text-xs mb-2">Payment Options:</h3>
-                  <div className="flex flex-col gap-2">
-                    {currentPool.paymentHandles?.venmo && (
-                      <a
-                        href={`https://venmo.com/u/${currentPool.paymentHandles.venmo.replace('@', '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors w-fit"
-                      >
-                        Venmo: {currentPool.paymentHandles.venmo} <ExternalLink size={14} />
-                      </a>
-                    )}
-                    {currentPool.paymentHandles?.googlePay && (
-                      <div className="bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 w-fit">
-                        <span className="text-slate-400 text-xs uppercase mr-1">GPay:</span>
-                        {currentPool.paymentHandles.googlePay}
-                      </div>
-                    )}
+
+              {/* Tab Content */}
+              <div className="p-6 flex-1 flex flex-col justify-center">
+
+                {statusTab === 'overview' && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
+                    <div>
+                      <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Status:</h3>
+                      {(() => {
+                        if (!squaresPool.isLocked) return (
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span></span>
+                            <div><p className="text-emerald-400 font-bold text-sm leading-none">Open</p><p className="text-slate-500 text-[10px]">Grid is available to choose squares</p></div>
+                          </div>
+                        );
+                        const status = squaresPool.scores.gameStatus;
+                        const isFinal = status === 'post' || !!squaresPool.scores.final;
+                        const isLive = status === 'in';
+                        if (isFinal) return (
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex h-3 w-3"><span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>
+                            <div><p className="text-blue-500 font-bold text-sm leading-none">Locked - Final</p><p className="text-slate-500 text-[10px]">Game has completed</p></div>
+                          </div>
+                        );
+                        if (isLive) return (
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span></span>
+                            <div><p className="text-rose-500 font-bold text-sm leading-none">Locked - Live</p><p className="text-slate-500 text-[10px]">Game has started</p></div>
+                          </div>
+                        );
+                        return (
+                          <div className="flex items-center gap-2">
+                            <Lock size={14} className="text-amber-500" />
+                            <div><p className="text-amber-500 font-bold text-sm leading-none">Locked - Pending</p><p className="text-slate-500 text-[10px]">Waiting for kickoff</p></div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
+                    <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Cost Per Square:</h3><p className="text-white font-medium text-sm">${currentPool.costPerSquare}</p></div>
                   </div>
-                </div>
-              )}
-              <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions from Pool Manager:</h3><p className="text-slate-300 text-sm leading-relaxed">{squaresPool.paymentInstructions}</p></div>
+                )}
+
+                {statusTab === 'rules' && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                    {/* Countdown Timer */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-center">
+                      <PoolTimer
+                        targetDate={squaresPool.scores.startTime}
+                        gameStatus={squaresPool.scores.gameStatus}
+                        isLocked={squaresPool.isLocked}
+                      />
+                    </div>
+
+                    <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
+                    <div>
+                      <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Unclaimed Rules:</h3>
+                      <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left">
+                        {currentPool.ruleVariations.quarterlyRollover ? (
+                          <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+                            <Zap size={12} className="fill-emerald-400" /> Rollover Active
+                          </div>
+                        ) : (
+                          <div className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold">Standard</div>
+                        )}
+                        <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {statusTab === 'payment' && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300 w-full">
+                    {(currentPool.paymentHandles?.venmo || currentPool.paymentHandles?.googlePay) ? (
+                      <div>
+                        <h3 className="text-slate-500 font-bold uppercase text-xs mb-2">Payment Options:</h3>
+                        <div className="flex flex-col gap-2">
+                          {currentPool.paymentHandles?.venmo && (
+                            <a href={`https://venmo.com/u/${currentPool.paymentHandles.venmo.replace('@', '')}`} target="_blank" rel="noreferrer" className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center transition-colors w-full">
+                              Venmo: {currentPool.paymentHandles.venmo} <ExternalLink size={14} />
+                            </a>
+                          )}
+                          {currentPool.paymentHandles?.googlePay && (
+                            <div className="bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center w-full">
+                              <span className="text-slate-400 text-xs uppercase mr-1">GPay:</span> {currentPool.paymentHandles.googlePay}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-slate-500 text-xs italic">No digital payment methods configured.</div>
+                    )}
+
+                    <div className="border-t border-slate-800 pt-3">
+                      <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions:</h3>
+                      <p className="text-slate-300 text-sm leading-relaxed max-h-32 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700">
+                        {squaresPool.paymentInstructions || "No additional instructions."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+              </div>
             </div>
 
             {/* Charity Card (Moved to Top Row if enabled, sharing grid) */}
