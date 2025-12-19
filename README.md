@@ -1,6 +1,6 @@
 # March Melee Pools (MMPoolsV3)
 
-A modern, real-time sports pool application supporting both **Super Bowl Squares** and **NCAA March Madness Brackets**. Built for performance, aesthetics, and ease of use, this application allows users to create and manage betting grids and bracket challenges with automated scoring, real-time updates, and extensive customization options.
+A modern, real-time sports pool application supporting both **Gameday Squares** and **NCAA March Madness Brackets**. Built for performance, aesthetics, and ease of use, this application allows users to create and manage betting grids and bracket challenges with automated scoring, real-time updates, and extensive customization options.
 
 ## 🚀 Features
 
@@ -18,11 +18,12 @@ A modern, real-time sports pool application supporting both **Super Bowl Squares
 *   **How it Works Guide:** **NEW!** Comprehensive, step-by-step interactive guide for new users, accessible directly from the main menu.
 *   **User Accounts:** Secure Google Authentication and email registration via Firebase.
 
-### March Madness Brackets (Beta)
+### March Madness Brackets
 *   **64-Team Bracket Challenge:** Full support for the Men's NCAA Tournament.
 *   **Interactive Builder:** Mobile-friendly bracket picker with drag-and-drop-like ease.
-*   **Live Scoring:** Round-by-round scoring updates with active leaderboard.
-*   **Feature Gating:** Controlled via SuperAdmin feature flags for phased rollout.
+*   **Live Scoring:** Round-by-round scoring updates with active leaderboard table.
+*   **Standings Integration:** View global rankings and entry performance.
+*   **Restricted Access:** Currently restricted to SuperAdmin creation only.
 
 ### Pool Management
 *   **Setup Wizard:** Enhanced 7-step flow to configure teams, costs, reminder rules, and payouts.
@@ -38,6 +39,7 @@ A modern, real-time sports pool application supporting both **Super Bowl Squares
 *   **Custom Payouts:** Configurable percentage splits for Q1, Halftime, Q3, and Final scores.
 *   **Manager Controls:** Lock/unlock grid, mark squares as paid, manual score overrides, new "Fix Pool Scores" emergency tool, and legacy "Force Sync" options.
 *   **Pool Setup:** Automated pre-filling of manager contact info for streamlined creation.
+*   **Date & Time Display:** **NEW!** Pool cards now explicitly show the scheduled Game Time or Bracket Lock Time.
 
 ### 🔔 Smart Reminder System & Notifications
 *   **Automated Payment Reminders:** Scheduled system that identifies users with unpaid squares and sends focused email reminders.
