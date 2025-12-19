@@ -15,7 +15,7 @@ interface ParticipantDashboardProps {
 export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user, onLogout, onCreatePool }) => {
     const [myPools, setMyPools] = useState<GameState[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'all' | 'open' | 'live' | 'completed'>('all');
+    const [activeTab, setActiveTab] = useState<'all' | 'open' | 'live' | 'completed'>('live');
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
