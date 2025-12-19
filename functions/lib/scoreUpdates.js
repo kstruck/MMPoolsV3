@@ -109,6 +109,79 @@ async function fetchESPNScores(gameId, league) {
         return null;
     }
 }
+// Helper to handle winner logging and computation (Shared between sync and fix)
+const processWinners = async (transaction, db, poolId, poolData, periodKey, homeScore, awayScore) => {
+    var _a, _b;
+    if (!poolData.axisNumbers)
+        return;
+    // Prevent re-processing if winner already exists? 
+    // Actually, we rely on the dedupe key in writeAuditEvent to prevent double-logging.
+    // But we might overwrite the winner doc. That's okay, creates self-healing.
+    const hDigit = getLastDigit(homeScore);
+    const aDigit = getLastDigit(awayScore);
+    const soldSquares = poolData.squares.filter((s) => s.owner).length;
+    const totalPot = soldSquares * poolData.costPerSquare;
+    const payoutPct = poolData.payouts[periodKey] || 0;
+    let amount = (totalPot * payoutPct) / 100;
+    if ((_a = poolData.ruleVariations) === null || _a === void 0 ? void 0 : _a.reverseWinners)
+        amount /= 2;
+    const label = periodKey === 'q1' ? 'Q1' : periodKey === 'half' ? 'Halftime' : periodKey === 'q3' ? 'Q3' : 'Final';
+    const axis = poolData.axisNumbers;
+    if (axis) {
+        const row = axis.away.indexOf(aDigit);
+        const col = axis.home.indexOf(hDigit);
+        if (row !== -1 && col !== -1) {
+            const squareIndex = row * 10 + col;
+            const square = poolData.squares[squareIndex];
+            const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
+            await (0, audit_1.writeAuditEvent)({
+                poolId: poolId,
+                type: 'WINNER_COMPUTED',
+                message: `${label} Winner: ${winnerName} (Home ${hDigit}, Away ${aDigit})`,
+                severity: 'INFO',
+                actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
+                payload: { period: label, homeScore, awayScore, homeDigit: hDigit, awayDigit: aDigit, winner: winnerName, squareId: squareIndex, amount },
+                dedupeKey: `WINNER:${poolId}:${periodKey}:${hDigit}:${aDigit}`
+            }, transaction);
+            const winnerDoc = {
+                period: periodKey,
+                squareId: squareIndex,
+                owner: winnerName,
+                amount: amount,
+                homeDigit: hDigit,
+                awayDigit: aDigit,
+                isReverse: false,
+                description: `${label} Winner`
+            };
+            transaction.set(db.collection('pools').doc(poolId).collection('winners').doc(periodKey), winnerDoc);
+        }
+        if ((_b = poolData.ruleVariations) === null || _b === void 0 ? void 0 : _b.reverseWinners) {
+            const rRow = axis.away.indexOf(hDigit);
+            const rCol = axis.home.indexOf(aDigit);
+            if (rRow !== -1 && rCol !== -1) {
+                const rSqIndex = rRow * 10 + rCol;
+                if (rSqIndex !== (row * 10 + col)) {
+                    const rSquare = poolData.squares[rSqIndex];
+                    const rWinnerName = (rSquare === null || rSquare === void 0 ? void 0 : rSquare.owner) || 'Unsold';
+                    await (0, audit_1.writeAuditEvent)({
+                        poolId: poolId,
+                        type: 'WINNER_COMPUTED',
+                        message: `${label} Reverse Winner: ${rWinnerName}`,
+                        severity: 'INFO',
+                        actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
+                        payload: { period: label, type: 'REVERSE', winner: rWinnerName, squareId: rSqIndex },
+                        dedupeKey: `WINNER_REV:${poolId}:${periodKey}:${hDigit}:${aDigit}`
+                    }, transaction);
+                    // We don't typically save reverse winner as separate doc in 'winners' collection unless we change schema,
+                    // but usually the main winner doc might need to be an array? 
+                    // For now, MVP assumes 1 main doc. Client might need to query audit log or we just rely on audit.
+                    // Or we can save specific 'reverse' doc?
+                    // Let's stick toAuditLog for reverse for now to avoid breaking schema.
+                }
+            }
+        }
+    }
+};
 exports.syncGameStatus = (0, scheduler_1.onSchedule)({
     schedule: "every 5 minutes",
     timeoutSeconds: 60,
@@ -152,7 +225,7 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
         if (isGameFinal && !((_e = pool.scores) === null || _e === void 0 ? void 0 : _e.final))
             newScores.final = pool.includeOvertime ? espnScores.apiTotal : espnScores.final;
         await db.runTransaction(async (transaction) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
             const freshDoc = await transaction.get(doc.ref);
             if (!freshDoc.exists)
                 return;
@@ -164,6 +237,26 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
             if (currentScoresStr !== newScoresStr) {
                 transactionUpdates.scores = newScores;
                 shouldUpdate = true;
+            }
+            // Live Score Update Logging
+            // If the CURRENT score (e.g. 7-0) has changed from DB, log it. 
+            // This happens inside transaction, so we check freshPool vs espnScores.current
+            const freshCurrent = ((_a = freshPool.scores) === null || _a === void 0 ? void 0 : _a.current) || { home: 0, away: 0 };
+            const newCurrent = espnScores.current || { home: 0, away: 0 };
+            if (freshCurrent.home !== newCurrent.home || freshCurrent.away !== newCurrent.away) {
+                // Log this change!
+                await (0, audit_1.writeAuditEvent)({
+                    poolId: doc.id,
+                    type: 'SCORE_FINALIZED', // Reuse this type or add NEW 'SCORE_UPDATE' to types?
+                    // Let's use SCORE_FINALIZED but with message "Score Update" to keep types simple for now, 
+                    // OR better, allow a generic "INFO" type. 
+                    // But wait, the frontend has icon mapping. 'SCORE_FINALIZED' uses Activity icon. That fits.
+                    message: `Score Update: ${newCurrent.home}-${newCurrent.away} (${state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th')})`,
+                    severity: 'INFO',
+                    actor: { uid: 'system', role: 'SYSTEM' },
+                    payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock },
+                    dedupeKey: `SCORE:${doc.id}:${newCurrent.home}:${newCurrent.away}`
+                }, transaction);
             }
             if (freshPool.numberSets === 4) {
                 let qNums = freshPool.quarterlyNumbers || {};
@@ -205,85 +298,21 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
             if (shouldUpdate) {
                 transaction.update(doc.ref, Object.assign(Object.assign({}, transactionUpdates), { updatedAt: admin.firestore.Timestamp.now() }));
             }
-            const handleWinnerLog = async (periodKey, homeScore, awayScore) => {
-                var _a, _b;
-                if (!freshPool.axisNumbers)
-                    return;
-                const hDigit = getLastDigit(homeScore);
-                const aDigit = getLastDigit(awayScore);
-                const soldSquares = freshPool.squares.filter(s => s.owner).length;
-                const totalPot = soldSquares * freshPool.costPerSquare;
-                const payoutPct = freshPool.payouts[periodKey] || 0;
-                let amount = (totalPot * payoutPct) / 100;
-                if ((_a = freshPool.ruleVariations) === null || _a === void 0 ? void 0 : _a.reverseWinners)
-                    amount /= 2;
-                const label = periodKey === 'q1' ? 'Q1' : periodKey === 'half' ? 'Halftime' : periodKey === 'q3' ? 'Q3' : 'Final';
-                const axis = freshPool.axisNumbers;
-                if (axis) {
-                    const row = axis.away.indexOf(aDigit);
-                    const col = axis.home.indexOf(hDigit);
-                    if (row !== -1 && col !== -1) {
-                        const squareIndex = row * 10 + col;
-                        const square = freshPool.squares[squareIndex];
-                        const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
-                        await (0, audit_1.writeAuditEvent)({
-                            poolId: doc.id,
-                            type: 'WINNER_COMPUTED',
-                            message: `${label} Winner: ${winnerName} (Home ${hDigit}, Away ${aDigit})`,
-                            severity: 'INFO',
-                            actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
-                            payload: { period: label, homeScore, awayScore, homeDigit: hDigit, awayDigit: aDigit, winner: winnerName, squareId: squareIndex, amount },
-                            dedupeKey: `WINNER:${doc.id}:${periodKey}:${hDigit}:${aDigit}`
-                        }, transaction);
-                        const winnerDoc = {
-                            period: periodKey,
-                            squareId: squareIndex,
-                            owner: winnerName,
-                            amount: amount,
-                            homeDigit: hDigit,
-                            awayDigit: aDigit,
-                            isReverse: false,
-                            description: `${label} Winner`
-                        };
-                        transaction.set(db.collection('pools').doc(doc.id).collection('winners').doc(periodKey), winnerDoc);
-                    }
-                    if ((_b = freshPool.ruleVariations) === null || _b === void 0 ? void 0 : _b.reverseWinners) {
-                        const rRow = axis.away.indexOf(hDigit);
-                        const rCol = axis.home.indexOf(aDigit);
-                        if (rRow !== -1 && rCol !== -1) {
-                            const rSqIndex = rRow * 10 + rCol;
-                            if (rSqIndex !== (row * 10 + col)) {
-                                const rSquare = freshPool.squares[rSqIndex];
-                                const rWinnerName = (rSquare === null || rSquare === void 0 ? void 0 : rSquare.owner) || 'Unsold';
-                                await (0, audit_1.writeAuditEvent)({
-                                    poolId: doc.id,
-                                    type: 'WINNER_COMPUTED',
-                                    message: `${label} Reverse Winner: ${rWinnerName}`,
-                                    severity: 'INFO',
-                                    actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
-                                    payload: { period: label, type: 'REVERSE', winner: rWinnerName, squareId: rSqIndex },
-                                    dedupeKey: `WINNER_REV:${doc.id}:${periodKey}:${hDigit}:${aDigit}`
-                                }, transaction);
-                            }
-                        }
-                    }
-                }
-            };
-            const q1H = (_a = newScores.q1) === null || _a === void 0 ? void 0 : _a.home;
-            const q1A = (_b = newScores.q1) === null || _b === void 0 ? void 0 : _b.away;
-            const halfH = (_c = newScores.half) === null || _c === void 0 ? void 0 : _c.home;
-            const halfA = (_d = newScores.half) === null || _d === void 0 ? void 0 : _d.away;
-            const q3H = (_e = newScores.q3) === null || _e === void 0 ? void 0 : _e.home;
-            const q3A = (_f = newScores.q3) === null || _f === void 0 ? void 0 : _f.away;
-            const finalH = (_g = newScores.final) === null || _g === void 0 ? void 0 : _g.home;
-            const finalA = (_h = newScores.final) === null || _h === void 0 ? void 0 : _h.away;
+            const q1H = (_b = newScores.q1) === null || _b === void 0 ? void 0 : _b.home;
+            const q1A = (_c = newScores.q1) === null || _c === void 0 ? void 0 : _c.away;
+            const halfH = (_d = newScores.half) === null || _d === void 0 ? void 0 : _d.home;
+            const halfA = (_e = newScores.half) === null || _e === void 0 ? void 0 : _e.away;
+            const q3H = (_f = newScores.q3) === null || _f === void 0 ? void 0 : _f.home;
+            const q3A = (_g = newScores.q3) === null || _g === void 0 ? void 0 : _g.away;
+            const finalH = (_h = newScores.final) === null || _h === void 0 ? void 0 : _h.home;
+            const finalA = (_j = newScores.final) === null || _j === void 0 ? void 0 : _j.away;
             if (isQ1Final && q1H !== undefined) {
                 await (0, audit_1.writeAuditEvent)({
                     poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q1 Finalized: ${q1H}-${q1A}`, severity: 'INFO',
                     actor: { uid: 'system', role: 'SYSTEM' }, payload: { period: 1, score: { home: q1H, away: q1A } },
                     dedupeKey: `SCORE_FINALIZED:${doc.id}:q1`
                 }, transaction);
-                await handleWinnerLog('q1', q1H, q1A);
+                await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A);
             }
             if (isHalfFinal && halfH !== undefined) {
                 await (0, audit_1.writeAuditEvent)({
@@ -291,7 +320,7 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
                     actor: { uid: 'system', role: 'SYSTEM' }, payload: { period: 2, score: { home: halfH, away: halfA } },
                     dedupeKey: `SCORE_FINALIZED:${doc.id}:half`
                 }, transaction);
-                await handleWinnerLog('half', halfH, halfA);
+                await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA);
             }
             if (isQ3Final && q3H !== undefined) {
                 await (0, audit_1.writeAuditEvent)({
@@ -299,7 +328,7 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
                     actor: { uid: 'system', role: 'SYSTEM' }, payload: { period: 3, score: { home: q3H, away: q3A } },
                     dedupeKey: `SCORE_FINALIZED:${doc.id}:q3`
                 }, transaction);
-                await handleWinnerLog('q3', q3H, q3A);
+                await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A);
             }
             if (isGameFinal && finalH !== undefined) {
                 await (0, audit_1.writeAuditEvent)({
@@ -307,12 +336,12 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
                     actor: { uid: 'system', role: 'SYSTEM' }, payload: { period: 4, score: { home: finalH, away: finalA } },
                     dedupeKey: `SCORE_FINALIZED:${doc.id}:final`
                 }, transaction);
-                await handleWinnerLog('final', finalH, finalA);
+                await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA);
             }
         });
     }
 });
-// One-time callable function to fix corrupted pool scores
+// One-time callable function to fix corrupted pool scores AND run winner logic
 exports.fixPoolScores = (0, https_1.onCall)({
     timeoutSeconds: 120,
     memory: "256MiB"
@@ -324,8 +353,6 @@ exports.fixPoolScores = (0, https_1.onCall)({
     }
     const db = admin.firestore();
     const results = [];
-    // Find all active pools with a game assigned (regardless of lock status)
-    // We filter for gameId > "" to ensure we only get pools with a game.
     const poolsSnap = await db.collection("pools")
         .where("gameId", ">", "")
         .get();
@@ -340,7 +367,6 @@ exports.fixPoolScores = (0, https_1.onCall)({
             results.push({ id: doc.id, status: 'skipped', reason: `gameStatus is ${gameStatus}` });
             continue;
         }
-        // Fetch fresh scores
         const espnScores = await fetchESPNScores(pool.gameId, pool.league || 'nfl');
         if (!espnScores) {
             results.push({ id: doc.id, status: 'error', reason: 'ESPN fetch failed' });
@@ -352,7 +378,7 @@ exports.fixPoolScores = (0, https_1.onCall)({
         const isHalfFinal = (period >= 3) || (state === "post");
         const isQ3Final = (period >= 4) || (state === "post");
         const isGameFinal = (state === "post");
-        // Force update all scores based on current period
+        // Prepare Updates
         const updates = {
             'scores.current': espnScores.current,
             'scores.gameStatus': state,
@@ -368,18 +394,55 @@ exports.fixPoolScores = (0, https_1.onCall)({
         if (isGameFinal) {
             updates['scores.final'] = pool.includeOvertime ? espnScores.apiTotal : espnScores.final;
         }
-        await db.collection('pools').doc(doc.id).update(updates);
+        // Run as Transaction to support winners & audit
+        await db.runTransaction(async (t) => {
+            // We need to fetch it within transaction? 
+            // Ideally yes, but for 'fix' we can just use the outer doc if we are confident,
+            // BUT processWinners takes 'poolData'. 
+            // Let's just use 'pool' (from outside) + 'updates' merged. 
+            // Be careful: processWinners looks at poolData.squares. 
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            // Update the doc via simple update first? No, transaction requirements.
+            t.update(doc.ref, updates);
+            // Construct the "Effective" pool data to use for winner logging
+            const effectivePool = Object.assign(Object.assign({}, pool), { scores: Object.assign(Object.assign({}, pool.scores), {
+                    q1: isQ1Final ? espnScores.q1 : pool.scores.q1,
+                    half: isHalfFinal ? espnScores.half : pool.scores.half,
+                    q3: isQ3Final ? espnScores.q3 : pool.scores.q3,
+                    final: isGameFinal ? (pool.includeOvertime ? espnScores.apiTotal : espnScores.final) : pool.scores.final
+                }) });
+            const q1H = (_a = effectivePool.scores.q1) === null || _a === void 0 ? void 0 : _a.home;
+            const q1A = (_b = effectivePool.scores.q1) === null || _b === void 0 ? void 0 : _b.away;
+            const halfH = (_c = effectivePool.scores.half) === null || _c === void 0 ? void 0 : _c.home;
+            const halfA = (_d = effectivePool.scores.half) === null || _d === void 0 ? void 0 : _d.away;
+            const q3H = (_e = effectivePool.scores.q3) === null || _e === void 0 ? void 0 : _e.home;
+            const q3A = (_f = effectivePool.scores.q3) === null || _f === void 0 ? void 0 : _f.away;
+            const finalH = (_g = effectivePool.scores.final) === null || _g === void 0 ? void 0 : _g.home;
+            const finalA = (_h = effectivePool.scores.final) === null || _h === void 0 ? void 0 : _h.away;
+            if (isQ1Final && q1H !== undefined)
+                await processWinners(t, db, doc.id, effectivePool, 'q1', q1H, q1A);
+            if (isHalfFinal && halfH !== undefined)
+                await processWinners(t, db, doc.id, effectivePool, 'half', halfH, halfA);
+            if (isQ3Final && q3H !== undefined)
+                await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
+            if (isGameFinal && finalH !== undefined)
+                await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
+            // Also log that FIX was run
+            await (0, audit_1.writeAuditEvent)({
+                poolId: doc.id,
+                type: 'SCORE_FINALIZED',
+                message: `Manual Score Fix Applied by Admin`,
+                severity: 'WARNING',
+                actor: { uid: ((_j = request.auth) === null || _j === void 0 ? void 0 : _j.uid) || 'admin', role: 'ADMIN', label: 'SuperAdmin Fix' },
+                payload: { updates },
+                dedupeKey: `FIX_SCORES:${doc.id}:${Date.now()}`
+            }, t);
+        });
         results.push({
             id: doc.id,
             name: `${pool.homeTeam} vs ${pool.awayTeam}`,
             status: 'fixed',
-            scores: {
-                q1: isQ1Final ? espnScores.q1 : null,
-                half: isHalfFinal ? espnScores.half : null,
-                q3: isQ3Final ? espnScores.q3 : null,
-                final: isGameFinal ? (pool.includeOvertime ? espnScores.apiTotal : espnScores.final) : null,
-                current: espnScores.current
-            }
+            scores: updates
         });
     }
     return { success: true, pools: results };

@@ -1081,6 +1081,7 @@ const App: React.FC = () => {
               </div>
 
               <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
+              <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Cost Per Square:</h3><p className="text-white font-medium text-sm">${currentPool.costPerSquare}</p></div>
               <div className="mb-4"><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
               <div className="mb-4">
                 <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Unclaimed Rules:</h3>

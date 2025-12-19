@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { User, GameState } from '../types';
+import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
-import { LayoutGrid, User as UserIcon, Search, ChevronRight, Loader } from 'lucide-react';
+import { LayoutGrid, User as UserIcon, Search, ChevronRight, Loader, Calendar, Shield } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 
@@ -107,10 +108,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 {/* Tabs */}
                 <div className="flex items-center gap-2 mb-6 border-b border-slate-700 overflow-x-auto">
                     {[
-                        { id: 'all', label: 'All Pools', count: counts.all },
-                        { id: 'open', label: 'Open', count: counts.open },
                         { id: 'live', label: 'Live', count: counts.live },
+                        { id: 'open', label: 'Open', count: counts.open },
                         { id: 'completed', label: 'Completed', count: counts.completed },
+                        { id: 'all', label: 'All Pools', count: counts.all },
                     ].map(tab => (
                         <button
                             key={tab.id}
@@ -176,8 +177,21 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 >
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-sm font-bold text-slate-300 group-hover:text-emerald-400 transition-colors">
-                                                {pool.name.substring(0, 2).toUpperCase()}
+                                            <div className="flex -space-x-3 isolate">
+                                                <div className="w-10 h-10 rounded-full bg-slate-900 border-2 border-slate-700 flex items-center justify-center overflow-hidden relative z-10 shadow-md">
+                                                    {(pool.awayTeamLogo || getTeamLogo(pool.awayTeam)) ? (
+                                                        <img src={pool.awayTeamLogo || getTeamLogo(pool.awayTeam) || ''} alt="Away" className="w-full h-full object-contain p-0.5" />
+                                                    ) : (
+                                                        <Shield className="text-slate-600" size={16} />
+                                                    )}
+                                                </div>
+                                                <div className="w-10 h-10 rounded-full bg-slate-900 border-2 border-slate-700 flex items-center justify-center overflow-hidden relative z-0 shadow-md">
+                                                    {(pool.homeTeamLogo || getTeamLogo(pool.homeTeam)) ? (
+                                                        <img src={pool.homeTeamLogo || getTeamLogo(pool.homeTeam) || ''} alt="Home" className="w-full h-full object-contain p-0.5" />
+                                                    ) : (
+                                                        <Shield className="text-slate-600" size={16} />
+                                                    )}
+                                                </div>
                                             </div>
                                             <div>
                                                 <h3 className="font-bold text-white group-hover:text-emerald-400 transition-colors line-clamp-1">{pool.name}</h3>
@@ -185,6 +199,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                     {getStatusBadge(pool)}
                                                     <span className="text-xs text-slate-500 font-mono">${pool.costPerSquare}/sq</span>
                                                 </div>
+                                                {pool.scores.startTime && (
+                                                    <div className="text-[10px] text-slate-400 mt-1 font-medium flex items-center gap-1">
+                                                        <Calendar size={10} />
+                                                        {new Date(pool.scores.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

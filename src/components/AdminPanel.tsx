@@ -854,7 +854,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   setWeek(currentEstimatedWeek.toString());
                 }
               }
-            }} className="bg-slate-800 hover:bg-slate-700 text-indigo-300 px-4 py-2 rounded-lg text-sm font-bold border border-slate-700 transition-colors flex items-center gap-2"><Calendar size={16} /> {showSchedule ? 'Hide Schedule' : 'Find Game'}</button>
+            }} className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${showSchedule ? 'bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.6)] border border-indigo-400 hover:scale-105 ring-2 ring-indigo-500/30'}`}>
+              <Calendar size={18} className={!showSchedule ? 'animate-pulse' : ''} />
+              {showSchedule ? 'Hide Schedule' : 'Find Game'}
+            </button>
           </div>
           {showSchedule && (
             <div className="mb-6 bg-slate-950 border border-slate-700 rounded-xl p-4 animate-in fade-in">
