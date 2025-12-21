@@ -94,7 +94,6 @@ export const calculateWinners = (state: GameState): Winner[] => {
       const col = state.axisNumbers!.home.indexOf(homeDigit);
 
       let winnerName = 'Unsold (House)';
-      let isWinner = false;
 
       if (row !== -1 && col !== -1) {
         const squareId = row * 10 + col;
@@ -102,7 +101,6 @@ export const calculateWinners = (state: GameState): Winner[] => {
 
         if (square.owner) {
           winnerName = square.owner;
-          isWinner = true;
         } else {
           // Handle Unsold Strategy
           const strategy = state.ruleVariations.scoreChangeHandleUnsold || 'house';

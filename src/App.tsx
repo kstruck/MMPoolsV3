@@ -13,7 +13,7 @@ import { calculateWinners, calculateScenarioWinners, getLastDigit } from './serv
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp } from 'lucide-react';
+import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
