@@ -1389,51 +1389,50 @@ const App: React.FC = () => {
 
                       </div>
                       <div className="space-y-1">
-                        <div className="space-y-1">
-                          {quarterlyPayouts
-                            .filter(card => {
-                              // Hybrid Strategy: Only show Half and Final cards
-                              if (squaresPool.ruleVariations.scoreChangePayout && squaresPool.ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
-                                return card.period === 'half' || card.period === 'final';
-                              }
-                              // Equal Split: Hide all fixed period cards (all are event based)
-                              if (squaresPool.ruleVariations.scoreChangePayout && squaresPool.ruleVariations.scoreChangePayoutStrategy === 'equal_split') {
-                                return false;
-                              }
-                              // Standard: Show all 4
-                              return true;
-                            })
-                            .map((card) => {
-                              const percent = squaresPool.payouts[card.period as keyof typeof squaresPool.payouts];
-                              // allow 0% if it's a major prize in Hybrid mode? OR just rely on logic above.
-                              // Existing logic checks if (!percent) return null. 
-                              // In Hybrid, Half/Final have weights in `scoreChangeHybridWeights`, not necessarily `payouts` object (which is for standard).
-                              // We need to ensure we display the correct "Potential Prize" for hybrid cards. 
-                              // Currently `quarterlyPayouts` calculation handles this via `baseAmount`.
+                        {quarterlyPayouts
+                          .filter(card => {
+                            // Hybrid Strategy: Only show Half and Final cards
+                            if ((squaresPool as GameState).ruleVariations.scoreChangePayout && (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
+                              return card.period === 'half' || card.period === 'final';
+                            }
+                            // Equal Split: Hide all fixed period cards (all are event based)
+                            if ((squaresPool as GameState).ruleVariations.scoreChangePayout && (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'equal_split') {
+                              return false;
+                            }
+                            // Standard: Show all 4
+                            return true;
+                          })
+                          .map((card) => {
+                            const percent = squaresPool.payouts[card.period as keyof typeof squaresPool.payouts];
+                            // allow 0% if it's a major prize in Hybrid mode? OR just rely on logic above.
+                            // Existing logic checks if (!percent) return null. 
+                            // In Hybrid, Half/Final have weights in `scoreChangeHybridWeights`, not necessarily `payouts` object (which is for standard).
+                            // We need to ensure we display the correct "Potential Prize" for hybrid cards. 
+                            // Currently `quarterlyPayouts` calculation handles this via `baseAmount`.
 
-                              if (!percent && !squaresPool.ruleVariations.scoreChangePayout) return null;
+                            if (!percent && !(squaresPool as GameState).ruleVariations.scoreChangePayout) return null;
 
-                              return (
-                                <div key={card.period} className="flex justify-between items-center text-sm">
-                                  <span className="text-slate-400 font-bold">{card.label}
-                                    <span className="text-slate-600 font-normal ml-1">
-                                      {squaresPool.ruleVariations.scoreChangePayoutStrategy === 'hybrid'
-                                        ? `(${squaresPool.ruleVariations.scoreChangeHybridWeights?.[card.period === 'half' ? 'halftime' : 'final'] || 0}%)`
-                                        : `(${percent}%)`}
-                                    </span>
+                            return (
+                              <div key={card.period} className="flex justify-between items-center text-sm">
+                                <span className="text-slate-400 font-bold">{card.label}
+                                  <span className="text-slate-600 font-normal ml-1">
+                                    {(squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'hybrid'
+                                      ? `(${(squaresPool as GameState).ruleVariations.scoreChangeHybridWeights?.[card.period === 'half' ? 'halftime' : 'final'] || 0}%)`
+                                      : `(${percent}%)`}
                                   </span>
-                                  <div className="flex flex-col items-end">
-                                    <span className="text-white font-mono font-bold">
-                                      ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                                    </span>
-                                    {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
-                                  </div>
+                                </span>
+                                <div className="flex flex-col items-end">
+                                  <span className="text-white font-mono font-bold">
+                                    ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                  </span>
+                                  {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
                                 </div>
-                              );
-                            })}
-                        </div>
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
+
                   )}
 
                   {payoutTab === 'win-report' && (
@@ -1609,47 +1608,58 @@ const App: React.FC = () => {
 
 
         {/* BOTTOM Payout Cards */}
-        <div className="max-w-[1400px] mx-auto px-4 mb-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {quarterlyPayouts.map((card, idx) => {
-              return (
-                <div key={idx} className="bg-black border border-slate-800 rounded-xl p-6 text-center shadow-lg relative overflow-hidden group">
-                  <div className={`absolute top-0 w-full h-1 opacity-20 group-hover:opacity-50 transition-opacity ${card.isLocked ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-                  <h4 className="text-slate-400 font-bold text-sm uppercase mb-4">{card.label}</h4>
-                  <div className="flex justify-center gap-4 text-white font-bold text-2xl mb-2 items-center">
-                    <span>{card.home}</span> <span className="text-slate-600">-</span> <span>{card.away}</span>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-6 font-medium">This Quarter: {card.qPointsHome} - {card.qPointsAway}</p>
-                  <div className="mb-4">
-                    <p className="text-xs text-slate-400 uppercase font-bold mb-1">In the money:</p>
-                    {card.isRollover ? (
-                      <p className="text-emerald-400 font-bold text-lg italic flex items-center justify-center gap-1"><Zap size={16} fill="currentColor" /> Rollover</p>
-                    ) : (
-                      <p className="text-white font-bold text-lg">{card.winnerName}</p>
-                    )}
-                    {card.reverseWinnerName && (
-                      <div className="mt-1 flex flex-col items-center">
-                        <span className="text-[10px] text-slate-500">AND (Reverse)</span>
-                        <span className="text-indigo-300 font-bold text-sm">{card.reverseWinnerName}</span>
+        {
+          (!(squaresPool as GameState).ruleVariations.scoreChangePayout || (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy !== 'equal_split') && (
+            <div className="max-w-[1400px] mx-auto px-4 mb-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {quarterlyPayouts
+                  .filter(card => {
+                    if ((squaresPool as GameState).ruleVariations.scoreChangePayout && (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
+                      return card.period === 'half' || card.period === 'final';
+                    }
+                    return true;
+                  })
+                  .map((card, idx) => {
+                    return (
+                      <div key={idx} className="bg-black border border-slate-800 rounded-xl p-6 text-center shadow-lg relative overflow-hidden group">
+                        <div className={`absolute top-0 w-full h-1 opacity-20 group-hover:opacity-50 transition-opacity ${card.isLocked ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+                        <h4 className="text-slate-400 font-bold text-sm uppercase mb-4">{card.label}</h4>
+                        <div className="flex justify-center gap-4 text-white font-bold text-2xl mb-2 items-center">
+                          <span>{card.home}</span> <span className="text-slate-600">-</span> <span>{card.away}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-6 font-medium">This Quarter: {card.qPointsHome} - {card.qPointsAway}</p>
+                        <div className="mb-4">
+                          <p className="text-xs text-slate-400 uppercase font-bold mb-1">In the money:</p>
+                          {card.isRollover ? (
+                            <p className="text-emerald-400 font-bold text-lg italic flex items-center justify-center gap-1"><Zap size={16} fill="currentColor" /> Rollover</p>
+                          ) : (
+                            <p className="text-white font-bold text-lg">{card.winnerName}</p>
+                          )}
+                          {card.reverseWinnerName && (
+                            <div className="mt-1 flex flex-col items-center">
+                              <span className="text-[10px] text-slate-500">AND (Reverse)</span>
+                              <span className="text-indigo-300 font-bold text-sm">{card.reverseWinnerName}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-center mb-4">
+                          {card.isRollover ? (
+                            <div className="text-slate-500 font-mono font-bold text-sm uppercase">Accumulating...</div>
+                          ) : (
+                            <>
+                              <div className="text-2xl font-bold font-mono text-emerald-400">${card.amount.toLocaleString()}</div>
+                              {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">(Includes ${card.rolloverAdded} Rollover)</span>}
+                            </>
+                          )}
+                        </div>
+                        {card.isLocked ? <Lock size={20} className="text-rose-500/50 mx-auto" /> : <Unlock size={20} className="text-emerald-500/30 mx-auto" />}
                       </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-center mb-4">
-                    {card.isRollover ? (
-                      <div className="text-slate-500 font-mono font-bold text-sm uppercase">Accumulating...</div>
-                    ) : (
-                      <>
-                        <div className="text-2xl font-bold font-mono text-emerald-400">${card.amount.toLocaleString()}</div>
-                        {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">(Includes ${card.rolloverAdded} Rollover)</span>}
-                      </>
-                    )}
-                  </div>
-                  {card.isLocked ? <Lock size={20} className="text-rose-500/50 mx-auto" /> : <Unlock size={20} className="text-emerald-500/30 mx-auto" />}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )
+        }
 
         {/* AI COMMISSIONER */}
         <div className="max-w-[1400px] mx-auto px-4 mb-20">
@@ -1657,56 +1667,58 @@ const App: React.FC = () => {
         </div>
 
         {/* Rules Explanation Modal */}
-        {showRulesModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl shadow-2xl max-w-md w-full relative">
-              <button onClick={() => setShowRulesModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={20} /></button>
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <Shield size={20} className="text-emerald-400" /> Unclaimed Prize Rules
-              </h3>
+        {
+          showRulesModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+              <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl shadow-2xl max-w-md w-full relative">
+                <button onClick={() => setShowRulesModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={20} /></button>
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <Shield size={20} className="text-emerald-400" /> Unclaimed Prize Rules
+                </h3>
 
-              <div className="space-y-4">
-                <div className={`p-4 rounded-lg border ${currentPool.ruleVariations.quarterlyRollover ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-950 border-slate-800'}`}>
-                  <h4 className={`font-bold text-sm mb-1 ${currentPool.ruleVariations.quarterlyRollover ? 'text-emerald-400' : 'text-slate-300'}`}>
-                    {currentPool.ruleVariations.quarterlyRollover ? '✅ Quarterly Rollover is ON' : 'Standard Rules (No Rollover)'}
-                  </h4>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    {currentPool.ruleVariations.quarterlyRollover
-                      ? "If a winning square is empty for Q1, Half, or Q3, the prize money automatically rolls over to the next quarter's pot. This creates bigger jackpots for later winners!"
-                      : "If a winning square is empty, the prize is typically kept by the house or split among other winners (see Manager instructions)."}
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg bg-slate-950 border border-slate-800">
-                  <h4 className="font-bold text-sm text-slate-300 mb-1">Final Prize Strategy</h4>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-slate-800 text-slate-400'}`}>
-                      {currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'Random Draw' : 'Last Winner'}
-                    </span>
+                <div className="space-y-4">
+                  <div className={`p-4 rounded-lg border ${currentPool.ruleVariations.quarterlyRollover ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-950 border-slate-800'}`}>
+                    <h4 className={`font-bold text-sm mb-1 ${currentPool.ruleVariations.quarterlyRollover ? 'text-emerald-400' : 'text-slate-300'}`}>
+                      {currentPool.ruleVariations.quarterlyRollover ? '✅ Quarterly Rollover is ON' : 'Standard Rules (No Rollover)'}
+                    </h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      {currentPool.ruleVariations.quarterlyRollover
+                        ? "If a winning square is empty for Q1, Half, or Q3, the prize money automatically rolls over to the next quarter's pot. This creates bigger jackpots for later winners!"
+                        : "If a winning square is empty, the prize is typically kept by the house or split among other winners (see Manager instructions)."}
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    {currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random'
-                      ? "If the final square is empty, the Commissioner will activate the site's 'Randomizer' function to determine a winner. The system will randomly select a winner from all occupied squares."
-                      : "If the final square is empty, the prize reverts to the most recent previous winner (e.g. 3rd Quarter)."}
-                  </p>
+
+                  <div className="p-4 rounded-lg bg-slate-950 border border-slate-800">
+                    <h4 className="font-bold text-sm text-slate-300 mb-1">Final Prize Strategy</h4>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                        {currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'Random Draw' : 'Last Winner'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      {currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random'
+                        ? "If the final square is empty, the Commissioner will activate the site's 'Randomizer' function to determine a winner. The system will randomly select a winner from all occupied squares."
+                        : "If the final square is empty, the prize reverts to the most recent previous winner (e.g. 3rd Quarter)."}
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-2 p-3 bg-slate-950 rounded border border-slate-800">
+                    <Shield size={14} className="text-slate-500 mt-0.5" />
+                    <p className="text-[10px] text-slate-500 leading-tight">
+                      <strong className="text-slate-400">Audit Verified:</strong> All automated decisions, including rollover calculations and random winner selections, are securely recorded in the <span className="font-mono text-emerald-500">Immutable Audit Log</span>.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex items-start gap-2 p-3 bg-slate-950 rounded border border-slate-800">
-                  <Shield size={14} className="text-slate-500 mt-0.5" />
-                  <p className="text-[10px] text-slate-500 leading-tight">
-                    <strong className="text-slate-400">Audit Verified:</strong> All automated decisions, including rollover calculations and random winner selections, are securely recorded in the <span className="font-mono text-emerald-500">Immutable Audit Log</span>.
-                  </p>
+                <div className="mt-6 pt-4 border-t border-slate-800 flex justify-end">
+                  <button onClick={() => setShowRulesModal(false)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition-colors">
+                    Got it
+                  </button>
                 </div>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-slate-800 flex justify-end">
-                <button onClick={() => setShowRulesModal(false)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition-colors">
-                  Got it
-                </button>
               </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
         {showAudit && <AuditLog poolId={currentPool.id} onClose={() => setShowAudit(false)} />}
