@@ -130,7 +130,8 @@ const App: React.FC = () => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [showShareModal, setShowShareModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
-  const [statusTab, setStatusTab] = useState<'overview' | 'rules' | 'payment' | 'win-report'>('overview');
+  const [statusTab, setStatusTab] = useState<'overview' | 'rules' | 'payment'>('overview');
+  const [payoutTab, setPayoutTab] = useState<'structure' | 'win-report'>('structure');
   const [showPoolInfo, setShowPoolInfo] = useState(true);
   const [shareUrl, setShareUrl] = useState('');
   const [showAudit, setShowAudit] = useState(false); // New State
@@ -1140,7 +1141,7 @@ const App: React.FC = () => {
         {/* INFO & PAYOUTS ROW */}
         <div className="max-w-[1400px] mx-auto px-4 py-6">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-slate-400 font-bold uppercase text-xs tracking-wider">Pool Details</h3>
+            <h3 className="text-slate-400 font-black uppercase text-xl tracking-wider">Pool Details</h3>
             <button
               onClick={() => setShowPoolInfo(!showPoolInfo)}
               className="bg-slate-900 hover:bg-slate-800 text-slate-400 p-2 rounded-full transition-colors"
@@ -1173,12 +1174,6 @@ const App: React.FC = () => {
                     className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'payment' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}
                   >
                     Payment
-                  </button>
-                  <button
-                    onClick={() => setStatusTab('win-report')}
-                    className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'win-report' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-emerald-400/70 hover:bg-slate-900/50'}`}
-                  >
-                    Win Report
                   </button>
                 </div>
 
@@ -1283,7 +1278,116 @@ const App: React.FC = () => {
                     </div>
                   )}
 
-                  {statusTab === 'win-report' && (
+                </div>
+              </div>
+
+              {/* Charity Card (Moved to Top Row if enabled, sharing grid) */}
+              {squaresPool.charity?.enabled && (
+                <div className="bg-slate-900 border border-rose-500/30 rounded-xl p-6 shadow-lg shadow-rose-500/10 relative overflow-hidden flex flex-col justify-center">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <Heart size={80} className="text-rose-500" />
+                  </div>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="bg-rose-500/20 p-1.5 rounded-lg">
+                        <Heart size={18} className="text-rose-400" />
+                      </div>
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">Proudly Supporting</h3>
+                    </div>
+                    <h2 className="text-2xl font-black text-rose-400 mb-1 leading-tight">{squaresPool.charity.name}</h2>
+                    <div className="mt-3">
+                      <span className="text-xs text-slate-500 uppercase font-bold block mb-1">Donation Amount</span>
+                      <span className="text-2xl font-mono font-bold text-white">
+                        ${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (squaresPool.charity.percentage / 100)))).toLocaleString()}
+                      </span>
+                      {squaresPool.charity.url && (
+                        <a
+                          href={squaresPool.charity.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-rose-400 hover:text-white font-bold text-xs flex items-center gap-1 mt-2 transition-colors"
+                        >
+                          Learn More <ArrowRight size={12} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Payout Structure Card - Updated Logic */}
+              <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
+                {/* Tabs Header */}
+                <div className="flex border-b border-slate-800">
+                  <button
+                    onClick={() => setPayoutTab('structure')}
+                    className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${payoutTab === 'structure' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}
+                  >
+                    Payout Structure
+                  </button>
+                  <button
+                    onClick={() => setPayoutTab('win-report')}
+                    className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${payoutTab === 'win-report' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-emerald-400/70 hover:bg-slate-900/50'}`}
+                  >
+                    Win Report
+                  </button>
+                </div>
+
+                <div className="p-6 flex-1 flex flex-col justify-center">
+                  {payoutTab === 'structure' && (
+                    <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+                      <div className="space-y-3">
+                        {/* Total Collected */}
+                        <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
+                          <span className="text-slate-400">Total Pot</span>
+                          <span className="text-white font-mono font-bold">
+                            ${(currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare).toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Charity Deduction Line */}
+                        {currentPool.charity?.enabled && (
+                          <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
+                            <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({currentPool.charity.percentage}%)</span>
+                            <span className="font-mono font-bold">
+                              -${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Net Prize Pot */}
+                        <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
+                          <span className="text-white font-bold">Net Prize Pool</span>
+                          <span className="text-emerald-400 font-mono font-bold text-lg">
+                            ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
+                          </span>
+                        </div>
+
+                      </div>
+                      <div className="space-y-1">
+                        {quarterlyPayouts.map((card) => {
+                          const percent = squaresPool.payouts[card.period as keyof typeof squaresPool.payouts];
+                          if (!percent) return null;
+
+                          return (
+                            <div key={card.period} className="flex justify-between items-center text-sm">
+                              <span className="text-slate-400 font-bold">{card.label}
+                                <span className="text-slate-600 font-normal ml-1">({percent}%)</span>
+                              </span>
+                              <div className="flex flex-col items-end">
+                                <span className="text-white font-mono font-bold">
+                                  ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                </span>
+                                {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {payoutTab === 'win-report' && (
                     <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full overflow-hidden rounded-lg border border-slate-800">
                       <table className="w-full text-left text-sm">
                         <thead className="bg-slate-900/50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
@@ -1329,94 +1433,7 @@ const App: React.FC = () => {
                       </table>
                     </div>
                   )}
-
                 </div>
-              </div>
-
-              {/* Charity Card (Moved to Top Row if enabled, sharing grid) */}
-              {squaresPool.charity?.enabled && (
-                <div className="bg-slate-900 border border-rose-500/30 rounded-xl p-6 shadow-lg shadow-rose-500/10 relative overflow-hidden flex flex-col justify-center">
-                  <div className="absolute top-0 right-0 p-4 opacity-10">
-                    <Heart size={80} className="text-rose-500" />
-                  </div>
-                  <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="bg-rose-500/20 p-1.5 rounded-lg">
-                        <Heart size={18} className="text-rose-400" />
-                      </div>
-                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">Proudly Supporting</h3>
-                    </div>
-                    <h2 className="text-2xl font-black text-rose-400 mb-1 leading-tight">{squaresPool.charity.name}</h2>
-                    <div className="mt-3">
-                      <span className="text-xs text-slate-500 uppercase font-bold block mb-1">Donation Amount</span>
-                      <span className="text-2xl font-mono font-bold text-white">
-                        ${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (squaresPool.charity.percentage / 100)))).toLocaleString()}
-                      </span>
-                      {squaresPool.charity.url && (
-                        <a
-                          href={squaresPool.charity.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-rose-400 hover:text-white font-bold text-xs flex items-center gap-1 mt-2 transition-colors"
-                        >
-                          Learn More <ArrowRight size={12} />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Payout Structure Card - Updated Logic */}
-              <div className="bg-black rounded-xl border border-slate-800 p-6 shadow-xl flex flex-col justify-center">
-                <h3 className="text-center text-slate-300 font-bold mb-4 border-b border-slate-800 pb-2">Payout Structure</h3>
-
-                <div className="space-y-3">
-                  {/* Total Collected */}
-                  <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
-                    <span className="text-slate-400">Total Pot</span>
-                    <span className="text-white font-mono font-bold">
-                      ${(currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare).toLocaleString()}
-                    </span>
-                  </div>
-
-                  {/* Charity Deduction Line */}
-                  {currentPool.charity?.enabled && (
-                    <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
-                      <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({currentPool.charity.percentage}%)</span>
-                      <span className="font-mono font-bold">
-                        -${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Net Prize Pot */}
-                  <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
-                    <span className="text-white font-bold">Net Prize Pool</span>
-                    <span className="text-emerald-400 font-mono font-bold text-lg">
-                      ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
-                    </span>
-                  </div>
-
-                </div>
-                {quarterlyPayouts.map((card) => {
-                  const percent = squaresPool.payouts[card.period as keyof typeof squaresPool.payouts];
-                  if (!percent) return null;
-
-                  return (
-                    <div key={card.period} className="flex justify-between items-center text-sm">
-                      <span className="text-slate-400 font-bold">{card.label}
-                        <span className="text-slate-600 font-normal ml-1">({percent}%)</span>
-                      </span>
-                      <div className="flex flex-col items-end">
-                        <span className="text-white font-mono font-bold">
-                          ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                        </span>
-                        {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
             </div>
           </div>
