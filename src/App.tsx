@@ -1389,24 +1389,49 @@ const App: React.FC = () => {
 
                       </div>
                       <div className="space-y-1">
-                        {quarterlyPayouts.map((card) => {
-                          const percent = squaresPool.payouts[card.period as keyof typeof squaresPool.payouts];
-                          if (!percent) return null;
+                        <div className="space-y-1">
+                          {quarterlyPayouts
+                            .filter(card => {
+                              // Hybrid Strategy: Only show Half and Final cards
+                              if (squaresPool.ruleVariations.scoreChangePayout && squaresPool.ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
+                                return card.period === 'half' || card.period === 'final';
+                              }
+                              // Equal Split: Hide all fixed period cards (all are event based)
+                              if (squaresPool.ruleVariations.scoreChangePayout && squaresPool.ruleVariations.scoreChangePayoutStrategy === 'equal_split') {
+                                return false;
+                              }
+                              // Standard: Show all 4
+                              return true;
+                            })
+                            .map((card) => {
+                              const percent = squaresPool.payouts[card.period as keyof typeof squaresPool.payouts];
+                              // allow 0% if it's a major prize in Hybrid mode? OR just rely on logic above.
+                              // Existing logic checks if (!percent) return null. 
+                              // In Hybrid, Half/Final have weights in `scoreChangeHybridWeights`, not necessarily `payouts` object (which is for standard).
+                              // We need to ensure we display the correct "Potential Prize" for hybrid cards. 
+                              // Currently `quarterlyPayouts` calculation handles this via `baseAmount`.
 
-                          return (
-                            <div key={card.period} className="flex justify-between items-center text-sm">
-                              <span className="text-slate-400 font-bold">{card.label}
-                                <span className="text-slate-600 font-normal ml-1">({percent}%)</span>
-                              </span>
-                              <div className="flex flex-col items-end">
-                                <span className="text-white font-mono font-bold">
-                                  ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                                </span>
-                                {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
-                              </div>
-                            </div>
-                          );
-                        })}
+                              if (!percent && !squaresPool.ruleVariations.scoreChangePayout) return null;
+
+                              return (
+                                <div key={card.period} className="flex justify-between items-center text-sm">
+                                  <span className="text-slate-400 font-bold">{card.label}
+                                    <span className="text-slate-600 font-normal ml-1">
+                                      {squaresPool.ruleVariations.scoreChangePayoutStrategy === 'hybrid'
+                                        ? `(${squaresPool.ruleVariations.scoreChangeHybridWeights?.[card.period === 'half' ? 'halftime' : 'final'] || 0}%)`
+                                        : `(${percent}%)`}
+                                    </span>
+                                  </span>
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-white font-mono font-bold">
+                                      ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                    </span>
+                                    {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
                       </div>
                     </div>
                   )}
