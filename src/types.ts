@@ -163,10 +163,12 @@ export interface GameState {
   ruleVariations: {
     reverseWinners: boolean; // Split pot with reverse digits
     quarterlyRollover: boolean; // Unsold squares roll money to next quarter
-    scoreChangePayout: boolean; // Pay fixed amount on every score change
-    scoreChangePayoutStrategy?: 'fixed' | 'split_pot'; // Fixed $ per score vs Split a % of pot
-    scoreChangeAllocation?: number; // If split_pot, what % of Total Pot to allocate (e.g. 10%)
-    scoreChangeHandleUnsold?: 'contract_owner' | 'rollover' | 'house'; // What to do if unowned
+    scoreChangePayout: boolean; // Pay out on every score change
+    scoreChangePayoutStrategy?: 'equal_split' | 'hybrid'; // Option A (Equal) vs Option B (Hybrid)
+    scoreChangeHybridWeights?: { final: number; halftime: number; other: number }; // For Hybrid strategy
+    scoreChangeHandleUnsold?: 'rollover_next' | 'house' | 'split_winners'; // Unsold handling
+    combineTDandXP?: boolean; // Treat TD+XP as one event
+    includeOTInScorePayouts?: boolean; // Include OT events in score payouts (distinct from Final Score OT rule)
     unclaimedFinalPrizeStrategy?: 'last_winner' | 'random';
   };
   randomWinner?: {

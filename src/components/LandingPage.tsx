@@ -1,3 +1,4 @@
+import React from 'react';
 import type { User } from '../types';
 import { Trophy, Zap, Shield, LayoutGrid, Calendar, CheckCircle2, Heart, Globe, DollarSign, Star } from 'lucide-react';
 import { Header } from './Header';
@@ -27,6 +28,8 @@ const BRAND = {
 };
 
 export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
+  const [activeTab, setActiveTab] = React.useState<'squares' | 'survivor' | 'pickem' | 'bracket'>('squares');
+
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
 
@@ -105,13 +108,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             The professional platform for managing squares pools for <strong>any game, all season long</strong>. Automated scoring, real-time payouts, and a pre-loaded schedule of every NFL and College game.
           </p>
 
-          {/* Pool Type Badges */}
-          <div className="mt-16 flex flex-wrap justify-center gap-6 md:gap-10 animate-in fade-in slide-in-from-bottom-16 duration-1000 delay-300">
-            <div className="flex flex-col items-center gap-2 opacity-90 hover:opacity-100 transition-opacity">
-              <img src="/squares_badge_dark.png" alt="Football Squares Pool Badge" className="h-16 md:h-20" />
-            </div>
-            {/* Future badges hidden for Squares-only focus */}
-          </div>
+
 
           {/* Hero Visual */}
           <div className="mt-16 md:mt-20 relative mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-20 duration-1000 delay-400">
@@ -304,74 +301,111 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
           </div>
 
-          {/* Popular Pools */}
-          <div>
-            <h2 className="text-3xl font-bold mb-6 text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>Perfect for Every Week</h2>
-            <p className="text-lg leading-relaxed mb-4" style={{ color: BRAND.lightGray }}>
-              Whether you are looking for the best <strong className="text-white">Super Bowl squares app</strong> or a reliable way to run your weekly <strong className="text-white">Monday Night Football pools</strong>, March Melee Pools has you covered.
-            </p>
-            <ul className="list-disc pl-6 space-y-2" style={{ color: BRAND.lightGray }}>
-              <li><strong className="text-white">Any Game, Any Time:</strong> Our database includes the full NFL and College Football schedule. Just pick your game.</li>
-              <li><strong className="text-white">Super Bowl Squares:</strong> The classic 10x10 grid. Perfect for the big game.</li>
-              <li><strong className="text-white">Weekly Office Pools:</strong> Spice up the regular season with a new grid for every prime-time matchup.</li>
-            </ul>
-          </div>
+          {/* Game Modes Tabs */}
+          <div className="mb-20">
+            <h2 className="text-3xl font-bold mb-8 text-white text-center" style={{ fontFamily: "'Montserrat', sans-serif" }}>Choose Your Game</h2>
 
-          {/* How It Works */}
-          <div>
-            <h2 className="text-3xl font-bold mb-6 text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>How Game Day Squares Work</h2>
-            <p className="text-lg leading-relaxed mb-4" style={{ color: BRAND.lightGray }}>
-              Squares pools (specifically the 10x10 grid) are the easiest way to engage your friends and colleagues during any football game.
-            </p>
-            <ol className="list-decimal pl-6 space-y-3" style={{ color: BRAND.lightGray }}>
-              <li><strong className="text-white">Select Your Game:</strong> Browse our <strong className="text-white">pre-loaded schedule</strong> of NFL and College games. No manual data entry needed.</li>
-              <li><strong className="text-white">Create a Grid:</strong> Set up your pool in seconds. Customizable buy-ins and payouts.</li>
-              <li><strong className="text-white">Invite Friends:</strong> Share a simple link for people to join and pick their squares.</li>
-              <li><strong className="text-white">Assign Numbers:</strong> Once the grid is full, random numbers (0-9) are generated for each row and column.</li>
-              <li><strong className="text-white">Win Big:</strong> At the end of each quarter, the last digit of each team's score determines the winning square.</li>
-            </ol>
-            <p className="mt-4" style={{ color: BRAND.lightGray }}>
-              Our <strong className="text-white">online squares pool</strong> platform automates everything—from number generation to final payouts—so you can enjoy the game.
-            </p>
-          </div>
-
-          {/* Payout Scenarios */}
-          <div>
-            <h2 className="text-3xl font-bold mb-6 text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>Winning Scenarios & Payout Examples</h2>
-            <p className="text-lg leading-relaxed mb-6" style={{ color: BRAND.lightGray }}>
-              You control the pot. Choose standard flexible payout structures or create your own custom rules. Here are some popular ways to split the winnings:
-            </p>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="p-6 rounded-xl border border-slate-700 bg-slate-800/50">
-                <div className="flex items-center gap-3 mb-4">
-                  <DollarSign className="text-emerald-400" />
-                  <h3 className="font-bold text-white">Standard Quarter Breakdown</h3>
-                </div>
-                <ul className="space-y-2 text-sm text-slate-300">
-                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>1st Quarter</span> <span className="font-bold text-white">25%</span></li>
-                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>Halftime</span> <span className="font-bold text-white">25%</span></li>
-                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>3rd Quarter</span> <span className="font-bold text-white">25%</span></li>
-                  <li className="flex justify-between"><span>Final Score</span> <span className="font-bold text-white">25%</span></li>
-                </ul>
-              </div>
-
-              <div className="p-6 rounded-xl border border-slate-700 bg-slate-800/50">
-                <div className="flex items-center gap-3 mb-4">
-                  <Trophy className="text-amber-400" />
-                  <h3 className="font-bold text-white">Back-Loaded Jackpot</h3>
-                </div>
-                <ul className="space-y-2 text-sm text-slate-300">
-                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>1st Quarter</span> <span className="font-bold text-white">10%</span></li>
-                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>Halftime</span> <span className="font-bold text-white">10%</span></li>
-                  <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>3rd Quarter</span> <span className="font-bold text-white">10%</span></li>
-                  <li className="flex justify-between"><span>Final Score</span> <span className="font-bold text-white">70%</span></li>
-                </ul>
-              </div>
+            {/* Tabs Navigation */}
+            <div className="flex flex-wrap justify-center gap-4 mb-12">
+              {[
+                { id: 'squares', label: 'Game Day Squares', icon: LayoutGrid },
+                { id: 'survivor', label: 'Survivor Pool', icon: Shield, badge: 'Coming Soon' },
+                { id: 'pickem', label: 'Pick\'em League', icon: CheckCircle2, badge: 'Coming Soon' },
+                { id: 'bracket', label: 'March Madness', icon: Trophy, badge: 'Coming Soon' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  disabled={tab.badge === 'Coming Soon'}
+                  className={`relative flex items-center gap-2 px-6 py-3 rounded-full text-sm font-bold transition-all ${activeTab === tab.id
+                    ? 'text-white shadow-lg scale-105'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    } ${tab.badge === 'Coming Soon' ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  style={{
+                    backgroundColor: activeTab === tab.id ? BRAND.orange : 'transparent',
+                    boxShadow: activeTab === tab.id ? `0 4px 20px ${BRAND.orange}40` : 'none'
+                  }}
+                >
+                  <tab.icon size={16} />
+                  {tab.label}
+                  {tab.badge && (
+                    <span className="absolute -top-2 -right-2 bg-slate-700 text-[10px] px-2 py-0.5 rounded-full text-slate-300 border border-slate-600">
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
-            <p className="mt-4 text-sm" style={{ color: BRAND.lightGray }}>
-              * We also support <strong>Reverse Winners</strong> (payouts for the reversed score) and custom charity allocations.
-            </p>
+
+            {/* Dynamic Content Area */}
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {activeTab === 'squares' && (
+                <div className="space-y-16">
+                  {/* Intro */}
+                  <div className="text-center max-w-3xl mx-auto">
+                    <h3 className="text-2xl md:text-3xl font-bold text-white mb-4">Perfect for Every Week</h3>
+                    <p className="text-lg text-slate-300 leading-relaxed">
+                      Whether you are looking for the best <strong className="text-white">Super Bowl squares app</strong> or a reliable way to run your weekly <strong className="text-white">Monday Night Football pools</strong>, we have you covered with fully automated 10x10 grids.
+                    </p>
+                  </div>
+
+                  {/* How it Works Cards */}
+                  <div>
+                    <h3 className="text-xl font-bold text-white mb-8 flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center"><Zap size={18} /></div>
+                      How Game Day Squares Work
+                    </h3>
+                    <div className="grid md:grid-cols-3 gap-6">
+                      {[
+                        { title: "1. Select Your Game", desc: "Browse our pre-loaded schedule of NFL and College games. No manual data entry needed." },
+                        { title: "2. Invite & Pick", desc: "Share a simple link. Friends join and pick squares. Numbers (0-9) are auto-generated randomly." },
+                        { title: "3. Watch & Win", desc: "Last digits of the score at each quarter determine the winner. We track everything automatically." }
+                      ].map((step, i) => (
+                        <div key={i} className="bg-slate-800/50 border border-slate-700 p-6 rounded-xl hover:border-blue-500/50 transition-colors">
+                          <h4 className="font-bold text-white mb-2">{step.title}</h4>
+                          <p className="text-sm text-slate-400 leading-relaxed">{step.desc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Payout Scenarios */}
+                  <div>
+                    <h3 className="text-xl font-bold text-white mb-8 flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center"><DollarSign size={18} /></div>
+                      Winning Scenarios & Payouts
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className="p-6 rounded-xl border border-slate-700 bg-slate-800/50">
+                        <div className="flex items-center gap-3 mb-4">
+                          <DollarSign className="text-emerald-400" />
+                          <h3 className="font-bold text-white">Standard Quarter Breakdown</h3>
+                        </div>
+                        <ul className="space-y-2 text-sm text-slate-300">
+                          <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>1st Quarter</span> <span className="font-bold text-white">25%</span></li>
+                          <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>Halftime</span> <span className="font-bold text-white">25%</span></li>
+                          <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>3rd Quarter</span> <span className="font-bold text-white">25%</span></li>
+                          <li className="flex justify-between"><span>Final Score</span> <span className="font-bold text-white">25%</span></li>
+                        </ul>
+                      </div>
+
+                      <div className="p-6 rounded-xl border border-slate-700 bg-slate-800/50">
+                        <div className="flex items-center gap-3 mb-4">
+                          <Trophy className="text-amber-400" />
+                          <h3 className="font-bold text-white">Back-Loaded Jackpot</h3>
+                        </div>
+                        <ul className="space-y-2 text-sm text-slate-300">
+                          <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>1st Quarter</span> <span className="font-bold text-white">10%</span></li>
+                          <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>Halftime</span> <span className="font-bold text-white">10%</span></li>
+                          <li className="flex justify-between border-b border-slate-700/50 pb-2"><span>3rd Quarter</span> <span className="font-bold text-white">10%</span></li>
+                          <li className="flex justify-between"><span>Final Score</span> <span className="font-bold text-white">70%</span></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Benefits */}

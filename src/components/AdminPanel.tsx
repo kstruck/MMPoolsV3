@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { GameState, Scores, PayoutConfig, Square } from '../types';
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Activity, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe } from 'lucide-react';
+import { AlertTriangle, Trophy, Zap, Lock, Unlock, Eye, EyeOff, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
@@ -1056,36 +1056,191 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const renderWizardStep4 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
+
+      {/* 1. Main Payout Mode Toggle */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div className="flex justify-between items-center mb-6"><div><h3 className="text-xl font-bold text-white mb-1">Payout & Charity Configuration</h3><p className="text-slate-400 text-sm">Define how the pot is split. Must total 100%.</p></div><div className={`text-xl font-bold font-mono px-4 py-2 rounded border ${totalPayout === 100 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/50' : 'bg-rose-500/10 text-rose-400 border-rose-500/50'}`}>Total: {totalPayout}%</div></div>
-        <div className="space-y-6">
-          {['q1', 'half', 'q3', 'final'].map((key) => {
-            const label = key === 'q1' ? '1st Quarter' : key === 'half' ? 'Halftime' : key === 'q3' ? '3rd Quarter' : 'Final Score';
-            const val = gameState.payouts[key as keyof PayoutConfig];
+        <h3 className="text-xl font-bold text-white mb-4">Payout Configuration</h3>
+        <div className="flex bg-slate-950 p-1.5 rounded-lg border border-slate-800 mb-6">
+          <button
+            onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: false } })}
+            className={`flex-1 py-3 rounded-md font-bold text-sm transition-all ${!gameState.ruleVariations.scoreChangePayout ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
+          >
+            Standard Quarterly
+          </button>
+          <button
+            onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: true } })}
+            className={`flex-1 py-3 rounded-md font-bold text-sm transition-all ${gameState.ruleVariations.scoreChangePayout ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
+          >
+            Every Score Pays
+          </button>
+        </div>
 
-            // Calculate Projected Amount
-            const totalPot = gameState.costPerSquare * 100;
-            const charityDeduction = gameState.charity?.enabled ? (totalPot * (gameState.charity.percentage / 100)) : 0;
-            const netPot = totalPot - charityDeduction;
-            const projectedAmount = (netPot * (val / 100));
+        {/* 2. Standard Sliders (Only if NOT Every Score Mode OR if using Hybrid) */}
+        {(!gameState.ruleVariations.scoreChangePayout) && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex justify-between items-center mb-6"><div><h4 className="font-bold text-white mb-1">Pot Distribution</h4><p className="text-slate-400 text-sm">Define how the pot is split. Must total 100%.</p></div><div className={`text-xl font-bold font-mono px-4 py-2 rounded border ${totalPayout === 100 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/50' : 'bg-rose-500/10 text-rose-400 border-rose-500/50'}`}>Total: {totalPayout}%</div></div>
+            {['q1', 'half', 'q3', 'final'].map((key) => {
+              const label = key === 'q1' ? '1st Quarter' : key === 'half' ? 'Halftime' : key === 'q3' ? '3rd Quarter' : 'Final Score';
+              const val = gameState.payouts[key as keyof PayoutConfig];
+              const totalPot = gameState.costPerSquare * 100;
+              const charityDeduction = gameState.charity?.enabled ? (totalPot * (gameState.charity.percentage / 100)) : 0;
+              const netPot = totalPot - charityDeduction;
+              const projectedAmount = (netPot * (val / 100));
 
-            return (
-              <div key={key} className="bg-slate-950 p-4 rounded-xl border border-slate-700 flex items-center gap-4">
-                <div className="w-32 font-bold text-slate-300">
-                  {label}
-                  <div className="text-[10px] text-slate-500 font-normal">Est. ${projectedAmount.toLocaleString()}</div>
+              return (
+                <div key={key} className="bg-slate-950 p-4 rounded-xl border border-slate-700 flex items-center gap-4">
+                  <div className="w-32 font-bold text-slate-300">
+                    {label}
+                    <div className="text-[10px] text-slate-500 font-normal">Est. ${projectedAmount.toLocaleString()}</div>
+                  </div>
+                  <input type="range" min="0" max="100" step="5" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseInt(e.target.value) } })} className="flex-1 accent-indigo-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
+                  <div className="w-20 relative">
+                    <input type="number" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseFloat(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-right text-white font-mono font-bold outline-none focus:border-indigo-500" />
+                    <span className="absolute right-6 top-1.5 text-slate-500 text-xs hidden">%</span>
+                  </div>
                 </div>
-                <input type="range" min="0" max="100" step="5" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseInt(e.target.value) } })} className="flex-1 accent-indigo-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
-                <div className="w-20 relative">
-                  <input type="number" value={val} onChange={(e) => updateConfig({ payouts: { ...gameState.payouts, [key]: parseFloat(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-right text-white font-mono font-bold outline-none focus:border-indigo-500" />
-                  <span className="absolute right-6 top-1.5 text-slate-500 text-xs hidden">%</span>
+              )
+            })}
+          </div>
+        )}
+
+        {/* 3. Every Score Pays Configuration */}
+        {gameState.ruleVariations.scoreChangePayout && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+
+            {/* Strategy Selection */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <button
+                onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'equal_split' } })}
+                className={`p-4 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? 'bg-indigo-500/20 border-indigo-500 ring-1 ring-indigo-500' : 'bg-slate-950 border-slate-700 hover:border-indigo-500/50'}`}
+              >
+                <div className="font-bold text-white mb-2 flex items-center gap-2"><Zap size={18} className={gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? 'text-indigo-400' : 'text-slate-500'} /> Option A: Equal Split</div>
+                <p className="text-xs text-slate-400 leading-relaxed">Most fair. The total pot is divided by the total number of scoring events. Every score is worth the exact same amount.</p>
+              </button>
+
+              <button
+                onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'hybrid' } })}
+                className={`p-4 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? 'bg-indigo-500/20 border-indigo-500 ring-1 ring-indigo-500' : 'bg-slate-950 border-slate-700 hover:border-indigo-500/50'}`}
+              >
+                <div className="font-bold text-white mb-2 flex items-center gap-2"><Trophy size={18} className={gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? 'text-indigo-400' : 'text-slate-500'} /> Option B: Hybrid</div>
+                <p className="text-xs text-slate-400 leading-relaxed">Reserve larger payouts for Final/Halftime, and split the remainder across all other scoring events.</p>
+              </button>
+            </div>
+
+            {/* Strategy Details */}
+            {gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' && (
+              <div className="bg-slate-950 p-6 rounded-xl border border-slate-700">
+                <h4 className="font-bold text-white mb-4">Hybrid Payout Weights</h4>
+                <div className="space-y-4">
+                  {/* Final */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-300 font-bold">Final Score</span>
+                    <div className="flex items-center gap-2">
+                      <input type="number"
+                        value={gameState.ruleVariations.scoreChangeHybridWeights?.final || 40}
+                        onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangeHybridWeights: { ...(gameState.ruleVariations.scoreChangeHybridWeights || { final: 40, halftime: 20, other: 40 }), final: parseInt(e.target.value) } } })}
+                        className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-right text-white font-mono font-bold outline-none"
+                      />
+                      <span className="text-slate-500 text-sm">%</span>
+                    </div>
+                  </div>
+                  {/* Halftime */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-300 font-bold">Halftime</span>
+                    <div className="flex items-center gap-2">
+                      <input type="number"
+                        value={gameState.ruleVariations.scoreChangeHybridWeights?.halftime || 20}
+                        onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangeHybridWeights: { ...(gameState.ruleVariations.scoreChangeHybridWeights || { final: 40, halftime: 20, other: 40 }), halftime: parseInt(e.target.value) } } })}
+                        className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-right text-white font-mono font-bold outline-none"
+                      />
+                      <span className="text-slate-500 text-sm">%</span>
+                    </div>
+                  </div>
+                  {/* Remainder */}
+                  <div className="flex items-center justify-between border-t border-slate-800 pt-4">
+                    <span className="text-sm text-indigo-400 font-bold">All Other Scores (Split)</span>
+                    <span className="font-mono font-bold text-white text-lg">
+                      {100 - ((gameState.ruleVariations.scoreChangeHybridWeights?.final || 40) + (gameState.ruleVariations.scoreChangeHybridWeights?.halftime || 20))}%
+                    </span>
+                  </div>
                 </div>
               </div>
-            )
-          })}
+            )}
+
+            {/* Edge Cases */}
+            <div className="bg-slate-950 p-6 rounded-xl border border-slate-700">
+              <h4 className="font-bold text-white mb-4 text-sm uppercase tracking-wide">Edge Cases & Rules</h4>
+              <div className="space-y-4">
+                {/* TD + XP */}
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div>
+                    <span className="text-sm text-slate-300 block font-bold">Combine TD + XP?</span>
+                    <span className="text-xs text-slate-500">If Yes, a touchdown and its extra point count as 1 payout event.</span>
+                  </div>
+                  <input type="checkbox" checked={gameState.ruleVariations.combineTDandXP || false} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, combineTDandXP: e.target.checked } })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600" />
+                </label>
+
+                {/* Overtime */}
+                <label className="flex items-center justify-between cursor-pointer border-t border-slate-800 pt-3">
+                  <div>
+                    <span className="text-sm text-slate-300 block font-bold">Include Overtime?</span>
+                    <span className="text-xs text-slate-500">If Yes, OT score changes also trigger payouts.</span>
+                  </div>
+                  <input type="checkbox" checked={gameState.ruleVariations.includeOTInScorePayouts || false} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, includeOTInScorePayouts: e.target.checked } })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600" />
+                </label>
+
+                {/* Unsold */}
+                <div className="border-t border-slate-800 pt-3">
+                  <label className="text-sm text-slate-300 block font-bold mb-2">If Winning Square is Unsold?</label>
+                  <select
+                    value={gameState.ruleVariations.scoreChangeHandleUnsold || 'rollover_next'}
+                    onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangeHandleUnsold: e.target.value as any } })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500 text-sm"
+                  >
+                    <option value="rollover_next">Rollover to Next Event (Increases Pot)</option>
+                    <option value="split_winners">Split Among ALL Previous Winners</option>
+                    <option value="house">Return to House / Pool Organizer</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+      </div>
+
+      {/* Legacy Game Logic - Now in Step 4 */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <h3 className="text-xl font-bold text-white mb-4">Other Game Logic</h3>
+        <div className="space-y-3">
+          <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-indigo-500/30">
+            <div>
+              <span className="font-bold text-slate-300 block">Reverse Winners</span>
+              <span className="text-xs text-slate-500">Pay out the reverse score too (Split Pot 50/50).</span>
+            </div>
+            <input type="checkbox" checked={gameState.ruleVariations.reverseWinners} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, reverseWinners: e.target.checked } })} className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600" />
+          </label>
+
+          <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-indigo-500/30">
+            <div>
+              <span className="font-bold text-slate-300 block">Quarterly Rollovers</span>
+              <span className="text-xs text-slate-500">Unwon quarterly prizes roll to the next quarter.</span>
+            </div>
+            <input type="checkbox" checked={gameState.ruleVariations.quarterlyRollover} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, quarterlyRollover: e.target.checked } })} className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600" />
+          </label>
+
+          <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-indigo-500/30">
+            <div>
+              <span className="font-bold text-slate-300 block">Include Overtime in Final?</span>
+              <span className="text-xs text-slate-500">If No, Final Score is taken at end of Q4.</span>
+            </div>
+            <input type="checkbox" checked={gameState.includeOvertime} onChange={(e) => updateConfig({ includeOvertime: e.target.checked })} className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600" />
+          </label>
         </div>
       </div>
 
+      {/* Charity Section (Moved down) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -1159,6 +1314,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         )}
       </div>
+
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -1170,10 +1326,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         <div className="space-y-4">
+          {/* Note: Unsold handling for Score Events is configured above. This handles Quarterly. */}
+
           <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
             <div>
-              <span className="font-bold text-slate-200 block">Roll Over Winnings</span>
-              <span className="text-xs text-slate-500">Unclaimed money moves to the next quarter's pot.</span>
+              <span className="font-bold text-slate-200 block">Roll Over Winnings (Quarterly)</span>
+              <span className="text-xs text-slate-500">Unclaimed quarter prizes move to the next quarter.</span>
             </div>
             <input
               type="checkbox"
@@ -1183,7 +1341,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             />
           </label>
 
-          {gameState.ruleVariations.quarterlyRollover && (
+          {gameState.ruleVariations.quarterlyRollover && !gameState.ruleVariations.scoreChangePayout && (
             <div className="animate-in fade-in slide-in-from-top-2 p-4 bg-slate-950/50 border border-slate-800 rounded-lg">
               <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Final Score Unclaimed Logic</label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1256,81 +1414,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span className="text-sm text-slate-300">Alert Admin when Grid Full</span>
                 <input type="checkbox" checked={gameState.notifyAdminFull} onChange={(e) => updateConfig({ notifyAdminFull: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
               </label>
-            </div>
-          </div>
-
-          {/* Game Logic */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-700">
-            <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Activity size={16} className="text-rose-400" /> Game Logic</h4>
-            <div className="space-y-3">
-              <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded"><span className="text-sm text-slate-300">Reverse Winners (Split Pot)</span><input type="checkbox" checked={gameState.ruleVariations.reverseWinners} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, reverseWinners: e.target.checked } })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" /></label>
-              <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded"><span className="text-sm text-slate-300">Quarterly Rollovers</span><input type="checkbox" checked={gameState.ruleVariations.quarterlyRollover} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, quarterlyRollover: e.target.checked } })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" /></label>
-              <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded"><span className="text-sm text-slate-300">Score Change Payouts</span><input type="checkbox" checked={gameState.ruleVariations.scoreChangePayout} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: e.target.checked } })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" /></label>
-              {gameState.ruleVariations.scoreChangePayout && (
-                <div className="ml-2 pl-4 border-l border-slate-700 animate-in fade-in slide-in-from-top-2 space-y-3 my-2">
-                  {/* Strategy Selector */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Payout Strategy</label>
-                    <div className="flex bg-slate-900 rounded p-1 border border-slate-700">
-                      <button
-                        onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'fixed' } })}
-                        className={`flex-1 py-1 text-xs font-bold rounded ${gameState.ruleVariations.scoreChangePayoutStrategy !== 'split_pot' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-                      >
-                        Fixed Amount ($)
-                      </button>
-                      <button
-                        onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'split_pot' } })}
-                        className={`flex-1 py-1 text-xs font-bold rounded ${gameState.ruleVariations.scoreChangePayoutStrategy === 'split_pot' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-                      >
-                        Split Pot (%)
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Inputs based on Strategy */}
-                  {gameState.ruleVariations.scoreChangePayoutStrategy === 'split_pot' ? (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pot Allocation (%)</label>
-                      <input
-                        type="number"
-                        value={gameState.ruleVariations.scoreChangeAllocation || 0}
-                        onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangeAllocation: parseInt(e.target.value) || 0 } })}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                        placeholder="e.g. 20"
-                      />
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        {gameState.ruleVariations.scoreChangeAllocation ? `${gameState.ruleVariations.scoreChangeAllocation}% of the pot is reserved for score changes. The rest (${100 - gameState.ruleVariations.scoreChangeAllocation}%) goes to Q1-Final.` : 'Percentage of total pot to split among all score events.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payout Amount Per Score ($)</label>
-                      <input
-                        type="number"
-                        value={gameState.scoreChangePayoutAmount || 0}
-                        onChange={(e) => updateConfig({ scoreChangePayoutAmount: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                        placeholder="e.g. 5"
-                      />
-                      <p className="text-[10px] text-slate-500 mt-1">Fixed amount deducted from main pot per event.</p>
-                    </div>
-                  )}
-
-                  {/* Unsold Handling */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">If Square Unsold?</label>
-                    <select
-                      value={gameState.ruleVariations.scoreChangeHandleUnsold || 'house'}
-                      onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangeHandleUnsold: e.target.value as any } })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white outline-none"
-                    >
-                      <option value="house">Keep in Pot / House</option>
-                      <option value="rollover">Rollover to Next Event</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-              <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded"><span className="text-sm text-slate-300">Include Overtime in Final?</span><input type="checkbox" checked={gameState.includeOvertime} onChange={(e) => updateConfig({ includeOvertime: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" /></label>
             </div>
           </div>
 
