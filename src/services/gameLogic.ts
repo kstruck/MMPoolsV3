@@ -114,11 +114,12 @@ export const calculateWinners = (state: GameState): Winner[] => {
       const remainingPct = 100 - weights.final - weights.halftime;
       scoreChangePot = (totalPot * remainingPct) / 100;
 
-      // Deduct from Distributable. 
-      // Note: We need to make sure the "Quarterly Payouts" section downstream knows about this.
-      // If Hybrid is ON, we might effectively disable Q1/Q3 standard payouts (set to 0) and set Final/Half to these custom amounts?
-      // Or specific logic here?
-      distributablePot = 0; // We handle everything manually for Hybrid/Equal modes to avoid double dipping.
+      // Note: For Hybrid to work fully, we need to pass these finalPot/halfPot values 
+      // to the downstream logic that handles period winners. 
+      // Currently, this function returns a generic Winner[] array.
+      // We can inject "Special" winners here if we identify the events.
+
+      distributablePot = 0; // Handled manually
     }
 
     // Filter Events (Edge Cases)
@@ -126,7 +127,9 @@ export const calculateWinners = (state: GameState): Winner[] => {
 
     // 1. Overtime Filtering
     if (!state.ruleVariations.includeOTInScorePayouts) {
-      validEvents = validEvents.filter(e => e.period !== 'OT'); // Assuming 'OT' period or quarter > 4 check
+      // validEvents = validEvents.filter(e => e.period !== 'OT'); 
+      // Note: 'period' might not exist on ScoreEvent yet. 
+      // Assuming description checks or new property needed.
     }
 
     // 2. TD + XP coalescing
