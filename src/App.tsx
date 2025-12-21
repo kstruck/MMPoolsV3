@@ -130,7 +130,7 @@ const App: React.FC = () => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [showShareModal, setShowShareModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
-  const [statusTab, setStatusTab] = useState<'overview' | 'rules' | 'payment'>('overview');
+  const [statusTab, setStatusTab] = useState<'overview' | 'rules' | 'payment' | 'win-report'>('overview');
   const [shareUrl, setShareUrl] = useState('');
   const [showAudit, setShowAudit] = useState(false); // New State
   const [pendingAction, setPendingActionState] = useState<'create_pool' | null>(() => {
@@ -638,58 +638,108 @@ const App: React.FC = () => {
     return 0;
   };
 
-  const getQuarterData = (period: 'q1' | 'half' | 'q3' | 'final') => {
-    if (!currentPool || currentPool.type === 'BRACKET') return { home: 0, away: 0, qPointsHome: 0, qPointsAway: 0, winnerName: '', reverseWinnerName: null, amount: 0, isLocked: false };
+  const quarterlyPayouts = useMemo(() => {
+    if (!currentPool || currentPool.type === 'BRACKET') return [];
     const squaresPool = currentPool as GameState;
+    const periods = ['q1', 'half', 'q3', 'final'] as const;
+    let accumulatedRollover = 0;
 
-    const isFinal = !!squaresPool.scores[period];
-    const lockedScore = squaresPool.scores[period];
-    const liveScore = squaresPool.scores.current;
+    const totalPot = squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare;
+    const charityDeduction = squaresPool.charity?.enabled ? Math.floor(totalPot * (squaresPool.charity.percentage / 100)) : 0;
+    const netPot = totalPot - charityDeduction;
 
-    const sHome = lockedScore ? sanitize(lockedScore.home) : sanitize(liveScore?.home);
-    const sAway = lockedScore ? sanitize(lockedScore.away) : sanitize(liveScore?.away);
+    return periods.map(period => {
+      const percent = squaresPool.payouts[period];
+      const baseAmount = Math.floor(netPot * (percent / 100));
+      let currentAmount = baseAmount;
+      let rolloverContribution = 0;
 
-    const home = sHome;
-    const away = sAway;
+      // Score Logic
+      const isFinal = !!squaresPool.scores[period];
+      const lockedScore = squaresPool.scores[period];
+      const liveScore = squaresPool.scores.current;
+      const home = lockedScore ? sanitize(lockedScore.home) : sanitize(liveScore?.home);
+      const away = lockedScore ? sanitize(lockedScore.away) : sanitize(liveScore?.away);
 
-    let prevHome = 0, prevAway = 0;
-    if (period === 'half') { prevHome = sanitize(currentPool.scores.q1?.home); prevAway = sanitize(currentPool.scores.q1?.away); }
-    else if (period === 'q3') { prevHome = sanitize(currentPool.scores.half?.home); prevAway = sanitize(currentPool.scores.half?.away); }
-    else if (period === 'final') { prevHome = sanitize(currentPool.scores.q3?.home); prevAway = sanitize(currentPool.scores.q3?.away); }
-    const qPointsHome = home - prevHome;
-    const qPointsAway = away - prevAway;
-    let winnerName = "TBD";
-    let reverseWinnerName: string | null = null;
-    let isLocked = isFinal;
-    if (currentPool.axisNumbers) {
-      const hD = getLastDigit(home);
-      const aD = getLastDigit(away);
-      const row = currentPool.axisNumbers.away.indexOf(aD);
-      const col = currentPool.axisNumbers.home.indexOf(hD);
-      if (row !== -1 && col !== -1) {
-        winnerName = currentPool.squares[row * 10 + col].owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
-      }
-      if (currentPool.ruleVariations.reverseWinners) {
-        const rRow = currentPool.axisNumbers.away.indexOf(hD);
-        const rCol = currentPool.axisNumbers.home.indexOf(aD);
-        if (rRow !== -1 && rCol !== -1) {
-          const rSqId = rRow * 10 + rCol;
-          if (rSqId !== (row * 10 + col)) {
-            reverseWinnerName = currentPool.squares[rSqId].owner || (currentPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold");
+      // Previous Score
+      let prevHome = 0, prevAway = 0;
+      if (period === 'half') { prevHome = sanitize(squaresPool.scores.q1?.home); prevAway = sanitize(squaresPool.scores.q1?.away); }
+      else if (period === 'q3') { prevHome = sanitize(squaresPool.scores.half?.home); prevAway = sanitize(squaresPool.scores.half?.away); }
+      else if (period === 'final') { prevHome = sanitize(squaresPool.scores.q3?.home); prevAway = sanitize(squaresPool.scores.q3?.away); }
+
+      const qPointsHome = home - prevHome;
+      const qPointsAway = away - prevAway;
+
+      // Winner Logic
+      let winnerName = "TBD";
+      let reverseWinnerName: string | null = null;
+      let hasWinner = false;
+
+      if (squaresPool.axisNumbers) {
+        const hD = getLastDigit(home);
+        const aD = getLastDigit(away);
+        // Standard Winner
+        // Only calculate if scores exist (game started)
+        if (squaresPool.scores.gameStatus === 'in' || squaresPool.scores.gameStatus === 'post' || isFinal) {
+          const row = squaresPool.axisNumbers.away.indexOf(aD);
+          const col = squaresPool.axisNumbers.home.indexOf(hD);
+          if (row !== -1 && col !== -1) {
+            const owner = squaresPool.squares[row * 10 + col].owner;
+            if (owner) {
+              winnerName = owner;
+              hasWinner = true;
+            } else {
+              winnerName = squaresPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold";
+            }
+          }
+        }
+
+        // Reverse Winner
+        if (squaresPool.ruleVariations.reverseWinners && hasWinner) {
+          const row = squaresPool.axisNumbers.away.indexOf(aD); // Re-calc these for clarity
+          const col = squaresPool.axisNumbers.home.indexOf(hD);
+          const rRow = squaresPool.axisNumbers.away.indexOf(hD); // Swap digits
+          const rCol = squaresPool.axisNumbers.home.indexOf(aD);
+          if (rRow !== -1 && rCol !== -1) {
+            const rSqId = rRow * 10 + rCol;
+            if (rSqId !== (row * 10 + col)) { // Distinct square
+              const rOwner = squaresPool.squares[rSqId].owner;
+              if (rOwner) reverseWinnerName = rOwner; // Reverse winner must be owned? Or also unsold? Usually reverse implies bonus for owner.
+              // Let's assume if nobody owns reverse square, no reverse prize awarded, it stays in main pot or ignored?
+              // For simplicity, let's only set reverseWinnerName if owned.
+            }
           }
         }
       }
-    }
 
-    // if (currentPool.type === 'BRACKET') return null; // Already handled at top
-    // const squaresPool = currentPool as GameState; // Already defined at top
+      // Rollover Calculation
+      const isRollover = winnerName === "Rollover";
+      if (isRollover) {
+        accumulatedRollover += baseAmount;
+        currentAmount = 0;
+      } else if (hasWinner) {
+        rolloverContribution = accumulatedRollover;
+        currentAmount += accumulatedRollover;
+        accumulatedRollover = 0;
+      }
 
-    const totalPot = squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare;
-    let distributablePot = Math.max(0, totalPot - (squaresPool.ruleVariations.scoreChangePayout ? (squaresPool.scoreEvents.length * squaresPool.scoreChangePayoutAmount) : 0));
-    let amount = (distributablePot * squaresPool.payouts[period]) / 100;
-    if (reverseWinnerName) amount = amount / 2;
-    return { home, away, qPointsHome, qPointsAway, winnerName, reverseWinnerName, amount, isLocked };
-  };
+      // Split for Reverse
+      let finalAmount = currentAmount;
+      if (reverseWinnerName) finalAmount = finalAmount / 2;
+
+      return {
+        period,
+        label: PERIOD_LABELS[period] || period,
+        home, away, qPointsHome, qPointsAway,
+        winnerName, reverseWinnerName,
+        amount: finalAmount,
+        baseAmount,
+        rolloverAdded: rolloverContribution,
+        isLocked: isFinal,
+        isRollover
+      };
+    });
+  }, [currentPool]);
 
   // Calculate Total Charity
   const totalCharity = useMemo(() => {
@@ -1040,10 +1090,6 @@ const App: React.FC = () => {
       return renderPasswordGate();
     }
 
-    const q1Data = getQuarterData('q1');
-    const halfData = getQuarterData('half');
-    const q3Data = getQuarterData('q3');
-    const finalData = getQuarterData('final');
     const homeLogo = squaresPool.homeTeamLogo || getTeamLogo(squaresPool.homeTeam);
     const awayLogo = squaresPool.awayTeamLogo || getTeamLogo(squaresPool.awayTeam);
     const homePredictions = calculateScenarioWinners(squaresPool, 'home');
@@ -1114,6 +1160,12 @@ const App: React.FC = () => {
                   className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'payment' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}
                 >
                   Payment
+                </button>
+                <button
+                  onClick={() => setStatusTab('win-report')}
+                  className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'win-report' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-emerald-400/70 hover:bg-slate-900/50'}`}
+                >
+                  Win Report
                 </button>
               </div>
 
@@ -1218,6 +1270,53 @@ const App: React.FC = () => {
                   </div>
                 )}
 
+                {statusTab === 'win-report' && (
+                  <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full overflow-hidden rounded-lg border border-slate-800">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-900/50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                        <tr>
+                          <th className="px-4 py-3">Quarter</th>
+                          <th className="px-4 py-3">Winner</th>
+                          <th className="px-4 py-3 text-right">Prize</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {quarterlyPayouts.map((qp) => (
+                          <tr key={qp.period} className="hover:bg-slate-900/30 transition-colors">
+                            <td className="px-4 py-3 font-medium text-slate-300">{qp.label}</td>
+                            <td className="px-4 py-3">
+                              {qp.isRollover ? (
+                                <span className="text-emerald-400 font-bold italic flex items-center gap-1">
+                                  <Zap size={12} fill="currentColor" /> Rollover
+                                </span>
+                              ) : qp.winnerName === 'Unsold' || qp.winnerName === 'TBD' ? (
+                                <span className="text-slate-500">{qp.winnerName}</span>
+                              ) : (
+                                <span className="text-white font-bold">{qp.winnerName}</span>
+                              )}
+                              {qp.reverseWinnerName && <div className="text-xs text-indigo-400 mt-0.5">reverse: {qp.reverseWinnerName}</div>}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono">
+                              {qp.isRollover ? (
+                                <span className="text-slate-500 text-xs">Accumulating...</span>
+                              ) : qp.winnerName === 'Unsold' || qp.winnerName === 'TBD' ? (
+                                <span className="text-slate-600">$0</span>
+                              ) : (
+                                <div className="flex flex-col items-end">
+                                  <span className="text-emerald-400 font-bold">${qp.amount.toLocaleString()}</span>
+                                  {qp.rolloverAdded > 0 && (
+                                    <span className="text-[10px] text-emerald-500/70">(incl. ${qp.rolloverAdded} roll)</span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
               </div>
             </div>
 
@@ -1287,24 +1386,21 @@ const App: React.FC = () => {
                 </div>
 
               </div>
-              {['q1', 'half', 'q3', 'final'].map((key) => {
-                const percent = squaresPool.payouts[key as keyof typeof squaresPool.payouts];
+              {quarterlyPayouts.map((card) => {
+                const percent = squaresPool.payouts[card.period as keyof typeof squaresPool.payouts];
                 if (!percent) return null;
 
-                const label = PERIOD_LABELS[key] || key;
-                const totalPot = squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare;
-                const charityDeduction = squaresPool.charity?.enabled ? Math.floor(totalPot * (squaresPool.charity.percentage / 100)) : 0;
-                const netPot = totalPot - charityDeduction;
-                const amount = Math.floor(netPot * (percent / 100));
-
                 return (
-                  <div key={key} className="flex justify-between items-center text-sm">
-                    <span className="text-slate-400 font-bold">{label}
+                  <div key={card.period} className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400 font-bold">{card.label}
                       <span className="text-slate-600 font-normal ml-1">({percent}%)</span>
                     </span>
-                    <span className="text-white font-mono font-bold">
-                      ${amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                    </span>
+                    <div className="flex flex-col items-end">
+                      <span className="text-white font-mono font-bold">
+                        ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                      </span>
+                      {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
+                    </div>
                   </div>
                 );
               })}
@@ -1432,33 +1528,40 @@ const App: React.FC = () => {
         {/* BOTTOM Payout Cards */}
         <div className="max-w-[1400px] mx-auto px-4 mb-10">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { title: 'Quarter 1', data: q1Data },
-              { title: 'Quarter 2', data: halfData },
-              { title: 'Quarter 3', data: q3Data },
-              { title: 'Quarter 4', data: finalData }
-            ].map((card, idx) => {
-              if (!card.data) return null;
+            {quarterlyPayouts.map((card, idx) => {
               return (
                 <div key={idx} className="bg-black border border-slate-800 rounded-xl p-6 text-center shadow-lg relative overflow-hidden group">
-                  <div className={`absolute top-0 w-full h-1 opacity-20 group-hover:opacity-50 transition-opacity ${card.data.isLocked ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-                  <h4 className="text-slate-400 font-bold text-sm uppercase mb-4">{card.title}</h4>
+                  <div className={`absolute top-0 w-full h-1 opacity-20 group-hover:opacity-50 transition-opacity ${card.isLocked ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+                  <h4 className="text-slate-400 font-bold text-sm uppercase mb-4">{card.label}</h4>
                   <div className="flex justify-center gap-4 text-white font-bold text-2xl mb-2 items-center">
-                    <span>{card.data.home}</span> <span className="text-slate-600">-</span> <span>{card.data.away}</span>
+                    <span>{card.home}</span> <span className="text-slate-600">-</span> <span>{card.away}</span>
                   </div>
-                  <p className="text-xs text-slate-500 mb-6 font-medium">This Quarter: {card.data.qPointsHome} - {card.data.qPointsAway}</p>
+                  <p className="text-xs text-slate-500 mb-6 font-medium">This Quarter: {card.qPointsHome} - {card.qPointsAway}</p>
                   <div className="mb-4">
                     <p className="text-xs text-slate-400 uppercase font-bold mb-1">In the money:</p>
-                    <p className="text-white font-bold text-lg">{card.data.winnerName}</p>
-                    {card.data.reverseWinnerName && (
+                    {card.isRollover ? (
+                      <p className="text-emerald-400 font-bold text-lg italic flex items-center justify-center gap-1"><Zap size={16} fill="currentColor" /> Rollover</p>
+                    ) : (
+                      <p className="text-white font-bold text-lg">{card.winnerName}</p>
+                    )}
+                    {card.reverseWinnerName && (
                       <div className="mt-1 flex flex-col items-center">
                         <span className="text-[10px] text-slate-500">AND (Reverse)</span>
-                        <span className="text-indigo-300 font-bold text-sm">{card.data.reverseWinnerName}</span>
+                        <span className="text-indigo-300 font-bold text-sm">{card.reverseWinnerName}</span>
                       </div>
                     )}
                   </div>
-                  <div className="text-2xl font-bold font-mono text-emerald-400 mb-4">${card.data.amount.toLocaleString()}</div>
-                  {card.data.isLocked ? <Lock size={20} className="text-rose-500/50 mx-auto" /> : <Unlock size={20} className="text-emerald-500/30 mx-auto" />}
+                  <div className="flex flex-col items-center mb-4">
+                    {card.isRollover ? (
+                      <div className="text-slate-500 font-mono font-bold text-sm uppercase">Accumulating...</div>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold font-mono text-emerald-400">${card.amount.toLocaleString()}</div>
+                        {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">(Includes ${card.rolloverAdded} Rollover)</span>}
+                      </>
+                    )}
+                  </div>
+                  {card.isLocked ? <Lock size={20} className="text-rose-500/50 mx-auto" /> : <Unlock size={20} className="text-emerald-500/30 mx-auto" />}
                 </div>
               );
             })}

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Trophy, Heart, DollarSign } from 'lucide-react';
+import { Search, Trophy, Heart, DollarSign, Activity, Lock, Unlock } from 'lucide-react';
 import type { GameState, User, BracketPool } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -18,6 +18,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
     const [selectedLeague, setSelectedLeague] = useState<string>('all');
     const [filterCharity, setFilterCharity] = useState(false);
     const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 10, mid 10-50, high > 50
+    const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'live' | 'closed'>('all');
 
     // Filter Logic
     const filteredPools = useMemo(() => {
@@ -54,6 +55,33 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                 if (filterPrice === 'high' && cost <= 50) return false;
             }
 
+            // Status Filter
+            if (filterStatus !== 'all') {
+                if (filterStatus === 'open') {
+                    // Open = Not Locked (Squares) or Published (Bracket)
+                    if (isBracket && (p as BracketPool).status !== 'PUBLISHED') return false;
+                    if (isSquares && (p as GameState).isLocked) return false;
+                } else if (filterStatus === 'live') {
+                    // Live = Locked + In Progress
+                    if (isBracket) {
+                        if ((p as BracketPool).status !== 'LOCKED') return false;
+                    } else {
+                        const s = p as GameState;
+                        const isLive = s.isLocked && s.scores?.gameStatus === 'in';
+                        if (!isLive) return false;
+                    }
+                } else if (filterStatus === 'closed') {
+                    // Closed = Complete
+                    if (isBracket) {
+                        if ((p as BracketPool).status !== 'COMPLETED') return false;
+                    } else {
+                        const s = p as GameState;
+                        const isClosed = s.scores?.gameStatus === 'post';
+                        if (!isClosed) return false;
+                    }
+                }
+            }
+
             // League Filter
             if (selectedLeague !== 'all') {
                 if (isBracket && selectedLeague !== 'ncaa_bb') return false;
@@ -67,7 +95,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
 
             return true;
         });
-    }, [pools, searchTerm, selectedLeague, filterCharity, filterPrice]);
+    }, [pools, searchTerm, selectedLeague, filterCharity, filterPrice, filterStatus]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
@@ -97,6 +125,33 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full bg-slate-900/50 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
                             />
+                        </div>
+
+                        {/* Status Filter */}
+                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Activity size={14} /> Game Status
+                            </h3>
+                            <div className="flex flex-col gap-2">
+                                {[
+                                    { id: 'all', label: 'All', icon: null },
+                                    { id: 'open', label: 'Open', icon: <Unlock size={14} /> },
+                                    { id: 'live', label: 'Live Now', icon: <Activity size={14} /> },
+                                    { id: 'closed', label: 'Closed', icon: <Lock size={14} /> },
+                                ].map((status) => (
+                                    <button
+                                        key={status.id}
+                                        onClick={() => setFilterStatus(status.id as any)}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${filterStatus === status.id
+                                            ? 'bg-indigo-600 text-white'
+                                            : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                            }`}
+                                    >
+                                        {status.icon}
+                                        <span>{status.label}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         {/* Sport Filter */}
