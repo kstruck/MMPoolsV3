@@ -1231,6 +1231,28 @@ const App: React.FC = () => {
                       </div>
 
                       <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
+
+                      {/* NEW: Score Change Rule Explanation */}
+                      {squaresPool.ruleVariations.scoreChangePayout && (
+                        <div className="bg-slate-900 border border-emerald-500/30 rounded p-3 text-sm">
+                          <h4 className="text-emerald-400 font-bold uppercase text-xs mb-1 flex items-center gap-1">
+                            <Trophy size={12} /> Every Score Pays Rule
+                          </h4>
+                          <p className="text-slate-300 text-xs leading-relaxed">
+                            This pool pays out whenever the score changes.
+                            {squaresPool.ruleVariations.scoreChangePayoutStrategy === 'split_pot' ? (
+                              <span> <strong>{squaresPool.ruleVariations.scoreChangeAllocation}%</strong> of the total pot is reserved for these payouts.</span>
+                            ) : (
+                              <span> A fixed amount of <strong>${squaresPool.scoreChangePayoutAmount}</strong> is deducted from the pot for each score.</span>
+                            )}
+                            <br />
+                            <span className="text-slate-500 italic mt-1 block">
+                              Winning square is determined by the last digits of the NEW score.
+                            </span>
+                          </p>
+                        </div>
+                      )}
+
                       <div>
                         <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Unclaimed Rules:</h3>
                         <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left">

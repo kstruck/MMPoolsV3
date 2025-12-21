@@ -164,6 +164,9 @@ export interface GameState {
     reverseWinners: boolean; // Split pot with reverse digits
     quarterlyRollover: boolean; // Unsold squares roll money to next quarter
     scoreChangePayout: boolean; // Pay fixed amount on every score change
+    scoreChangePayoutStrategy?: 'fixed' | 'split_pot'; // Fixed $ per score vs Split a % of pot
+    scoreChangeAllocation?: number; // If split_pot, what % of Total Pot to allocate (e.g. 10%)
+    scoreChangeHandleUnsold?: 'contract_owner' | 'rollover' | 'house'; // What to do if unowned
     unclaimedFinalPrizeStrategy?: 'last_winner' | 'random';
   };
   randomWinner?: {

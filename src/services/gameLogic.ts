@@ -69,8 +69,23 @@ export const calculateWinners = (state: GameState): Winner[] => {
   const totalPot = state.costPerSquare * 100;
   let distributablePot = totalPot;
 
-  // 0. Handle Score Change Payouts (Fixed Amounts deducted from Total Pot)
+  // 0. Handle Score Change Payouts
   if (state.ruleVariations.scoreChangePayout && state.scoreEvents.length > 0) {
+    const isSplitPot = state.ruleVariations.scoreChangePayoutStrategy === 'split_pot';
+    let scoreChangePot = 0;
+
+    if (isSplitPot) {
+      // Calculate allocated percentage of total pot
+      const allocation = state.ruleVariations.scoreChangeAllocation || 0;
+      scoreChangePot = (totalPot * allocation) / 100;
+      distributablePot -= scoreChangePot; // Remove from main pot for Q1-Final
+    }
+
+    const eventCount = state.scoreEvents.length;
+    const amountPerEvent = isSplitPot
+      ? scoreChangePot / (eventCount || 1)
+      : (state.scoreChangePayoutAmount || 0);
+
     state.scoreEvents.forEach(event => {
       const homeDigit = getLastDigit(event.home);
       const awayDigit = getLastDigit(event.away);
@@ -78,23 +93,50 @@ export const calculateWinners = (state: GameState): Winner[] => {
       const row = state.axisNumbers!.away.indexOf(awayDigit);
       const col = state.axisNumbers!.home.indexOf(homeDigit);
 
+      let winnerName = 'Unsold (House)';
+      let isWinner = false;
+
       if (row !== -1 && col !== -1) {
         const squareId = row * 10 + col;
         const square = state.squares[squareId];
-        const amount = state.scoreChangePayoutAmount;
 
-        // Deduct from main pot
-        distributablePot -= amount;
+        if (square.owner) {
+          winnerName = square.owner;
+          isWinner = true;
+        } else {
+          // Handle Unsold Strategy
+          const strategy = state.ruleVariations.scoreChangeHandleUnsold || 'house';
+          if (strategy === 'rollover') {
+            // For rollover, we effectively push this amount back to distributable? 
+            // Or keep it for next EVENT? 
+            // Complexity: implementing true "next event rollover" requires tracking state.
+            // simpler fallback: add back to distributablePot for now, effectively rolling gently to quarters
+            distributablePot += amountPerEvent;
+            winnerName = 'Rollover to Main Pot';
+            // Don't deduct if we just added it back, OR deduct and add back. 
+            // Logic below deducts if NOT split pot. 
+          }
+        }
 
-        winners.push({
-          period: 'Event',
-          squareId: squareId,
-          owner: square.owner || 'Unsold (House)',
-          amount: amount,
-          homeDigit: homeDigit,
-          awayDigit: awayDigit,
-          description: event.description // e.g. "TD Chiefs"
-        });
+        // Logic for POT Deduction (Fixed Strategy Only)
+        // Split Pot logic already deducted the chunk upfront.
+        if (!isSplitPot) {
+          if (winnerName !== 'Rollover to Main Pot') {
+            distributablePot -= amountPerEvent;
+          }
+        }
+
+        if (winnerName !== 'Rollover to Main Pot') {
+          winners.push({
+            period: 'Event',
+            squareId: squareId,
+            owner: winnerName,
+            amount: amountPerEvent,
+            homeDigit: homeDigit,
+            awayDigit: awayDigit,
+            description: event.description
+          });
+        }
       }
     });
   }

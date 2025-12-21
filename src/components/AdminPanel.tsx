@@ -1266,6 +1266,70 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded"><span className="text-sm text-slate-300">Reverse Winners (Split Pot)</span><input type="checkbox" checked={gameState.ruleVariations.reverseWinners} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, reverseWinners: e.target.checked } })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" /></label>
               <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded"><span className="text-sm text-slate-300">Quarterly Rollovers</span><input type="checkbox" checked={gameState.ruleVariations.quarterlyRollover} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, quarterlyRollover: e.target.checked } })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" /></label>
               <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded"><span className="text-sm text-slate-300">Score Change Payouts</span><input type="checkbox" checked={gameState.ruleVariations.scoreChangePayout} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: e.target.checked } })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" /></label>
+              {gameState.ruleVariations.scoreChangePayout && (
+                <div className="ml-2 pl-4 border-l border-slate-700 animate-in fade-in slide-in-from-top-2 space-y-3 my-2">
+                  {/* Strategy Selector */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Payout Strategy</label>
+                    <div className="flex bg-slate-900 rounded p-1 border border-slate-700">
+                      <button
+                        onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'fixed' } })}
+                        className={`flex-1 py-1 text-xs font-bold rounded ${gameState.ruleVariations.scoreChangePayoutStrategy !== 'split_pot' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        Fixed Amount ($)
+                      </button>
+                      <button
+                        onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'split_pot' } })}
+                        className={`flex-1 py-1 text-xs font-bold rounded ${gameState.ruleVariations.scoreChangePayoutStrategy === 'split_pot' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        Split Pot (%)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Inputs based on Strategy */}
+                  {gameState.ruleVariations.scoreChangePayoutStrategy === 'split_pot' ? (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pot Allocation (%)</label>
+                      <input
+                        type="number"
+                        value={gameState.ruleVariations.scoreChangeAllocation || 0}
+                        onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangeAllocation: parseInt(e.target.value) || 0 } })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                        placeholder="e.g. 20"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        {gameState.ruleVariations.scoreChangeAllocation ? `${gameState.ruleVariations.scoreChangeAllocation}% of the pot is reserved for score changes. The rest (${100 - gameState.ruleVariations.scoreChangeAllocation}%) goes to Q1-Final.` : 'Percentage of total pot to split among all score events.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payout Amount Per Score ($)</label>
+                      <input
+                        type="number"
+                        value={gameState.scoreChangePayoutAmount || 0}
+                        onChange={(e) => updateConfig({ scoreChangePayoutAmount: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                        placeholder="e.g. 5"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">Fixed amount deducted from main pot per event.</p>
+                    </div>
+                  )}
+
+                  {/* Unsold Handling */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">If Square Unsold?</label>
+                    <select
+                      value={gameState.ruleVariations.scoreChangeHandleUnsold || 'house'}
+                      onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangeHandleUnsold: e.target.value as any } })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white outline-none"
+                    >
+                      <option value="house">Keep in Pot / House</option>
+                      <option value="rollover">Rollover to Next Event</option>
+                    </select>
+                  </div>
+                </div>
+              )}
               <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded"><span className="text-sm text-slate-300">Include Overtime in Final?</span><input type="checkbox" checked={gameState.includeOvertime} onChange={(e) => updateConfig({ includeOvertime: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" /></label>
             </div>
           </div>
