@@ -1611,7 +1611,7 @@ const App: React.FC = () => {
         {
           (!(squaresPool as GameState).ruleVariations.scoreChangePayout || (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy !== 'equal_split') && (
             <div className="max-w-[1400px] mx-auto px-4 mb-10">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="flex flex-wrap justify-center gap-6">
                 {quarterlyPayouts
                   .filter(card => {
                     if ((squaresPool as GameState).ruleVariations.scoreChangePayout && (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
@@ -1621,7 +1621,7 @@ const App: React.FC = () => {
                   })
                   .map((card, idx) => {
                     return (
-                      <div key={idx} className="bg-black border border-slate-800 rounded-xl p-6 text-center shadow-lg relative overflow-hidden group">
+                      <div key={idx} className="bg-black border border-slate-800 rounded-xl p-6 text-center shadow-lg relative overflow-hidden group w-full md:w-[320px]">
                         <div className={`absolute top-0 w-full h-1 opacity-20 group-hover:opacity-50 transition-opacity ${card.isLocked ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
                         <h4 className="text-slate-400 font-bold text-sm uppercase mb-4">{card.label}</h4>
                         <div className="flex justify-center gap-4 text-white font-bold text-2xl mb-2 items-center">
@@ -1660,6 +1660,56 @@ const App: React.FC = () => {
             </div>
           )
         }
+
+        {/* Score Change History Table (For 'Every Score Pays' pools) */}
+        {(squaresPool as GameState).ruleVariations.scoreChangePayout && (
+          <div className="max-w-[1400px] mx-auto px-4 mb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h3 className="text-slate-400 font-bold text-sm uppercase mb-4 text-center">Score Change History</h3>
+            <div className="w-full overflow-hidden rounded-lg border border-slate-800 bg-black/50">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-900/50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-3">Event</th>
+                    <th className="px-4 py-3">Winner</th>
+                    <th className="px-4 py-3 text-right">Prize</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {winners.length === 0 ? (
+                    <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-500 italic">No score changes yet.</td></tr>
+                  ) : (
+                    winners.map((win, idx) => (
+                      <tr key={`${win.period}-${win.squareId}-${idx}`} className="hover:bg-slate-900/30 transition-colors">
+                        <td className="px-4 py-3 font-medium text-slate-300">
+                          {win.period === 'Event' || win.period === 'Bonus' ? (
+                            <div className="flex flex-col">
+                              <span className="text-emerald-400 font-bold text-xs uppercase">{win.description?.split(':')[0]}</span>
+                              <span className="text-[10px] text-slate-500 truncate">{win.description?.split(':')[1] || win.description}</span>
+                            </div>
+                          ) : (
+                            <span className="text-white font-bold">{PERIOD_LABELS[win.period] || win.period}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {win.isRollover ? (
+                            <span className="text-emerald-400 font-bold italic flex items-center gap-1">Rollover</span>
+                          ) : win.owner === 'Unsold' || win.owner === 'Unsold (House)' ? (
+                            <span className="text-slate-500">{win.owner}</span>
+                          ) : (
+                            <span className="text-white font-bold">{win.owner}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono">
+                          <span className="text-emerald-400 font-bold">${win.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                        </td>
+                      </tr>
+                    )))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
 
         {/* AI COMMISSIONER */}
         <div className="max-w-[1400px] mx-auto px-4 mb-20">
