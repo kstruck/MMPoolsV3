@@ -1234,14 +1234,16 @@ const App: React.FC = () => {
 
                       {/* NEW: Score Change Rule Explanation */}
                       {squaresPool.ruleVariations.scoreChangePayout && (
-                        <div className="bg-slate-900 border border-emerald-500/30 rounded p-3 text-sm">
+                        <div className="bg-slate-900 border border-emerald-500/30 rounded-full p-3 text-sm">
                           <h4 className="text-emerald-400 font-bold uppercase text-xs mb-1 flex items-center gap-1">
                             <Trophy size={12} /> Every Score Pays Rule
                           </h4>
                           <p className="text-slate-300 text-xs leading-relaxed">
                             This pool pays out whenever the score changes.
-                            {squaresPool.ruleVariations.scoreChangePayoutStrategy === 'split_pot' ? (
-                              <span> <strong>{squaresPool.ruleVariations.scoreChangeAllocation}%</strong> of the total pot is reserved for these payouts.</span>
+                            {squaresPool.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? (
+                              <span> <strong>Equal Split:</strong> The total prize pot is divided equally among all scoring events.</span>
+                            ) : squaresPool.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? (
+                              <span> <strong>Hybrid Split:</strong> Weighted payouts for Final/Halftime, with the remainder split among all other scores.</span>
                             ) : (
                               <span> A fixed amount of <strong>${squaresPool.scoreChangePayoutAmount}</strong> is deducted from the pot for each score.</span>
                             )}
@@ -1420,37 +1422,40 @@ const App: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
-                          {quarterlyPayouts.map((qp) => (
-                            <tr key={qp.period} className="hover:bg-slate-900/30 transition-colors">
-                              <td className="px-4 py-3 font-medium text-slate-300">{qp.label}</td>
-                              <td className="px-4 py-3">
-                                {qp.isRollover ? (
-                                  <span className="text-emerald-400 font-bold italic flex items-center gap-1">
-                                    <Zap size={12} fill="currentColor" /> Rollover
-                                  </span>
-                                ) : qp.winnerName === 'Unsold' || qp.winnerName === 'TBD' ? (
-                                  <span className="text-slate-500">{qp.winnerName}</span>
-                                ) : (
-                                  <span className="text-white font-bold">{qp.winnerName}</span>
-                                )}
-                                {qp.reverseWinnerName && <div className="text-xs text-indigo-400 mt-0.5">reverse: {qp.reverseWinnerName}</div>}
-                              </td>
-                              <td className="px-4 py-3 text-right font-mono">
-                                {qp.isRollover ? (
-                                  <span className="text-slate-500 text-xs">Accumulating...</span>
-                                ) : qp.winnerName === 'Unsold' || qp.winnerName === 'TBD' ? (
-                                  <span className="text-slate-600">$0</span>
-                                ) : (
+                          {winners.length === 0 ? (
+                            <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-500 italic">No winners yet. Game has not started or no scores accumulated.</td></tr>
+                          ) : (
+                            winners.map((win, idx) => (
+                              <tr key={`${win.period}-${win.squareId}-${idx}`} className="hover:bg-slate-900/30 transition-colors">
+                                <td className="px-4 py-3 font-medium text-slate-300">
+                                  {win.period === 'Event' || win.period === 'Bonus' ? (
+                                    <div className="flex flex-col">
+                                      <span className="text-xs uppercase font-bold text-slate-400">{win.period === 'Bonus' ? 'Bonus' : 'Score Change'}</span>
+                                      <span className="text-[10px] text-slate-500 truncate max-w-[120px]" title={win.description}>{win.description}</span>
+                                    </div>
+                                  ) : (
+                                    PERIOD_LABELS[win.period] || win.period
+                                  )}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {win.isRollover ? (
+                                    <span className="text-emerald-400 font-bold italic flex items-center gap-1">
+                                      <Zap size={12} fill="currentColor" /> {win.owner}
+                                    </span>
+                                  ) : win.owner === 'Unsold' || win.owner === 'Unsold (House)' ? (
+                                    <span className="text-slate-500">{win.owner}</span>
+                                  ) : (
+                                    <span className="text-white font-bold">{win.owner}</span>
+                                  )}
+                                  {win.isReverse && <div className="text-xs text-indigo-400 mt-0.5">Reverse Winner</div>}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono">
                                   <div className="flex flex-col items-end">
-                                    <span className="text-emerald-400 font-bold">${qp.amount.toLocaleString()}</span>
-                                    {qp.rolloverAdded > 0 && (
-                                      <span className="text-[10px] text-emerald-500/70">(incl. ${qp.rolloverAdded} roll)</span>
-                                    )}
+                                    <span className="text-emerald-400 font-bold">${win.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
                                   </div>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                              </tr>
+                            )))}
                         </tbody>
                       </table>
                     </div>

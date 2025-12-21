@@ -68,6 +68,8 @@ export const calculateWinners = (state: GameState): Winner[] => {
   const winners: Winner[] = [];
   const totalPot = state.costPerSquare * 100;
   let distributablePot = totalPot;
+  let hybridFinalPot = 0;
+  let hybridHalfPot = 0;
 
   // 0. Handle Score Change Payouts
   if (state.ruleVariations.scoreChangePayout && state.scoreEvents.length > 0) {
@@ -81,7 +83,6 @@ export const calculateWinners = (state: GameState): Winner[] => {
     // Wait, the user prompt said: "Option A: Split the total pot across all scoring events". 
     // This implies standard quarterly payouts might be disabled or secondary?
     // Let's assume for 'Equal Split', 100% of distributable is used, UNLESS user configured Payouts manually?
-    // Actually, Admin Wizard Step 4 allows toggling "Standard" vs "Every Score Wins". 
     // If "Every Score Wins" is ON, we should probably check if the user *also* wants quarterly prizes?
     // User request: "Hybrid... Reserve some money for 'big moments' so it doesn't all get diluted"
     // This implies Equal Split distributes EVERYTHING. 
@@ -90,137 +91,106 @@ export const calculateWinners = (state: GameState): Winner[] => {
 
     if (strategy === 'equal_split') {
       scoreChangePot = totalPot;
-      distributablePot = 0; // No Quarterly Payouts in this mode? Or maybe just 'remaining'? 
-      // Logic check: If Equal Split is 100%, then Q1/Q2/Q3/Final get 0.
+      distributablePot = 0; // All money goes to score changes
     } else if (isHybrid) {
-      // Hybrid: 40% Final, 20% Half... "All Other Events" get the rest.
       const weights = state.ruleVariations.scoreChangeHybridWeights || { final: 40, halftime: 20, other: 40 };
-      // We actually need to reserve the pot for Final/Half *as if* they were quarters, but they are technically 'Score Events' too?
-      // No, 'Hybrid' says "40% final score change... remaining 40% split across all OTHER scoring events".
-      // So Final/Half are treated as special Payout Buckets.
 
-      // Let's treat Hybrid as:
-      // 1. Calculate allocated amounts for Q2 (Half) and Q4 (Final, or specific Final score)
-      // 2. The REST is scoreChangePot for "Other" events.
+      hybridFinalPot = (totalPot * weights.final) / 100;
+      hybridHalfPot = (totalPot * weights.halftime) / 100;
 
-      // Problem: The current `payouts` object (q1, half, q3, final) is used for quarterly logic.
-      // If Hybrid is active, we should probably override the default logic or use this pre-calculation.
-
-      // Let's stick to the prompt's implied logic:
-      // "Reserve some money for big moments... split across all other scoring events".
-      // Use the weights to set aside money.
-      const finalPot = (totalPot * weights.final) / 100;
-      const halfPot = (totalPot * weights.halftime) / 100;
       const remainingPct = 100 - weights.final - weights.halftime;
       scoreChangePot = (totalPot * remainingPct) / 100;
 
-      // Note: For Hybrid to work fully, we need to pass these finalPot/halfPot values 
-      // to the downstream logic that handles period winners. 
-      // Currently, this function returns a generic Winner[] array.
-      // We can inject "Special" winners here if we identify the events.
-
-      distributablePot = 0; // Handled manually
+      distributablePot = 0; // Handled manually via hybrid variables
     }
 
     // Filter Events (Edge Cases)
     let validEvents = [...state.scoreEvents];
 
     // 1. Overtime Filtering
-    if (!state.ruleVariations.includeOTInScorePayouts) {
-      // validEvents = validEvents.filter(e => e.period !== 'OT'); 
-      // Note: 'period' might not exist on ScoreEvent yet. 
-      // Assuming description checks or new property needed.
+    if (state.ruleVariations.includeOTInScorePayouts === false) {
+      // Naive check for "OT" in description if available
+      validEvents = validEvents.filter(e => !e.description.toUpperCase().includes('OT') && !e.description.toUpperCase().includes('OVERTIME'));
     }
 
-    // 2. TD + XP coalescing
-    // Complex: Identifying XP. We need a heuristic. 
-    // Heuristic: If event B is roughly 1 point, and Event A was 6 points, and timestamps close?
-    // Simpler: Just rely on descriptions? "Touchdown", "Extra Point"?
-    // Let's assume description contains 'Touchdown' / 'Extra Point' / 'Field Goal' / 'Safety'.
+    // 2. TD + XP coalescing (Placeholder)
     if (state.ruleVariations.combineTDandXP) {
-      // This is hard without reliable metadata. We'll skip complex merging for now unless we have robust event data.
-      // fallback: just ignore 'Extra Point' labels if simpler? No, that denies payouts.
-      // Let's just create a placeholder comment for now. Logic requires robust timestamping.
+      // Logic to merge events would go here
     }
 
     const eventCount = validEvents.length;
-
-    // Calculate Payout Per Event
-    let amountPerEvent = 0;
-
-    if (strategy === 'equal_split') { // Option A
-      // Post-game calc: Total Pot / Total Events. 
-      // During game: Estimated.
-      amountPerEvent = eventCount > 0 ? (scoreChangePot / eventCount) : 0;
-    } else if (isHybrid) {
-      // Option B
-      // Identify "Major" events: Halftime score, Final score.
-      // "All OTHER scoring events" share the scoreChangePot.
-      // We need to count 'Other' events (excluding the specific Half/Final updates? No, usually Half/Final are snapshots, not score changes).
-      // A "Score Change" at 0:00 Q2 IS the Halftime score.
-      // Let's count ALL valid score events.
-      amountPerEvent = eventCount > 0 ? (scoreChangePot / eventCount) : 0;
-
-      // Wait, Hybrid explicitly pays MORE for Final/Half. 
-      // So we need to separate the "Hybrid Major Payouts" from "Minor Payouts".
-      // Downstream logic handles Quarter payouts. We should inject valid "Winners" for Half/Final here 
-      // AND generate "Minor" winners for the rest.
-    }
+    let runningRollover = 0;
+    const baseAmountPerEvent = eventCount > 0 ? (scoreChangePot / eventCount) : 0;
 
     // Generate Winners
-    validEvents.forEach(event => {
-      // ... Logic for determining owner ...
+    validEvents.forEach((event, index) => {
+      // Current Event Value
+      let currentEventValue = baseAmountPerEvent + runningRollover;
+      runningRollover = 0; // Reset unless we roll over again
+
       const homeDigit = getLastDigit(event.home);
       const awayDigit = getLastDigit(event.away);
       const row = state.axisNumbers!.away.indexOf(awayDigit);
       const col = state.axisNumbers!.home.indexOf(homeDigit);
 
-      // ... Winner generation ... (Similar to before but using calculated amountPerEvent)
-      // For Hybrid: If this event is THE Final Score event (how to tell?), pay the Big Pot.
-      // Otherwise pay small pot.
-
-      // Placeholder for now: utilizing simple "Equal Split" logic as baseline
-      // because true Hybrid requires mapping specific events to game clock (End of Q2, End of Q4).
+      let winnerName = 'Unsold';
+      let squareId = -1;
 
       if (row !== -1 && col !== -1) {
-        const squareId = row * 10 + col;
-        const square = state.squares[squareId];
-        let winnerName = square.owner || 'Unsold';
+        squareId = row * 10 + col;
+        winnerName = state.squares[squareId].owner || 'Unsold';
+      }
 
-        // Unsold handling
-        if (!square.owner) {
-          const unsoldStrategy = state.ruleVariations.scoreChangeHandleUnsold || 'rollover_next';
-          if (unsoldStrategy === 'house') winnerName = 'Unsold (House)';
-          else if (unsoldStrategy === 'rollover_next') {
+      // Handle Unsold
+      if (winnerName === 'Unsold') {
+        const unsoldStrategy = state.ruleVariations.scoreChangeHandleUnsold || 'rollover_next';
+
+        if (unsoldStrategy === 'house') {
+          winnerName = 'Unsold (House)';
+        } else if (unsoldStrategy === 'rollover_next') {
+          // Accumulate and continue
+          runningRollover += baseAmountPerEvent; // Determine base share to roll
+          // If this is the LAST event, we can't roll over to "Next Score". 
+          // It rolls to "Final Pot" or separate handling?
+          // Let's assume it rolls to 'rolloverPot' used in end-of-game logic.
+          if (index === eventCount - 1) {
+            // Will be picked up by the 'Bonus' logic if we add it to the main rolloverPot?
+            // Or just add a specific placeholder winner.
+            winnerName = 'Rollover (Unclaimed)';
+          } else {
             winnerName = 'Rollover to Next';
-            // Technically implies next event is worth (amount + amount). 
-            // For "Equal Split" post-game, this just means this event has no winner, so the pot splits among N-1 events? 
-            // OR money stays in pot?
-            // Most fair 'Rollover' in Equal Split: 
-            // "Total Pot / (Winning Events)". 
-            // So we filter effective count!
           }
         }
+      }
 
-        if (winnerName !== 'Rollover to Next') {
-          winners.push({
-            period: 'Event',
-            squareId,
-            owner: winnerName,
-            amount: amountPerEvent, // Note: this is an estimate until game over for Equal Split
-            homeDigit,
-            awayDigit,
-            description: event.description
-          });
-        }
+      if (winnerName !== 'Rollover to Next') {
+        winners.push({
+          period: 'Event',
+          squareId,
+          owner: winnerName,
+          amount: currentEventValue,
+          homeDigit,
+          awayDigit,
+          description: event.description || `Score Change ${event.home}-${event.away}`,
+          isRollover: winnerName === 'Rollover (Unclaimed)'
+        });
       }
     });
 
-    // Recalculate Equal Split Amounts if 'Rollover' was used (Effective N)
-    if (strategy === 'equal_split' && state.ruleVariations.scoreChangeHandleUnsold === 'rollover_next') {
-      const winningEventsCount = winners.length; // Winners array only contains actual claims now
-      const realAmount = winningEventsCount > 0 ? (scoreChangePot / winningEventsCount) : 0;
-      winners.forEach(w => w.amount = realAmount);
+    // If leftover rollover from score events
+    if (runningRollover > 0) {
+      // Technically this money is floating. 
+      // We'll add it to the main quarterly rollover logic?
+      // Or create a distinct 'Unclaimed Score Pot' winner.
+      winners.push({
+        period: 'Bonus',
+        squareId: -1,
+        owner: 'Unsold Score Pot',
+        amount: runningRollover,
+        homeDigit: -1,
+        awayDigit: -1,
+        description: 'Unclaimed Score Events'
+      });
     }
   }
 
@@ -238,7 +208,14 @@ export const calculateWinners = (state: GameState): Winner[] => {
       const awayDigit = getLastDigit(score.away);
 
       // Calculate Pot for this period based on the REMAINING distributable pot
-      const basePeriodAmount = (distributablePot * state.payouts[period]) / 100;
+      let basePeriodAmount = (distributablePot * state.payouts[period]) / 100;
+
+      // Hybrid Override
+      if (state.ruleVariations.scoreChangePayout && state.ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
+        if (period === 'final') basePeriodAmount = hybridFinalPot;
+        else if (period === 'half') basePeriodAmount = hybridHalfPot;
+      }
+
       const totalPeriodPot = basePeriodAmount + rolloverPot;
 
       // Reset rollover for this step
