@@ -12,7 +12,7 @@ A modern, real-time sports pool application supporting both **Gameday Squares** 
     *   **Search:** Quickly find pools by name or team.
     *   **Status Tracking:** Visual progress bars and status badges for every entry.
 *   **User Profiles:** Users can manage their display name, phone number, and social links via a new Profile Manager. Changes sync instantly across Firestore and Authentication.
-*   **Enhanced Visualization:** **NEW!** Dynamic grid highlighting for active rows/columns, winning squares, and paid (Emerald) vs. reserved (Amber) status.
+*   **Enhanced Visualization:** **NEW!** Dynamic grid highlighting for active rows/columns, winning squares, and paid (Emerald) vs. reserved (Amber) status. Now supports **Hybrid Winner Highlighting**—visually distinguishing between standard period winners (Gold/Trophy) and "Every Score" event winners (Purple/Zap), with special gradients for dual winners.
 *   **Dynamic Layouts:** Smart responsive design that adapts to pool settings (e.g., auto-centering status cards when Charity is disabled).
 *   **Mobile-Responsive:** fully optimized design for desktop, tablet, and mobile devices.
 *   **How it Works Guide:** **NEW!** Comprehensive, step-by-step interactive guide for new users, accessible directly from the main menu.
@@ -40,6 +40,7 @@ A modern, real-time sports pool application supporting both **Gameday Squares** 
 *   **Custom Payouts:** Configurable percentage splits for Q1, Halftime, Q3, and Final scores.
 *   **Manager Controls:** Lock/unlock grid, mark squares as paid, manual score overrides, new "Fix Pool Scores" emergency tool, and legacy "Force Sync" options.
 *   **Pool Setup:** Automated pre-filling of manager contact info for streamlined creation.
+*   **Auto-Lock System:** **NEW!** Pools automatically lock and generate random axis numbers at the scheduled kick-off time, removing the need for manual manager intervention.
 *   **Date & Time Display:** **NEW!** Pool cards now explicitly show the scheduled Game Time or Bracket Lock Time.
 
 ### 🃏 Enhanced Status Card (NEW)
