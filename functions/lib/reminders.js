@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.onWinnerComputed = exports.runReminders = void 0;
 const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
+const audit_1 = require("./audit");
 const db = admin.firestore();
 // --- HELPERS ---
 /**
@@ -147,8 +148,13 @@ async function checkLockReminders(pool, now) {
         return;
     const msUntilLock = settings.lockAt - now;
     const minutesUntilLock = msUntilLock / 1000 / 60;
-    if (minutesUntilLock <= 0)
-        return; // Already passed logic
+    if (minutesUntilLock <= 0) {
+        // Time has passed: Execute Auto-Lock if not already locked
+        if (!pool.isLocked) {
+            await executeAutoLock(pool);
+        }
+        return;
+    }
     for (const scheduleMin of settings.scheduleMinutes) {
         // Window: +/- 10 minutes
         const diff = Math.abs(minutesUntilLock - scheduleMin);
@@ -226,4 +232,74 @@ exports.onWinnerComputed = functions.firestore.onDocumentCreated("pools/{poolId}
         await logAudit(pool.id, `Sent winner announcement for ${period}`, 'NOTIFICATION_SENT', { dedupeKey: key });
     }
 });
+// --- AUTO LOCK LOGIC ---
+const generateDigits = () => {
+    const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    // Fisher-Yates Shuffle
+    for (let i = nums.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [nums[i], nums[j]] = [nums[j], nums[i]];
+    }
+    return nums;
+};
+async function executeAutoLock(pool) {
+    console.log(`[AutoLock] Executing for pool ${pool.id}`);
+    const poolRef = db.collection("pools").doc(pool.id);
+    try {
+        await db.runTransaction(async (t) => {
+            const doc = await t.get(poolRef);
+            if (!doc.exists)
+                return; // Deleted?
+            const currentPool = doc.data();
+            if (currentPool.isLocked) {
+                console.log(`[AutoLock] Skipped - already locked: ${pool.id}`);
+                return;
+            }
+            // Generate Digits
+            const axisNumbers = {
+                home: generateDigits(),
+                away: generateDigits(),
+            };
+            let updates = {
+                isLocked: true,
+                lockGrid: true, // Legacy/UI sync
+                axisNumbers,
+                updatedAt: admin.firestore.Timestamp.now(),
+            };
+            // Handle 4-Set initialization
+            if (currentPool.numberSets === 4) {
+                updates.quarterlyNumbers = {
+                    q1: axisNumbers
+                };
+            }
+            t.update(poolRef, updates);
+            // Audit Logs
+            await (0, audit_1.writeAuditEvent)({
+                poolId: pool.id,
+                type: 'POOL_LOCKED',
+                message: 'Auto-locked by system (Timer)',
+                severity: 'INFO',
+                actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' }
+            }, t);
+            const digitsHash = (0, audit_1.computeDigitsHash)({ home: axisNumbers.home, away: axisNumbers.away, poolId: pool.id, period: 'q1' });
+            await (0, audit_1.writeAuditEvent)({
+                poolId: pool.id,
+                type: 'DIGITS_GENERATED',
+                message: 'Auto-Generated Axis Numbers',
+                severity: 'INFO',
+                actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' },
+                payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets },
+                dedupeKey: `DIGITS_GENERATED:${pool.id}:initial:${digitsHash}`
+            }, t);
+        });
+        // Notify Host
+        if (pool.contactEmail) {
+            await sendEmail(pool.contactEmail, `Pool Locked & Numbers Generated: ${pool.name}`, `<p>Your pool <strong>${pool.name}</strong> has been auto-locked and numbers have been generated.</p>
+                 <p><a href="https://marchmeleepools.com/#pool/${pool.id}">View Pool</a></p>`);
+        }
+    }
+    catch (e) {
+        console.error(`[AutoLock] Failed for ${pool.id}:`, e);
+    }
+}
 //# sourceMappingURL=reminders.js.map

@@ -105,6 +105,10 @@ export interface GameState {
   managerName: string; // Name of the pool manager
   paymentInstructions: string; // Instructions for payment (Venmo, etc.)
   theme: string;
+  branding?: {
+    logoUrl?: string;
+    backgroundColor?: string;
+  };
 
   homeTeam: string; // Row Team
   awayTeam: string; // Column Team

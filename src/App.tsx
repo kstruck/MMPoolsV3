@@ -1101,13 +1101,19 @@ const App: React.FC = () => {
 
 
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative">
+      <div
+        className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative transition-colors duration-500"
+        style={{ backgroundColor: squaresPool.branding?.backgroundColor || '#020617' }} // Default Slate-950 equivalent
+      >
         <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} onCreatePool={handleCreatePool} />
         <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
         {/* Header Content */}
         <div className="max-w-[1400px] mx-auto px-4 pt-6 flex justify-between items-center">
           <div className="text-center md:text-left">
             <div className="flex items-center gap-3 mb-1">
+              {squaresPool.branding?.logoUrl && (
+                <img src={squaresPool.branding.logoUrl} className="h-16 w-auto object-contain drop-shadow-lg" alt="Pool Logo" />
+              )}
               <h1 className="text-3xl font-bold text-white">{squaresPool.name}</h1>
               <button onClick={() => setShowAudit(true)} className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors">
                 <Shield size={10} className="fill-emerald-400/20" /> Fully Auditable
