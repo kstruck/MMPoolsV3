@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { GameState, Winner, PlayerDetails, User } from '../types';
-import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon } from 'lucide-react';
+import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon, Zap } from 'lucide-react';
 import { getTeamLogo } from '../constants';
 
 interface GridProps {
@@ -594,6 +594,10 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            const isWinner = squareWinners.length > 0;
                            const isSelected = selectedSquares.includes(squareIndex);
 
+                           const isScoreChangeWinner = squareWinners.some(w => w.period === 'Event');
+                           const isStandardWinner = squareWinners.some(w => ['q1', 'half', 'q3', 'final', 'Bonus'].includes(w.period));
+                           const isHybridWinner = isScoreChangeWinner && isStandardWinner;
+
                            // Highlight logic for active row/col
                            const awayDigit = gameState.axisNumbers ? gameState.axisNumbers.away[rowIndex] : -1; // Row is Away
                            const homeDigit = gameState.axisNumbers ? gameState.axisNumbers.home[colIndex] : -1; // Col is Home
@@ -617,9 +621,23 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            let zIndex = "z-0";
 
                            if (isWinner) {
-                              bgClass = "bg-gradient-to-br from-amber-500/40 to-yellow-600/40 backdrop-blur-md";
-                              borderClass = "border-2 border-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.4)]";
-                              textClass = "text-white font-bold text-shadow-sm";
+                              if (isHybridWinner) {
+                                 // BOTH types of win
+                                 bgClass = "bg-gradient-to-br from-amber-500 via-yellow-500 to-fuchsia-600 text-white backdrop-blur-md";
+                                 borderClass = "border-2 border-white shadow-[0_0_30px_rgba(234,179,8,0.6)]";
+                                 textClass = "text-white font-black text-shadow-sm";
+                              } else if (isStandardWinner) {
+                                 // Standard Period Winner (Gold)
+                                 bgClass = "bg-gradient-to-br from-amber-500/40 to-yellow-600/40 backdrop-blur-md";
+                                 borderClass = "border-2 border-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.4)]";
+                                 textClass = "text-white font-bold text-shadow-sm";
+                              } else {
+                                 // Score Change Winner (Purple/Pink)
+                                 bgClass = "bg-gradient-to-br from-fuchsia-600/60 to-purple-800/60 backdrop-blur-md";
+                                 borderClass = "border-2 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.4)]";
+                                 textClass = "text-fuchsia-100 font-bold text-shadow-sm";
+                              }
+
                               effectClass += " transform scale-110";
                               zIndex = "z-40";
                            } else if (isSelected) {
@@ -709,8 +727,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                  )}
 
                                  {isWinner && (
-                                    <div className="absolute -top-3 -right-3 text-slate-900 bg-amber-400 rounded-full p-1 border border-white/30 shadow-lg z-50 animate-bounce">
-                                       <Trophy size={14} fill="currentColor" />
+                                    <div className={`absolute -top-3 -right-3 text-slate-900 rounded-full p-1 border border-white/30 shadow-lg z-50 animate-bounce ${isStandardWinner ? 'bg-amber-400' : 'bg-fuchsia-400'}`}>
+                                       {isStandardWinner ? <Trophy size={14} fill="currentColor" /> : <Zap size={14} fill="currentColor" />}
                                     </div>
                                  )}
 
@@ -729,7 +747,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                  {square.owner ? (
                                     <div className="text-center w-full px-0.5">
                                        {isWinner ? (
-                                          <span className="text-[9px] font-black text-amber-100 uppercase tracking-wider mb-0 block drop-shadow-md">Winner!</span>
+                                          <span className={`text-[9px] font-black uppercase tracking-wider mb-0 block drop-shadow-md ${isStandardWinner ? 'text-amber-100' : 'text-fuchsia-100'}`}>
+                                             {isHybridWinner ? 'Mega Win!' : (isStandardWinner ? 'Winner!' : 'Event!')}
+                                          </span>
                                        ) : (
                                           <div className="h-2"></div>
                                        )}
@@ -788,7 +808,14 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   <div className="w-6 h-6 rounded bg-amber-400 border border-amber-300 shadow-sm flex items-center justify-center animate-bounce">
                      <Trophy size={14} className="text-black" fill="currentColor" />
                   </div>
-                  <span className="text-sm font-bold text-amber-200">Winner!</span>
+                  <span className="text-sm font-bold text-amber-200">Period Winner</span>
+               </div>
+
+               <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded bg-fuchsia-500 border border-fuchsia-400 shadow-sm flex items-center justify-center">
+                     <Zap size={14} className="text-white" fill="currentColor" />
+                  </div>
+                  <span className="text-sm font-bold text-fuchsia-300">Score Change</span>
                </div>
 
                {!gameState.isLocked && (
