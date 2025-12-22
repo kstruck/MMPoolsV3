@@ -277,19 +277,64 @@ export const syncGameStatus = onSchedule({
             const newCurrent = espnScores.current || { home: 0, away: 0 };
 
             if (freshCurrent.home !== newCurrent.home || freshCurrent.away !== newCurrent.away) {
-                // Log this change!
+                // 1. Log Score Change Audit
                 await writeAuditEvent({
                     poolId: doc.id,
-                    type: 'SCORE_FINALIZED', // Reuse this type or add NEW 'SCORE_UPDATE' to types?
-                    // Let's use SCORE_FINALIZED but with message "Score Update" to keep types simple for now, 
-                    // OR better, allow a generic "INFO" type. 
-                    // But wait, the frontend has icon mapping. 'SCORE_FINALIZED' uses Activity icon. That fits.
+                    type: 'SCORE_FINALIZED',
                     message: `Score Update: ${newCurrent.home}-${newCurrent.away} (${state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th')})`,
                     severity: 'INFO',
                     actor: { uid: 'system', role: 'SYSTEM' },
                     payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock },
                     dedupeKey: `SCORE:${doc.id}:${newCurrent.home}:${newCurrent.away}`
                 }, transaction);
+
+                // 2. Add to Score History (scoreEvents)
+                const newEvent = {
+                    id: admin.firestore().collection("_").doc().id, // Random ID
+                    home: newCurrent.home,
+                    away: newCurrent.away,
+                    description: `Score Change (${period > 0 ? 'Q' + period : 'Pre'})`,
+                    timestamp: Date.now()
+                };
+                transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
+                shouldUpdate = true;
+
+                // 3. Handle "Score Change Payouts" (Event Winners)
+                if (freshPool.ruleVariations?.scoreChangePayout) {
+                    const hDigit = getLastDigit(newCurrent.home);
+                    const aDigit = getLastDigit(newCurrent.away);
+                    const axis = freshPool.axisNumbers;
+
+                    if (axis) {
+                        const row = axis.away.indexOf(aDigit);
+                        const col = axis.home.indexOf(hDigit);
+
+                        if (row !== -1 && col !== -1) {
+                            const squareIndex = row * 10 + col;
+                            const square = freshPool.squares[squareIndex];
+                            const winnerName = square?.owner || 'Unsold';
+
+                            await writeAuditEvent({
+                                poolId: doc.id,
+                                type: 'WINNER_COMPUTED',
+                                message: `Event Winner: ${winnerName} (${newCurrent.home}-${newCurrent.away})`,
+                                severity: 'INFO',
+                                actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
+                                payload: {
+                                    period: 'Event',
+                                    homeScore: newCurrent.home,
+                                    awayScore: newCurrent.away,
+                                    homeDigit: hDigit,
+                                    awayDigit: aDigit,
+                                    winner: winnerName,
+                                    squareId: squareIndex
+                                },
+                                dedupeKey: `WINNER_EVENT:${doc.id}:${newCurrent.home}:${newCurrent.away}`
+                                // Note: Amount logic omitted here as it's complex and computed on client/final payout
+                            }, transaction);
+                        }
+                    }
+                }
             }
 
             if (freshPool.numberSets === 4) {
