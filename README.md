@@ -64,6 +64,14 @@ A military-grade audit logging system to ensure absolute fairness and transparen
 ### 💰 Global Stats & Prizes (NEW)
 *   **Total Prizes Tracker:** Persistent global counter on the landing page showing the total amount of prize money awarded across all pools.
 *   **Automated Tracking:** Secure Cloud Function (`onPoolCompleted`) automatically updates the global ledger whenever a pool is finalized, ensuring the total never decreases even if old pools are deleted.
+*   **Final Payouts:** **NEW!** Implemented backend logic to accurately calculate and distribute "Every Score Wins" payouts when a game goes final, ensuring a fair split of the event pot.
+
+### 🧪 Advanced Simulation & Testing (NEW)
+*   **Simulation Dashboard:** A powerful new SuperAdmin tool to verify game logic, winner calculation, and payouts without waiting for real games.
+    *   **Scenario Runner:** Simulate entire games quarter-by-quarter or event-by-event (Touchdowns, Field Goals, Safeties).
+    *   **Auto-Fill Grids:** Instantly populate grids with test users and random squares to stress-test payout algorithms.
+    *   **Audit Verification:** Integrated view to confirm that specific game events correctly trigger "Event Winner" logs in the immutable audit trail.
+    *   **Fix Scores:** Emergency tool to re-fetch ESPN data and regenerate all winner records retroactively if issues arise.
 
 ### 🎨 Design & Experience
 *   **Brand Refreshed:** Updated visual identity with a larger, cleaner logo and "collage-style" hero imagery.

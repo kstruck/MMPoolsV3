@@ -131,7 +131,6 @@ const App: React.FC = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [statusTab, setStatusTab] = useState<'overview' | 'rules' | 'payment'>('overview');
-  const [payoutTab, setPayoutTab] = useState<'structure' | 'win-report'>('structure');
   const [showPoolInfo, setShowPoolInfo] = useState(true);
   const [shareUrl, setShareUrl] = useState('');
   const [showAudit, setShowAudit] = useState(false); // New State
@@ -1375,149 +1374,86 @@ const App: React.FC = () => {
 
               {/* Payout Structure Card - Updated Logic */}
               <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
-                {/* Tabs Header */}
-                <div className="flex border-b border-slate-800">
-                  <button
-                    onClick={() => setPayoutTab('structure')}
-                    className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${payoutTab === 'structure' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}
-                  >
-                    Payout Structure
-                  </button>
-                  <button
-                    onClick={() => setPayoutTab('win-report')}
-                    className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${payoutTab === 'win-report' ? 'bg-slate-900 text-emerald-400 border-b-2 border-emerald-500' : 'text-slate-500 hover:text-emerald-400/70 hover:bg-slate-900/50'}`}
-                  >
-                    Win Report
-                  </button>
+                <div className="flex border-b border-slate-800 bg-slate-900/50 px-6 py-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-white">Payout Structure</h3>
                 </div>
 
                 <div className="p-6 flex-1 flex flex-col justify-center">
-                  {payoutTab === 'structure' && (
-                    <div className="animate-in fade-in slide-in-from-left-4 duration-300">
-                      <div className="space-y-3">
-                        {/* Total Collected */}
-                        <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
-                          <span className="text-slate-400">Total Pot</span>
-                          <span className="text-white font-mono font-bold">
-                            ${(currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare).toLocaleString()}
-                          </span>
-                        </div>
-
-                        {/* Charity Deduction Line */}
-                        {currentPool.charity?.enabled && (
-                          <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
-                            <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({currentPool.charity.percentage}%)</span>
-                            <span className="font-mono font-bold">
-                              -${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Net Prize Pot */}
-                        <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
-                          <span className="text-white font-bold">Net Prize Pool</span>
-                          <span className="text-emerald-400 font-mono font-bold text-lg">
-                            ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
-                          </span>
-                        </div>
-
+                  <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+                    <div className="space-y-3">
+                      {/* Total Collected */}
+                      <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
+                        <span className="text-slate-400">Total Pot</span>
+                        <span className="text-white font-mono font-bold">
+                          ${(currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare).toLocaleString()}
+                        </span>
                       </div>
-                      <div className="space-y-1">
-                        {quarterlyPayouts
-                          .filter(card => {
-                            // Hybrid Strategy: Only show Half and Final cards
-                            if ((squaresPool as GameState).ruleVariations.scoreChangePayout && (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
-                              return card.period === 'half' || card.period === 'final';
-                            }
-                            // Equal Split: Hide all fixed period cards (all are event based)
-                            if ((squaresPool as GameState).ruleVariations.scoreChangePayout && (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'equal_split') {
-                              return false;
-                            }
-                            // Standard: Show all 4
-                            return true;
-                          })
-                          .map((card) => {
-                            const percent = squaresPool.payouts[card.period as keyof typeof squaresPool.payouts];
-                            // allow 0% if it's a major prize in Hybrid mode? OR just rely on logic above.
-                            // Existing logic checks if (!percent) return null. 
-                            // In Hybrid, Half/Final have weights in `scoreChangeHybridWeights`, not necessarily `payouts` object (which is for standard).
-                            // We need to ensure we display the correct "Potential Prize" for hybrid cards. 
-                            // Currently `quarterlyPayouts` calculation handles this via `baseAmount`.
 
-                            if (!percent && !(squaresPool as GameState).ruleVariations.scoreChangePayout) return null;
+                      {/* Charity Deduction Line */}
+                      {currentPool.charity?.enabled && (
+                        <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
+                          <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({currentPool.charity.percentage}%)</span>
+                          <span className="font-mono font-bold">
+                            -${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
 
-                            return (
-                              <div key={card.period} className="flex justify-between items-center text-sm">
-                                <span className="text-slate-400 font-bold">{card.label}
-                                  <span className="text-slate-600 font-normal ml-1">
-                                    {(squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'hybrid'
-                                      ? `(${(squaresPool as GameState).ruleVariations.scoreChangeHybridWeights?.[card.period === 'half' ? 'halftime' : 'final'] || 0}%)`
-                                      : `(${percent}%)`}
-                                  </span>
+                      {/* Net Prize Pot */}
+                      <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
+                        <span className="text-white font-bold">Net Prize Pool</span>
+                        <span className="text-emerald-400 font-mono font-bold text-lg">
+                          ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
+                        </span>
+                      </div>
+
+                    </div>
+                    <div className="space-y-1">
+                      {quarterlyPayouts
+                        .filter(card => {
+                          // Hybrid Strategy: Only show Half and Final cards
+                          if ((squaresPool as GameState).ruleVariations.scoreChangePayout && (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
+                            return card.period === 'half' || card.period === 'final';
+                          }
+                          // Equal Split: Hide all fixed period cards (all are event based)
+                          if ((squaresPool as GameState).ruleVariations.scoreChangePayout && (squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'equal_split') {
+                            return false;
+                          }
+                          // Standard: Show all 4
+                          return true;
+                        })
+                        .map((card) => {
+                          const percent = squaresPool.payouts[card.period as keyof typeof squaresPool.payouts];
+                          // allow 0% if it's a major prize in Hybrid mode? OR just rely on logic above.
+                          // Existing logic checks if (!percent) return null. 
+                          // In Hybrid, Half/Final have weights in `scoreChangeHybridWeights`, not necessarily `payouts` object (which is for standard).
+                          // We need to ensure we display the correct "Potential Prize" for hybrid cards. 
+                          // Currently `quarterlyPayouts` calculation handles this via `baseAmount`.
+
+                          if (!percent && !(squaresPool as GameState).ruleVariations.scoreChangePayout) return null;
+
+                          return (
+                            <div key={card.period} className="flex justify-between items-center text-sm">
+                              <span className="text-slate-400 font-bold">{card.label}
+                                <span className="text-slate-600 font-normal ml-1">
+                                  {(squaresPool as GameState).ruleVariations.scoreChangePayoutStrategy === 'hybrid'
+                                    ? `(${(squaresPool as GameState).ruleVariations.scoreChangeHybridWeights?.[card.period === 'half' ? 'halftime' : 'final'] || 0}%)`
+                                    : `(${percent}%)`}
                                 </span>
-                                <div className="flex flex-col items-end">
-                                  <span className="text-white font-mono font-bold">
-                                    ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                                  </span>
-                                  {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
-                                </div>
+                              </span>
+                              <div className="flex flex-col items-end">
+                                <span className="text-white font-mono font-bold">
+                                  ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                </span>
+                                {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
                               </div>
-                            );
-                          })}
-                      </div>
+                            </div>
+                          );
+                        })}
                     </div>
+                  </div>
 
-                  )}
-
-                  {payoutTab === 'win-report' && (
-                    <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full overflow-hidden rounded-lg border border-slate-800">
-                      <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-900/50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
-                          <tr>
-                            <th className="px-4 py-3">Quarter</th>
-                            <th className="px-4 py-3">Winner</th>
-                            <th className="px-4 py-3 text-right">Prize</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800">
-                          {winners.length === 0 ? (
-                            <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-500 italic">No winners yet. Game has not started or no scores accumulated.</td></tr>
-                          ) : (
-                            winners.map((win, idx) => (
-                              <tr key={`${win.period}-${win.squareId}-${idx}`} className="hover:bg-slate-900/30 transition-colors">
-                                <td className="px-4 py-3 font-medium text-slate-300">
-                                  {win.period === 'Event' || win.period === 'Bonus' ? (
-                                    <div className="flex flex-col">
-                                      <span className="text-xs uppercase font-bold text-slate-400">{win.period === 'Bonus' ? 'Bonus' : 'Score Change'}</span>
-                                      <span className="text-[10px] text-slate-500 truncate max-w-[120px]" title={win.description}>{win.description}</span>
-                                    </div>
-                                  ) : (
-                                    PERIOD_LABELS[win.period] || win.period
-                                  )}
-                                </td>
-                                <td className="px-4 py-3">
-                                  {win.isRollover ? (
-                                    <span className="text-emerald-400 font-bold italic flex items-center gap-1">
-                                      <Zap size={12} fill="currentColor" /> {win.owner}
-                                    </span>
-                                  ) : win.owner === 'Unsold' || win.owner === 'Unsold (House)' ? (
-                                    <span className="text-slate-500">{win.owner}</span>
-                                  ) : (
-                                    <span className="text-white font-bold">{win.owner}</span>
-                                  )}
-                                  {win.isReverse && <div className="text-xs text-indigo-400 mt-0.5">Reverse Winner</div>}
-                                </td>
-                                <td className="px-4 py-3 text-right font-mono">
-                                  <div className="flex flex-col items-end">
-                                    <span className="text-emerald-400 font-bold">${win.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            )))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  {/* Win Report Block Removed */}
                 </div>
               </div>
             </div>

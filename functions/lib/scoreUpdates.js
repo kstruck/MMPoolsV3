@@ -174,7 +174,7 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
  * Core logic to update a single pool based on new scores.
  */
 const processGameUpdate = async (transaction, doc, espnScores, actor, overrides) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
     const db = admin.firestore();
     const freshPool = Object.assign(Object.assign({}, doc.data()), overrides);
     if (!espnScores)
@@ -353,10 +353,76 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
         }, transaction);
         await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA, true);
     }
+    // ... (This function is getting large, consider refactoring if it grows more)
     // FINAL WRITE: Update the pool doc itself
     // Must be last if previous steps involve reads (like audit deduping)
     if (shouldUpdate) {
         transaction.update(doc.ref, Object.assign(Object.assign({}, transactionUpdates), { updatedAt: admin.firestore.Timestamp.now() }));
+    }
+    // --- EVERY SCORE PAYS FINALIZATION ---
+    // If the game just went final, we need to calculate the actual $ amount for each event based on the total pot logic
+    if (isGameFinal && ((_q = freshPool.ruleVariations) === null || _q === void 0 ? void 0 : _q.scoreChangePayout)) {
+        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor);
+    }
+};
+// Helper to calculate and backfill amounts for all score events when game is over
+const finalizeEventPayouts = async (transaction, db, poolId, pool, actor) => {
+    // 1. Calculate Pot Logic
+    const soldSquares = pool.squares ? pool.squares.filter((s) => s.owner).length : 0;
+    const totalPot = soldSquares * (pool.costPerSquare || 0);
+    let scoreChangePot = 0;
+    const strategy = pool.ruleVariations.scoreChangePayoutStrategy || 'equal_split';
+    if (strategy === 'equal_split') {
+        // In "Equal Split" mode (as per user req), usually this means 100% of pot goes to scores??
+        // Or is it implied that PayoutConfig is respected?
+        // Game Logic client-side says: "Option A (Equal Split) = 100% of pot is for scores (technically, if not standard 25/25/25/25)"
+        // But let's assume if payouts are defined (e.g. 25/25/25/25), then Equal Split applies to the *Remainder*?
+        // Actually, for "Every Score Pays", usually the *Entire* pot is split by events.
+        // Let's stick to the GameLogic.ts implementation logic to match client validation.
+        // In GameLogic.ts: if equal_split, scoreChangePot = totalPot (and distributable is 0)
+        scoreChangePot = totalPot;
+    }
+    else {
+        // Hybrid
+        const weights = pool.ruleVariations.scoreChangeHybridWeights || { final: 40, halftime: 20, other: 40 };
+        const remainingPct = 100 - weights.final - weights.halftime;
+        scoreChangePot = (totalPot * remainingPct) / 100;
+    }
+    // 2. Filter Valid Events
+    let validEvents = [...(pool.scoreEvents || [])];
+    if (pool.ruleVariations.includeOTInScorePayouts === false) {
+        validEvents = validEvents.filter(e => !e.description.toUpperCase().includes('OT') && !e.description.toUpperCase().includes('OVERTIME'));
+    }
+    // 3. Calculate Amount Per Event
+    const eventCount = validEvents.length;
+    const amountPerEvent = eventCount > 0 ? (scoreChangePot / eventCount) : 0;
+    // 4. Update Winner Docs
+    // We need to find the winner docs corresponding to these events.
+    // The ID format is `event_HOME_AWAY`.
+    // Valid events have unique scores usually, but lets be careful.
+    let updatedCount = 0;
+    for (const ev of validEvents) {
+        const docId = `event_${ev.home}_${ev.away}`;
+        const winnerRef = db.collection('pools').doc(poolId).collection('winners').doc(docId);
+        // We use transaction.set with merge true to update amount
+        transaction.set(winnerRef, { amount: amountPerEvent }, { merge: true });
+        updatedCount++;
+    }
+    // 5. Log Action
+    if (updatedCount > 0) {
+        await (0, audit_1.writeAuditEvent)({
+            poolId: poolId,
+            type: 'WINNER_COMPUTED',
+            message: `Finalized Event Payouts: $${amountPerEvent.toFixed(2)} per event (${updatedCount} events)`,
+            severity: 'INFO',
+            actor: actor,
+            payload: {
+                totalPot,
+                scoreChangePot,
+                eventCount,
+                amountPerEvent
+            }
+        }, transaction);
     }
 };
 exports.syncGameStatus = (0, scheduler_1.onSchedule)({
@@ -498,7 +564,7 @@ exports.fixPoolScores = (0, https_1.onCall)({
         }
         // Run as Transaction to support winners & audit
         await db.runTransaction(async (t) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
             t.update(doc.ref, updates);
             // Construct the "Effective" pool data to use for winner logging
             const effectivePool = Object.assign(Object.assign({}, pool), { scores: Object.assign(Object.assign({}, pool.scores), {
@@ -528,15 +594,21 @@ exports.fixPoolScores = (0, https_1.onCall)({
                 for (const ev of pool.scoreEvents) {
                     const hDigit = getLastDigit(ev.home);
                     const aDigit = getLastDigit(ev.away);
-                    let periodKey = 'q1';
-                    if (ev.description.includes('Q2'))
-                        periodKey = 'q2';
-                    if (ev.description.includes('Q3'))
-                        periodKey = 'q3';
-                    if (ev.description.includes('Q4'))
-                        periodKey = 'q4';
+                    // ... (existing logic to recreate winners if missing) ...
+                    // We can reuse the same logic block here or just trust processGameUpdate logic?
+                    // The block above (lines 621-665 in view) handles *creation* of docs.
+                    // But we also need to set the *Amount* if the game is final.
+                    // Let's ensure the Backfill logic above runs first to create docs (it has amount: 0)
+                    // Then run finalize logic to update amounts.
                     let axis = pool.axisNumbers;
                     if (pool.numberSets === 4 && pool.quarterlyNumbers) {
+                        let periodKey = 'q1';
+                        if (ev.description.includes('Q2'))
+                            periodKey = 'q2';
+                        if (ev.description.includes('Q3'))
+                            periodKey = 'q3';
+                        if (ev.description.includes('Q4'))
+                            periodKey = 'q4';
                         if (periodKey === 'q1' && pool.quarterlyNumbers.q1)
                             axis = pool.quarterlyNumbers.q1;
                         if (periodKey === 'q2' && pool.quarterlyNumbers.q2)
@@ -553,11 +625,13 @@ exports.fixPoolScores = (0, https_1.onCall)({
                             const sqIdx = row * 10 + col;
                             const square = pool.squares[sqIdx];
                             const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
+                            // Don't overwrite if exists, just ensure it's there
+                            // Actually fixPoolScores is forceful.
                             const winnerDoc = {
                                 period: 'Event',
                                 squareId: sqIdx,
                                 owner: winnerName,
-                                amount: 0,
+                                amount: 0, // Will be updated by finalize if Final
                                 homeDigit: hDigit,
                                 awayDigit: aDigit,
                                 isReverse: false,
@@ -567,14 +641,31 @@ exports.fixPoolScores = (0, https_1.onCall)({
                         }
                     }
                 }
+                // NEW: Run Finalize Payouts if Game is Final
+                if (isGameFinal) {
+                    // We need the *fresh* (effective) pool data with the events we just ensured exist
+                    // Since we're in a transaction, writes aren't visible to reads yet typically, 
+                    // but `finalizeEventPayouts` doesn't read *winners*, it only Writes them.
+                    // It Reads `pool.scoreEvents` (from memory) and `pool.ruleVariations`.
+                    await finalizeEventPayouts(t, db, doc.id, effectivePool, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' });
+                }
             }
             // Also log that FIX was run
+            // Also log that FIX was run
+            const eventsCount = ((_k = pool.scoreEvents) === null || _k === void 0 ? void 0 : _k.length) || 0;
+            console.log(`[Fix] Backfilled winners for pool ${doc.id}:`, {
+                q1: !!q1H,
+                half: !!halfH,
+                q3: !!q3H,
+                final: !!finalH,
+                eventWinnersCount: eventsCount
+            });
             await (0, audit_1.writeAuditEvent)({
                 poolId: doc.id,
                 type: 'SCORE_FINALIZED',
                 message: `Manual Score Fix Applied by Admin`,
                 severity: 'WARNING',
-                actor: { uid: ((_k = request.auth) === null || _k === void 0 ? void 0 : _k.uid) || 'admin', role: 'ADMIN', label: 'SuperAdmin Fix' },
+                actor: { uid: ((_l = request.auth) === null || _l === void 0 ? void 0 : _l.uid) || 'admin', role: 'ADMIN', label: 'SuperAdmin Fix' },
                 payload: { updates },
                 dedupeKey: `FIX_SCORES:${doc.id}:${Date.now()}`
             }, t);

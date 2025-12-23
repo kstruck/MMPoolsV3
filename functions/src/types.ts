@@ -139,6 +139,11 @@ export interface GameState {
         reverseWinners: boolean; // Split pot with reverse digits
         quarterlyRollover: boolean; // Unsold squares roll money to next quarter
         scoreChangePayout: boolean; // Pay fixed amount on every score change
+        scoreChangePayoutStrategy?: 'equal_split' | 'hybrid';
+        scoreChangeHybridWeights?: { final: number; halftime: number; other: number };
+        scoreChangeHandleUnsold?: 'rollover_next' | 'house';
+        includeOTInScorePayouts?: boolean;
+        combineTDandXP?: boolean;
     };
     ownerId?: string; // ID of the user who owns this pool
     createdByUid?: string; // Required for RBAC
