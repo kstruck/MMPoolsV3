@@ -193,14 +193,224 @@ const processWinners = async (
                         payload: { period: label, type: 'REVERSE', winner: rWinnerName, squareId: rSqIndex },
                         dedupeKey: `WINNER_REV:${poolId}:${periodKey}:${hDigit}:${aDigit}`
                     }, transaction);
-                    // We don't typically save reverse winner as separate doc in 'winners' collection unless we change schema,
-                    // but usually the main winner doc might need to be an array? 
-                    // For now, MVP assumes 1 main doc. Client might need to query audit log or we just rely on audit.
-                    // Or we can save specific 'reverse' doc?
-                    // Let's stick toAuditLog for reverse for now to avoid breaking schema.
                 }
             }
         }
+    }
+};
+
+/**
+ * Core logic to update a single pool based on new scores.
+ * @param transaction Firestore transaction
+ * @param doc Firestore DocumentSnapshot of the pool
+ * @param espnScores The normalized score object (from ESPN or Simulation)
+ * @param actor The actor performing the update (for audit logs)
+ */
+const processGameUpdate = async (
+    transaction: admin.firestore.Transaction,
+    doc: admin.firestore.DocumentSnapshot,
+    espnScores: any,
+    actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string }
+) => {
+    const db = admin.firestore();
+    const freshPool = doc.data() as GameState;
+
+    if (!espnScores) return;
+
+    const period = espnScores.period;
+    const state = espnScores.gameStatus;
+    const isQ1Final = (period >= 2) || (state === "post");
+    const isHalfFinal = (period >= 3) || (state === "post");
+    const isQ3Final = (period >= 4) || (state === "post");
+    const isGameFinal = (state === "post");
+
+    // Prepare New Scores Object
+    const newScores: any = {
+        ...freshPool.scores,
+        current: espnScores.current,
+        gameStatus: state,
+        period: period,
+        clock: espnScores.clock,
+        startTime: espnScores.startTime || freshPool.scores.startTime
+    };
+
+    if (isQ1Final && !freshPool.scores?.q1) newScores.q1 = espnScores.q1;
+    if (isHalfFinal && !freshPool.scores?.half) newScores.half = espnScores.half;
+    if (isQ3Final && !freshPool.scores?.q3) newScores.q3 = espnScores.q3;
+    if (isGameFinal && !freshPool.scores?.final) newScores.final = freshPool.includeOvertime ? espnScores.apiTotal : espnScores.final;
+
+    let transactionUpdates: any = {};
+    let shouldUpdate = false;
+
+    const currentScoresStr = JSON.stringify(freshPool.scores);
+    const newScoresStr = JSON.stringify(newScores);
+
+    if (currentScoresStr !== newScoresStr) {
+        transactionUpdates.scores = newScores;
+        shouldUpdate = true;
+    }
+
+    // Live Score Update Logging
+    const freshCurrent = freshPool.scores?.current || { home: 0, away: 0 };
+    const newCurrent = espnScores.current || { home: 0, away: 0 };
+
+    // Check if score changed
+    if (freshCurrent.home !== newCurrent.home || freshCurrent.away !== newCurrent.away) {
+        // 1. Log Score Change Audit
+        await writeAuditEvent({
+            poolId: doc.id,
+            type: 'SCORE_FINALIZED',
+            message: `Score Update: ${newCurrent.home}-${newCurrent.away} (${state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th')})`,
+            severity: 'INFO',
+            actor: actor,
+            payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock },
+            dedupeKey: `SCORE:${doc.id}:${newCurrent.home}:${newCurrent.away}`
+        }, transaction);
+
+        // 2. Add to Score History (scoreEvents)
+        const newEvent = {
+            id: db.collection("_").doc().id, // Random ID
+            home: newCurrent.home,
+            away: newCurrent.away,
+            description: `Score Change (${period > 0 ? 'Q' + period : 'Pre'})`,
+            timestamp: Date.now()
+        };
+        transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
+        shouldUpdate = true;
+
+        // 3. Handle "Score Change Payouts" (Event Winners)
+        if (freshPool.ruleVariations?.scoreChangePayout) {
+            const hDigit = getLastDigit(newCurrent.home);
+            const aDigit = getLastDigit(newCurrent.away);
+            const axis = freshPool.axisNumbers;
+
+            if (axis) {
+                const row = axis.away.indexOf(aDigit);
+                const col = axis.home.indexOf(hDigit);
+
+                if (row !== -1 && col !== -1) {
+                    const squareIndex = row * 10 + col;
+                    const square = freshPool.squares[squareIndex];
+                    const winnerName = square?.owner || 'Unsold';
+
+                    await writeAuditEvent({
+                        poolId: doc.id,
+                        type: 'WINNER_COMPUTED',
+                        message: `Event Winner: ${winnerName} (${newCurrent.home}-${newCurrent.away})`,
+                        severity: 'INFO',
+                        actor: actor,
+                        payload: {
+                            period: 'Event',
+                            homeScore: newCurrent.home,
+                            awayScore: newCurrent.away,
+                            homeDigit: hDigit,
+                            awayDigit: aDigit,
+                            winner: winnerName,
+                            squareId: squareIndex
+                        },
+                        dedupeKey: `WINNER_EVENT:${doc.id}:${newCurrent.home}:${newCurrent.away}`
+                    }, transaction);
+
+                    // PERSIST WINNER TO COLLECTION
+                    const winnerDoc: Winner = {
+                        period: 'Event',
+                        squareId: squareIndex,
+                        owner: winnerName,
+                        amount: 0, // Calculated at end of game
+                        homeDigit: hDigit,
+                        awayDigit: aDigit,
+                        isReverse: false,
+                        description: `Score Change (${newCurrent.home}-${newCurrent.away})`
+                    };
+                    transaction.set(
+                        db.collection('pools').doc(doc.id).collection('winners').doc(`event_${newCurrent.home}_${newCurrent.away}`),
+                        winnerDoc
+                    );
+                }
+            }
+        }
+    }
+
+    if (freshPool.numberSets === 4) {
+        let qNums = freshPool.quarterlyNumbers || {};
+        let numsUpdated = false;
+
+        const handleGen = async (pKey: 'q2' | 'q3' | 'q4') => {
+            const newAxis = generateAxisNumbers();
+            qNums[pKey] = newAxis;
+            numsUpdated = true;
+            const digitsHash = computeDigitsHash({ home: newAxis.home, away: newAxis.away, poolId: doc.id, period: pKey });
+            await writeAuditEvent({
+                poolId: doc.id,
+                type: 'DIGITS_GENERATED',
+                message: `${pKey.toUpperCase()} Axis Numbers Generated`,
+                severity: 'INFO',
+                actor: actor,
+                payload: { period: pKey, commitHash: digitsHash },
+                dedupeKey: `DIGITS_GENERATED:${doc.id}:${pKey}:${digitsHash}`
+            }, transaction);
+        };
+
+        if (isQ1Final && !qNums.q2) await handleGen('q2');
+        if (isHalfFinal && !qNums.q3) await handleGen('q3');
+        if (isQ3Final && !qNums.q4) await handleGen('q4');
+
+        if (numsUpdated) {
+            transactionUpdates.quarterlyNumbers = qNums;
+            shouldUpdate = true;
+            if (qNums.q4 && (period >= 4)) transactionUpdates.axisNumbers = qNums.q4;
+            else if (qNums.q3 && (period >= 3)) transactionUpdates.axisNumbers = qNums.q3;
+            else if (qNums.q2 && (period >= 2)) transactionUpdates.axisNumbers = qNums.q2;
+            else if (qNums.q1) transactionUpdates.axisNumbers = qNums.q1;
+        }
+    }
+
+    if (shouldUpdate) {
+        transaction.update(doc.ref, {
+            ...transactionUpdates,
+            updatedAt: admin.firestore.Timestamp.now()
+        });
+    }
+
+    const q1H = newScores.q1?.home; const q1A = newScores.q1?.away;
+    const halfH = newScores.half?.home; const halfA = newScores.half?.away;
+    const q3H = newScores.q3?.home; const q3A = newScores.q3?.away;
+    const finalH = newScores.final?.home; const finalA = newScores.final?.away;
+
+    if (isQ1Final && q1H !== undefined) {
+        await writeAuditEvent({
+            poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q1 Finalized: ${q1H}-${q1A}`, severity: 'INFO',
+            actor: actor, payload: { period: 1, score: { home: q1H, away: q1A } },
+            dedupeKey: `SCORE_FINALIZED:${doc.id}:q1`
+        }, transaction);
+        await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A);
+    }
+
+    if (isHalfFinal && halfH !== undefined) {
+        await writeAuditEvent({
+            poolId: doc.id, type: 'SCORE_FINALIZED', message: `Halftime Finalized: ${halfH}-${halfA}`, severity: 'INFO',
+            actor: actor, payload: { period: 2, score: { home: halfH, away: halfA } },
+            dedupeKey: `SCORE_FINALIZED:${doc.id}:half`
+        }, transaction);
+        await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA);
+    }
+
+    if (isQ3Final && q3H !== undefined) {
+        await writeAuditEvent({
+            poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q3 Finalized: ${q3H}-${q3A}`, severity: 'INFO',
+            actor: actor, payload: { period: 3, score: { home: q3H, away: q3A } },
+            dedupeKey: `SCORE_FINALIZED:${doc.id}:q3`
+        }, transaction);
+        await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A);
+    }
+
+    if (isGameFinal && finalH !== undefined) {
+        await writeAuditEvent({
+            poolId: doc.id, type: 'SCORE_FINALIZED', message: `Game Finalized: ${finalH}-${finalA}`, severity: 'INFO',
+            actor: actor, payload: { period: 4, score: { home: finalH, away: finalA } },
+            dedupeKey: `SCORE_FINALIZED:${doc.id}:final`
+        }, transaction);
+        await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA);
     }
 };
 
@@ -233,208 +443,54 @@ export const syncGameStatus = onSchedule({
         const espnScores = await fetchESPNScores(pool.gameId, (pool as any).league || 'nfl');
         if (!espnScores) continue;
 
-        const period = espnScores.period;
-        const state = espnScores.gameStatus;
-        const isQ1Final = (period >= 2) || (state === "post");
-        const isHalfFinal = (period >= 3) || (state === "post");
-        const isQ3Final = (period >= 4) || (state === "post");
-        const isGameFinal = (state === "post");
-
-        const newScores: any = {
-            ...pool.scores,
-            current: espnScores.current,
-            gameStatus: state,
-            period: period,
-            clock: espnScores.clock,
-            startTime: espnScores.startTime
-        };
-
-        if (isQ1Final && !pool.scores?.q1) newScores.q1 = espnScores.q1;
-        if (isHalfFinal && !pool.scores?.half) newScores.half = espnScores.half;
-        if (isQ3Final && !pool.scores?.q3) newScores.q3 = espnScores.q3;
-        if (isGameFinal && !pool.scores?.final) newScores.final = pool.includeOvertime ? espnScores.apiTotal : espnScores.final;
-
         await db.runTransaction(async (transaction) => {
             const freshDoc = await transaction.get(doc.ref);
             if (!freshDoc.exists) return;
-            const freshPool = freshDoc.data() as GameState;
-
-            let transactionUpdates: any = {};
-            let shouldUpdate = false;
-
-            const currentScoresStr = JSON.stringify(freshPool.scores);
-            const newScoresStr = JSON.stringify(newScores);
-
-            if (currentScoresStr !== newScoresStr) {
-                transactionUpdates.scores = newScores;
-                shouldUpdate = true;
-            }
-
-            // Live Score Update Logging
-            // If the CURRENT score (e.g. 7-0) has changed from DB, log it. 
-            // This happens inside transaction, so we check freshPool vs espnScores.current
-            const freshCurrent = freshPool.scores?.current || { home: 0, away: 0 };
-            const newCurrent = espnScores.current || { home: 0, away: 0 };
-
-            if (freshCurrent.home !== newCurrent.home || freshCurrent.away !== newCurrent.away) {
-                // 1. Log Score Change Audit
-                await writeAuditEvent({
-                    poolId: doc.id,
-                    type: 'SCORE_FINALIZED',
-                    message: `Score Update: ${newCurrent.home}-${newCurrent.away} (${state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th')})`,
-                    severity: 'INFO',
-                    actor: { uid: 'system', role: 'SYSTEM' },
-                    payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock },
-                    dedupeKey: `SCORE:${doc.id}:${newCurrent.home}:${newCurrent.away}`
-                }, transaction);
-
-                // 2. Add to Score History (scoreEvents)
-                const newEvent = {
-                    id: admin.firestore().collection("_").doc().id, // Random ID
-                    home: newCurrent.home,
-                    away: newCurrent.away,
-                    description: `Score Change (${period > 0 ? 'Q' + period : 'Pre'})`,
-                    timestamp: Date.now()
-                };
-                transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
-                shouldUpdate = true;
-
-                // 3. Handle "Score Change Payouts" (Event Winners)
-                if (freshPool.ruleVariations?.scoreChangePayout) {
-                    const hDigit = getLastDigit(newCurrent.home);
-                    const aDigit = getLastDigit(newCurrent.away);
-                    const axis = freshPool.axisNumbers;
-
-                    if (axis) {
-                        const row = axis.away.indexOf(aDigit);
-                        const col = axis.home.indexOf(hDigit);
-
-                        if (row !== -1 && col !== -1) {
-                            const squareIndex = row * 10 + col;
-                            const square = freshPool.squares[squareIndex];
-                            const winnerName = square?.owner || 'Unsold';
-
-                            await writeAuditEvent({
-                                poolId: doc.id,
-                                type: 'WINNER_COMPUTED',
-                                message: `Event Winner: ${winnerName} (${newCurrent.home}-${newCurrent.away})`,
-                                severity: 'INFO',
-                                actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
-                                payload: {
-                                    period: 'Event',
-                                    homeScore: newCurrent.home,
-                                    awayScore: newCurrent.away,
-                                    homeDigit: hDigit,
-                                    awayDigit: aDigit,
-                                    winner: winnerName,
-                                    squareId: squareIndex
-                                },
-                                dedupeKey: `WINNER_EVENT:${doc.id}:${newCurrent.home}:${newCurrent.away}`
-                            }, transaction);
-
-                            // PERSIST WINNER TO COLLECTION
-                            const winnerDoc: Winner = {
-                                period: 'Event',
-                                squareId: squareIndex,
-                                owner: winnerName,
-                                amount: 0, // Calculated at end of game
-                                homeDigit: hDigit,
-                                awayDigit: aDigit,
-                                isReverse: false,
-                                description: `Score Change (${newCurrent.home}-${newCurrent.away})`
-                            };
-                            transaction.set(
-                                db.collection('pools').doc(doc.id).collection('winners').doc(`event_${newCurrent.home}_${newCurrent.away}`),
-                                winnerDoc
-                            );
-                        }
-                    }
-                }
-            }
-
-            if (freshPool.numberSets === 4) {
-                let qNums = freshPool.quarterlyNumbers || {};
-                let numsUpdated = false;
-
-                const handleGen = async (pKey: 'q2' | 'q3' | 'q4') => {
-                    const newAxis = generateAxisNumbers();
-                    qNums[pKey] = newAxis;
-                    numsUpdated = true;
-                    const digitsHash = computeDigitsHash({ home: newAxis.home, away: newAxis.away, poolId: doc.id, period: pKey });
-                    await writeAuditEvent({
-                        poolId: doc.id,
-                        type: 'DIGITS_GENERATED',
-                        message: `${pKey.toUpperCase()} Axis Numbers Generated`,
-                        severity: 'INFO',
-                        actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
-                        payload: { period: pKey, commitHash: digitsHash },
-                        dedupeKey: `DIGITS_GENERATED:${doc.id}:${pKey}:${digitsHash}`
-                    }, transaction);
-                };
-
-                if (isQ1Final && !qNums.q2) await handleGen('q2');
-                if (isHalfFinal && !qNums.q3) await handleGen('q3');
-                if (isQ3Final && !qNums.q4) await handleGen('q4');
-
-                if (numsUpdated) {
-                    transactionUpdates.quarterlyNumbers = qNums;
-                    shouldUpdate = true;
-                    if (qNums.q4 && (period >= 4)) transactionUpdates.axisNumbers = qNums.q4;
-                    else if (qNums.q3 && (period >= 3)) transactionUpdates.axisNumbers = qNums.q3;
-                    else if (qNums.q2 && (period >= 2)) transactionUpdates.axisNumbers = qNums.q2;
-                    else if (qNums.q1) transactionUpdates.axisNumbers = qNums.q1;
-                }
-            }
-
-            if (shouldUpdate) {
-                transaction.update(doc.ref, {
-                    ...transactionUpdates,
-                    updatedAt: admin.firestore.Timestamp.now()
-                });
-            }
-
-            const q1H = newScores.q1?.home; const q1A = newScores.q1?.away;
-            const halfH = newScores.half?.home; const halfA = newScores.half?.away;
-            const q3H = newScores.q3?.home; const q3A = newScores.q3?.away;
-            const finalH = newScores.final?.home; const finalA = newScores.final?.away;
-
-            if (isQ1Final && q1H !== undefined) {
-                await writeAuditEvent({
-                    poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q1 Finalized: ${q1H}-${q1A}`, severity: 'INFO',
-                    actor: { uid: 'system', role: 'SYSTEM' }, payload: { period: 1, score: { home: q1H, away: q1A } },
-                    dedupeKey: `SCORE_FINALIZED:${doc.id}:q1`
-                }, transaction);
-                await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A);
-            }
-
-            if (isHalfFinal && halfH !== undefined) {
-                await writeAuditEvent({
-                    poolId: doc.id, type: 'SCORE_FINALIZED', message: `Halftime Finalized: ${halfH}-${halfA}`, severity: 'INFO',
-                    actor: { uid: 'system', role: 'SYSTEM' }, payload: { period: 2, score: { home: halfH, away: halfA } },
-                    dedupeKey: `SCORE_FINALIZED:${doc.id}:half`
-                }, transaction);
-                await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA);
-            }
-
-            if (isQ3Final && q3H !== undefined) {
-                await writeAuditEvent({
-                    poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q3 Finalized: ${q3H}-${q3A}`, severity: 'INFO',
-                    actor: { uid: 'system', role: 'SYSTEM' }, payload: { period: 3, score: { home: q3H, away: q3A } },
-                    dedupeKey: `SCORE_FINALIZED:${doc.id}:q3`
-                }, transaction);
-                await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A);
-            }
-
-            if (isGameFinal && finalH !== undefined) {
-                await writeAuditEvent({
-                    poolId: doc.id, type: 'SCORE_FINALIZED', message: `Game Finalized: ${finalH}-${finalA}`, severity: 'INFO',
-                    actor: { uid: 'system', role: 'SYSTEM' }, payload: { period: 4, score: { home: finalH, away: finalA } },
-                    dedupeKey: `SCORE_FINALIZED:${doc.id}:final`
-                }, transaction);
-                await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA);
-            }
+            // Use shared logic
+            await processGameUpdate(
+                transaction,
+                freshDoc,
+                espnScores,
+                { uid: 'system', role: 'SYSTEM' }
+            );
         });
     }
+});
+
+// Callable to simulate a game update for testing
+export const simulateGameUpdate = onCall({
+    timeoutSeconds: 60,
+    memory: "256MiB"
+}, async (request) => {
+    // Only allow super admin
+    if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
+        throw new HttpsError('permission-denied', 'Only super admin can simulate');
+    }
+
+    const { poolId, scores } = request.data;
+    if (!poolId || !scores) {
+        throw new HttpsError('invalid-argument', 'Missing poolId or scores');
+    }
+
+    const db = admin.firestore();
+    const poolRef = db.collection('pools').doc(poolId);
+
+    await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(poolRef);
+        if (!doc.exists) throw new HttpsError('not-found', 'Pool not found');
+
+        // Log simulation start
+        console.log(`Simulating update for pool ${poolId} with scores:`, scores);
+
+        await processGameUpdate(
+            transaction,
+            doc,
+            scores,
+            { uid: request.auth?.uid || 'admin', role: 'ADMIN', label: 'Simulation' }
+        );
+    });
+
+    return { success: true, message: 'Simulation Applied' };
 });
 
 // One-time callable function to fix corrupted pool scores AND run winner logic
@@ -498,13 +554,6 @@ export const fixPoolScores = onCall({
 
         // Run as Transaction to support winners & audit
         await db.runTransaction(async (t) => {
-            // We need to fetch it within transaction? 
-            // Ideally yes, but for 'fix' we can just use the outer doc if we are confident,
-            // BUT processWinners takes 'poolData'. 
-            // Let's just use 'pool' (from outside) + 'updates' merged. 
-            // Be careful: processWinners looks at poolData.squares. 
-
-            // Update the doc via simple update first? No, transaction requirements.
             t.update(doc.ref, updates);
 
             // Construct the "Effective" pool data to use for winner logging
@@ -530,30 +579,12 @@ export const fixPoolScores = onCall({
             if (isQ3Final && q3H !== undefined) await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
             if (isGameFinal && finalH !== undefined) await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
 
-
             // BACKFILL EVENT WINNERS
             if (pool.ruleVariations?.scoreChangePayout && pool.scoreEvents) {
-                // Determine Axis per quarter if needed, but for MVP assume no quarter-rotation for event winners or use q4 for everything?
-                // The issue description implies "none of the score changes counted". 
-                // We should match the axis logic.
-                // Assuming standard axis for now or checking quarterback rotation.
-                // NOTE: 'pool.axisNumbers' might change per quarter if rotation is on.
-                // That makes backfilling hard if we don't know WHICH set was active.
-                // However, the `scoreEvents` has a timestamp.
-                // Or we can just use the current 'effectivePool' state which might be post-game.
-                // If the user used rotating numbers, backfilling events from Q1 using Q4 numbers would be wrong.
-                // For this fix, let's assume standard numbers OR just use what's in 'pool.axisNumbers' which is usually Q1?
-                // Wait, `transactionUpdates.axisNumbers` updates it.
-                // If `numberSets === 4`, `pool.axisNumbers` holds the *current* ones.
-                // Ideally, we'd check `pool.quarterlyNumbers`.
-
-                // Let's implement a best-effort backfill using quarterlyNumbers if available.
-
                 for (const ev of pool.scoreEvents) {
                     const hDigit = getLastDigit(ev.home);
                     const aDigit = getLastDigit(ev.away);
 
-                    // Deduce Period from description "Score Change (Q2)"
                     let periodKey: 'q1' | 'q2' | 'q3' | 'q4' = 'q1';
                     if (ev.description.includes('Q2')) periodKey = 'q2';
                     if (ev.description.includes('Q3')) periodKey = 'q3';
@@ -594,7 +625,6 @@ export const fixPoolScores = onCall({
                     }
                 }
             }
-
 
             // Also log that FIX was run
             await writeAuditEvent({

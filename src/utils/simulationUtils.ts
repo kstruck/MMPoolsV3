@@ -114,6 +114,73 @@ export async function simulateRound(year: number) {
 }
 
 
+import { functions } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+
 export async function resetTournament(year: number) {
     await seedTestTournament(year);
+}
+
+/**
+ * Trigger a robust server-side simulation of a game update (for Squares pools etc.)
+ */
+
+export async function simulatePoolGame(poolId: string, scores: any) {
+    const simulateStats = httpsCallable(functions, 'simulateGameUpdate');
+    await simulateStats({ poolId, scores });
+}
+
+/**
+ * Fills the grid with dummy users, leaving a specified number of blank squares.
+ */
+export async function fillGridWithBlanks(poolId: string, blanksToLeave: number) {
+    const poolRef = doc(db, 'pools', poolId);
+    const snap = await getDoc(poolRef);
+    if (!snap.exists()) throw new Error("Pool not found");
+    const pool = snap.data();
+
+    // 1. Identify empty squares
+    let squares = [...(pool.squares || [])];
+
+    // Ensure 100 squares exist
+    if (squares.length < 100) {
+        squares = Array(100).fill(null).map((_, i) => ({ id: i, owner: null }));
+    }
+
+    const currentFilled = squares.filter((s: any) => s.owner).length;
+    const currentEmptyIndices = squares
+        .map((s: any, i: number) => s.owner ? -1 : i)
+        .filter((i: number) => i !== -1);
+
+    const targetFilled = 100 - blanksToLeave;
+    const needed = targetFilled - currentFilled;
+
+    if (needed <= 0) {
+        return `Grid already has ${currentFilled} filled. Target was ${targetFilled} (leaving ${blanksToLeave} blank). No action taken.`;
+    }
+
+    // 2. Shuffle indices to fill randomly
+    const indicesToFill = [...currentEmptyIndices];
+    for (let i = indicesToFill.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indicesToFill[i], indicesToFill[j]] = [indicesToFill[j], indicesToFill[i]];
+    }
+
+    // 3. Fill needed amount
+    const selectedIndices = indicesToFill.slice(0, needed);
+    const dummyNames = ["Abe", "Barb", "Carl", "Deb", "Ed", "Fran", "Gil", "Hal", "Ivy", "Jon", "Ken", "Liz", "Mac", "Nan", "Pat", "Ron", "Sam", "Val", "Wes", "Zoe"];
+
+    selectedIndices.forEach((idx, i) => {
+        const randomName = dummyNames[Math.floor(Math.random() * dummyNames.length)];
+        squares[idx] = {
+            id: idx,
+            owner: `${randomName}-${Math.floor(Math.random() * 999)}`, // Unique-ish name
+            isPaid: true,
+            timestamp: Date.now()
+        };
+    });
+
+    // 4. Update
+    await updateDoc(poolRef, { squares });
+    return `Filled ${selectedIndices.length} squares. Grid now has ${100 - blanksToLeave} filled.`;
 }

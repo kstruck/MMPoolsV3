@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
+import { SimulationDashboard } from './SimulationDashboard';
 import type { GameState, Pool, User, SystemSettings } from '../types';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle } from 'lucide-react';
+
 
 export const SuperAdmin: React.FC = () => {
     const [pools, setPools] = useState<Pool[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [usersLoading, setUsersLoading] = useState(true);
+    const [showSimDashboard, setShowSimDashboard] = useState(false);
 
     // User Edit State
+
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [viewingUser, setViewingUser] = useState<User | null>(null);
     const [editName, setEditName] = useState('');
@@ -74,116 +78,137 @@ export const SuperAdmin: React.FC = () => {
         if (!confirmSim) return;
 
         try {
-            const updates: any = {};
-            const scores = { ...pool.scores };
-
-            // Helper to generate digits
-            const genDigits = () => {
-                const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-                for (let i = nums.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [nums[i], nums[j]] = [nums[j], nums[i]];
-                }
-                return nums;
+            const { simulatePoolGame } = await import('../utils/simulationUtils');
+            const scores = {
+                current: { home: 0, away: 0 },
+                ...pool.scores
             };
-            const genAxis = () => ({ home: genDigits(), away: genDigits() });
 
             // State Machine Logic
+            // We construct the "Next" ESPN-like score object
+            let nextState: any = { ...scores };
+            let actionDescription = "";
+
             if (!pool.isLocked) {
-                // 1. Lock Pool & Init
-                updates.isLocked = true;
-                updates.lockGrid = true;
+                // Special case: Lock is a pool property, not score.
+                // We can just update it locally or via existing updatePool
+                await dbService.updatePool(pool.id, {
+                    isLocked: true,
+                    lockGrid: true,
+                    'scores.gameStatus': 'pre',
+                    'scores.startTime': new Date().toISOString()
+                } as any);
+                alert('Sim: Pool Locked. Open Sim again to start Game.');
+                return;
+            }
 
-                // Init Numbers
-                const baseAxis = pool.axisNumbers || genAxis();
-                updates.axisNumbers = baseAxis;
-
-                if (pool.numberSets === 4) {
-                    updates.quarterlyNumbers = {
-                        q1: baseAxis
-                    };
-                }
-
-                updates['scores.gameStatus'] = 'pre';
-                updates['scores.startTime'] = new Date().toISOString();
-                alert('Sim: Pool Locked. Open Sim again to start Q1.');
-            } else if (scores.gameStatus === 'pre') {
-                // 2. Start Game -> Q1 IN
-                updates['scores.gameStatus'] = 'in';
-                updates['scores.period'] = 1;
-                updates['scores.clock'] = '15:00';
-                updates['scores.current'] = { home: 0, away: 0 };
-                alert('Sim: Game Started (Q1).');
+            if (scores.gameStatus === 'pre') {
+                // Start Game -> Q1 0-0
+                nextState.gameStatus = 'in';
+                nextState.period = 1;
+                nextState.clock = '15:00';
+                nextState.current = { home: 0, away: 0 };
+                actionDescription = "Start Game (Q1 0-0)";
             } else if (scores.gameStatus === 'in') {
                 const p = scores.period || 1;
+                const h = scores.current?.home || 0;
+                const a = scores.current?.away || 0;
 
                 if (p === 1) {
-                    // Q1 -> Q2
-                    updates['scores.period'] = 2;
-                    updates['scores.clock'] = '15:00';
-                    updates['scores.q1'] = { home: 7, away: 3 }; // Sim Score
-                    updates['scores.current'] = { home: 7, away: 3 };
-
-                    // 4-Sets Logic
-                    if (pool.numberSets === 4) {
-                        const q2 = genAxis();
-                        updates['quarterlyNumbers.q2'] = q2;
-                        updates.axisNumbers = q2; // Update active numbers
+                    if (h === 0 && a === 0) {
+                        nextState.current = { home: 7, away: 0 };
+                        nextState.clock = '10:00';
+                        actionDescription = "Score Change: Home 7, Away 0";
+                    } else if (h === 7 && a === 0) {
+                        nextState.current = { home: 7, away: 3 };
+                        nextState.clock = '5:00';
+                        actionDescription = "Score Change: Home 7, Away 3";
+                    } else {
+                        // End Q1
+                        nextState.period = 2;
+                        nextState.clock = '15:00';
+                        nextState.q1 = { home: 7, away: 3 }; // Delta/Cumulative same for Q1
+                        nextState.current = { home: 7, away: 3 };
+                        actionDescription = "End Q1";
                     }
-                    alert('Sim: End of Q1.');
                 } else if (p === 2) {
-                    // Q2 -> Half -> Q3
-                    updates['scores.period'] = 3;
-                    updates['scores.clock'] = '15:00';
-                    updates['scores.half'] = { home: 14, away: 10 };
-                    updates['scores.current'] = { home: 14, away: 10 };
-
-                    if (pool.numberSets === 4) {
-                        const q3 = genAxis();
-                        updates['quarterlyNumbers.q3'] = q3;
-                        updates.axisNumbers = q3;
+                    if (h === 7 && a === 3) {
+                        nextState.current = { home: 14, away: 3 };
+                        nextState.clock = '10:00';
+                        actionDescription = "Score Change: Home 14, Away 3";
+                    } else if (h === 14 && a === 3) {
+                        nextState.current = { home: 14, away: 10 };
+                        nextState.clock = '2:00';
+                        actionDescription = "Score Change: Home 14, Away 10";
+                    } else {
+                        // End Half
+                        nextState.period = 3;
+                        nextState.clock = '15:00';
+                        nextState.half = { home: 14, away: 10 };
+                        nextState.current = { home: 14, away: 10 };
+                        actionDescription = "End Halftime";
                     }
-                    alert('Sim: Halftime Complete.');
                 } else if (p === 3) {
-                    // Q3 -> Q4
-                    updates['scores.period'] = 4;
-                    updates['scores.clock'] = '15:00';
-                    updates['scores.q3'] = { home: 21, away: 17 };
-                    updates['scores.current'] = { home: 21, away: 17 };
-
-                    if (pool.numberSets === 4) {
-                        const q4 = genAxis();
-                        updates['quarterlyNumbers.q4'] = q4;
-                        updates.axisNumbers = q4;
+                    if (h === 14) {
+                        nextState.current = { home: 21, away: 10 };
+                        nextState.clock = '8:00';
+                        actionDescription = "Score Change: Home 21, Away 10";
+                    } else if (a === 10) {
+                        nextState.current = { home: 21, away: 17 };
+                        nextState.clock = '4:00';
+                        actionDescription = "Score Change: Home 21, Away 17";
+                    } else {
+                        // End Q3
+                        nextState.period = 4;
+                        nextState.clock = '15:00';
+                        nextState.q3 = { home: 21, away: 17 };
+                        nextState.current = { home: 21, away: 17 };
+                        actionDescription = "End Q3";
                     }
-                    alert('Sim: End of Q3.');
                 } else if (p === 4) {
-                    // Q4 -> Final
-                    updates['scores.gameStatus'] = 'post';
-                    updates['scores.period'] = 4;
-                    updates['scores.clock'] = '0:00';
-                    updates['scores.final'] = { home: 24, away: 20 };
-                    updates['scores.current'] = { home: 24, away: 20 };
-                    alert('Sim: Game Over.');
+                    if (h === 21) {
+                        nextState.current = { home: 24, away: 17 };
+                        nextState.clock = '5:00';
+                        actionDescription = "Score Change: Home 24, Away 17";
+                    } else if (a === 17) {
+                        nextState.current = { home: 24, away: 20 };
+                        nextState.clock = '1:00';
+                        actionDescription = "Score Change: Home 24, Away 20";
+                    } else {
+                        // Final
+                        nextState.gameStatus = 'post';
+                        nextState.clock = '0:00';
+                        nextState.final = { home: 24, away: 20 };
+                        nextState.apiTotal = { home: 24, away: 20 }; // For ESPN compat
+                        nextState.current = { home: 24, away: 20 };
+                        actionDescription = "Game Final";
+                    }
                 }
             } else if (scores.gameStatus === 'post') {
                 // Reset
-                updates.isLocked = false;
-                updates.lockGrid = false;
-                updates.scores = {
-                    current: null, q1: null, half: null, q3: null, final: null, gameStatus: 'pre'
-                };
-                updates.axisNumbers = null;
-                if (pool.numberSets === 4) updates.quarterlyNumbers = null;
-                alert('Sim: Reset Complete.');
+                if (confirm('Reset Pool to Pre-Game?')) {
+                    await dbService.updatePool(pool.id, {
+                        isLocked: false,
+                        lockGrid: false,
+                        scores: { current: null, q1: null, half: null, q3: null, final: null, gameStatus: 'pre' },
+                        axisNumbers: null,
+                        quarterlyNumbers: null
+                    } as any);
+                    alert('Pool Reset');
+                    return;
+                }
+                return;
             }
 
-            if (Object.keys(updates).length > 0) {
-                await dbService.updatePool(pool.id, updates);
+            if (actionDescription) {
+                // Call Cloud Function
+                await simulatePoolGame(pool.id, nextState);
+                alert(`Simulated: ${actionDescription}`);
             }
-        } catch (e) {
+
+        } catch (e: any) {
             console.error(e);
-            alert('Sim Failed');
+            alert('Sim Failed: ' + e.message);
         }
     };
 
@@ -294,14 +319,22 @@ export const SuperAdmin: React.FC = () => {
                                 🔧 Fix Pool Scores
                             </button>
                         </div>
+
                         <div className="bg-slate-800/50 p-6 rounded-xl border border-indigo-500/30 backdrop-blur-sm">
                             <h3 className="text-indigo-400 text-xs font-bold uppercase mb-2 tracking-wider flex items-center gap-2"><Users size={14} /> Referrals</h3>
                             <p className="text-4xl font-bold text-indigo-400">{users.reduce((sum, u) => sum + (u.referralCount || 0), 0)}</p>
                             <p className="text-xs text-slate-500 mt-1">
                                 {users.filter(u => u.referredBy).length} referred users
                             </p>
+                            <button
+                                onClick={() => setShowSimDashboard(true)}
+                                className="mt-3 w-full bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded transition-colors font-bold text-xs"
+                            >
+                                Open Sim Dashboard
+                            </button>
                         </div>
                     </div>
+
 
                     {/* Quick Stats by Sport */}
                     <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-8">
@@ -975,8 +1008,11 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                )
-            }
+
+            {showSimDashboard && (
+                <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />
+            )}
         </div >
     );
 };
+
