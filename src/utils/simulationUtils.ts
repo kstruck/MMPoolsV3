@@ -170,7 +170,7 @@ export async function fillGridWithBlanks(poolId: string, blanksToLeave: number) 
     const selectedIndices = indicesToFill.slice(0, needed);
     const dummyNames = ["Abe", "Barb", "Carl", "Deb", "Ed", "Fran", "Gil", "Hal", "Ivy", "Jon", "Ken", "Liz", "Mac", "Nan", "Pat", "Ron", "Sam", "Val", "Wes", "Zoe"];
 
-    selectedIndices.forEach((idx, i) => {
+    selectedIndices.forEach((idx) => {
         const randomName = dummyNames[Math.floor(Math.random() * dummyNames.length)];
         squares[idx] = {
             id: idx,
