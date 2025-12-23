@@ -284,12 +284,12 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                             <button onClick={() => runSimStep('RESET')} className="bg-slate-700 hover:bg-slate-600 p-3 rounded font-bold text-slate-300">Reset</button>
 
                             <div className="col-span-2 text-xs text-slate-500 font-bold uppercase mt-2">Score Events</div>
-                            <button onClick={() => runSimStep('HOME+7')} className="bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold">Home TD (+7)</button>
-                            <button onClick={() => runSimStep('AWAY+7')} className="bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold">Away TD (+7)</button>
-                            <button onClick={() => runSimStep('HOME+3')} className="bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold">Home FG (+3)</button>
-                            <button onClick={() => runSimStep('AWAY+3')} className="bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold">Away FG (+3)</button>
-                            <button onClick={() => runSimStep('HOME+2')} className="bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold">Home 2-Pt (+2)</button>
-                            <button onClick={() => runSimStep('AWAY+2')} className="bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold">Away 2-Pt (+2)</button>
+                            <button onClick={() => runSimStep('HOME+7')} className="w-full bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold transition-all">Home TD (+7)</button>
+                            <button onClick={() => runSimStep('AWAY+7')} className="w-full bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold transition-all">Away TD (+7)</button>
+                            <button onClick={() => runSimStep('HOME+3')} className="w-full bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold transition-all">Home FG (+3)</button>
+                            <button onClick={() => runSimStep('AWAY+3')} className="w-full bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold transition-all">Away FG (+3)</button>
+                            <button onClick={() => runSimStep('HOME+2')} className="w-full bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold transition-all">Home 2-Pt (+2)</button>
+                            <button onClick={() => runSimStep('AWAY+2')} className="w-full bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold transition-all">Away 2-Pt (+2)</button>
 
                             <div className="col-span-2 text-xs text-slate-500 font-bold uppercase mt-2">Progresion</div>
                             <button onClick={() => runSimStep('END_Q1')} className="bg-slate-700 hover:bg-slate-600 p-2 rounded font-bold text-white">End Q1</button>
