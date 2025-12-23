@@ -80,8 +80,8 @@ export const SuperAdmin: React.FC = () => {
         try {
             const { simulatePoolGame } = await import('../utils/simulationUtils');
             const scores = {
-                current: { home: 0, away: 0 },
-                ...pool.scores
+                ...pool.scores,
+                current: pool.scores.current || { home: 0, away: 0 }
             };
 
             // State Machine Logic
@@ -1008,6 +1008,8 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
                     </div>
+                )
+            }
 
             {showSimDashboard && (
                 <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />

@@ -1240,7 +1240,7 @@ const App: React.FC = () => {
 
                       {/* NEW: Score Change Rule Explanation */}
                       {squaresPool.ruleVariations.scoreChangePayout && (
-                        <div className="bg-slate-900 border border-emerald-500/30 rounded-full p-3 text-sm">
+                        <div className="bg-slate-900 border border-emerald-500/30 rounded-xl p-3 text-sm">
                           <h4 className="text-emerald-400 font-bold uppercase text-xs mb-1 flex items-center gap-1">
                             <Trophy size={12} /> Every Score Pays Rule
                           </h4>
@@ -1262,17 +1262,25 @@ const App: React.FC = () => {
                       )}
 
                       <div>
-                        <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Unclaimed Rules:</h3>
-                        <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left">
-                          {currentPool.ruleVariations.quarterlyRollover ? (
-                            <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
-                              <Zap size={12} className="fill-emerald-400" /> Rollover Active
+                        <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Active Rules:</h3>
+                        <div className="flex flex-col gap-2 items-start">
+                          <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left">
+                            {currentPool.ruleVariations.quarterlyRollover ? (
+                              <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+                                <Zap size={12} className="fill-emerald-400" /> Rollover Active
+                              </div>
+                            ) : (
+                              <div className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold">Standard Payouts</div>
+                            )}
+                            <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
+                          </button>
+
+                          {currentPool.ruleVariations.reverseWinners && (
+                            <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
+                              <Zap size={12} className="fill-indigo-400" /> Reverse Winners Active
                             </div>
-                          ) : (
-                            <div className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold">Standard</div>
                           )}
-                          <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
-                        </button>
+                        </div>
                       </div>
                     </div>
                   )}
