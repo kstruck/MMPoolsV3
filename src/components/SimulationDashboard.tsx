@@ -4,7 +4,7 @@ import { dbService } from '../services/dbService';
 import { simulatePoolGame, fillGridWithBlanks } from '../utils/simulationUtils';
 import { AuditLogViewer } from './AuditLogViewer';
 import type { GameState, Pool } from '../types';
-import { RefreshCw, Play, Settings, Users, Activity } from 'lucide-react';
+import { Play, Settings, Users, Activity } from 'lucide-react';
 
 interface SimulationDashboardProps {
     pools: Pool[];
