@@ -131,7 +131,8 @@ const processWinners = async (
     poolData: GameState,
     periodKey: 'q1' | 'half' | 'q3' | 'final',
     homeScore: number,
-    awayScore: number
+    awayScore: number,
+    skipDedupe: boolean = false
 ) => {
     // Safety check for axis numbers
     if (!poolData.axisNumbers || !poolData.axisNumbers.home || !poolData.axisNumbers.away) return;
@@ -168,7 +169,7 @@ const processWinners = async (
                 severity: 'INFO',
                 actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
                 payload: { period: label, homeScore, awayScore, homeDigit: hDigit, awayDigit: aDigit, winner: winnerName, squareId: squareIndex, amount },
-                dedupeKey: `WINNER:${poolId}:${periodKey}:${hDigit}:${aDigit}`
+                ...(skipDedupe ? {} : { dedupeKey: `WINNER:${poolId}:${periodKey}:${hDigit}:${aDigit}` })
             }, transaction);
 
             const winnerDoc: Winner = {
@@ -202,7 +203,7 @@ const processWinners = async (
                         severity: 'INFO',
                         actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
                         payload: { period: label, type: 'REVERSE', winner: rWinnerName, squareId: rSqIndex, amount: amount },
-                        dedupeKey: `WINNER_REV:${poolId}:${periodKey}:${hDigit}:${aDigit}`
+                        ...(skipDedupe ? {} : { dedupeKey: `WINNER_REV:${poolId}:${periodKey}:${hDigit}:${aDigit}` })
                     }, transaction);
                 }
             }
@@ -270,8 +271,8 @@ const processGameUpdate = async (
             message: `Score Update: ${newCurrent.home}-${newCurrent.away} (${state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th')})`,
             severity: 'INFO',
             actor: actor,
-            payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock },
-            dedupeKey: `SCORE:${doc.id}:${newCurrent.home}:${newCurrent.away}`
+            payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
 
         // 2. Add to Score History (scoreEvents)
@@ -314,8 +315,8 @@ const processGameUpdate = async (
                             awayDigit: aDigit,
                             winner: winnerName,
                             squareId: squareIndex
-                        },
-                        dedupeKey: `WINNER_EVENT:${doc.id}:${newCurrent.home}:${newCurrent.away}`
+                        }
+                        // Dedupe skipped to prevent Read-After-Write error
                     }, transaction);
 
                     // PERSIST WINNER TO COLLECTION
@@ -353,8 +354,8 @@ const processGameUpdate = async (
                 message: `${pKey.toUpperCase()} Axis Numbers Generated`,
                 severity: 'INFO',
                 actor: actor,
-                payload: { period: pKey, commitHash: digitsHash },
-                dedupeKey: `DIGITS_GENERATED:${doc.id}:${pKey}:${digitsHash}`
+                payload: { period: pKey, commitHash: digitsHash }
+                // Dedupe skipped to prevent Read-After-Write error
             }, transaction);
         };
 
@@ -380,37 +381,37 @@ const processGameUpdate = async (
     if (isQ1Final && q1H !== undefined) {
         await writeAuditEvent({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q1 Finalized: ${q1H}-${q1A}`, severity: 'INFO',
-            actor: actor, payload: { period: 1, score: { home: q1H, away: q1A } },
-            dedupeKey: `SCORE_FINALIZED:${doc.id}:q1`
+            actor: actor, payload: { period: 1, score: { home: q1H, away: q1A } }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A);
+        await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A, true);
     }
 
     if (isHalfFinal && halfH !== undefined) {
         await writeAuditEvent({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Halftime Finalized: ${halfH}-${halfA}`, severity: 'INFO',
-            actor: actor, payload: { period: 2, score: { home: halfH, away: halfA } },
-            dedupeKey: `SCORE_FINALIZED:${doc.id}:half`
+            actor: actor, payload: { period: 2, score: { home: halfH, away: halfA } }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA);
+        await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA, true);
     }
 
     if (isQ3Final && q3H !== undefined) {
         await writeAuditEvent({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q3 Finalized: ${q3H}-${q3A}`, severity: 'INFO',
-            actor: actor, payload: { period: 3, score: { home: q3H, away: q3A } },
-            dedupeKey: `SCORE_FINALIZED:${doc.id}:q3`
+            actor: actor, payload: { period: 3, score: { home: q3H, away: q3A } }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A);
+        await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A, true);
     }
 
     if (isGameFinal && finalH !== undefined) {
         await writeAuditEvent({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Game Finalized: ${finalH}-${finalA}`, severity: 'INFO',
-            actor: actor, payload: { period: 4, score: { home: finalH, away: finalA } },
-            dedupeKey: `SCORE_FINALIZED:${doc.id}:final`
+            actor: actor, payload: { period: 4, score: { home: finalH, away: finalA } }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA);
+        await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA, true);
     }
 
     // FINAL WRITE: Update the pool doc itself
