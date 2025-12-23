@@ -245,7 +245,11 @@ const processGameUpdate = async (
     if (isQ1Final && !freshPool.scores?.q1) newScores.q1 = espnScores.q1;
     if (isHalfFinal && !freshPool.scores?.half) newScores.half = espnScores.half;
     if (isQ3Final && !freshPool.scores?.q3) newScores.q3 = espnScores.q3;
-    if (isGameFinal && !freshPool.scores?.final) newScores.final = freshPool.includeOvertime ? espnScores.apiTotal : espnScores.final;
+    if (isGameFinal && !freshPool.scores?.final) {
+        newScores.final = (freshPool.includeOvertime && espnScores.apiTotal !== undefined)
+            ? espnScores.apiTotal
+            : (espnScores.final || espnScores.current);
+    }
 
     let transactionUpdates: any = {};
     let shouldUpdate = false;
