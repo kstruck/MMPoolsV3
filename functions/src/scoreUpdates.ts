@@ -218,10 +218,11 @@ const processGameUpdate = async (
     transaction: admin.firestore.Transaction,
     doc: admin.firestore.DocumentSnapshot,
     espnScores: any,
-    actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string }
+    actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string },
+    overrides?: Partial<GameState>
 ) => {
     const db = admin.firestore();
-    const freshPool = doc.data() as GameState;
+    const freshPool = { ...doc.data() as GameState, ...overrides };
 
     if (!espnScores) return;
 
@@ -494,14 +495,32 @@ export const simulateGameUpdate = onCall({
             const doc = await transaction.get(poolRef);
             if (!doc.exists) throw new HttpsError('not-found', 'Pool not found');
 
-            // Log simulation start
-            console.log(`[Sim] Updating pool ${poolId} with scores:`, scores);
+            // Ensure Axis Numbers Exist during Simulation
+            let overrides: Partial<GameState> = {};
+            const poolData = doc.data() as GameState;
+            if (!poolData.axisNumbers) {
+                const newAxis = generateAxisNumbers();
+                console.log(`[Sim] Generating missing Axis Numbers for pool ${poolId}`);
+                transaction.update(poolRef, { axisNumbers: newAxis });
+                overrides.axisNumbers = newAxis;
+
+                await writeAuditEvent({
+                    poolId: doc.id,
+                    type: 'DIGITS_GENERATED',
+                    message: `Axis Numbers Auto-Generated for Simulation`,
+                    severity: 'INFO',
+                    actor: { uid: request.auth?.uid || 'admin', role: 'ADMIN', label: 'Sim Auto-Gen' },
+                    payload: { axis: newAxis }
+                    // Dedupe skipped to prevent Read-After-Write error
+                }, transaction);
+            }
 
             await processGameUpdate(
                 transaction,
                 doc,
                 scores,
-                { uid: request.auth?.uid || 'admin', role: 'ADMIN', label: 'Simulation' }
+                { uid: request.auth?.uid || 'admin', role: 'ADMIN', label: 'Simulation' },
+                overrides
             );
         });
 
