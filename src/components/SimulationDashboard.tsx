@@ -1,10 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '../firebase';
 import { dbService } from '../services/dbService';
 import { simulatePoolGame, fillGridWithBlanks } from '../utils/simulationUtils';
 import { AuditLogViewer } from './AuditLogViewer';
-import type { GameState, Pool } from '../types';
-import { Play, Settings, Users, Activity } from 'lucide-react';
+import type { GameState, Pool, Winner, Square } from '../types';
+import { Play, Settings, Users, Activity, Trophy } from 'lucide-react';
 
 interface SimulationDashboardProps {
     pools: Pool[];
@@ -17,6 +18,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
     const [blanksToLeave, setBlanksToLeave] = useState(5);
     const [simStatus, setSimStatus] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
+    const [winners, setWinners] = useState<Winner[]>([]);
 
     // Filter for Football squares pools only
     const validPools = pools.filter(p => p.type !== 'BRACKET');
@@ -25,8 +27,17 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
         if (selectedPoolId) {
             const pool = pools.find(p => p.id === selectedPoolId) as GameState;
             setSelectedPool(pool || null);
+
+            // Subscribe to Winners
+            const q = query(collection(db, 'pools', selectedPoolId, 'winners'));
+            const unsub = onSnapshot(q, (snap) => {
+                const wins = snap.docs.map(d => d.data() as Winner);
+                setWinners(wins);
+            });
+            return () => unsub();
         } else {
             setSelectedPool(null);
+            setWinners([]);
         }
     }, [selectedPoolId, pools]);
 
@@ -73,12 +84,21 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                 nextState.current = { home: h + 7, away: a };
                 nextState.clock = '10:00';
                 break;
-            case 'AWAY+3':
-                nextState.current = { home: h, away: a + 3 };
-                nextState.clock = '8:00';
+            case 'AWAY+7':
+                nextState.current = { home: h, away: a + 7 };
+                nextState.clock = '9:00';
                 break;
             case 'HOME+3':
                 nextState.current = { home: h + 3, away: a };
+                break;
+            case 'AWAY+3':
+                nextState.current = { home: h, away: a + 3 };
+                break;
+            case 'HOME+2':
+                nextState.current = { home: h + 2, away: a };
+                break;
+            case 'AWAY+2':
+                nextState.current = { home: h, away: a + 2 };
                 break;
             case 'END_Q1':
                 nextState.period = 2;
@@ -114,7 +134,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                 <div className="max-w-4xl mx-auto">
                     <div className="flex justify-between items-center mb-8">
                         <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                            <Activity className="text-emerald-500" /> Simulation Dashboard
+                            <Activity className="text-emerald-500" /> Simulation Dashboard <span className="text-xs bg-slate-800 text-emerald-400 px-2 py-0.5 rounded-full">v2.1</span>
                         </h1>
                         <button onClick={onClose} className="text-slate-400 hover:text-white font-bold">Close</button>
                     </div>
@@ -131,7 +151,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                                     <div className="font-bold text-white group-hover:text-emerald-400">{p.name}</div>
                                     <div className="text-xs text-slate-500 font-mono mt-1">{p.id}</div>
                                     <div className="text-xs text-slate-400 mt-2">
-                                        {(p as GameState).squares.filter(s => s.owner).length}/100 Filled • {(p as GameState).isLocked ? 'LOCKED' : 'OPEN'}
+                                        {(p as GameState).squares.filter((s: Square) => s.owner).length}/100 Filled • {(p as GameState).isLocked ? 'LOCKED' : 'OPEN'}
                                     </div>
                                 </button>
                             ))}
@@ -265,8 +285,11 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
 
                             <div className="col-span-2 text-xs text-slate-500 font-bold uppercase mt-2">Score Events</div>
                             <button onClick={() => runSimStep('HOME+7')} className="bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold">Home TD (+7)</button>
-                            <button onClick={() => runSimStep('AWAY+3')} className="bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold">Away FG (+3)</button>
+                            <button onClick={() => runSimStep('AWAY+7')} className="bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold">Away TD (+7)</button>
                             <button onClick={() => runSimStep('HOME+3')} className="bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold">Home FG (+3)</button>
+                            <button onClick={() => runSimStep('AWAY+3')} className="bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold">Away FG (+3)</button>
+                            <button onClick={() => runSimStep('HOME+2')} className="bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold">Home 2-Pt (+2)</button>
+                            <button onClick={() => runSimStep('AWAY+2')} className="bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold">Away 2-Pt (+2)</button>
 
                             <div className="col-span-2 text-xs text-slate-500 font-bold uppercase mt-2">Progresion</div>
                             <button onClick={() => runSimStep('END_Q1')} className="bg-slate-700 hover:bg-slate-600 p-2 rounded font-bold text-white">End Q1</button>
@@ -284,9 +307,20 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                     {/* Mini Winners Table */}
                     <div className="mt-4 bg-slate-900 border border-slate-800 rounded-xl p-4 flex-1 flex flex-col min-h-[200px]">
                         <h3 className="text-sm font-bold text-slate-400 uppercase mb-2 flex items-center gap-2"><Trophy size={16} /> Calculated Winners</h3>
-                        <div className="overflow-y-auto flex-1 text-xs">
-                            {/* Placeholder: ideally we fetch winners subcollection, but for now we rely on Audit Logs to confirm success */}
-                            <div className="text-slate-500 italic p-2">Check Audit Log for 'WINNER_COMPUTED' events.</div>
+                        <div className="overflow-y-auto flex-1 text-xs space-y-2">
+                            {winners.length === 0 && <div className="text-slate-500 italic p-2 text-center">No winners computed yet.</div>}
+                            {winners.map((w, i) => (
+                                <div key={i} className="bg-slate-800 p-2 rounded border border-slate-700/50 flex justify-between items-center hover:bg-slate-700 transition">
+                                    <div>
+                                        <div className="font-bold text-emerald-400">{w.owner}</div>
+                                        <div className="text-[10px] text-slate-400">{w.description || w.period} • {w.homeDigit}-{w.awayDigit}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="font-bold text-white">${w.amount}</div>
+                                        {w.isReverse && <div className="text-[10px] text-indigo-400">Reverse</div>}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -296,4 +330,3 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
     );
 };
 
-import { Trophy } from 'lucide-react';
