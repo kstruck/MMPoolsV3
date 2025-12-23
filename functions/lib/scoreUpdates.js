@@ -117,7 +117,7 @@ async function fetchESPNScores(gameId, league) {
     }
 }
 // Helper to handle winner logging and computation (Shared between sync and fix)
-const processWinners = async (transaction, db, poolId, poolData, periodKey, homeScore, awayScore) => {
+const processWinners = async (transaction, db, poolId, poolData, periodKey, homeScore, awayScore, skipDedupe = false) => {
     var _a, _b;
     // Safety check for axis numbers
     if (!poolData.axisNumbers || !poolData.axisNumbers.home || !poolData.axisNumbers.away)
@@ -141,15 +141,7 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
             const squareIndex = row * 10 + col;
             const square = poolData.squares[squareIndex];
             const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
-            await (0, audit_1.writeAuditEvent)({
-                poolId: poolId,
-                type: 'WINNER_COMPUTED',
-                message: `${label} Winner: ${winnerName} (Home ${hDigit}, Away ${aDigit})`,
-                severity: 'INFO',
-                actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
-                payload: { period: label, homeScore, awayScore, homeDigit: hDigit, awayDigit: aDigit, winner: winnerName, squareId: squareIndex, amount },
-                dedupeKey: `WINNER:${poolId}:${periodKey}:${hDigit}:${aDigit}`
-            }, transaction);
+            await (0, audit_1.writeAuditEvent)(Object.assign({ poolId: poolId, type: 'WINNER_COMPUTED', message: `${label} Winner: ${winnerName} (Home ${hDigit}, Away ${aDigit})`, severity: 'INFO', actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' }, payload: { period: label, homeScore, awayScore, homeDigit: hDigit, awayDigit: aDigit, winner: winnerName, squareId: squareIndex, amount } }, (skipDedupe ? {} : { dedupeKey: `WINNER:${poolId}:${periodKey}:${hDigit}:${aDigit}` })), transaction);
             const winnerDoc = {
                 period: periodKey,
                 squareId: squareIndex,
@@ -172,15 +164,7 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
                 if (rSqIndex !== regularIndex) {
                     const rSquare = poolData.squares[rSqIndex];
                     const rWinnerName = (rSquare === null || rSquare === void 0 ? void 0 : rSquare.owner) || 'Unsold';
-                    await (0, audit_1.writeAuditEvent)({
-                        poolId: poolId,
-                        type: 'WINNER_COMPUTED',
-                        message: `${label} Reverse Winner: ${rWinnerName}`,
-                        severity: 'INFO',
-                        actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
-                        payload: { period: label, type: 'REVERSE', winner: rWinnerName, squareId: rSqIndex, amount: amount },
-                        dedupeKey: `WINNER_REV:${poolId}:${periodKey}:${hDigit}:${aDigit}`
-                    }, transaction);
+                    await (0, audit_1.writeAuditEvent)(Object.assign({ poolId: poolId, type: 'WINNER_COMPUTED', message: `${label} Reverse Winner: ${rWinnerName}`, severity: 'INFO', actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' }, payload: { period: label, type: 'REVERSE', winner: rWinnerName, squareId: rSqIndex, amount: amount } }, (skipDedupe ? {} : { dedupeKey: `WINNER_REV:${poolId}:${periodKey}:${hDigit}:${aDigit}` })), transaction);
                 }
             }
         }
@@ -189,10 +173,10 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
 /**
  * Core logic to update a single pool based on new scores.
  */
-const processGameUpdate = async (transaction, doc, espnScores, actor) => {
+const processGameUpdate = async (transaction, doc, espnScores, actor, overrides) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
     const db = admin.firestore();
-    const freshPool = doc.data();
+    const freshPool = Object.assign(Object.assign({}, doc.data()), overrides);
     if (!espnScores)
         return;
     const period = espnScores.period;
@@ -209,8 +193,11 @@ const processGameUpdate = async (transaction, doc, espnScores, actor) => {
         newScores.half = espnScores.half;
     if (isQ3Final && !((_c = freshPool.scores) === null || _c === void 0 ? void 0 : _c.q3))
         newScores.q3 = espnScores.q3;
-    if (isGameFinal && !((_d = freshPool.scores) === null || _d === void 0 ? void 0 : _d.final))
-        newScores.final = freshPool.includeOvertime ? espnScores.apiTotal : espnScores.final;
+    if (isGameFinal && !((_d = freshPool.scores) === null || _d === void 0 ? void 0 : _d.final)) {
+        newScores.final = (freshPool.includeOvertime && espnScores.apiTotal !== undefined)
+            ? espnScores.apiTotal
+            : (espnScores.final || espnScores.current);
+    }
     let transactionUpdates = {};
     let shouldUpdate = false;
     const currentScoresStr = JSON.stringify(freshPool.scores);
@@ -231,8 +218,8 @@ const processGameUpdate = async (transaction, doc, espnScores, actor) => {
             message: `Score Update: ${newCurrent.home}-${newCurrent.away} (${state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th')})`,
             severity: 'INFO',
             actor: actor,
-            payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock },
-            dedupeKey: `SCORE:${doc.id}:${newCurrent.home}:${newCurrent.away}`
+            payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock || "0:00" }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
         // 2. Add to Score History (scoreEvents)
         const newEvent = {
@@ -270,8 +257,8 @@ const processGameUpdate = async (transaction, doc, espnScores, actor) => {
                             awayDigit: aDigit,
                             winner: winnerName,
                             squareId: squareIndex
-                        },
-                        dedupeKey: `WINNER_EVENT:${doc.id}:${newCurrent.home}:${newCurrent.away}`
+                        }
+                        // Dedupe skipped to prevent Read-After-Write error
                     }, transaction);
                     // PERSIST WINNER TO COLLECTION
                     const winnerDoc = {
@@ -303,8 +290,8 @@ const processGameUpdate = async (transaction, doc, espnScores, actor) => {
                 message: `${pKey.toUpperCase()} Axis Numbers Generated`,
                 severity: 'INFO',
                 actor: actor,
-                payload: { period: pKey, commitHash: digitsHash },
-                dedupeKey: `DIGITS_GENERATED:${doc.id}:${pKey}:${digitsHash}`
+                payload: { period: pKey, commitHash: digitsHash }
+                // Dedupe skipped to prevent Read-After-Write error
             }, transaction);
         };
         if (isQ1Final && !qNums.q2)
@@ -337,34 +324,34 @@ const processGameUpdate = async (transaction, doc, espnScores, actor) => {
     if (isQ1Final && q1H !== undefined) {
         await (0, audit_1.writeAuditEvent)({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q1 Finalized: ${q1H}-${q1A}`, severity: 'INFO',
-            actor: actor, payload: { period: 1, score: { home: q1H, away: q1A } },
-            dedupeKey: `SCORE_FINALIZED:${doc.id}:q1`
+            actor: actor, payload: { period: 1, score: { home: q1H, away: q1A } }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A);
+        await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A, true);
     }
     if (isHalfFinal && halfH !== undefined) {
         await (0, audit_1.writeAuditEvent)({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Halftime Finalized: ${halfH}-${halfA}`, severity: 'INFO',
-            actor: actor, payload: { period: 2, score: { home: halfH, away: halfA } },
-            dedupeKey: `SCORE_FINALIZED:${doc.id}:half`
+            actor: actor, payload: { period: 2, score: { home: halfH, away: halfA } }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA);
+        await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA, true);
     }
     if (isQ3Final && q3H !== undefined) {
         await (0, audit_1.writeAuditEvent)({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q3 Finalized: ${q3H}-${q3A}`, severity: 'INFO',
-            actor: actor, payload: { period: 3, score: { home: q3H, away: q3A } },
-            dedupeKey: `SCORE_FINALIZED:${doc.id}:q3`
+            actor: actor, payload: { period: 3, score: { home: q3H, away: q3A } }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A);
+        await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A, true);
     }
     if (isGameFinal && finalH !== undefined) {
         await (0, audit_1.writeAuditEvent)({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Game Finalized: ${finalH}-${finalA}`, severity: 'INFO',
-            actor: actor, payload: { period: 4, score: { home: finalH, away: finalA } },
-            dedupeKey: `SCORE_FINALIZED:${doc.id}:final`
+            actor: actor, payload: { period: 4, score: { home: finalH, away: finalA } }
+            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA);
+        await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA, true);
     }
     // FINAL WRITE: Update the pool doc itself
     // Must be last if previous steps involve reads (like audit deduping)
@@ -425,13 +412,29 @@ exports.simulateGameUpdate = (0, https_1.onCall)({
     const poolRef = db.collection('pools').doc(poolId);
     try {
         await db.runTransaction(async (transaction) => {
-            var _a;
+            var _a, _b;
             const doc = await transaction.get(poolRef);
             if (!doc.exists)
                 throw new https_1.HttpsError('not-found', 'Pool not found');
-            // Log simulation start
-            console.log(`[Sim] Updating pool ${poolId} with scores:`, scores);
-            await processGameUpdate(transaction, doc, scores, { uid: ((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) || 'admin', role: 'ADMIN', label: 'Simulation' });
+            // Ensure Axis Numbers Exist during Simulation
+            let overrides = {};
+            const poolData = doc.data();
+            if (!poolData.axisNumbers) {
+                const newAxis = generateAxisNumbers();
+                console.log(`[Sim] Generating missing Axis Numbers for pool ${poolId}`);
+                transaction.update(poolRef, { axisNumbers: newAxis });
+                overrides.axisNumbers = newAxis;
+                await (0, audit_1.writeAuditEvent)({
+                    poolId: doc.id,
+                    type: 'DIGITS_GENERATED',
+                    message: `Axis Numbers Auto-Generated for Simulation`,
+                    severity: 'INFO',
+                    actor: { uid: ((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) || 'admin', role: 'ADMIN', label: 'Sim Auto-Gen' },
+                    payload: { axis: newAxis }
+                    // Dedupe skipped to prevent Read-After-Write error
+                }, transaction);
+            }
+            await processGameUpdate(transaction, doc, scores, { uid: ((_b = request.auth) === null || _b === void 0 ? void 0 : _b.uid) || 'admin', role: 'ADMIN', label: 'Simulation' }, overrides);
         });
         return { success: true, message: 'Simulation Applied' };
     }

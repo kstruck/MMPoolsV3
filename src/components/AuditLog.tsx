@@ -32,7 +32,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
         // Basic query - specific filters can be complex with Firestore, doing client-side filter for now if low volume,
         // or simple 'in' queries if volume is high. For MVPs, client side filter of last 100 events is usually okay.
         // Let's try to query mostly everything sorted by time.
-        const q = query(auditRef, orderBy('createdAt', 'desc'), limit(100));
+        const q = query(auditRef, orderBy('timestamp', 'desc'), limit(100));
 
         const unsubscribe = onSnapshot(q, (snap) => {
             const evts: AuditLogEvent[] = [];

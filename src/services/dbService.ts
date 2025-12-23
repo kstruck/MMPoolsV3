@@ -183,6 +183,18 @@ export const dbService = {
         });
     },
 
+    // Winners Subcollection Listener
+    subscribeToWinners: (poolId: string, callback: (winners: any[]) => void) => {
+        const q = query(collection(db, "pools", poolId, "winners"));
+        return onSnapshot(q, (snapshot) => {
+            const winners = snapshot.docs.map(doc => doc.data());
+            callback(winners);
+        }, (error) => {
+            console.error("Error subscribing to winners:", error);
+            callback([]);
+        });
+    },
+
     // --- USERS ---
     saveUser: async (user: User) => {
         try {

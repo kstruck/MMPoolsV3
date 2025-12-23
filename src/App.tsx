@@ -9,7 +9,7 @@ import { BracketPoolDashboard } from './components/BracketPoolDashboard/BracketP
 
 import { createNewPool, getTeamLogo, PERIOD_LABELS } from './constants';
 import type { GameState, Scores, PlayerDetails, User, Pool } from './types';
-import { calculateWinners, calculateScenarioWinners, getLastDigit } from './services/gameLogic';
+import { calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
@@ -413,10 +413,18 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [user, currentPool?.id, (currentPool as GameState)?.scores?.final]); // Simplified dependency array to avoid deep access issues
 
-  const winners = useMemo(() => {
-    if (!currentPool || currentPool.type === 'BRACKET') return [];
-    return calculateWinners(currentPool as GameState);
-  }, [currentPool]);
+  // Fetch Winners from Subcollection (Authoritative)
+  const [winners, setWinners] = useState<any[]>([]);
+  useEffect(() => {
+    if (!currentPool || currentPool.type === 'BRACKET') {
+      setWinners([]);
+      return;
+    }
+    const unsub = dbService.subscribeToWinners(currentPool.id, (wins) => {
+      setWinners(wins);
+    });
+    return () => unsub();
+  }, [currentPool?.id]);
 
   // Calculate isManager once
   const isManager = useMemo(() => {
@@ -677,7 +685,19 @@ const App: React.FC = () => {
       let reverseWinnerName: string | null = null;
       let hasWinner = false;
 
-      if (squaresPool.axisNumbers) {
+      // Check for Official Winner (Backend Authoritative)
+      const officialWinner = winners.find(w => w.prizeType === ((period === 'final' || period === 'half') ? period.toUpperCase() : period.toUpperCase()) || w.period === period);
+      // specific check for period keys matching prizeType/period
+
+      if (officialWinner) {
+        winnerName = officialWinner.owner;
+        hasWinner = true;
+        // Check for reverse in winners list? 
+        // Backend stores reverse winners as separate docs usually? Or same doc?
+        // If separate, we need to find it.
+        // For now, let's keep local projected logic as it renders consistently,
+        // BUT if official winner says "Unsold" or specific name, use it.
+      } else if (squaresPool.axisNumbers) {
         const hD = getLastDigit(home);
         const aD = getLastDigit(away);
         // Standard Winner
@@ -698,17 +718,17 @@ const App: React.FC = () => {
 
         // Reverse Winner
         if (squaresPool.ruleVariations.reverseWinners && hasWinner) {
-          const row = squaresPool.axisNumbers.away.indexOf(aD); // Re-calc these for clarity
+          // ... keep existing reverse logic ...
+          // Re-calc for reverse
+          const row = squaresPool.axisNumbers.away.indexOf(aD);
           const col = squaresPool.axisNumbers.home.indexOf(hD);
-          const rRow = squaresPool.axisNumbers.away.indexOf(hD); // Swap digits
+          const rRow = squaresPool.axisNumbers.away.indexOf(hD);
           const rCol = squaresPool.axisNumbers.home.indexOf(aD);
           if (rRow !== -1 && rCol !== -1) {
             const rSqId = rRow * 10 + rCol;
-            if (rSqId !== (row * 10 + col)) { // Distinct square
+            if (rSqId !== (row * 10 + col)) {
               const rOwner = squaresPool.squares[rSqId].owner;
-              if (rOwner) reverseWinnerName = rOwner; // Reverse winner must be owned? Or also unsold? Usually reverse implies bonus for owner.
-              // Let's assume if nobody owns reverse square, no reverse prize awarded, it stays in main pot or ignored?
-              // For simplicity, let's only set reverseWinnerName if owned.
+              if (rOwner) reverseWinnerName = rOwner;
             }
           }
         }
@@ -741,7 +761,7 @@ const App: React.FC = () => {
         isRollover
       };
     });
-  }, [currentPool]);
+  }, [currentPool, winners]);
 
   // Calculate Total Charity
   const totalCharity = useMemo(() => {
