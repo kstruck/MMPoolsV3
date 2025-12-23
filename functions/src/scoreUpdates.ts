@@ -330,8 +330,23 @@ export const syncGameStatus = onSchedule({
                                     squareId: squareIndex
                                 },
                                 dedupeKey: `WINNER_EVENT:${doc.id}:${newCurrent.home}:${newCurrent.away}`
-                                // Note: Amount logic omitted here as it's complex and computed on client/final payout
                             }, transaction);
+
+                            // PERSIST WINNER TO COLLECTION
+                            const winnerDoc: Winner = {
+                                period: 'Event',
+                                squareId: squareIndex,
+                                owner: winnerName,
+                                amount: 0, // Calculated at end of game
+                                homeDigit: hDigit,
+                                awayDigit: aDigit,
+                                isReverse: false,
+                                description: `Score Change (${newCurrent.home}-${newCurrent.away})`
+                            };
+                            transaction.set(
+                                db.collection('pools').doc(doc.id).collection('winners').doc(`event_${newCurrent.home}_${newCurrent.away}`),
+                                winnerDoc
+                            );
                         }
                     }
                 }
@@ -514,6 +529,72 @@ export const fixPoolScores = onCall({
             if (isHalfFinal && halfH !== undefined) await processWinners(t, db, doc.id, effectivePool, 'half', halfH, halfA);
             if (isQ3Final && q3H !== undefined) await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
             if (isGameFinal && finalH !== undefined) await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
+
+
+            // BACKFILL EVENT WINNERS
+            if (pool.ruleVariations?.scoreChangePayout && pool.scoreEvents) {
+                // Determine Axis per quarter if needed, but for MVP assume no quarter-rotation for event winners or use q4 for everything?
+                // The issue description implies "none of the score changes counted". 
+                // We should match the axis logic.
+                // Assuming standard axis for now or checking quarterback rotation.
+                // NOTE: 'pool.axisNumbers' might change per quarter if rotation is on.
+                // That makes backfilling hard if we don't know WHICH set was active.
+                // However, the `scoreEvents` has a timestamp.
+                // Or we can just use the current 'effectivePool' state which might be post-game.
+                // If the user used rotating numbers, backfilling events from Q1 using Q4 numbers would be wrong.
+                // For this fix, let's assume standard numbers OR just use what's in 'pool.axisNumbers' which is usually Q1?
+                // Wait, `transactionUpdates.axisNumbers` updates it.
+                // If `numberSets === 4`, `pool.axisNumbers` holds the *current* ones.
+                // Ideally, we'd check `pool.quarterlyNumbers`.
+
+                // Let's implement a best-effort backfill using quarterlyNumbers if available.
+
+                for (const ev of pool.scoreEvents) {
+                    const hDigit = getLastDigit(ev.home);
+                    const aDigit = getLastDigit(ev.away);
+
+                    // Deduce Period from description "Score Change (Q2)"
+                    let periodKey: 'q1' | 'q2' | 'q3' | 'q4' = 'q1';
+                    if (ev.description.includes('Q2')) periodKey = 'q2';
+                    if (ev.description.includes('Q3')) periodKey = 'q3';
+                    if (ev.description.includes('Q4')) periodKey = 'q4';
+
+                    let axis = pool.axisNumbers;
+                    if (pool.numberSets === 4 && pool.quarterlyNumbers) {
+                        if (periodKey === 'q1' && pool.quarterlyNumbers.q1) axis = pool.quarterlyNumbers.q1;
+                        if (periodKey === 'q2' && pool.quarterlyNumbers.q2) axis = pool.quarterlyNumbers.q2;
+                        if (periodKey === 'q3' && pool.quarterlyNumbers.q3) axis = pool.quarterlyNumbers.q3;
+                        if (periodKey === 'q4' && pool.quarterlyNumbers.q4) axis = pool.quarterlyNumbers.q4;
+                    }
+
+                    if (axis) {
+                        const row = axis.away.indexOf(aDigit);
+                        const col = axis.home.indexOf(hDigit);
+
+                        if (row !== -1 && col !== -1) {
+                            const sqIdx = row * 10 + col;
+                            const square = pool.squares[sqIdx];
+                            const winnerName = square?.owner || 'Unsold';
+
+                            const winnerDoc: Winner = {
+                                period: 'Event',
+                                squareId: sqIdx,
+                                owner: winnerName,
+                                amount: 0,
+                                homeDigit: hDigit,
+                                awayDigit: aDigit,
+                                isReverse: false,
+                                description: `Score Change (${ev.home}-${ev.away})`
+                            };
+                            t.set(
+                                db.collection('pools').doc(doc.id).collection('winners').doc(`event_${ev.home}_${ev.away}`),
+                                winnerDoc
+                            );
+                        }
+                    }
+                }
+            }
+
 
             // Also log that FIX was run
             await writeAuditEvent({
