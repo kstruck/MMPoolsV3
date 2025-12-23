@@ -42,6 +42,13 @@ service cloud.firestore {
       // NO CREATE via Client (Must use createPool function)
       allow create: if false;
 
+      // WINNERS (Subcollection)
+      // Read: Everyone (Publicly visible results)
+      match /winners/{winnerId} {
+        allow read: if true;
+        allow write: if false; // Only via Cloud Functions
+      }
+
       // PARTICIPANTS INDEX (Subcollection)
       // Read: Pool Owner OR The Participant themselves OR SuperAdmin
       match /participants/{participantId} {

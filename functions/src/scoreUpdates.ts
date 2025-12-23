@@ -276,7 +276,7 @@ const processGameUpdate = async (
             message: `Score Update: ${newCurrent.home}-${newCurrent.away} (${state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th')})`,
             severity: 'INFO',
             actor: actor,
-            payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock }
+            payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock || "0:00" }
             // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
 
