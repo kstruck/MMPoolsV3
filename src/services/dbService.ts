@@ -254,10 +254,10 @@ export const dbService = {
         }
     },
 
-    fixPoolScores: async (): Promise<any> => {
+    fixPoolScores: async (poolId?: string): Promise<any> => {
         try {
             const fn = httpsCallable(functions, 'fixPoolScores');
-            const result = await fn();
+            const result = await fn({ poolId });
             return result.data;
         } catch (error) {
             console.error("Error fixing pool scores:", error);
