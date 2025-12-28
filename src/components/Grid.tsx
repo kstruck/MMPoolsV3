@@ -476,7 +476,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          )}
 
          {/* --- SECTION 2: GRID HEADER (TEAMS) --- */}
-         <div className="w-full bg-slate-900 p-4 rounded-t-xl border border-slate-800 flex flex-wrap justify-between items-center gap-4 shadow-lg relative z-10">
+         <div className="w-full max-w-[80vh] mx-auto bg-slate-900 p-4 rounded-t-xl border border-slate-800 flex flex-wrap justify-between items-center gap-4 shadow-lg relative z-10">
             <div className="flex items-center gap-3 bg-gradient-to-r from-indigo-900/40 to-slate-900 px-4 py-2 rounded-lg border border-indigo-500/30 shadow-inner">
                {awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain drop-shadow" />}
                <div className="flex flex-col">
@@ -517,8 +517,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          </div>
 
          {/* --- SECTION 3: THE GRID --- */}
-         <div className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-hidden w-full border-x border-b border-slate-800">
-            <div className="w-full max-w-3xl mx-auto">
+         <div className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-hidden w-full max-w-[80vh] mx-auto border-x border-b border-slate-800">
+            <div className="w-full">
                {/* Grid Container - 11x11 layout */}
                <div className="grid grid-cols-11 gap-0.5 sm:gap-1 select-none">
 
