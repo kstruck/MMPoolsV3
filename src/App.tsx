@@ -551,7 +551,7 @@ const App: React.FC = () => {
     // Ideally, we use a Firestore Trigger for email sending to ensure it only happens on successful DB write.
     // For this migration, I will keep the existing client-side email logic but ensure it runs AFTER await.
 
-    const squaresInitials = ids.map(id => `#${id} (${normalizedName})`);
+
 
     console.log('[App] Processing Square Claim. Config:', {
       emailSetting: currentPool.emailConfirmation,
@@ -565,11 +565,16 @@ const App: React.FC = () => {
         console.log('[App] Service imported. Sending confirmation...');
         emailService.sendConfirmation(
           currentPool.name,
-          squaresInitials,
+          ids.map(id => ({ id, cost: (currentPool as GameState).costPerSquare })),
           details.email!,
           normalizedName,
-          (currentPool as GameState).contactEmail,
           currentPool.id,
+          {
+            ruleVariations: (currentPool as GameState).ruleVariations,
+            charity: (currentPool as GameState).charity,
+            costPerSquare: (currentPool as GameState).costPerSquare,
+            payouts: (currentPool as GameState).payouts
+          },
           ownerId, // Pool owner's referral code
           squaresPool.paymentHandles // Add payment handles
         ).then((res) => console.log('[App] Email Service Response:', res))
@@ -1377,7 +1382,7 @@ const App: React.FC = () => {
 
               {/* Payout Structure Card - Updated Logic */}
               <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
-                <div className="flex border-b border-slate-800 bg-slate-900/50 px-6 py-4">
+                <div className="flex border-b border-slate-800 bg-slate-900 px-6 py-4">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-white">Payout Structure</h3>
                 </div>
 
@@ -1507,7 +1512,7 @@ const App: React.FC = () => {
               </div>
 
               {/* Away Team Row */}
-              <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center mb-3 bg-slate-900/50 p-4 rounded-lg border border-slate-800/50">
+              <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center mb-3 bg-slate-900 p-4 rounded-lg border border-slate-800/50">
                 <div className="col-span-2 text-left pl-2 flex items-center gap-3">
                   {awayLogo ? <img src={awayLogo} className="w-10 h-10 object-contain drop-shadow-md" /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{squaresPool.awayTeam.charAt(0)}</div>}
                   <span className="text-lg">{squaresPool.awayTeam}</span>
@@ -1520,7 +1525,7 @@ const App: React.FC = () => {
               </div>
 
               {/* Home Team Row */}
-              <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center bg-slate-900/50 p-4 rounded-lg border border-slate-800/50">
+              <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center bg-slate-900 p-4 rounded-lg border border-slate-800/50">
                 <div className="col-span-2 text-left pl-2 flex items-center gap-3">
                   {homeLogo ? <img src={homeLogo} className="w-10 h-10 object-contain drop-shadow-md" /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{squaresPool.homeTeam.charAt(0)}</div>}
                   <span className="text-lg">{squaresPool.homeTeam}</span>
@@ -1571,11 +1576,11 @@ const App: React.FC = () => {
         <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 xl:grid-cols-2 gap-8 items-start mb-8">
           <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
             <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-indigo-400 font-bold">{squaresPool.awayTeam}</span> score next...</h3></div>
-            <div className="bg-black/50 p-4 space-y-4">{awayPredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-indigo-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+            <div className="bg-slate-950 p-4 space-y-4">{awayPredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-indigo-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
           </div>
           <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
             <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2">{homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain" />}<h3 className="text-amber-400 font-medium text-sm">If the <span className="text-rose-400 font-bold">{squaresPool.homeTeam}</span> score next...</h3></div>
-            <div className="bg-black/50 p-4 space-y-4">{homePredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-rose-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
+            <div className="bg-slate-950 p-4 space-y-4">{homePredictions.map((pred) => (<div key={pred.points} className="flex justify-between items-center group border-b border-slate-800/50 pb-2 last:border-0 last:pb-0"><div><span className="block text-slate-300 font-bold text-sm group-hover:text-rose-400 transition-colors">+{pred.points} points</span><span className="text-[10px] text-slate-500">New digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>))}</div>
           </div>
         </div>
 
@@ -1638,9 +1643,9 @@ const App: React.FC = () => {
         {(squaresPool as GameState).ruleVariations.scoreChangePayout && (
           <div className="max-w-[1400px] mx-auto px-4 mb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h3 className="text-slate-400 font-bold text-sm uppercase mb-4 text-center">Score Change History</h3>
-            <div className="w-full overflow-hidden rounded-lg border border-slate-800 bg-black/50">
+            <div className="w-full overflow-hidden rounded-lg border border-slate-800 bg-black">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-900/50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
+                <thead className="bg-slate-900 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
                   <tr>
                     <th className="px-4 py-3">Event</th>
                     <th className="px-4 py-3">Winner</th>

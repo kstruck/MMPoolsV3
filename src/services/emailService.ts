@@ -92,54 +92,119 @@ export const emailService = {
 
     sendConfirmation: async (
         poolName: string,
-        squaresInitials: string[], // e.g. ["#4 (Kevin)", "#12 (Kevin)"]
+        squares: { id: number, cost: number }[], // Changed to array of objects
         playerEmail: string,
         playerName: string,
-        _poolOwnerEmail: string,
         poolId: string,
+        config: {
+            ruleVariations: any,
+            charity?: { enabled: boolean, name: string, percentage: number },
+            costPerSquare: number,
+            payouts: any
+        },
         ownerReferralCode?: string,
         paymentHandles?: { venmo?: string, googlePay?: string }
     ) => {
         const link = `${window.location.origin}/#pool/${poolId}`;
+        const logoUrl = `${window.location.origin}/email-logo.png`;
         const subject = `Confirmation: You joined "${poolName}"`;
+        const totalCost = squares.reduce((sum, s) => sum + s.cost, 0);
 
-        let paymentText = '';
+        // --- Rules Summary ---
+        let rulesHtml = '<div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px;">';
+        rulesHtml += '<h3 style="margin-top: 0; color: #334155; font-size: 16px;">Pool Rules</h3>';
+        rulesHtml += '<ul style="padding-left: 20px; color: #475569; font-size: 14px; margin-bottom: 0;">';
+
+        // Cost
+        rulesHtml += `<li><strong>Cost per Square:</strong> $${config.costPerSquare}</li>`;
+
+        // Rollover
+        if (config.ruleVariations.quarterlyRollover) {
+            rulesHtml += `<li><strong>Rollover:</strong> <span style="color: #10b981; font-weight: bold;">Active</span> (Unclaimed prizes roll to next quarter)</li>`;
+        } else {
+            rulesHtml += `<li><strong>Rollover:</strong> Standard (No rollover)</li>`;
+        }
+
+        // Reverse Winners
+        if (config.ruleVariations.reverseWinners) {
+            rulesHtml += `<li><strong>Reverse Winners:</strong> <span style="color: #6366f1; font-weight: bold;">Active</span> (Prizes split 50/50 with reverse digits)</li>`;
+        }
+
+        // Charity
+        if (config.charity?.enabled) {
+            rulesHtml += `<li><strong>Charity:</strong> ${config.charity.percentage}% of pot goes to <em>${config.charity.name}</em></li>`;
+        }
+
+        rulesHtml += '</ul></div>';
+
+        // --- Squares Table ---
+        let squaresTable = '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">';
+        squaresTable += '<thead><tr style="background-color: #f1f5f9; text-align: left;"><th style="padding: 10px; border-bottom: 2px solid #e2e8f0; color: #475569;">Square #</th><th style="padding: 10px; border-bottom: 2px solid #e2e8f0; color: #475569;">Owner</th><th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: right; color: #475569;">Cost</th></tr></thead>';
+        squaresTable += '<tbody>';
+
+        squares.forEach(s => {
+            squaresTable += `<tr>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #334155;">#${s.id}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #64748b;">${playerName}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #334155;">$${s.cost}</td>
+            </tr>`;
+        });
+
+        // Total Row
+        squaresTable += `<tr style="background-color: #f8fafc; font-weight: bold;">
+            <td colspan="2" style="padding: 10px; text-align: right; color: #334155;">Total Due:</td>
+            <td style="padding: 10px; text-align: right; color: #0f172a; font-size: 16px;">$${totalCost}</td>
+        </tr>`;
+        squaresTable += '</tbody></table>';
+
+
+        // --- Payment Section ---
         let paymentHtml = '';
-
         if (paymentHandles?.venmo || paymentHandles?.googlePay) {
-            paymentText += '\n\nPayment Options:';
-            paymentHtml += '<div style="margin-top: 20px; padding: 15px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;"><strong>Payment Options:</strong><br>';
+            paymentHtml += '<div style="margin-top: 20px; padding: 20px; background-color: #f0f9ff; border-radius: 8px; border: 1px solid #bae6fd;">';
+            paymentHtml += '<h3 style="margin-top: 0; color: #0369a1; font-size: 16px; margin-bottom: 10px;">Payment Options</h3>';
 
             if (paymentHandles.venmo) {
                 const vUser = paymentHandles.venmo.replace('@', '');
-                paymentText += `\nVenmo: https://venmo.com/u/${vUser}`;
-                paymentHtml += `<div style="margin-top: 8px;"><a href="https://venmo.com/u/${vUser}" style="background-color: #008CFF; color: white; padding: 6px 12px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">Pay with Venmo (@${vUser})</a></div>`;
+                paymentHtml += `<div style="margin-bottom: 15px;">
+                    <a href="https://venmo.com/u/${vUser}" style="background-color: #008CFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Pay $${totalCost} on Venmo (@${vUser})</a>
+                </div>`;
             }
             if (paymentHandles.googlePay) {
-                paymentText += `\nGoogle Pay: ${paymentHandles.googlePay}`;
-                paymentHtml += `<div style="margin-top: 8px; color: #475569;"><strong>Google Pay:</strong> ${paymentHandles.googlePay}</div>`;
+                paymentHtml += `<div style="color: #334155; font-size: 14px;">
+                    <strong>Google Pay:</strong> ${paymentHandles.googlePay}
+                </div>`;
             }
             paymentHtml += '</div>';
         }
 
-        const text = `Hi ${playerName},
-
-You have successfully claimed ${squaresInitials.length} square(s) in "${poolName}".
-
-Squares: ${squaresInitials.join(', ')}
-
-View the pool here: ${link}${paymentText}
-
-Good luck!`;
-
+        // --- Final HTML Assembly ---
         const html = `
-            <p>Hi ${playerName},</p>
-            <p>You have successfully claimed <strong>${squaresInitials.length} square(s)</strong> in "<strong>${poolName}</strong>".</p>
-            <p><strong>Squares:</strong> ${squaresInitials.join(', ')}</p>
-            <p><a href="${link}">View Pool</a></p>
-            ${paymentHtml}
-            <p>Good luck!</p>
+            <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #334155; line-height: 1.6;">
+                <div style="text-align: center; margin-bottom: 30px; padding: 20px; background-color: #0f172a; border-radius: 0 0 12px 12px;">
+                    <img src="${logoUrl}" alt="March Melee Pools" style="height: 50px; w: auto;" />
+                </div>
+                
+                <h1 style="color: #0f172a; font-size: 24px; margin-bottom: 10px;">You're in the game!</h1>
+                <p style="font-size: 16px; margin-bottom: 20px;">Hi ${playerName},</p>
+                <p>You have successfully claimed <strong>${squares.length} square(s)</strong> in "<strong>${poolName}</strong>".</p>
+                
+                ${rulesHtml}
+                
+                <h3 style="color: #334155; font-size: 16px; margin-bottom: 10px;">Your Selection</h3>
+                ${squaresTable}
+                
+                ${paymentHtml}
+                
+                <div style="margin-top: 30px; text-align: center;">
+                    <a href="${link}" style="background-color: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">View Pool Dashboard</a>
+                </div>
+                
+                <p style="margin-top: 30px; font-size: 14px; color: #94a3b8; text-align: center;">Good luck!</p>
+            </div>
         `;
+
+        const text = `Hi ${playerName}, You claimed ${squares.length} squares in ${poolName}. Total: $${totalCost}. View pool: ${link}`;
 
         return emailService.sendEmail(playerEmail, subject, text, html, { ownerReferralCode });
     },
