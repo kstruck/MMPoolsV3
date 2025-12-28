@@ -617,217 +617,186 @@ exports.fixPoolScores = (0, https_1.onCall)({
     }
     const db = admin.firestore();
     const results = [];
-    const poolsSnap = await db.collection("pools")
-        .where("gameId", ">", "")
+    const poolsSnap = await db.collection('pools')
+        .where('gameId', '!=', null)
         .get();
     for (const doc of poolsSnap.docs) {
-        const pool = doc.data();
-        if (!pool.gameId) {
-            results.push({ id: doc.id, status: 'skipped', reason: 'no gameId' });
-            continue;
-        }
-        const gameStatus = (_a = pool.scores) === null || _a === void 0 ? void 0 : _a.gameStatus;
-        if (gameStatus !== 'in' && gameStatus !== 'post') {
-            results.push({ id: doc.id, status: 'skipped', reason: `gameStatus is ${gameStatus}` });
-            continue;
-        }
-        const espnScores = await fetchESPNScores(pool.gameId, pool.league || 'nfl');
-        if (!espnScores) {
-            results.push({ id: doc.id, status: 'error', reason: 'ESPN fetch failed' });
-            continue;
-        }
-        const period = espnScores.period;
-        const state = espnScores.gameStatus;
-        const isQ1Final = (period >= 2) || (state === "post");
-        const isHalfFinal = (period >= 3) || (state === "post");
-        const isQ3Final = (period >= 4) || (state === "post");
-        const isGameFinal = (state === "post");
-        // Prepare Updates
-        const updates = {
-            'scores.current': espnScores.current,
-            'scores.gameStatus': state,
-            'scores.period': period,
-            'scores.clock': espnScores.clock
-        };
-        if (isQ1Final)
-            updates['scores.q1'] = espnScores.q1;
-        if (isHalfFinal)
-            updates['scores.half'] = espnScores.half;
-        if (isQ3Final)
-            updates['scores.q3'] = espnScores.q3;
-        if (isGameFinal) {
-            updates['scores.final'] = pool.includeOvertime ? espnScores.apiTotal : espnScores.final;
-        }
-        // Run as Transaction to support winners & audit
-        await db.runTransaction(async (t) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
-            t.update(doc.ref, updates);
-            // Construct the "Effective" pool data to use for winner logging
-            const effectivePool = Object.assign(Object.assign({}, pool), { scores: Object.assign(Object.assign({}, pool.scores), {
-                    q1: isQ1Final ? espnScores.q1 : pool.scores.q1,
-                    half: isHalfFinal ? espnScores.half : pool.scores.half,
-                    q3: isQ3Final ? espnScores.q3 : pool.scores.q3,
-                    final: isGameFinal ? (pool.includeOvertime ? espnScores.apiTotal : espnScores.final) : pool.scores.final
-                }) });
-            const q1H = (_a = effectivePool.scores.q1) === null || _a === void 0 ? void 0 : _a.home;
-            const q1A = (_b = effectivePool.scores.q1) === null || _b === void 0 ? void 0 : _b.away;
-            const halfH = (_c = effectivePool.scores.half) === null || _c === void 0 ? void 0 : _c.home;
-            const halfA = (_d = effectivePool.scores.half) === null || _d === void 0 ? void 0 : _d.away;
-            const q3H = (_e = effectivePool.scores.q3) === null || _e === void 0 ? void 0 : _e.home;
-            const q3A = (_f = effectivePool.scores.q3) === null || _f === void 0 ? void 0 : _f.away;
-            const finalH = (_g = effectivePool.scores.final) === null || _g === void 0 ? void 0 : _g.home;
-            const finalA = (_h = effectivePool.scores.final) === null || _h === void 0 ? void 0 : _h.away;
-            if (isQ1Final && q1H !== undefined)
-                await processWinners(t, db, doc.id, effectivePool, 'q1', q1H, q1A);
-            if (isHalfFinal && halfH !== undefined)
-                await processWinners(t, db, doc.id, effectivePool, 'half', halfH, halfA);
-            if (isQ3Final && q3H !== undefined)
-                await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
-            if (isGameFinal && finalH !== undefined)
-                await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
-            // BACKFILL EVENT WINNERS & REPAIR HISTORY
-            // This logic scans the event history for "jumps" (e.g. 0->7) and inserts missing events (0->6)
-            // It also ensures a Winner doc exists for every valid event.
-            if ((_j = pool.ruleVariations) === null || _j === void 0 ? void 0 : _j.scoreChangePayout) {
-                const existingEvents = pool.scoreEvents || [];
-                // Sort by timestamp
-                existingEvents.sort((a, b) => a.timestamp - b.timestamp);
-                const newEventHistory = [];
-                let lastScore = { home: 0, away: 0 };
-                let repairsMade = false;
-                // Helper to ensure winner exists
-                const ensureWinner = async (home, away, desc, timestamp) => {
-                    const hDigit = getLastDigit(home);
-                    const aDigit = getLastDigit(away);
-                    let axis = pool.axisNumbers;
-                    // Quarterly Axis Logic
-                    if (pool.numberSets === 4 && pool.quarterlyNumbers) {
-                        // Estimate period based on desc or just default to Q1 if unknown
-                        // Realistically for repairs, we might rely on the Event's description if available
-                        // or just use Final/Current logic?
-                        // For simplicity in repair, if we lack period context, check Q1 axes first.
-                        if (pool.quarterlyNumbers.q1)
-                            axis = pool.quarterlyNumbers.q1;
-                        // In a perfect world we map timestamp to period, but that's complex. 
-                        // Fallback is usually Q1 axis for early bugs.
-                    }
-                    if (axis) {
-                        const row = axis.away.indexOf(aDigit);
-                        const col = axis.home.indexOf(hDigit);
-                        if (row !== -1 && col !== -1) {
-                            const sqIdx = row * 10 + col;
-                            const square = pool.squares[sqIdx];
-                            const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
-                            const docId = `event_${home}_${away}`;
-                            // Check if exists using transaction? No, we can just blind write merge=true
-                            // or set if missing.
-                            await t.set(db.collection('pools').doc(doc.id).collection('winners').doc(docId), {
-                                period: 'Event',
-                                squareId: sqIdx,
-                                owner: winnerName,
-                                homeDigit: hDigit,
-                                awayDigit: aDigit,
-                                isReverse: false,
-                                description: desc,
-                                // Preserve existing amount if any, or default to 0
-                            }, { merge: true });
-                        }
-                    }
-                };
-                for (const ev of existingEvents) {
-                    const deltaHome = ev.home - lastScore.home;
-                    const deltaAway = ev.away - lastScore.away;
-                    const combine = pool.ruleVariations.combineTDandXP === true;
-                    // CHECK HOME JUMP
-                    if (!combine && deltaHome === 7 && deltaAway === 0) {
-                        // Missing TD?
-                        const tdScore = { home: lastScore.home + 6, away: lastScore.away };
-                        // Check if we already have this event (unlikely if delta is 7)
-                        // Synthesize it
-                        const missingEvent = {
-                            id: db.collection("_").doc().id,
-                            home: tdScore.home,
-                            away: tdScore.away,
-                            description: 'Touchdown (Repaired)',
-                            timestamp: ev.timestamp - 1000 // 1 sec before
-                        };
-                        newEventHistory.push(missingEvent);
-                        await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
-                        repairsMade = true;
-                        await (0, audit_1.writeAuditEvent)({
-                            poolId: doc.id,
-                            type: 'ADMIN_OVERRIDE_SCORE',
-                            message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
-                            severity: 'WARNING',
-                            actor: { uid: 'system', role: 'ADMIN', label: 'Auto-Repair' }
-                        }, t);
-                    }
-                    // CHECK AWAY JUMP
-                    else if (!combine && deltaAway === 7 && deltaHome === 0) {
-                        const tdScore = { home: lastScore.home, away: lastScore.away + 6 };
-                        const missingEvent = {
-                            id: db.collection("_").doc().id,
-                            home: tdScore.home,
-                            away: tdScore.away,
-                            description: 'Touchdown (Repaired)',
-                            timestamp: ev.timestamp - 1000
-                        };
-                        newEventHistory.push(missingEvent);
-                        await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
-                        repairsMade = true;
-                        await (0, audit_1.writeAuditEvent)({
-                            poolId: doc.id,
-                            type: 'ADMIN_OVERRIDE_SCORE',
-                            message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
-                            severity: 'WARNING',
-                            actor: { uid: 'system', role: 'ADMIN', label: 'Auto-Repair' }
-                        }, t);
-                    }
-                    // Push original
-                    newEventHistory.push(ev);
-                    // Ensure winner for original too (idempotent fix)
-                    await ensureWinner(ev.home, ev.away, ev.description, ev.timestamp);
-                    lastScore = { home: ev.home, away: ev.away };
-                }
-                if (repairsMade) {
-                    updates.scoreEvents = newEventHistory;
-                    t.update(doc.ref, { scoreEvents: newEventHistory });
-                }
-                // NEW: Run Finalize Payouts if Game is Final
-                if (isGameFinal) {
-                    // We need the *fresh* (effective) pool data with the events we just ensured exist
-                    // Since we're in a transaction, writes aren't visible to reads yet typically, 
-                    // but `finalizeEventPayouts` doesn't read *winners*, it only Writes them.
-                    // It Reads `pool.scoreEvents` (from memory) and `pool.ruleVariations`.
-                    await finalizeEventPayouts(t, db, doc.id, effectivePool, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' });
-                }
+        try {
+            const pool = doc.data();
+            if (!pool.gameId) {
+                results.push({ id: doc.id, status: 'skipped', reason: 'no gameId' });
+                continue;
             }
-            // Also log that FIX was run
-            // Also log that FIX was run
-            const eventsCount = ((_k = pool.scoreEvents) === null || _k === void 0 ? void 0 : _k.length) || 0;
-            console.log(`[Fix] Backfilled winners for pool ${doc.id}:`, {
-                q1: !!q1H,
-                half: !!halfH,
-                q3: !!q3H,
-                final: !!finalH,
-                eventWinnersCount: eventsCount
+            const gameStatus = (_a = pool.scores) === null || _a === void 0 ? void 0 : _a.gameStatus;
+            if (gameStatus !== 'in' && gameStatus !== 'post') {
+                results.push({ id: doc.id, status: 'skipped', reason: `gameStatus is ${gameStatus}` });
+                continue;
+            }
+            const espnScores = await fetchESPNScores(pool.gameId, pool.league || 'nfl');
+            if (!espnScores) {
+                results.push({ id: doc.id, status: 'error', reason: 'ESPN fetch failed' });
+                continue;
+            }
+            const period = espnScores.period;
+            const state = espnScores.gameStatus;
+            const isQ1Final = (period >= 2) || (state === "post");
+            const isHalfFinal = (period >= 3) || (state === "post");
+            const isQ3Final = (period >= 4) || (state === "post");
+            const isGameFinal = (state === "post");
+            // Prepare Updates
+            const updates = {
+                'scores.current': espnScores.current,
+                'scores.gameStatus': state,
+                'scores.period': period,
+                'scores.clock': espnScores.clock
+            };
+            if (isQ1Final)
+                updates['scores.q1'] = espnScores.q1;
+            if (isHalfFinal)
+                updates['scores.half'] = espnScores.half;
+            if (isQ3Final)
+                updates['scores.q3'] = espnScores.q3;
+            if (isGameFinal) {
+                updates['scores.final'] = pool.includeOvertime ? espnScores.apiTotal : espnScores.final;
+            }
+            // Run as Transaction
+            await db.runTransaction(async (t) => {
+                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+                t.update(doc.ref, updates);
+                // Construct effective pool
+                const effectivePool = Object.assign(Object.assign({}, pool), { scores: Object.assign(Object.assign({}, pool.scores), {
+                        q1: isQ1Final ? espnScores.q1 : pool.scores.q1,
+                        half: isHalfFinal ? espnScores.half : pool.scores.half,
+                        q3: isQ3Final ? espnScores.q3 : pool.scores.q3,
+                        final: isGameFinal ? (pool.includeOvertime ? espnScores.apiTotal : espnScores.final) : pool.scores.final
+                    }) });
+                const q1H = (_a = effectivePool.scores.q1) === null || _a === void 0 ? void 0 : _a.home;
+                const q1A = (_b = effectivePool.scores.q1) === null || _b === void 0 ? void 0 : _b.away;
+                const halfH = (_c = effectivePool.scores.half) === null || _c === void 0 ? void 0 : _c.home;
+                const halfA = (_d = effectivePool.scores.half) === null || _d === void 0 ? void 0 : _d.away;
+                const q3H = (_e = effectivePool.scores.q3) === null || _e === void 0 ? void 0 : _e.home;
+                const q3A = (_f = effectivePool.scores.q3) === null || _f === void 0 ? void 0 : _f.away;
+                const finalH = (_g = effectivePool.scores.final) === null || _g === void 0 ? void 0 : _g.home;
+                const finalA = (_h = effectivePool.scores.final) === null || _h === void 0 ? void 0 : _h.away;
+                if (isQ1Final && q1H !== undefined)
+                    await processWinners(t, db, doc.id, effectivePool, 'q1', q1H, q1A);
+                if (isHalfFinal && halfH !== undefined)
+                    await processWinners(t, db, doc.id, effectivePool, 'half', halfH, halfA);
+                if (isQ3Final && q3H !== undefined)
+                    await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
+                if (isGameFinal && finalH !== undefined)
+                    await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
+                // BACKFILL LOGIC
+                if ((_j = pool.ruleVariations) === null || _j === void 0 ? void 0 : _j.scoreChangePayout) {
+                    const existingEvents = pool.scoreEvents || [];
+                    existingEvents.sort((a, b) => a.timestamp - b.timestamp);
+                    const newEventHistory = [];
+                    let lastScore = { home: 0, away: 0 };
+                    let repairsMade = false;
+                    const ensureWinner = async (home, away, desc, timestamp) => {
+                        var _a;
+                        const hDigit = getLastDigit(home);
+                        const aDigit = getLastDigit(away);
+                        let axis = pool.axisNumbers;
+                        if (pool.numberSets === 4 && ((_a = pool.quarterlyNumbers) === null || _a === void 0 ? void 0 : _a.q1)) {
+                            axis = pool.quarterlyNumbers.q1;
+                        }
+                        if ((axis === null || axis === void 0 ? void 0 : axis.home) && (axis === null || axis === void 0 ? void 0 : axis.away)) {
+                            const row = axis.away.indexOf(aDigit);
+                            const col = axis.home.indexOf(hDigit);
+                            if (row !== -1 && col !== -1) {
+                                const sqIdx = row * 10 + col;
+                                const square = pool.squares ? pool.squares[sqIdx] : null;
+                                const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
+                                const docId = `event_${home}_${away}`;
+                                await t.set(db.collection('pools').doc(doc.id).collection('winners').doc(docId), {
+                                    period: 'Event',
+                                    squareId: sqIdx,
+                                    owner: winnerName,
+                                    homeDigit: hDigit,
+                                    awayDigit: aDigit,
+                                    isReverse: false,
+                                    description: desc || 'Score Change',
+                                    // Preserve existing amount if any, or default to 0
+                                }, { merge: true });
+                            }
+                        }
+                    };
+                    for (const ev of existingEvents) {
+                        const deltaHome = ev.home - lastScore.home;
+                        const deltaAway = ev.away - lastScore.away;
+                        const combine = ((_k = pool.ruleVariations) === null || _k === void 0 ? void 0 : _k.combineTDandXP) === true;
+                        if (!combine && deltaHome === 7 && deltaAway === 0) {
+                            const tdScore = { home: lastScore.home + 6, away: lastScore.away };
+                            const missingEvent = {
+                                id: db.collection("_").doc().id,
+                                home: tdScore.home,
+                                away: tdScore.away,
+                                description: 'Touchdown (Repaired)',
+                                timestamp: ev.timestamp - 1000
+                            };
+                            newEventHistory.push(missingEvent);
+                            await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
+                            repairsMade = true;
+                            await (0, audit_1.writeAuditEvent)({
+                                poolId: doc.id,
+                                type: 'ADMIN_OVERRIDE_SCORE',
+                                message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
+                                severity: 'WARNING',
+                                actor: { uid: 'system', role: 'ADMIN' }
+                            }, t);
+                        }
+                        else if (!combine && deltaAway === 7 && deltaHome === 0) {
+                            const tdScore = { home: lastScore.home, away: lastScore.away + 6 };
+                            const missingEvent = {
+                                id: db.collection("_").doc().id,
+                                home: tdScore.home,
+                                away: tdScore.away,
+                                description: 'Touchdown (Repaired)',
+                                timestamp: ev.timestamp - 1000
+                            };
+                            newEventHistory.push(missingEvent);
+                            await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
+                            repairsMade = true;
+                            await (0, audit_1.writeAuditEvent)({
+                                poolId: doc.id,
+                                type: 'ADMIN_OVERRIDE_SCORE',
+                                message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
+                                severity: 'WARNING',
+                                actor: { uid: 'system', role: 'ADMIN' }
+                            }, t);
+                        }
+                        newEventHistory.push(ev);
+                        await ensureWinner(ev.home, ev.away, ev.description || 'Score Update', ev.timestamp);
+                        lastScore = { home: ev.home, away: ev.away };
+                    }
+                    if (repairsMade) {
+                        updates.scoreEvents = newEventHistory;
+                        t.update(doc.ref, { scoreEvents: newEventHistory });
+                    }
+                    if (isGameFinal) {
+                        await finalizeEventPayouts(t, db, doc.id, effectivePool, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' });
+                    }
+                }
+                await (0, audit_1.writeAuditEvent)({
+                    poolId: doc.id,
+                    type: 'SCORE_FINALIZED',
+                    message: `Manual Score Fix Applied by Admin`,
+                    severity: 'INFO',
+                    actor: { uid: 'system', role: 'ADMIN' }
+                }, t);
             });
-            await (0, audit_1.writeAuditEvent)({
-                poolId: doc.id,
-                type: 'SCORE_FINALIZED',
-                message: `Manual Score Fix Applied by Admin`,
-                severity: 'WARNING',
-                actor: { uid: ((_l = request.auth) === null || _l === void 0 ? void 0 : _l.uid) || 'admin', role: 'ADMIN', label: 'SuperAdmin Fix' },
-                payload: { updates },
-                dedupeKey: `FIX_SCORES:${doc.id}:${Date.now()}`
-            }, t);
-        });
-        results.push({
-            id: doc.id,
-            name: `${pool.homeTeam} vs ${pool.awayTeam}`,
-            status: 'fixed',
-            scores: updates
-        });
+            results.push({
+                id: doc.id,
+                name: `${pool.homeTeam} vs ${pool.awayTeam}`,
+                status: 'fixed',
+                scores: updates
+            });
+        }
+        catch (error) {
+            console.error(`Error processing pool ${doc.id}:`, error);
+            results.push({ id: doc.id, status: 'error', message: error.message });
+        }
     }
     return { success: true, pools: results };
 });
