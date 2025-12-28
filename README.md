@@ -40,8 +40,9 @@ A modern, real-time sports pool application supporting both **Gameday Squares** 
 *   **Custom Payouts:** Configurable percentage splits for Q1, Halftime, Q3, and Final scores.
 *   **Manager Controls:** Lock/unlock grid, mark squares as paid, manual score overrides, new "Fix Pool Scores" emergency tool, and legacy "Force Sync" options.
 *   **Pool Setup:** Automated pre-filling of manager contact info for streamlined creation.
-*   **Auto-Lock System:** **NEW!** Pools automatically lock and generate random axis numbers at the scheduled kick-off time, removing the need for manual manager intervention.
+*   **Auto-Lock System:** **NEW!** Pools automatically lock and generate random axis numbers at the scheduled kick-off time. **Now Robust:** Fixed frontend data saving to ensure reliability.
 *   **Date & Time Display:** **NEW!** Pool cards now explicitly show the scheduled Game Time or Bracket Lock Time.
+*   **Payout & Score History:** **Fixed!** "Fix Pool Scores" tool now correctly recalculates all past winners and payouts, ensuring the "Score Change History" audit log is always money-perfect. "No Money Won" status is now accurately reflected.
 
 ### 🃏 Enhanced Status Card (NEW)
 *   **Tabbed Interface:** The pool status card has been completely refactored into a sleek, tabbed design ("Overview", "Rules", "Payment") to organize critical information without clutter.
@@ -71,7 +72,7 @@ A military-grade audit logging system to ensure absolute fairness and transparen
     *   **Scenario Runner:** Simulate entire games quarter-by-quarter or event-by-event (Touchdowns, Field Goals, Safeties).
     *   **Auto-Fill Grids:** Instantly populate grids with test users and random squares to stress-test payout algorithms.
     *   **Audit Verification:** Integrated view to confirm that specific game events correctly trigger "Event Winner" logs in the immutable audit trail.
-    *   **Fix Scores:** Emergency tool to re-fetch ESPN data and regenerate all winner records retroactively if issues arise.
+    *   **Fix Scores:** Emergency tool to re-fetch ESPN data and regenerate all winner records retroactively if issues arise. Now supports **Targeted Pool Repair** to fix specific pools without affecting others.
 
 ### 🎨 Design & Experience
 *   **Brand Refreshed:** Updated visual identity with a larger, cleaner logo and "collage-style" hero imagery.
