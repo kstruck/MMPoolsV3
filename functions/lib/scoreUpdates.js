@@ -456,7 +456,7 @@ const finalizeEventPayouts = async (transaction, db, poolId, pool, actor) => {
     // Valid events have unique scores usually, but lets be careful.
     let updatedCount = 0;
     for (const ev of validEvents) {
-        const docId = `event_${ev.home}_${ev.away}`;
+        const docId = `event-${ev.id}`;
         const winnerRef = db.collection('pools').doc(poolId).collection('winners').doc(docId);
         // We use transaction.set with merge true to update amount
         transaction.set(winnerRef, { amount: amountPerEvent }, { merge: true });
