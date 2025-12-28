@@ -146,6 +146,11 @@ const processWinners = async (
     const totalPot = soldSquares * (poolData.costPerSquare || 0);
 
     // Process Payout Amount
+    if (poolData.ruleVariations?.scoreChangePayout && poolData.ruleVariations?.scoreChangePayoutStrategy === 'equal_split') {
+        console.log(`[ScoreSync] Skipping Period Winner for Equal Split Pool ${poolId}`);
+        return;
+    }
+
     const payoutPct = getSafePayout(poolData.payouts, periodKey);
     let amount = (totalPot * payoutPct) / 100;
     if (poolData.ruleVariations?.reverseWinners) amount /= 2;

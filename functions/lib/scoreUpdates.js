@@ -118,7 +118,7 @@ async function fetchESPNScores(gameId, league) {
 }
 // Helper to handle winner logging and computation (Shared between sync and fix)
 const processWinners = async (transaction, db, poolId, poolData, periodKey, homeScore, awayScore, skipDedupe = false) => {
-    var _a, _b;
+    var _a, _b, _c, _d;
     // Safety check for axis numbers
     if (!poolData.axisNumbers || !poolData.axisNumbers.home || !poolData.axisNumbers.away)
         return;
@@ -128,9 +128,13 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
     const soldSquares = poolData.squares ? poolData.squares.filter((s) => s.owner).length : 0;
     const totalPot = soldSquares * (poolData.costPerSquare || 0);
     // Process Payout Amount
+    if (((_a = poolData.ruleVariations) === null || _a === void 0 ? void 0 : _a.scoreChangePayout) && ((_b = poolData.ruleVariations) === null || _b === void 0 ? void 0 : _b.scoreChangePayoutStrategy) === 'equal_split') {
+        console.log(`[ScoreSync] Skipping Period Winner for Equal Split Pool ${poolId}`);
+        return;
+    }
     const payoutPct = getSafePayout(poolData.payouts, periodKey);
     let amount = (totalPot * payoutPct) / 100;
-    if ((_a = poolData.ruleVariations) === null || _a === void 0 ? void 0 : _a.reverseWinners)
+    if ((_c = poolData.ruleVariations) === null || _c === void 0 ? void 0 : _c.reverseWinners)
         amount /= 2;
     const label = periodKey === 'q1' ? 'Q1' : periodKey === 'half' ? 'Halftime' : periodKey === 'q3' ? 'Q3' : 'Final';
     const axis = poolData.axisNumbers;
@@ -154,7 +158,7 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
             };
             transaction.set(db.collection('pools').doc(poolId).collection('winners').doc(periodKey), winnerDoc);
         }
-        if ((_b = poolData.ruleVariations) === null || _b === void 0 ? void 0 : _b.reverseWinners) {
+        if ((_d = poolData.ruleVariations) === null || _d === void 0 ? void 0 : _d.reverseWinners) {
             const rRow = axis.away.indexOf(hDigit);
             const rCol = axis.home.indexOf(aDigit);
             if (rRow !== -1 && rCol !== -1) {
