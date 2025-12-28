@@ -9,7 +9,9 @@ import {
     query,
     where,
     or,
-    Timestamp
+    Timestamp,
+    orderBy,
+    limit
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
@@ -237,6 +239,18 @@ export const dbService = {
         } catch (error) {
             console.error("Error deleting user:", error);
             throw error;
+        }
+    },
+
+    // --- SYSTEM LOGS ---
+    getSystemLogs: async (limitCount = 50): Promise<any[]> => {
+        try {
+            const q = query(collection(db, "system_logs"), orderBy("timestamp", "desc"), limit(limitCount));
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        } catch (error) {
+            console.error("Error fetching system logs:", error);
+            return [];
         }
     }
 };

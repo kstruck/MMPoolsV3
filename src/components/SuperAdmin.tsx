@@ -3,36 +3,52 @@ import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import type { GameState, Pool, User, SystemSettings } from '../types';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search } from 'lucide-react';
 
 
 export const SuperAdmin: React.FC = () => {
+    // --- STATE ---
     const [pools, setPools] = useState<Pool[]>([]);
     const [users, setUsers] = useState<User[]>([]);
-    const [usersLoading, setUsersLoading] = useState(true);
+    const [systemLogs, setSystemLogs] = useState<any[]>([]);
+
+    // UI State
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'settings' | 'system'>('overview');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
 
-    // User Edit State
-
+    // Edit/View State
+    const [viewingPool, setViewingPool] = useState<Pool | null>(null);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [viewingUser, setViewingUser] = useState<User | null>(null);
     const [editName, setEditName] = useState('');
     const [editEmail, setEditEmail] = useState('');
 
     const fetchUsers = () => {
-        setUsersLoading(true);
         dbService.getAllUsers()
             .then(setUsers)
-            .catch(err => console.error("Failed to load users", err))
-            .finally(() => setUsersLoading(false));
+            .catch(err => console.error("Failed to load users", err));
     };
 
+    // --- EFFECTS ---
     useEffect(() => {
-        // Subscribe to pools - this updates independently
-        const unsub = dbService.subscribeToAllPools(setPools);
+        const unsubPools = dbService.subscribeToAllPools(setPools);
+        const unsubSettings = settingsService.subscribe(setSettings);
         fetchUsers();
-        return () => unsub();
-    }, []);
+
+        // Load System Logs if on system tab
+        if (activeTab === 'system') {
+            if (dbService.getSystemLogs) {
+                dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
+            }
+        }
+
+        return () => {
+            unsubPools();
+            unsubSettings();
+        };
+    }, [activeTab]);
 
     const handleDeletePool = async (id: string) => {
         if (confirm('Create: Super Delete Pool?')) {
@@ -71,7 +87,7 @@ export const SuperAdmin: React.FC = () => {
 
 
     // Pool Edit/View State
-    const [viewingPool, setViewingPool] = useState<Pool | null>(null);
+    // Pool Edit/View State
 
     const handleRunSim = async (pool: GameState) => {
         const confirmSim = confirm(`Run simulation for ${pool.name}? This will advance the game state.`);
@@ -213,19 +229,7 @@ export const SuperAdmin: React.FC = () => {
     };
 
     // Tab state
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'settings'>('overview');
-    const [settings, setSettings] = useState<SystemSettings | null>(null);
 
-    useEffect(() => {
-        // Placeholder for a general data loading function if needed
-        const loadData = async () => {
-            // You might fetch other initial data here if loadData is meant to be comprehensive
-        };
-        loadData();
-        // Subscribe to settings
-        const unsub = settingsService.subscribe(setSettings);
-        return () => unsub();
-    }, []);
 
     // Group pools by sport/league (using existing league field from setup wizard)
     const getLeagueDisplayName = (league: string | undefined) => {
@@ -237,7 +241,15 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
-    const poolsBySport = pools.reduce((acc, pool) => {
+    const filteredPools = pools.filter(p => {
+        if (!searchTerm) return true;
+        const lowSearch = searchTerm.toLowerCase();
+        return p.name.toLowerCase().includes(lowSearch) ||
+            p.id.toLowerCase().includes(lowSearch) ||
+            ((p as any).ownerId || '').toLowerCase().includes(lowSearch);
+    });
+
+    const poolsBySport = filteredPools.reduce((acc, pool) => {
         let sport = 'Other';
         if (pool.type === 'BRACKET') {
             sport = 'March Madness';
@@ -252,10 +264,16 @@ export const SuperAdmin: React.FC = () => {
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: <Activity size={16} /> },
-        { id: 'pools', label: `Pools (${pools.length})`, icon: <Shield size={16} /> },
+        { id: 'pools', label: `Pools (${filteredPools.length})`, icon: <Shield size={16} /> },
         { id: 'users', label: `Users (${users.length})`, icon: <Users size={16} /> },
         { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
+        { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
     ] as const;
+
+    // Helper: Compute referrals locally
+    const getComputedReferrals = (userId: string) => {
+        return users.filter(u => u.referredBy === userId).length;
+    };
 
     return (
         <div className="max-w-7xl mx-auto p-4 md:p-6 relative text-slate-100">
@@ -268,7 +286,7 @@ export const SuperAdmin: React.FC = () => {
                 {tabs.map(tab => (
                     <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
+                        onClick={() => setActiveTab(tab.id as any)}
                         className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-bold text-sm transition-colors whitespace-nowrap ${activeTab === tab.id
                             ? 'bg-slate-800 text-white border-b-2 border-indigo-500'
                             : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -280,64 +298,59 @@ export const SuperAdmin: React.FC = () => {
             </div>
 
             {/* ============ OVERVIEW TAB ============ */}
+            {/* ============ OVERVIEW TAB ============ */}
             {activeTab === 'overview' && (
-                <>
+                <div className="space-y-8">
                     {/* STATS CARDS */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 mb-8">
-                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 backdrop-blur-sm">
-                            <h3 className="text-slate-400 text-xs font-bold uppercase mb-2 tracking-wider">Total Pools</h3>
-                            <p className="text-4xl font-bold">{pools.length}</p>
-                        </div>
-                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 backdrop-blur-sm">
-                            <h3 className="text-slate-400 text-xs font-bold uppercase mb-2 tracking-wider">Total Users</h3>
-                            <p className="text-4xl font-bold">{usersLoading ? '...' : users.length}</p>
-                            <p className="text-xs text-slate-500 mt-1">
-                                {users.filter(u => u.registrationMethod === 'google').length} Google / {users.filter(u => u.registrationMethod === 'email').length} Email
-                            </p>
-                        </div>
-                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 backdrop-blur-sm">
-                            <h3 className="text-slate-400 text-xs font-bold uppercase mb-2 tracking-wider">System Status</h3>
-                            <p className="text-xl font-bold text-emerald-400 flex items-center gap-2"><Activity size={20} /> Operational</p>
-                            <p className="text-xs text-slate-500 mt-1">Firestore Connected</p>
-                            <button
-                                onClick={async () => {
-                                    if (!confirm('Fix all active pool scores from ESPN? This will fetch fresh data and update quarter scores.')) return;
-                                    try {
-                                        const { getFunctions, httpsCallable } = await import('firebase/functions');
-                                        const functions = getFunctions();
-                                        const fixScores = httpsCallable(functions, 'fixPoolScores');
-                                        const result = await fixScores({}) as any;
-                                        console.log('Fix result:', result.data);
-                                        alert(`Fixed ${result.data?.pools?.filter((p: any) => p.status === 'fixed').length || 0} pools. Check console for details.`);
-                                    } catch (e: any) {
-                                        console.error(e);
-                                        alert('Fix failed: ' + e.message);
-                                    }
-                                }}
-                                className="mt-3 text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded transition-colors font-bold"
-                            >
-                                🔧 Fix Pool Scores
-                            </button>
-                        </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <button onClick={() => setActiveTab('pools')} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg text-left hover:border-indigo-500 transition-colors">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="p-3 bg-indigo-500/20 rounded-lg text-indigo-400"><Shield size={24} /></div>
+                                <span className="text-xs font-bold text-slate-500 uppercase">Total Pools</span>
+                            </div>
+                            <p className="text-4xl font-black text-white mb-1">{pools.length}</p>
+                            <p className="text-sm text-slate-400">across all sports</p>
+                        </button>
 
-                        <div className="bg-slate-800/50 p-6 rounded-xl border border-indigo-500/30 backdrop-blur-sm">
-                            <h3 className="text-indigo-400 text-xs font-bold uppercase mb-2 tracking-wider flex items-center gap-2"><Users size={14} /> Referrals</h3>
-                            <p className="text-4xl font-bold text-indigo-400">{users.reduce((sum, u) => sum + (u.referralCount || 0), 0)}</p>
-                            <p className="text-xs text-slate-500 mt-1">
-                                {users.filter(u => u.referredBy).length} referred users
+                        <button onClick={() => setActiveTab('users')} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg text-left hover:border-emerald-500 transition-colors">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="p-3 bg-emerald-500/20 rounded-lg text-emerald-400"><Users size={24} /></div>
+                                <span className="text-xs font-bold text-slate-500 uppercase">Total Users</span>
+                            </div>
+                            <p className="text-4xl font-black text-white mb-1">{users.length}</p>
+                            <p className="text-sm text-slate-400">registered accounts</p>
+                        </button>
+
+                        <button onClick={() => setActiveTab('system')} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg text-left hover:border-amber-500 transition-colors">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="p-3 bg-amber-500/20 rounded-lg text-amber-400"><Activity size={24} /></div>
+                                <span className="text-xs font-bold text-slate-500 uppercase">System Status</span>
+                            </div>
+                            {/* Show number of active/live pools for a quick stat */}
+                            <p className="text-4xl font-black text-white mb-1">
+                                {pools.filter(p => !('isLocked' in p) ? false : !(p as GameState).isLocked && (p as GameState).scores?.gameStatus !== 'post').length}
                             </p>
-                            <button
-                                onClick={() => setShowSimDashboard(true)}
-                                className="mt-3 w-full bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded transition-colors font-bold text-xs"
-                            >
-                                Open Sim Dashboard
-                            </button>
+                            <p className="text-sm text-slate-400">active pools</p>
+                        </button>
+
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h4 className="font-bold text-white">Maintenance Mode</h4>
+                                    <p className="text-sm text-slate-400">Disable all write actions for users.</p>
+                                </div>
+                                <button
+                                    onClick={() => settingsService.update({ maintenanceMode: !settings?.maintenanceMode })}
+                                    className={`transition-colors ${settings?.maintenanceMode ? 'text-amber-400' : 'text-slate-500'}`}
+                                >
+                                    {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-amber-500/20" /> : <ToggleLeft size={40} />}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-
                     {/* Quick Stats by Sport */}
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-8">
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
                         <h2 className="text-lg font-bold mb-4">Pools by Sport</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             {Object.entries(poolsBySport).map(([sport, sportPools]) => (
@@ -349,230 +362,434 @@ export const SuperAdmin: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Recent Activity - Top 5 Users */}
+                    {/* Recent Top Referrers */}
                     <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
                         <h2 className="text-lg font-bold mb-4">Top Referrers</h2>
                         <div className="space-y-2">
                             {[...users]
-                                .filter(u => (u.referralCount || 0) > 0)
-                                .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
+                                .map(u => ({ ...u, _computedCount: getComputedReferrals(u.id) }))
+                                .filter(u => u._computedCount > 0)
+                                .sort((a, b) => b._computedCount - a._computedCount)
                                 .slice(0, 5)
                                 .map((u, i) => (
                                     <div key={u.id} className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg">
                                         <span className={`text-lg font-bold ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-orange-500' : 'text-slate-500'}`}>#{i + 1}</span>
                                         <button onClick={() => handleViewUser(u)} className="font-bold text-white hover:text-indigo-400">{u.name}</button>
                                         <span className="text-slate-500 text-sm flex-1">{u.email}</span>
-                                        <span className="text-indigo-400 font-bold">{u.referralCount} referrals</span>
+                                        <span className="text-indigo-400 font-bold">{u._computedCount} referrals</span>
                                     </div>
                                 ))}
-                            {users.filter(u => (u.referralCount || 0) > 0).length === 0 && (
+                            {users.every(u => getComputedReferrals(u.id) === 0) && (
                                 <p className="text-slate-500 text-center py-4">No referrals yet</p>
                             )}
                         </div>
                     </div>
-                </>
+                </div>
             )}
 
             {/* ============ POOLS TAB ============ */}
-            {activeTab === 'pools' && (
-                <div className="space-y-8">
-                    {Object.entries(poolsBySport)
-                        .sort(([a], [b]) => a.localeCompare(b))
-                        .map(([sport, sportPools]) => (
-                            <div key={sport} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
-                                <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
-                                    <h2 className="text-xl font-bold flex items-center gap-2">
-                                        🏆 {sport}
-                                        <span className="text-sm font-normal text-slate-400">({sportPools.length} pools)</span>
-                                    </h2>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left">
-                                        <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
-                                            <tr>
-                                                <th className="p-4 font-bold tracking-wider">Pool Name</th>
-                                                <th className="p-4 font-bold tracking-wider">Created</th>
-                                                <th className="p-4 font-bold tracking-wider">Matchup</th>
-                                                <th className="p-4 font-bold tracking-wider">Game Time</th>
-                                                <th className="p-4 font-bold tracking-wider">Owner</th>
-                                                <th className="p-4 font-bold tracking-wider">Filled</th>
-                                                <th className="p-4 font-bold tracking-wider">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-700/50">
-                                            {[...sportPools].sort((a, b) => {
-                                                const timeA = typeof a.createdAt === 'number' ? a.createdAt : a.createdAt?.seconds || 0;
-                                                const timeB = typeof b.createdAt === 'number' ? b.createdAt : b.createdAt?.seconds || 0;
-                                                return timeB - timeA;
-                                            }).map(pool => {
-                                                const isBracket = pool.type === 'BRACKET';
-                                                // Normalize data access
-                                                const createdAt = typeof pool.createdAt === 'number' ? new Date(pool.createdAt).toLocaleDateString() : (pool.createdAt?.seconds ? new Date(pool.createdAt.seconds * 1000).toLocaleDateString() : 'N/A');
-                                                const matchUp = isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} @ ${(pool as GameState).homeTeam}`;
-                                                const ownerId = isBracket ? (pool as any).managerUid : (pool as any).ownerId;
-                                                const contact = users.find(u => u.id === ownerId)?.email || (isBracket ? 'N/A' : (pool as GameState).contactEmail);
-
-                                                let filledPct = 0;
-                                                if (isBracket) {
-                                                    const bp = pool as any;
-                                                    const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal;
-                                                    filledPct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round(((bp.entryCount || 0) / max) * 100);
-                                                } else {
-                                                    const sp = pool as GameState;
-                                                    filledPct = sp.squares.filter(s => s.owner).length;
-                                                }
-
-                                                return (
-                                                    <tr key={pool.id} className="hover:bg-slate-700/30 transition-colors">
-                                                        <td className="p-4">
-                                                            <button
-                                                                onClick={() => setViewingPool(pool as GameState)} // Type assertion or update setViewingPool type
-                                                                className="font-bold text-white hover:text-indigo-400 hover:underline flex items-center gap-2 text-left"
-                                                            >
-                                                                {pool.name}
-                                                                {!isBracket && (pool as GameState).charity?.enabled && (
-                                                                    <div title="Charity Pool">
-                                                                        <Heart size={12} className="text-rose-500 fill-rose-500" />
-                                                                    </div>
-                                                                )}
-                                                            </button>
-                                                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">{pool.id}</div>
-                                                        </td>
-                                                        <td className="p-4 text-slate-400 text-sm">
-                                                            {createdAt}
-                                                        </td>
-                                                        <td className="p-4 font-bold text-sm">{matchUp}</td>
-                                                        <td className="p-4 text-xs text-slate-400 font-mono">
-                                                            {isBracket ? (
-                                                                (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD'
-                                                            ) : (
-                                                                (pool as GameState).scores.startTime ? new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD'
-                                                            )}
-                                                        </td>
-                                                        <td className="p-4 text-slate-400 text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
-                                                        <td className="p-4">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-                                                                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${filledPct}%` }}></div>
-                                                                </div>
-                                                                <span className="text-xs text-slate-500">{filledPct}%</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="p-4 flex gap-2">
-                                                            <a href={`#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</a>
-                                                            {!isBracket && (
-                                                                <button onClick={() => handleRunSim(pool as GameState)} className="text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 px-2 py-1 rounded">Sim</button>
-                                                            )}
-                                                            <button onClick={() => handleDeletePool(pool.id)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                        {/* Close for loop and tbody */}
-                                    </table>
-                                </div>
+            {
+                activeTab === 'pools' && (
+                    <div className="space-y-8">
+                        {/* SEARCH BAR */}
+                        <div className="flex gap-4">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                                <input
+                                    type="text"
+                                    placeholder="Search pools by name, ID, or owner..."
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-indigo-500"
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                />
                             </div>
-                        ))}
-                </div>
-            )}
+                        </div>
+                        {Object.entries(poolsBySport)
+                            .sort(([a], [b]) => a.localeCompare(b))
+                            .map(([sport, sportPools]) => (
+                                <div key={sport} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
+                                    <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
+                                        <h2 className="text-xl font-bold flex items-center gap-2">
+                                            🏆 {sport}
+                                            <span className="text-sm font-normal text-slate-400">({sportPools.length} pools)</span>
+                                        </h2>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
+                                                <tr>
+                                                    <th className="p-4 font-bold tracking-wider">Pool Name</th>
+                                                    <th className="p-4 font-bold tracking-wider">Created</th>
+                                                    <th className="p-4 font-bold tracking-wider">Matchup</th>
+                                                    <th className="p-4 font-bold tracking-wider">Game Time</th>
+                                                    <th className="p-4 font-bold tracking-wider">Owner</th>
+                                                    <th className="p-4 font-bold tracking-wider">Filled</th>
+                                                    <th className="p-4 font-bold tracking-wider">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-700/50">
+                                                {[...sportPools].sort((a, b) => {
+                                                    const timeA = typeof a.createdAt === 'number' ? a.createdAt : a.createdAt?.seconds || 0;
+                                                    const timeB = typeof b.createdAt === 'number' ? b.createdAt : b.createdAt?.seconds || 0;
+                                                    return timeB - timeA;
+                                                }).map(pool => {
+                                                    const isBracket = pool.type === 'BRACKET';
+                                                    // Normalize data access
+                                                    const createdAt = typeof pool.createdAt === 'number' ? new Date(pool.createdAt).toLocaleDateString() : (pool.createdAt?.seconds ? new Date(pool.createdAt.seconds * 1000).toLocaleDateString() : 'N/A');
+                                                    const matchUp = isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} @ ${(pool as GameState).homeTeam}`;
+                                                    const ownerId = isBracket ? (pool as any).managerUid : (pool as any).ownerId;
+                                                    const contact = users.find(u => u.id === ownerId)?.email || (isBracket ? 'N/A' : (pool as GameState).contactEmail);
+
+                                                    let filledPct = 0;
+                                                    if (isBracket) {
+                                                        const bp = pool as any;
+                                                        const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal;
+                                                        filledPct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round(((bp.entryCount || 0) / max) * 100);
+                                                    } else {
+                                                        const sp = pool as GameState;
+                                                        filledPct = sp.squares.filter(s => s.owner).length;
+                                                    }
+
+                                                    return (
+                                                        <tr key={pool.id} className="hover:bg-slate-700/30 transition-colors">
+                                                            <td className="p-4">
+                                                                <button
+                                                                    onClick={() => setViewingPool(pool as GameState)} // Type assertion or update setViewingPool type
+                                                                    className="font-bold text-white hover:text-indigo-400 hover:underline flex items-center gap-2 text-left"
+                                                                >
+                                                                    {pool.name}
+                                                                    {!isBracket && (pool as GameState).charity?.enabled && (
+                                                                        <div title="Charity Pool">
+                                                                            <Heart size={12} className="text-rose-500 fill-rose-500" />
+                                                                        </div>
+                                                                    )}
+                                                                </button>
+                                                                <div className="text-[10px] text-slate-500 font-mono mt-0.5">{pool.id}</div>
+                                                            </td>
+                                                            <td className="p-4 text-slate-400 text-sm">
+                                                                {createdAt}
+                                                            </td>
+                                                            <td className="p-4 font-bold text-sm">{matchUp}</td>
+                                                            <td className="p-4 text-xs text-slate-400 font-mono">
+                                                                {isBracket ? (
+                                                                    (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD'
+                                                                ) : (
+                                                                    (pool as GameState).scores.startTime ? new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD'
+                                                                )}
+                                                            </td>
+                                                            <td className="p-4 text-slate-400 text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
+                                                            <td className="p-4">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                                                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${filledPct}%` }}></div>
+                                                                    </div>
+                                                                    <span className="text-xs text-slate-500">{filledPct}%</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-4 flex gap-2">
+                                                                <a href={`#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</a>
+                                                                {!isBracket && (
+                                                                    <button onClick={() => handleRunSim(pool as GameState)} className="text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 px-2 py-1 rounded">Sim</button>
+                                                                )}
+                                                                <button onClick={() => handleDeletePool(pool.id)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                            {/* Close for loop and tbody */}
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
+                    </div>
+                )
+            }
 
             {/* ============ USERS TAB ============ */}
-            {activeTab === 'users' && (
-                <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
-                    <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
-                        <h2 className="text-xl font-bold">Registered Users</h2>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={async () => {
-                                    if (confirm('Force sync all users from Auth to DB?')) {
-                                        setUsersLoading(true);
-                                        try {
-                                            const res = await dbService.syncAllUsers();
-                                            alert(`Synced ${res.count} users.`);
-                                            fetchUsers();
-                                        } catch (e) {
-                                            alert('Sync failed');
-                                        } finally {
-                                            setUsersLoading(false);
+            {
+                activeTab === 'users' && (
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
+                        <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
+                            <h2 className="text-xl font-bold">Registered Users</h2>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={async () => {
+                                        if (confirm('Force sync all users from Auth to DB?')) {
+                                            try {
+                                                const res = await dbService.syncAllUsers();
+                                                alert(`Synced ${res.count} users.`);
+                                                fetchUsers();
+                                            } catch (e) {
+                                                alert('Sync failed');
+                                            }
                                         }
-                                    }
-                                }}
-                                className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-bold"
-                            >
-                                Force Sync
-                            </button>
-                            {/* Admin Actions */}
-                            <button
-                                onClick={async () => {
-                                    if (confirm("Recalculate GLOBAL PRIZE STATS? This will scan all locked pools and reset the total prize counter.")) {
-                                        try {
-                                            const res = await dbService.recalculateGlobalStats();
-                                            alert(res.message + " Total: $" + res.totalPrizes);
-                                        } catch (e) {
-                                            alert("Error: " + e);
+                                    }}
+                                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-bold"
+                                >
+                                    Force Sync
+                                </button>
+                                {/* Admin Actions */}
+                                <button
+                                    onClick={async () => {
+                                        if (confirm("Recalculate GLOBAL PRIZE STATS? This will scan all locked pools and reset the total prize counter.")) {
+                                            try {
+                                                const res = await dbService.recalculateGlobalStats();
+                                                alert(res.message + " Total: $" + res.totalPrizes);
+                                            } catch (e) {
+                                                alert("Error: " + e);
+                                            }
                                         }
-                                    }
-                                }}
-                                className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-bold"
-                            >
-                                <Activity size={12} /> Recalculate Stats
-                            </button>
-                            <button
-                                onClick={fetchUsers}
-                                className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
-                            >
-                                <Activity size={12} /> Refresh List
-                            </button>
+                                    }}
+                                    className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-bold"
+                                >
+                                    <Activity size={12} /> Recalculate Stats
+                                </button>
+                                <button
+                                    onClick={fetchUsers}
+                                    className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                                >
+                                    <Activity size={12} /> Refresh List
+                                </button>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
+                                    <tr>
+                                        <th className="p-4 tracking-wider">Name</th>
+                                        <th className="p-4 tracking-wider">Email</th>
+                                        <th className="p-4 tracking-wider">Role</th>
+                                        <th className="p-4 tracking-wider">Method</th>
+                                        <th className="p-4 tracking-wider">Referrals</th>
+                                        <th className="p-4 tracking-wider">ID</th>
+                                        <th className="p-4 tracking-wider">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-700/50">
+                                    {users.map(u => (
+                                        <tr key={u.id} className="hover:bg-slate-700/30 transition-colors">
+                                            <td className="p-4 font-medium">
+                                                <button onClick={() => handleViewUser(u)} className="hover:text-indigo-400 hover:underline font-bold text-left">{u.name}</button>
+                                            </td>
+                                            <td className="p-4 text-slate-400">{u.email}</td>
+                                            <td className="p-4">
+                                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'POOL_MANAGER' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                                                    {u.role || 'USER'}
+                                                </span>
+                                            </td>
+                                            <td className="p-4">
+                                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
+                                                    {u.registrationMethod || 'EMAIL'}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <span className="text-indigo-400 font-bold">{u.referralCount || 0}</span>
+                                            </td>
+                                            <td className="p-4 text-slate-500 font-mono text-xs max-w-[100px] truncate" title={u.id}>{u.id}</td>
+                                            <td className="p-4 flex gap-2">
+                                                <button onClick={() => handleEditUser(u)} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Edit</button>
+                                                <button onClick={() => handleDeleteUser(u)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
-                                <tr>
-                                    <th className="p-4 tracking-wider">Name</th>
-                                    <th className="p-4 tracking-wider">Email</th>
-                                    <th className="p-4 tracking-wider">Role</th>
-                                    <th className="p-4 tracking-wider">Method</th>
-                                    <th className="p-4 tracking-wider">Referrals</th>
-                                    <th className="p-4 tracking-wider">ID</th>
-                                    <th className="p-4 tracking-wider">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-700/50">
-                                {users.map(u => (
-                                    <tr key={u.id} className="hover:bg-slate-700/30 transition-colors">
-                                        <td className="p-4 font-medium">
-                                            <button onClick={() => handleViewUser(u)} className="hover:text-indigo-400 hover:underline font-bold text-left">{u.name}</button>
-                                        </td>
-                                        <td className="p-4 text-slate-400">{u.email}</td>
-                                        <td className="p-4">
-                                            <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'POOL_MANAGER' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
-                                                {u.role || 'USER'}
-                                            </span>
-                                        </td>
-                                        <td className="p-4">
-                                            <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
-                                                {u.registrationMethod || 'EMAIL'}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            <span className="text-indigo-400 font-bold">{u.referralCount || 0}</span>
-                                        </td>
-                                        <td className="p-4 text-slate-500 font-mono text-xs max-w-[100px] truncate" title={u.id}>{u.id}</td>
-                                        <td className="p-4 flex gap-2">
-                                            <button onClick={() => handleEditUser(u)} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Edit</button>
-                                            <button onClick={() => handleDeleteUser(u)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
-                                        </td>
-                                    </tr>
+                )
+            }
+
+            {/* ============ REFERRALS TAB ============ */}
+            {activeTab === 'referrals' && (
+                <div className="bg-slate-800 rounded-xl border border-indigo-500/30 overflow-hidden shadow-xl">
+                    <div className="p-4 border-b border-slate-700 bg-indigo-900/20 flex justify-between items-center">
+                        <h2 className="text-xl font-bold flex items-center gap-2"><Users className="text-indigo-400" size={20} /> Referral Dashboard</h2>
+                        <span className="text-xs font-mono text-slate-500">Top Referrers & Referral Chain</span>
+                    </div>
+
+                    {/* Referral Stats Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border-b border-slate-700/50">
+                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                            <p className="text-3xl font-bold text-indigo-400">{users.reduce((sum, u) => sum + (getComputedReferrals(u.id) || 0), 0)}</p>
+                            <p className="text-xs text-slate-500 uppercase font-bold">Total Referrals</p>
+                        </div>
+                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                            <p className="text-3xl font-bold text-emerald-400">{users.filter(u => u.referredBy).length}</p>
+                            <p className="text-xs text-slate-500 uppercase font-bold">Referred Users</p>
+                        </div>
+                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                            <p className="text-3xl font-bold text-amber-400">
+                                {new Set(users.filter(u => u.referredBy).map(u => u.referredBy)).size}
+                            </p>
+                            <p className="text-xs text-slate-500 uppercase font-bold">Active Referrers</p>
+                        </div>
+                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                            <p className="text-3xl font-bold text-white">{users.length > 0 ? ((users.filter(u => u.referredBy).length / users.length) * 100).toFixed(1) : 0}%</p>
+                            <p className="text-xs text-slate-500 uppercase font-bold">Referral Rate</p>
+                        </div>
+                    </div>
+
+                    {/* Top Referrers Leaderboard */}
+                    <div className="p-4">
+                        <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">🏆 Top Referrers</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+                            {[...users]
+                                .map(u => ({ ...u, _computedCount: getComputedReferrals(u.id) }))
+                                .filter(u => u._computedCount > 0)
+                                .sort((a, b) => b._computedCount - a._computedCount)
+                                .slice(0, 3)
+                                .map((u, i) => (
+                                    <div key={u.id} className={`p-4 rounded-xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'}`}>
+                                        <div className="flex items-center gap-3">
+                                            <div className={`text-2xl font-black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'}`}>#{i + 1}</div>
+                                            <div className="flex-1 min-w-0">
+                                                <button onClick={() => handleViewUser(u)} className="font-bold text-white truncate hover:text-indigo-400">{u.name}</button>
+                                                <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-2xl font-bold text-indigo-400">{u._computedCount}</p>
+                                                <p className="text-[10px] text-slate-500 uppercase">referrals</p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 ))}
-                            </tbody>
-                        </table>
+                            {users.every(u => getComputedReferrals(u.id) === 0) && (
+                                <div className="col-span-3 text-center py-8 text-slate-500">No referrals yet</div>
+                            )}
+                        </div>
+
+                        {/* Full Referral Table */}
+                        <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">All Users Referral Data</h3>
+                        <div className="overflow-x-auto rounded-lg border border-slate-700">
+                            <table className="w-full text-left text-sm">
+                                <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
+                                    <tr>
+                                        <th className="p-3 font-bold">User</th>
+                                        <th className="p-3 font-bold">Referral Code</th>
+                                        <th className="p-3 font-bold text-center">Referrals Made</th>
+                                        <th className="p-3 font-bold">Referred By</th>
+                                        <th className="p-3 font-bold">Joined</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-700/50">
+                                    {[...users]
+                                        .map(u => ({ ...u, _computedCount: getComputedReferrals(u.id) }))
+                                        .sort((a, b) => b._computedCount - a._computedCount)
+                                        .map(u => {
+                                            const referrer = u.referredBy ? users.find(ref => ref.id === u.referredBy) : null;
+                                            return (
+                                                <tr key={u.id} className="hover:bg-slate-700/30">
+                                                    <td className="p-3">
+                                                        <button onClick={() => handleViewUser(u)} className="font-bold text-white hover:text-indigo-400">{u.name}</button>
+                                                        <p className="text-xs text-slate-500">{u.email}</p>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <code className="text-xs bg-slate-900 px-2 py-1 rounded text-indigo-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
+                                                    </td>
+                                                    <td className="p-3 text-center">
+                                                        <span className={`font-bold ${u._computedCount > 0 ? 'text-indigo-400' : 'text-slate-500'}`}>{u._computedCount}</span>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        {referrer ? (
+                                                            <span className="text-emerald-400 text-xs">{referrer.name}</span>
+                                                        ) : u.referredBy ? (
+                                                            <span className="text-slate-500 text-xs font-mono">{u.referredBy.slice(0, 8)}...</span>
+                                                        ) : (
+                                                            <span className="text-slate-600 text-xs">—</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-3 text-xs text-slate-500">
+                                                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* ============ REFERRALS TAB ============ */}
+            {activeTab === 'system' && (
+                <div className="space-y-6">
+                    {/* SYSTEM STATS CARDS */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <p className="text-xs text-slate-500 font-bold uppercase mb-1">Active Pools</p>
+                            <p className="text-3xl font-black text-white">
+                                {pools.filter(p => !('isLocked' in p) ? false : !(p as GameState).isLocked && (p as GameState).scores?.gameStatus !== 'post').length}
+                            </p>
+                        </div>
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <p className="text-xs text-slate-500 font-bold uppercase mb-1">Live Games</p>
+                            <p className="text-3xl font-black text-emerald-400">
+                                {pools.filter(p => (p as GameState).scores?.gameStatus === 'in').length}
+                            </p>
+                        </div>
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <p className="text-xs text-slate-500 font-bold uppercase mb-1">Finished</p>
+                            <p className="text-3xl font-black text-slate-400">
+                                {pools.filter(p => (p as GameState).scores?.gameStatus === 'post').length}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* EXECUTION LOGS */}
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                        <div className="p-4 border-b border-slate-700 bg-slate-900/40 flex justify-between items-center">
+                            <h3 className="font-bold text-white flex items-center gap-2">
+                                <Activity size={18} className="text-slate-400" />
+                                System Logs
+                            </h3>
+                            <button
+                                onClick={() => dbService.getSystemLogs?.().then(setSystemLogs)}
+                                className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition-colors"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+
+                        <div className="overflow-x-auto max-h-[600px]">
+                            <table className="w-full text-left text-sm">
+                                <thead className="text-xs text-slate-500 uppercase bg-slate-900 sticky top-0">
+                                    <tr>
+                                        <th className="p-3 font-bold">Time</th>
+                                        <th className="p-3 font-bold">Status</th>
+                                        <th className="p-3 font-bold">Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-700/50">
+                                    {systemLogs.length === 0 ? (
+                                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No logs found</td></tr>
+                                    ) : (
+                                        systemLogs.map((log, i) => (
+                                            <tr key={i} className="hover:bg-slate-700/20 font-mono text-xs">
+                                                <td className="p-3 text-slate-400 whitespace-nowrap">
+                                                    {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : new Date(log.timestamp).toLocaleString()}
+                                                </td>
+                                                <td className="p-3">
+                                                    <span className={`px-2 py-0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                        log.status === 'partial' ? 'bg-amber-500/10 text-amber-400' :
+                                                            'bg-rose-500/10 text-rose-400'
+                                                        }`}>
+                                                        {log.status?.toUpperCase() || 'UNKNOWN'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-3 text-slate-300">
+                                                    {log.details ? JSON.stringify(log.details) : (log.message || '-')}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'settings' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -677,113 +894,116 @@ export const SuperAdmin: React.FC = () => {
                         </div>
                     </div>
                 </div>
-            )}
-            {activeTab === 'referrals' && (
-                <div className="bg-slate-800 rounded-xl border border-indigo-500/30 overflow-hidden shadow-xl">
-                    <div className="p-4 border-b border-slate-700 bg-indigo-900/20 flex justify-between items-center">
-                        <h2 className="text-xl font-bold flex items-center gap-2"><Users className="text-indigo-400" size={20} /> Referral Dashboard</h2>
-                        <span className="text-xs font-mono text-slate-500">Top Referrers & Referral Chain</span>
-                    </div>
+            )
+            }
+            {
+                activeTab === 'referrals' && (
+                    <div className="bg-slate-800 rounded-xl border border-indigo-500/30 overflow-hidden shadow-xl">
+                        <div className="p-4 border-b border-slate-700 bg-indigo-900/20 flex justify-between items-center">
+                            <h2 className="text-xl font-bold flex items-center gap-2"><Users className="text-indigo-400" size={20} /> Referral Dashboard</h2>
+                            <span className="text-xs font-mono text-slate-500">Top Referrers & Referral Chain</span>
+                        </div>
 
-                    {/* Referral Stats Row */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border-b border-slate-700/50">
-                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                            <p className="text-3xl font-bold text-indigo-400">{users.reduce((sum, u) => sum + (u.referralCount || 0), 0)}</p>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Total Referrals</p>
+                        {/* Referral Stats Row */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border-b border-slate-700/50">
+                            <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                                <p className="text-3xl font-bold text-indigo-400">{users.reduce((sum, u) => sum + (u.referralCount || 0), 0)}</p>
+                                <p className="text-xs text-slate-500 uppercase font-bold">Total Referrals</p>
+                            </div>
+                            <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                                <p className="text-3xl font-bold text-emerald-400">{users.filter(u => u.referredBy).length}</p>
+                                <p className="text-xs text-slate-500 uppercase font-bold">Referred Users</p>
+                            </div>
+                            <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                                <p className="text-3xl font-bold text-amber-400">{users.filter(u => (u.referralCount || 0) > 0).length}</p>
+                                <p className="text-xs text-slate-500 uppercase font-bold">Active Referrers</p>
+                            </div>
+                            <div className="bg-slate-900/50 p-4 rounded-lg text-center">
+                                <p className="text-3xl font-bold text-white">{users.length > 0 ? ((users.filter(u => u.referredBy).length / users.length) * 100).toFixed(1) : 0}%</p>
+                                <p className="text-xs text-slate-500 uppercase font-bold">Referral Rate</p>
+                            </div>
                         </div>
-                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                            <p className="text-3xl font-bold text-emerald-400">{users.filter(u => u.referredBy).length}</p>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Referred Users</p>
-                        </div>
-                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                            <p className="text-3xl font-bold text-amber-400">{users.filter(u => (u.referralCount || 0) > 0).length}</p>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Active Referrers</p>
-                        </div>
-                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                            <p className="text-3xl font-bold text-white">{users.length > 0 ? ((users.filter(u => u.referredBy).length / users.length) * 100).toFixed(1) : 0}%</p>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Referral Rate</p>
-                        </div>
-                    </div>
 
-                    {/* Top Referrers Leaderboard */}
-                    <div className="p-4">
-                        <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">🏆 Top Referrers</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-                            {[...users]
-                                .filter(u => (u.referralCount || 0) > 0)
-                                .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
-                                .slice(0, 3)
-                                .map((u, i) => (
-                                    <div key={u.id} className={`p-4 rounded-xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'}`}>
-                                        <div className="flex items-center gap-3">
-                                            <div className={`text-2xl font-black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'}`}>#{i + 1}</div>
-                                            <div className="flex-1 min-w-0">
-                                                <button onClick={() => handleViewUser(u)} className="font-bold text-white truncate hover:text-indigo-400">{u.name}</button>
-                                                <p className="text-xs text-slate-400 truncate">{u.email}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-2xl font-bold text-indigo-400">{u.referralCount || 0}</p>
-                                                <p className="text-[10px] text-slate-500 uppercase">referrals</p>
+                        {/* Top Referrers Leaderboard */}
+                        <div className="p-4">
+                            <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">🏆 Top Referrers</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+                                {[...users]
+                                    .filter(u => (u.referralCount || 0) > 0)
+                                    .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
+                                    .slice(0, 3)
+                                    .map((u, i) => (
+                                        <div key={u.id} className={`p-4 rounded-xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`text-2xl font-black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'}`}>#{i + 1}</div>
+                                                <div className="flex-1 min-w-0">
+                                                    <button onClick={() => handleViewUser(u)} className="font-bold text-white truncate hover:text-indigo-400">{u.name}</button>
+                                                    <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-2xl font-bold text-indigo-400">{u.referralCount || 0}</p>
+                                                    <p className="text-[10px] text-slate-500 uppercase">referrals</p>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            {users.filter(u => (u.referralCount || 0) > 0).length === 0 && (
-                                <div className="col-span-3 text-center py-8 text-slate-500">No referrals yet</div>
-                            )}
-                        </div>
+                                    ))}
+                                {users.filter(u => (u.referralCount || 0) > 0).length === 0 && (
+                                    <div className="col-span-3 text-center py-8 text-slate-500">No referrals yet</div>
+                                )}
+                            </div>
 
-                        {/* Full Referral Table */}
-                        <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">All Users Referral Data</h3>
-                        <div className="overflow-x-auto rounded-lg border border-slate-700">
-                            <table className="w-full text-left text-sm">
-                                <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
-                                    <tr>
-                                        <th className="p-3 font-bold">User</th>
-                                        <th className="p-3 font-bold">Referral Code</th>
-                                        <th className="p-3 font-bold text-center">Referrals Made</th>
-                                        <th className="p-3 font-bold">Referred By</th>
-                                        <th className="p-3 font-bold">Joined</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-700/50">
-                                    {[...users]
-                                        .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
-                                        .map(u => {
-                                            const referrer = u.referredBy ? users.find(ref => ref.id === u.referredBy) : null;
-                                            return (
-                                                <tr key={u.id} className="hover:bg-slate-700/30">
-                                                    <td className="p-3">
-                                                        <button onClick={() => handleViewUser(u)} className="font-bold text-white hover:text-indigo-400">{u.name}</button>
-                                                        <p className="text-xs text-slate-500">{u.email}</p>
-                                                    </td>
-                                                    <td className="p-3">
-                                                        <code className="text-xs bg-slate-900 px-2 py-1 rounded text-indigo-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
-                                                    </td>
-                                                    <td className="p-3 text-center">
-                                                        <span className={`font-bold ${(u.referralCount || 0) > 0 ? 'text-indigo-400' : 'text-slate-500'}`}>{u.referralCount || 0}</span>
-                                                    </td>
-                                                    <td className="p-3">
-                                                        {referrer ? (
-                                                            <span className="text-emerald-400 text-xs">{referrer.name}</span>
-                                                        ) : u.referredBy ? (
-                                                            <span className="text-slate-500 text-xs font-mono">{u.referredBy.slice(0, 8)}...</span>
-                                                        ) : (
-                                                            <span className="text-slate-600 text-xs">—</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="p-3 text-xs text-slate-500">
-                                                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                </tbody>
-                            </table>
+                            {/* Full Referral Table */}
+                            <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">All Users Referral Data</h3>
+                            <div className="overflow-x-auto rounded-lg border border-slate-700">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
+                                        <tr>
+                                            <th className="p-3 font-bold">User</th>
+                                            <th className="p-3 font-bold">Referral Code</th>
+                                            <th className="p-3 font-bold text-center">Referrals Made</th>
+                                            <th className="p-3 font-bold">Referred By</th>
+                                            <th className="p-3 font-bold">Joined</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700/50">
+                                        {[...users]
+                                            .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
+                                            .map(u => {
+                                                const referrer = u.referredBy ? users.find(ref => ref.id === u.referredBy) : null;
+                                                return (
+                                                    <tr key={u.id} className="hover:bg-slate-700/30">
+                                                        <td className="p-3">
+                                                            <button onClick={() => handleViewUser(u)} className="font-bold text-white hover:text-indigo-400">{u.name}</button>
+                                                            <p className="text-xs text-slate-500">{u.email}</p>
+                                                        </td>
+                                                        <td className="p-3">
+                                                            <code className="text-xs bg-slate-900 px-2 py-1 rounded text-indigo-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
+                                                        </td>
+                                                        <td className="p-3 text-center">
+                                                            <span className={`font-bold ${(u.referralCount || 0) > 0 ? 'text-indigo-400' : 'text-slate-500'}`}>{u.referralCount || 0}</span>
+                                                        </td>
+                                                        <td className="p-3">
+                                                            {referrer ? (
+                                                                <span className="text-emerald-400 text-xs">{referrer.name}</span>
+                                                            ) : u.referredBy ? (
+                                                                <span className="text-slate-500 text-xs font-mono">{u.referredBy.slice(0, 8)}...</span>
+                                                            ) : (
+                                                                <span className="text-slate-600 text-xs">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-3 text-xs text-slate-500">
+                                                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* POOL DETAILS MODAL */}
             {
@@ -1011,9 +1231,11 @@ export const SuperAdmin: React.FC = () => {
                 )
             }
 
-            {showSimDashboard && (
-                <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />
-            )}
+            {
+                showSimDashboard && (
+                    <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />
+                )
+            }
         </div >
     );
 };

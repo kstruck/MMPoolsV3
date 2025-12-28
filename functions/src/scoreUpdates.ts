@@ -518,39 +518,82 @@ export const syncGameStatus = onSchedule({
     memory: "256MiB"
 }, async (event) => {
     const db = admin.firestore();
+    const startTime = Date.now();
+    let processedCount = 0;
+    let errorCount = 0;
 
-    // 1. Fetch Active Pools
-    const poolsSnap = await db.collection("pools")
-        .where("scores.gameStatus", "!=", "post")
-        .get();
+    try {
+        // 1. Fetch Active Pools
+        const poolsSnap = await db.collection("pools")
+            .where("scores.gameStatus", "!=", "post")
+            .get();
 
-    if (poolsSnap.empty) return;
-
-    // 2. Process Each Pool
-    for (const doc of poolsSnap.docs) {
-        const pool = doc.data() as GameState;
-
-        if (!pool.gameId) continue;
-
-        if (!pool.isLocked && pool.scores?.gameStatus === 'pre') {
-            const now = Date.now();
-            const start = new Date(pool.scores.startTime || 0).getTime();
-            if (start > now + 2 * 60 * 60 * 1000) continue;
+        if (poolsSnap.empty) {
+            await db.collection('system_logs').add({
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                type: 'SYNC_GAME_STATUS',
+                status: 'idle',
+                message: 'No active pools found',
+                durationMs: Date.now() - startTime
+            });
+            return;
         }
 
-        const espnScores = await fetchESPNScores(pool.gameId, (pool as any).league || 'nfl');
-        if (!espnScores) continue;
+        // 2. Process Each Pool
+        for (const doc of poolsSnap.docs) {
+            const pool = doc.data() as GameState;
 
-        await db.runTransaction(async (transaction) => {
-            const freshDoc = await transaction.get(doc.ref);
-            if (!freshDoc.exists) return;
-            // Use shared logic
-            await processGameUpdate(
-                transaction,
-                freshDoc,
-                espnScores,
-                { uid: 'system', role: 'SYSTEM' }
-            );
+            if (!pool.gameId) continue;
+
+            // Optimization: Skip if game hasn't started yet and start time is > 2 hours away
+            if (!pool.isLocked && pool.scores?.gameStatus === 'pre') {
+                const now = Date.now();
+                const start = new Date(pool.scores.startTime || 0).getTime();
+                if (start > now + 2 * 60 * 60 * 1000) continue;
+            }
+
+            try {
+                const espnScores = await fetchESPNScores(pool.gameId, (pool as any).league || 'nfl');
+                if (!espnScores) continue;
+
+                await db.runTransaction(async (transaction) => {
+                    const freshDoc = await transaction.get(doc.ref);
+                    if (!freshDoc.exists) return;
+                    await processGameUpdate(
+                        transaction,
+                        freshDoc,
+                        espnScores,
+                        { uid: 'system', role: 'SYSTEM' }
+                    );
+                });
+                processedCount++;
+            } catch (e) {
+                console.error(`Error processing pool ${doc.id}:`, e);
+                errorCount++;
+            }
+        }
+
+        // 3. Log Execution Summary
+        await db.collection('system_logs').add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            type: 'SYNC_GAME_STATUS',
+            status: errorCount > 0 ? 'partial' : 'success',
+            details: {
+                activePoolsFound: poolsSnap.size,
+                poolsProcessed: processedCount,
+                errors: errorCount
+            },
+            durationMs: Date.now() - startTime
+        });
+
+    } catch (globalError: any) {
+        console.error("Critical Sync Failure:", globalError);
+        await db.collection('system_logs').add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            type: 'SYNC_GAME_STATUS',
+            status: 'critical_error',
+            message: globalError.message || 'Unknown error',
+            durationMs: Date.now() - startTime
         });
     }
 });
