@@ -518,7 +518,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
          {/* --- SECTION 3: THE GRID --- */}
          <div className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-hidden w-full border-x border-b border-slate-800">
-            <div className="w-full">
+            <div className="w-full max-w-3xl mx-auto">
                {/* Grid Container - 11x11 layout */}
                <div className="grid grid-cols-11 gap-0.5 sm:gap-1 select-none">
 
