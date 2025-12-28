@@ -558,6 +558,20 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
                         return;
                     await processGameUpdate(transaction, freshDoc, espnScores, { uid: 'system', role: 'SYSTEM' });
                 });
+                // Log Successful Fetch & Process
+                await db.collection('system_logs').add({
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    type: 'ESPN_FETCH_SUCCESS',
+                    status: 'success',
+                    message: `Fetched ESPN scores for Game ${pool.gameId} (Pool ${doc.id})`,
+                    details: {
+                        poolId: doc.id,
+                        gameId: pool.gameId,
+                        currentScore: espnScores.current,
+                        period: espnScores.period,
+                        clock: espnScores.clock
+                    }
+                });
                 processedCount++;
             }
             catch (e) {
@@ -577,6 +591,7 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             type: 'SYNC_GAME_STATUS',
             status: errorCount > 0 ? 'partial' : 'success',
+            message: `Score Sync Cycle Completed: ${processedCount}/${poolsSnap.size} pools processed.`,
             details: {
                 activePoolsFound: poolsSnap.size,
                 poolsProcessed: processedCount,
