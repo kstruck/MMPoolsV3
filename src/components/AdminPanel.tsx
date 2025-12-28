@@ -1241,13 +1241,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <input type="checkbox" checked={gameState.ruleVariations.reverseWinners} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, reverseWinners: e.target.checked } })} className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600" />
           </label>
 
-          <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-indigo-500/30">
-            <div>
-              <span className="font-bold text-slate-300 block">Quarterly Rollovers</span>
-              <span className="text-xs text-slate-500">Unwon quarterly prizes roll to the next quarter.</span>
-            </div>
-            <input type="checkbox" checked={gameState.ruleVariations.quarterlyRollover} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, quarterlyRollover: e.target.checked } })} className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600" />
-          </label>
+
 
           <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-indigo-500/30">
             <div>
