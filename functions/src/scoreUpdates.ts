@@ -531,56 +531,59 @@ const finalizeEventPayouts = async (
     const totalPot = soldSquares * (pool.costPerSquare || 0);
 
     let scoreChangePot = 0;
-    const strategy = pool.ruleVariations.scoreChangePayoutStrategy || 'equal_split';
+    const strategy = pool.ruleVariations?.scoreChangePayoutStrategy || 'equal_split';
 
     if (strategy === 'equal_split') {
         scoreChangePot = totalPot;
     } else {
         // Hybrid
-        const weights = pool.ruleVariations.scoreChangeHybridWeights || { final: 40, halftime: 20, other: 40 };
+        const weights = pool.ruleVariations?.scoreChangeHybridWeights || { final: 40, halftime: 20, other: 40 };
         const remainingPct = 100 - weights.final - weights.halftime;
         scoreChangePot = (totalPot * remainingPct) / 100;
     }
 
-    // 2. Filter Valid Events
-    let validEvents = [...(pool.scoreEvents || [])];
-    if (pool.ruleVariations.includeOTInScorePayouts === false) {
-        validEvents = validEvents.filter(e => !e.description.toUpperCase().includes('OT') && !e.description.toUpperCase().includes('OVERTIME'));
-    }
+    // 2. Query ALL Event Winners from Subcollection (more reliable than scoreEvents array)
+    const winnersRef = db.collection('pools').doc(poolId).collection('winners');
+    const winnersSnap = await transaction.get(winnersRef);
+
+    // Filter to only 'Event' period winners (exclude q1, half, q3, final)
+    const eventWinners = winnersSnap.docs.filter(doc => {
+        const data = doc.data();
+        return data.period === 'Event';
+    });
 
     // 3. Calculate Amount Per Event
-    const eventCount = validEvents.length;
+    const eventCount = eventWinners.length;
     const amountPerEvent = eventCount > 0 ? (scoreChangePot / eventCount) : 0;
+
+    console.log(`[FinalizePayouts] Pool ${poolId}: ${eventCount} events, $${totalPot} pot, $${amountPerEvent.toFixed(2)} per event`);
 
     // 4. Update Winner Docs
     let updatedCount = 0;
 
-    for (const ev of validEvents) {
-        // CORRECTION: Match the ID format used in `processGameUpdate` and `fixPoolScores`
-        // Old: const docId = `event-${ev.id}`; // This was wrong! IDs in winners collection are key based
-        // Actually event winners ARE keyed by event_home_away.
-        const docId = `event_${ev.home}_${ev.away}`;
-
-        const winnerRef = db.collection('pools').doc(poolId).collection('winners').doc(docId);
-
-        // We use transaction.set with merge true to update amount
-        transaction.set(winnerRef, { amount: amountPerEvent }, { merge: true });
-        updatedCount++;
+    for (const winnerDoc of eventWinners) {
+        const currentData = winnerDoc.data();
+        // Only update if amount is different (to avoid unnecessary writes)
+        if (currentData.amount !== amountPerEvent) {
+            transaction.update(winnerDoc.ref, { amount: amountPerEvent });
+            updatedCount++;
+        }
     }
 
     // 5. Log Action
-    if (updatedCount > 0) {
+    if (updatedCount > 0 || eventCount > 0) {
         await writeAuditEvent({
             poolId: poolId,
             type: 'WINNER_COMPUTED',
-            message: `Finalized Event Payouts: $${amountPerEvent.toFixed(2)} per event (${updatedCount} events)`,
+            message: `Finalized Event Payouts: $${amountPerEvent.toFixed(2)} per event (${eventCount} total events, ${updatedCount} updated)`,
             severity: 'INFO',
             actor: actor,
             payload: {
                 totalPot,
                 scoreChangePot,
                 eventCount,
-                amountPerEvent
+                amountPerEvent,
+                updatedCount
             }
         }, transaction);
     }
