@@ -146,9 +146,18 @@ const processWinners = async (
     const totalPot = soldSquares * (poolData.costPerSquare || 0);
 
     // Process Payout Amount
+    // Skip ALL period winners for Equal Split (only score events pay)
     if (poolData.ruleVariations?.scoreChangePayout && poolData.ruleVariations?.scoreChangePayoutStrategy === 'equal_split') {
         console.log(`[ScoreSync] Skipping Period Winner for Equal Split Pool ${poolId}`);
         return;
+    }
+
+    // For Hybrid: Skip Q1 and Q3 (only Halftime and Final get period payouts)
+    if (poolData.ruleVariations?.scoreChangePayout && poolData.ruleVariations?.scoreChangePayoutStrategy === 'hybrid') {
+        if (periodKey === 'q1' || periodKey === 'q3') {
+            console.log(`[ScoreSync] Skipping ${periodKey} Winner for Hybrid Pool ${poolId} (only half/final pay)`);
+            return;
+        }
     }
 
     const payoutPct = getSafePayout(poolData.payouts, periodKey);
