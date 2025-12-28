@@ -285,39 +285,109 @@ const processGameUpdate = async (
 
         const combine = freshPool.ruleVariations?.combineTDandXP === true;
 
-        // Helper to push steps for a single side scoring
-        // Note: This simple logic assumes only ONE team scores at a time in a single poll interval.
-        // If both change (rare in 5 min interval but possible), we just process final.
-        // A more robust way is to handle Home change then Away change sequentially.
+        // Helper function to decompose scoring for a single team
+        const decomposeScoring = (
+            delta: number,
+            scoringTeam: 'home' | 'away',
+            currentHome: number,
+            currentAway: number
+        ): { home: number; away: number; desc: string }[] => {
+            const result: { home: number; away: number; desc: string }[] = [];
 
-        // HOME SCORING lookup
-        if (deltaHome > 0 && deltaAway === 0) {
-            if (!combine && deltaHome === 7) {
-                // TD (6) then XP (1)
-                steps.push({ home: freshCurrent.home + 6, away: freshCurrent.away, desc: 'Touchdown' });
-                steps.push({ home: freshCurrent.home + 7, away: freshCurrent.away, desc: 'Extra Point' });
-            } else if (!combine && deltaHome === 8) {
-                // TD (6) then 2Pt (2)
-                steps.push({ home: freshCurrent.home + 6, away: freshCurrent.away, desc: 'Touchdown' });
-                steps.push({ home: freshCurrent.home + 8, away: freshCurrent.away, desc: '2Pt Conv' });
-            } else {
-                steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+            if (delta <= 0) return result;
+
+            // Decompose based on common football scoring patterns
+            let remaining = delta;
+            let runningHome = currentHome;
+            let runningAway = currentAway;
+
+            while (remaining > 0) {
+                let points = 0;
+                let desc = '';
+
+                // Check for TD+XP (7) or TD+2PT (8) combos
+                if (!combine && remaining >= 7) {
+                    // TD (6 points)
+                    points = 6;
+                    desc = 'Touchdown';
+                    if (scoringTeam === 'home') {
+                        result.push({ home: runningHome + points, away: runningAway, desc });
+                        runningHome += points;
+                    } else {
+                        result.push({ home: runningHome, away: runningAway + points, desc });
+                        runningAway += points;
+                    }
+                    remaining -= points;
+
+                    // Now check for XP or 2PT
+                    if (remaining >= 2) {
+                        points = 2;
+                        desc = '2Pt Conv';
+                    } else if (remaining >= 1) {
+                        points = 1;
+                        desc = 'Extra Point';
+                    } else {
+                        continue;
+                    }
+                } else if (remaining === 6) {
+                    points = 6;
+                    desc = 'Touchdown';
+                } else if (remaining === 3) {
+                    points = 3;
+                    desc = 'Field Goal';
+                } else if (remaining === 2) {
+                    points = 2;
+                    desc = 'Safety';
+                } else if (remaining === 1) {
+                    points = 1;
+                    desc = 'Extra Point';
+                } else {
+                    // Unknown pattern - just record the remaining as one event
+                    points = remaining;
+                    desc = 'Score Change';
+                }
+
+                if (scoringTeam === 'home') {
+                    result.push({ home: runningHome + points, away: runningAway, desc });
+                    runningHome += points;
+                } else {
+                    result.push({ home: runningHome, away: runningAway + points, desc });
+                    runningAway += points;
+                }
+                remaining -= points;
+            }
+
+            return result;
+        };
+
+        // Process HOME scoring first, then AWAY scoring
+        // This ensures we capture all events even when both teams score in the same window
+        let runningHome = freshCurrent.home;
+        let runningAway = freshCurrent.away;
+
+        if (deltaHome > 0) {
+            const homeSteps = decomposeScoring(deltaHome, 'home', runningHome, runningAway);
+            for (const step of homeSteps) {
+                steps.push(step);
+                runningHome = step.home;
             }
         }
-        // AWAY SCORING lookup
-        else if (deltaAway > 0 && deltaHome === 0) {
-            if (!combine && deltaAway === 7) {
-                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 6, desc: 'Touchdown' });
-                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 7, desc: 'Extra Point' });
-            } else if (!combine && deltaAway === 8) {
-                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 6, desc: 'Touchdown' });
-                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 8, desc: '2Pt Conv' });
-            } else {
-                steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+
+        if (deltaAway > 0) {
+            const awaySteps = decomposeScoring(deltaAway, 'away', runningHome, runningAway);
+            for (const step of awaySteps) {
+                steps.push(step);
+                runningAway = step.away;
             }
         }
-        // BOTH scored or negative correction (just take final)
-        else {
+
+        // Handle negative corrections (score went down - rare but possible)
+        if (deltaHome < 0 || deltaAway < 0) {
+            steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Correction' });
+        }
+
+        // If no steps were generated but score changed, add a fallback
+        if (steps.length === 0 && (deltaHome !== 0 || deltaAway !== 0)) {
             steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
         }
 
