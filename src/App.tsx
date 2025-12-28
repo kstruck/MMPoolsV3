@@ -13,7 +13,7 @@ import { calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy } from 'lucide-react';
+import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2 } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
@@ -1146,6 +1146,11 @@ const App: React.FC = () => {
             <p className="text-slate-400 text-sm font-medium">{squaresRemaining} Squares Remaining</p>
           </div>
           <div className="flex gap-2">
+            {user && (user.id === squaresPool.ownerId || user.role === 'SUPER_ADMIN') && (
+              <a href={`/#admin/${squaresPool.id}`} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2">
+                <Edit2 size={16} /> Manage Pool
+              </a>
+            )}
             {!user && (
               <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="hidden md:block bg-indigo-900/50 hover:bg-indigo-800 text-indigo-200 border border-indigo-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors">
                 Sign In to Manage Your Pool

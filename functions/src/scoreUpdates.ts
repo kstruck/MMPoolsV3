@@ -617,7 +617,18 @@ export const syncGameStatus = onSchedule({
 
             try {
                 const espnScores = await fetchESPNScores(pool.gameId, (pool as any).league || 'nfl');
-                if (!espnScores) continue;
+                if (!espnScores) {
+                    console.warn(`[Sync] Failed to fetch scores for pool ${doc.id}`);
+                    await db.collection('system_logs').add({
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        type: 'ESPN_FETCH_FAIL',
+                        status: 'error',
+                        message: `Failed to fetch valid scores for pool ${doc.id} (GameID: ${pool.gameId})`,
+                        details: { poolId: doc.id, gameId: pool.gameId }
+                    });
+                    errorCount++;
+                    continue;
+                }
 
                 await db.runTransaction(async (transaction) => {
                     const freshDoc = await transaction.get(doc.ref);
@@ -630,8 +641,15 @@ export const syncGameStatus = onSchedule({
                     );
                 });
                 processedCount++;
-            } catch (e) {
+            } catch (e: any) {
                 console.error(`Error processing pool ${doc.id}:`, e);
+                await db.collection('system_logs').add({
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    type: 'POOL_SYNC_ERROR',
+                    status: 'error',
+                    message: `Error syncing pool ${doc.id}: ${e.message}`,
+                    details: { poolId: doc.id, error: e.message }
+                });
                 errorCount++;
             }
         }

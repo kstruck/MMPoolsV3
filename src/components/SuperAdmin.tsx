@@ -3,7 +3,7 @@ import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import type { GameState, Pool, User, SystemSettings } from '../types';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown } from 'lucide-react';
 
 
 export const SuperAdmin: React.FC = () => {
@@ -777,41 +777,98 @@ export const SuperAdmin: React.FC = () => {
 
                     {/* EXECUTION LOGS */}
                     <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                        <div className="p-4 border-b border-slate-700 bg-slate-900/40 flex justify-between items-center">
-                            <h3 className="font-bold text-white flex items-center gap-2">
-                                <Activity size={18} className="text-slate-400" />
-                                System Logs
-                            </h3>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={async () => {
-                                        if (confirm('Run Retroactive Score Fix? This will scan all active pools and repair missing score events (0-6 Touchdowns) if found.')) {
-                                            try {
-                                                if (dbService.fixPoolScores) {
-                                                    const res = await dbService.fixPoolScores();
-                                                    console.log('Fix Results:', res);
-                                                    alert('Fix Complete. Check console for details.');
+                        <div className="p-4 border-b border-slate-700 bg-slate-900/40 flex flex-col gap-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-bold text-white flex items-center gap-2">
+                                    <Activity size={18} className="text-slate-400" />
+                                    System Logs
+                                </h3>
+                                <div className="flex gap-2">
+                                    {/* Email Export Button */}
+                                    <button
+                                        onClick={() => {
+                                            // 1. Collect Users
+                                            const allEmails = new Map<string, string>(); // email -> name
+                                            users.forEach(u => allEmails.set(u.email.toLowerCase(), u.name));
+
+                                            // 2. Scan Pools for Guests
+                                            pools.forEach((p: any) => {
+                                                if (p.squares) {
+                                                    p.squares.forEach((s: any) => {
+                                                        if (s.playerDetails?.email) {
+                                                            const e = s.playerDetails.email.toLowerCase();
+                                                            if (!allEmails.has(e)) {
+                                                                allEmails.set(e, s.owner || 'Guest');
+                                                            }
+                                                        }
+                                                    });
                                                 }
-                                            } catch (e) {
-                                                console.error(e);
-                                                alert('Fix Failed');
+                                            });
+
+                                            // 3. Generate CSV
+                                            const headers = ['Name', 'Email'];
+                                            const rows = Array.from(allEmails.entries()).map(([email, name]) => `"${name}","${email}"`);
+                                            const csvContent = [headers.join(','), ...rows].join('\n');
+
+                                            // 4. Download
+                                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                                            const url = URL.createObjectURL(blob);
+                                            const link = document.createElement('a');
+                                            link.setAttribute('href', url);
+                                            link.setAttribute('download', `mmp_emails_${new Date().toISOString().slice(0, 10)}.csv`);
+                                            link.style.visibility = 'hidden';
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                        }}
+                                        className="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded text-white transition-colors font-bold flex items-center gap-1"
+                                    >
+                                        <ArrowDown size={12} /> Export Emails
+                                    </button>
+
+                                    <button
+                                        onClick={async () => {
+                                            if (confirm('Run Retroactive Score Fix? This will scan all active pools and repair missing score events.')) {
+                                                try {
+                                                    if (dbService.fixPoolScores) {
+                                                        await dbService.fixPoolScores();
+                                                        alert('Fix Complete.');
+                                                    }
+                                                } catch (e) { alert('Fix Failed'); }
                                             }
-                                        }
+                                        }}
+                                        className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded text-white transition-colors font-bold"
+                                    >
+                                        Fix Scoring
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (dbService.getSystemLogs) {
+                                                dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
+                                            }
+                                        }}
+                                        className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition-colors"
+                                    >
+                                        Refresh
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Filters */}
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Filter logs..."
+                                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white placeholder:text-slate-600 w-full max-w-xs focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    onChange={(e) => {
+                                        const term = e.target.value.toLowerCase();
+                                        const rows = document.querySelectorAll('.log-row');
+                                        rows.forEach((row: any) => {
+                                            const text = row.innerText.toLowerCase();
+                                            row.style.display = text.includes(term) ? '' : 'none';
+                                        });
                                     }}
-                                    className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded text-white transition-colors font-bold"
-                                >
-                                    Fix Scoring
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (dbService.getSystemLogs) {
-                                            dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
-                                        }
-                                    }}
-                                    className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition-colors"
-                                >
-                                    Refresh
-                                </button>
+                                />
                             </div>
                         </div>
 
@@ -829,7 +886,7 @@ export const SuperAdmin: React.FC = () => {
                                         <tr><td colSpan={3} className="p-8 text-center text-slate-500">No logs found</td></tr>
                                     ) : (
                                         systemLogs.map((log, i) => (
-                                            <tr key={i} className="hover:bg-slate-700/20 font-mono text-xs">
+                                            <tr key={i} className={`log-row hover:bg-slate-700/20 font-mono text-xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''}`}>
                                                 <td className="p-3 text-slate-400 whitespace-nowrap">
                                                     {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : new Date(log.timestamp).toLocaleString()}
                                                 </td>
