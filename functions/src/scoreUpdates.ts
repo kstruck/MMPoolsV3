@@ -820,6 +820,20 @@ export const fixPoolScores = onCall({
                     const existingEvents = [...currentScoreEvents];
                     existingEvents.sort((a, b) => a.timestamp - b.timestamp);
 
+                    // Ensure the LATEST score from ESPN is in the event list
+                    // This handles cases where syncGameStatus failed to record the final update
+                    const lastRecorded = existingEvents.length > 0 ? existingEvents[existingEvents.length - 1] : { home: 0, away: 0 };
+                    if (lastRecorded.home !== espnScores.current.home || lastRecorded.away !== espnScores.current.away) {
+                        console.log(`[FixPool] Appending missing tail score: ${espnScores.current.home}-${espnScores.current.away}`);
+                        existingEvents.push({
+                            id: db.collection("_").doc().id,
+                            home: espnScores.current.home,
+                            away: espnScores.current.away,
+                            description: 'Score Update (Synced)',
+                            timestamp: Date.now()
+                        });
+                    }
+
                     const newEventHistory: any[] = [];
                     let lastScore = { home: 0, away: 0 };
                     let repairsMade = false;

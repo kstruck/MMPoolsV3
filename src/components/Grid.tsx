@@ -518,9 +518,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
          {/* --- SECTION 3: THE GRID --- */}
          <div className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-hidden w-full border-x border-b border-slate-800">
-            <div className="overflow-x-auto grid-scroll pb-2">
+            <div className="w-full">
                {/* Grid Container - 11x11 layout */}
-               <div className="min-w-[600px] grid grid-cols-11 gap-1 select-none">
+               <div className="grid grid-cols-11 gap-0.5 sm:gap-1 select-none">
 
                   {/* Top-Left Corner (Logo/Team Names) */}
                   <div className="col-span-1 row-span-1 bg-slate-900 flex flex-col items-center justify-center p-1 rounded-lg border border-slate-800 relative overflow-hidden shadow-inner">
@@ -549,7 +549,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   {Array.from({ length: 10 }).map((_, i) => {
                      const digit = gameState.axisNumbers ? gameState.axisNumbers.home[i] : null; // Top is Home
                      const isHighlighted = highlightHomeDigit !== undefined && digit !== null && digit === highlightHomeDigit && gameState.isLocked;
-                     const baseClass = "flex flex-col items-center justify-center font-bold text-2xl h-16 rounded-lg border relative overflow-hidden group transition-all duration-300";
+                     const baseClass = "flex flex-col items-center justify-center font-bold text-sm sm:text-xl md:text-2xl aspect-square rounded-md sm:rounded-lg border relative overflow-hidden group transition-all duration-300";
                      const colorClass = isHighlighted
                         ? "bg-gradient-to-b from-rose-600 to-rose-800 text-white border-rose-400 shadow-[0_0_15px_rgba(225,29,72,0.5)] z-20 scale-105"
                         : "bg-slate-900 text-rose-200/70 border-slate-800 hover:border-rose-500/30 hover:bg-slate-800";
@@ -571,7 +571,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         {(() => {
                            const digit = gameState.axisNumbers ? gameState.axisNumbers.away[rowIndex] : null; // Left is Away
                            const isHighlighted = highlightAwayDigit !== undefined && digit !== null && digit === highlightAwayDigit && gameState.isLocked;
-                           const baseClass = "flex flex-col items-center justify-center font-bold text-2xl w-full h-16 rounded-lg border relative overflow-hidden transition-all duration-300";
+                           const baseClass = "flex flex-col items-center justify-center font-bold text-sm sm:text-xl md:text-2xl w-full aspect-square rounded-md sm:rounded-lg border relative overflow-hidden transition-all duration-300";
                            const colorClass = isHighlighted
                               ? "bg-gradient-to-r from-indigo-600 to-indigo-800 text-white border-indigo-400 shadow-[0_0_15px_rgba(79,70,229,0.5)] z-20 scale-105"
                               : "bg-slate-900 text-indigo-200/70 border-slate-800 hover:border-indigo-500/30 hover:bg-slate-800";
@@ -711,7 +711,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                  key={`sq-${squareIndex}`}
                                  onClick={() => handleSquareClick(squareIndex)}
                                  className={`
-                        relative flex flex-col items-center justify-center h-16 rounded-lg
+                        relative flex flex-col items-center justify-center aspect-square rounded-md sm:rounded-lg
                         ${bgClass} ${borderClass} ${textClass} ${effectClass} ${zIndex}
                         group
                                  `}
