@@ -1295,9 +1295,12 @@ const App: React.FC = () => {
                           </button>
 
                           {currentPool.ruleVariations.reverseWinners && (
-                            <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
-                              <Zap size={12} className="fill-indigo-400" /> Reverse Winners Active
-                            </div>
+                            <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1">
+                              <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
+                                <Zap size={12} className="fill-indigo-400" /> Reverse Winners Active
+                              </div>
+                              <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1707,6 +1710,15 @@ const App: React.FC = () => {
                         : "If a winning square is empty, the prize is typically kept by the house or split among other winners (see Manager instructions)."}
                     </p>
                   </div>
+
+                  {currentPool.ruleVariations.reverseWinners && (
+                    <div className="p-4 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
+                      <h4 className="font-bold text-sm text-indigo-400 mb-1">🔄 Reverse Winners is ON</h4>
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        Every prize is <strong>SPLIT 50/50</strong> between the standard winner and the "Reverse" winner (swapping the Home and Away digits). Double the winners, double the fun!
+                      </p>
+                    </div>
+                  )}
 
                   <div className="p-4 rounded-lg bg-slate-950 border border-slate-800">
                     <h4 className="font-bold text-sm text-slate-300 mb-1">Final Prize Strategy</h4>
