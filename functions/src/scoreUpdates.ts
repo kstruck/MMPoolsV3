@@ -796,14 +796,23 @@ export const fixPoolScores = onCall({
                 const q3H = effectivePool.scores.q3?.home; const q3A = effectivePool.scores.q3?.away;
                 const finalH = effectivePool.scores.final?.home; const finalA = effectivePool.scores.final?.away;
 
-                if (isQ1Final && q1H !== undefined) await processWinners(t, db, doc.id, effectivePool, 'q1', q1H, q1A);
-                if (isHalfFinal && halfH !== undefined) await processWinners(t, db, doc.id, effectivePool, 'half', halfH, halfA);
-                if (isQ3Final && q3H !== undefined) await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
-                if (isGameFinal && finalH !== undefined) await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
+                // SKIP QUARTER WINNERS IF "EQUAL SPLIT" IS ACTIVE
+                // If the user chose "Every Score Pays" -> "Equal Split", there are no quarterly winners.
+                // We trust ruleVariations over stale payout percentages.
+                const isEqualSplit = pool.ruleVariations?.scoreChangePayout && pool.ruleVariations?.scoreChangePayoutStrategy === 'equal_split';
+
+                if (!isEqualSplit) {
+                    if (isQ1Final && q1H !== undefined) await processWinners(t, db, doc.id, effectivePool, 'q1', q1H, q1A);
+                    if (isHalfFinal && halfH !== undefined) await processWinners(t, db, doc.id, effectivePool, 'half', halfH, halfA);
+                    if (isQ3Final && q3H !== undefined) await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
+                    if (isGameFinal && finalH !== undefined) await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
+                }
 
                 // BACKFILL LOGIC
+                let currentScoreEvents = pool.scoreEvents || [];
+
                 if (pool.ruleVariations?.scoreChangePayout) {
-                    const existingEvents = pool.scoreEvents || [];
+                    const existingEvents = [...currentScoreEvents];
                     existingEvents.sort((a, b) => a.timestamp - b.timestamp);
 
                     const newEventHistory: any[] = [];
@@ -836,7 +845,8 @@ export const fixPoolScores = onCall({
                                     awayDigit: aDigit,
                                     isReverse: false,
                                     description: desc || 'Score Change',
-                                    // Preserve existing amount if any, or default to 0
+                                    // Preserve existing amount (it will be overwritten by finalizeEventPayouts if final)
+                                    // BUT if we create it new, it has no amount.
                                 }, { merge: true });
                             }
                         }
@@ -896,11 +906,14 @@ export const fixPoolScores = onCall({
 
                     if (repairsMade) {
                         updates.scoreEvents = newEventHistory;
+                        currentScoreEvents = newEventHistory; // For finalization
                         t.update(doc.ref, { scoreEvents: newEventHistory });
                     }
 
                     if (isGameFinal) {
-                        await finalizeEventPayouts(t, db, doc.id, effectivePool, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' });
+                        // Use the updated event history for finalization so new events get paid!
+                        const poolForPayouts = { ...effectivePool, scoreEvents: currentScoreEvents };
+                        await finalizeEventPayouts(t, db, doc.id, poolForPayouts, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' });
                     }
                 }
 
