@@ -808,7 +808,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   <div className="w-6 h-6 rounded bg-amber-400 border border-amber-300 shadow-sm flex items-center justify-center animate-bounce">
                      <Trophy size={14} className="text-black" fill="currentColor" />
                   </div>
-                  <span className="text-sm font-bold text-amber-200">Period Winner</span>
+                  <span className="text-sm font-bold text-amber-200">Quarter Winner</span>
                </div>
 
                <div className="flex items-center gap-3">
