@@ -1084,13 +1084,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <h3 className="text-xl font-bold text-white mb-4">Payout Configuration</h3>
         <div className="flex bg-slate-950 p-1.5 rounded-lg border border-slate-800 mb-6">
           <button
-            onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: false } })}
+            onClick={() => updateConfig({
+              payouts: { q1: 25, half: 25, q3: 25, final: 25 },
+              ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: false }
+            })}
             className={`flex-1 py-3 rounded-md font-bold text-sm transition-all ${!gameState.ruleVariations.scoreChangePayout ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
           >
             Standard Quarterly
           </button>
           <button
-            onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: true } })}
+            onClick={() => updateConfig({
+              payouts: { q1: 0, half: 0, q3: 0, final: 0 },
+              ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: true }
+            })}
             className={`flex-1 py-3 rounded-md font-bold text-sm transition-all ${gameState.ruleVariations.scoreChangePayout ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
           >
             Every Score Pays
