@@ -117,6 +117,8 @@ export interface GameState {
   homeTeamLogo?: string; // API provided logo
   awayTeamLogo?: string; // API provided logo
   gameId?: string; // ESPN Game ID for automated tracking
+  seasonType?: '1' | '2' | '3'; // 1=Preseason, 2=Regular, 3=Postseason
+  week?: number; // 1-18 for regular, 1-5 for postseason (5 = Super Bowl)
 
   costPerSquare: number;
   maxSquaresPerPlayer: number;

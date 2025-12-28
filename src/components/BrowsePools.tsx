@@ -5,6 +5,7 @@ import type { GameState, User, BracketPool } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
+import { getPoolTypeName } from '../utils/poolUtils';
 
 interface BrowsePoolsProps {
     user: User | null;
@@ -280,7 +281,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                                         {pool.name}
                                                     </h3>
                                                     <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
-                                                        {isBracket ? <span className="text-amber-500">March Madness Bracket</span> : <span>Super Bowl Squares</span>}
+                                                        {isBracket ? <span className="text-amber-500">March Madness Bracket</span> : <span>{getPoolTypeName(pool as GameState)}</span>}
                                                         {charityEnabled && <span className="text-rose-400 flex items-center gap-1">• <Heart size={10} className="fill-rose-400" /> Charity</span>}
                                                     </div>
                                                 </div>

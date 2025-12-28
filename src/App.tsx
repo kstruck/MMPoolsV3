@@ -35,7 +35,7 @@ import { ManagerDashboard } from './components/ManagerDashboard';
 const ShareModal: React.FC<{ isOpen: boolean; onClose: () => void; shareUrl: string }> = ({ isOpen, onClose, shareUrl }) => {
   if (!isOpen) return null;
   const encodedUrl = encodeURIComponent(shareUrl);
-  const text = "Join my Super Bowl Squares pool! Pick your winning squares now.";
+  const text = "Join my Game Day Squares pool! Pick your winning squares now.";
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
       <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full relative">

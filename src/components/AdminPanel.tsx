@@ -454,6 +454,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       gameId: game.id,
       homeTeamLogo: home.logo,
       awayTeamLogo: away.logo,
+      seasonType: seasonType as '1' | '2' | '3', // Save the season type
+      week: parseInt(week), // Save the week number
       reminders: {
         ...existingReminders,
         lock: {

@@ -127,7 +127,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                         <h2 className="text-3xl font-bold text-white flex items-center gap-3">
                             <LayoutDashboard className="text-indigo-500" /> Manage My Pools
                         </h2>
-                        <p className="text-slate-400 mt-2">Create, edit, and manage your Super Bowl squares pools.</p>
+                        <p className="text-slate-400 mt-2">Create, edit, and manage your Game Day Squares pools.</p>
                     </div>
                     <button onClick={onCreatePool} className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
                         <Plus size={20} /> Create New Pool
@@ -153,7 +153,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                     <div className="text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700 border-dashed">
                         <Globe size={48} className="mx-auto text-slate-600 mb-4" />
                         <h3 className="text-xl font-bold text-white mb-2">No Pools Yet</h3>
-                        <p className="text-slate-400 font-medium mb-6">Get started by creating your first Super Bowl Squares pool!</p>
+                        <p className="text-slate-400 font-medium mb-6">Get started by creating your first Game Day Squares pool!</p>
                         <button onClick={onCreatePool} className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2 rounded-lg font-bold transition-colors">
                             Create Pool
                         </button>
