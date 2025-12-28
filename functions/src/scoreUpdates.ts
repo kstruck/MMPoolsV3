@@ -502,8 +502,6 @@ const processGameUpdate = async (
         await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA, true);
     }
 
-    // ... (This function is getting large, consider refactoring if it grows more)
-
     // FINAL WRITE: Update the pool doc itself
     // Must be last if previous steps involve reads (like audit deduping)
     if (shouldUpdate) {
@@ -536,13 +534,6 @@ const finalizeEventPayouts = async (
     const strategy = pool.ruleVariations.scoreChangePayoutStrategy || 'equal_split';
 
     if (strategy === 'equal_split') {
-        // In "Equal Split" mode (as per user req), usually this means 100% of pot goes to scores??
-        // Or is it implied that PayoutConfig is respected?
-        // Game Logic client-side says: "Option A (Equal Split) = 100% of pot is for scores (technically, if not standard 25/25/25/25)"
-        // But let's assume if payouts are defined (e.g. 25/25/25/25), then Equal Split applies to the *Remainder*?
-        // Actually, for "Every Score Pays", usually the *Entire* pot is split by events.
-        // Let's stick to the GameLogic.ts implementation logic to match client validation.
-        // In GameLogic.ts: if equal_split, scoreChangePot = totalPot (and distributable is 0)
         scoreChangePot = totalPot;
     } else {
         // Hybrid
@@ -562,14 +553,14 @@ const finalizeEventPayouts = async (
     const amountPerEvent = eventCount > 0 ? (scoreChangePot / eventCount) : 0;
 
     // 4. Update Winner Docs
-    // We need to find the winner docs corresponding to these events.
-    // The ID format is `event_HOME_AWAY`.
-    // Valid events have unique scores usually, but lets be careful.
-
     let updatedCount = 0;
 
     for (const ev of validEvents) {
-        const docId = `event-${ev.id}`;
+        // CORRECTION: Match the ID format used in `processGameUpdate` and `fixPoolScores`
+        // Old: const docId = `event-${ev.id}`; // This was wrong! IDs in winners collection are key based
+        // Actually event winners ARE keyed by event_home_away.
+        const docId = `event_${ev.home}_${ev.away}`;
+
         const winnerRef = db.collection('pools').doc(poolId).collection('winners').doc(docId);
 
         // We use transaction.set with merge true to update amount
@@ -631,7 +622,8 @@ export const syncGameStatus = onSchedule({
             // Optimization: Skip if game hasn't started yet and start time is > 2 hours away
             if (!pool.isLocked && pool.scores?.gameStatus === 'pre') {
                 const now = Date.now();
-                const start = new Date(pool.scores.startTime || 0).getTime();
+                // Safe handling of startTime
+                const start = pool.scores.startTime ? new Date(pool.scores.startTime).getTime() : 0;
                 if (start > now + 2 * 60 * 60 * 1000) continue;
             }
 
@@ -776,34 +768,40 @@ export const simulateGameUpdate = onCall({
 
 // One-time callable function to fix corrupted pool scores AND run winner logic
 export const fixPoolScores = onCall({
-    timeoutSeconds: 120,
-    memory: "256MiB"
+    timeoutSeconds: 300,
+    memory: "512MiB"
 }, async (request) => {
-    // Only allow super admin
-    if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
-        throw new HttpsError('permission-denied', 'Only super admin can run this');
+    // Check Authentication (Admin Only)
+    if (request.auth?.token.role !== 'SUPER_ADMIN' && request.auth?.token.email !== 'kstruck@gmail.com') {
+        if (request.auth?.token.role !== 'SUPER_ADMIN') {
+            throw new HttpsError('permission-denied', 'Must be Super Admin');
+        }
     }
 
     const db = admin.firestore();
+    const targetPoolId = request.data?.poolId;
+    let poolsSnap;
+
+    if (targetPoolId) {
+        // Targeted Fix
+        console.log(`[FixPool] Targeting single pool: ${targetPoolId}`);
+        const docSnap = await db.collection("pools").doc(targetPoolId).get();
+        if (!docSnap.exists) return { success: false, message: 'Pool not found' };
+        poolsSnap = { docs: [docSnap], size: 1 };
+    } else {
+        // Global Fix
+        console.log(`[FixPool] Running Global Fix...`);
+        poolsSnap = await db.collection("pools")
+            .where("scores.gameStatus", "in", ["in", "post"])
+            .get();
+    }
+
     const results: any[] = [];
-    const poolsSnap = await db.collection('pools')
-        .where('gameId', '!=', null)
-        .get();
 
     for (const doc of poolsSnap.docs) {
         try {
             const pool = doc.data() as GameState;
-
-            if (!pool.gameId) {
-                results.push({ id: doc.id, status: 'skipped', reason: 'no gameId' });
-                continue;
-            }
-
-            const gameStatus = pool.scores?.gameStatus;
-            if (gameStatus !== 'in' && gameStatus !== 'post') {
-                results.push({ id: doc.id, status: 'skipped', reason: `gameStatus is ${gameStatus}` });
-                continue;
-            }
+            if (!pool.gameId) continue;
 
             const espnScores = await fetchESPNScores(pool.gameId, (pool as any).league || 'nfl');
             if (!espnScores) {
@@ -811,8 +809,8 @@ export const fixPoolScores = onCall({
                 continue;
             }
 
-            const period = espnScores.period;
             const state = espnScores.gameStatus;
+            const period = espnScores.period;
             const isQ1Final = (period >= 2) || (state === "post");
             const isHalfFinal = (period >= 3) || (state === "post");
             const isQ3Final = (period >= 4) || (state === "post");
@@ -856,8 +854,6 @@ export const fixPoolScores = onCall({
                 const finalH = effectivePool.scores.final?.home; const finalA = effectivePool.scores.final?.away;
 
                 // SKIP QUARTER WINNERS IF "EQUAL SPLIT" IS ACTIVE
-                // If the user chose "Every Score Pays" -> "Equal Split", there are no quarterly winners.
-                // We trust ruleVariations over stale payout percentages.
                 const isEqualSplit = pool.ruleVariations?.scoreChangePayout && pool.ruleVariations?.scoreChangePayoutStrategy === 'equal_split';
 
                 if (!isEqualSplit) {
@@ -874,8 +870,6 @@ export const fixPoolScores = onCall({
                     const existingEvents = [...currentScoreEvents];
                     existingEvents.sort((a, b) => a.timestamp - b.timestamp);
 
-                    // Ensure the LATEST score from ESPN is in the event list
-                    // This handles cases where syncGameStatus failed to record the final update
                     const lastRecorded = existingEvents.length > 0 ? existingEvents[existingEvents.length - 1] : { home: 0, away: 0 };
                     if (lastRecorded.home !== espnScores.current.home || lastRecorded.away !== espnScores.current.away) {
                         console.log(`[FixPool] Appending missing tail score: ${espnScores.current.home}-${espnScores.current.away}`);
@@ -910,16 +904,22 @@ export const fixPoolScores = onCall({
                                 const winnerName = square?.owner || 'Unsold';
                                 const docId = `event_${home}_${away}`;
 
+                                // Calculate Amount
+                                let amount = 0;
+                                if (pool.scoreChangePayoutAmount && pool.scoreChangePayoutAmount > 0) {
+                                    amount = pool.scoreChangePayoutAmount;
+                                }
+
                                 await t.set(db.collection('pools').doc(doc.id).collection('winners').doc(docId), {
                                     period: 'Event',
                                     squareId: sqIdx,
                                     owner: winnerName,
+                                    amount: amount,
                                     homeDigit: hDigit,
                                     awayDigit: aDigit,
                                     isReverse: false,
                                     description: desc || 'Score Change',
-                                    // Preserve existing amount (it will be overwritten by finalizeEventPayouts if final)
-                                    // BUT if we create it new, it has no amount.
+                                    timestamp: timestamp
                                 }, { merge: true });
                             }
                         }
@@ -984,7 +984,6 @@ export const fixPoolScores = onCall({
                     }
 
                     if (isGameFinal) {
-                        // Use the updated event history for finalization so new events get paid!
                         const poolForPayouts = { ...effectivePool, scoreEvents: currentScoreEvents };
                         await finalizeEventPayouts(t, db, doc.id, poolForPayouts, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' });
                     }
@@ -1008,7 +1007,7 @@ export const fixPoolScores = onCall({
 
         } catch (error: any) {
             console.error(`Error processing pool ${doc.id}:`, error);
-            results.push({ id: doc.id, status: 'error', message: error.message });
+            results.push({ id: doc.id, status: 'error', reason: error.message });
         }
     }
 

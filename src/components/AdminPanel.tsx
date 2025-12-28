@@ -678,7 +678,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <p className="text-slate-400 text-sm mb-6">Automatically lock the grid and reveal numbers.</p>
 
           <div className="space-y-4">
-            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+            <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-slate-900 rounded mb-2 border border-transparent hover:border-slate-700 transition-all">
+              <input
+                type="checkbox"
+                checked={safeReminders.lock.enabled}
+                onChange={(e) => updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: e.target.checked } } })}
+                className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div>
+                <span className="text-sm font-bold text-slate-200 block">Enable Auto-Lock System</span>
+                <span className="text-xs text-slate-500">If disabled, the pool will NEVER auto-lock.</span>
+              </div>
+            </label>
+
+            <div className={`bg-slate-950 p-4 rounded-lg border border-slate-800 ${!safeReminders.lock.enabled ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Trigger Time</label>
               <select
                 className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white mb-4 outline-none focus:border-indigo-500"
@@ -694,12 +707,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     } else {
                       defaultTime.setMinutes(defaultTime.getMinutes() + 60);
                     }
-                    updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: defaultTime.getTime() } } });
+                    updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: defaultTime.getTime() } } });
                   } else {
                     const offsetMins = parseInt(val);
                     if (gameState.scores.startTime) {
                       const start = new Date(gameState.scores.startTime).getTime();
-                      updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: start - (offsetMins * 60 * 1000) } } });
+                      updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: start - (offsetMins * 60 * 1000) } } });
                     }
                   }
                 }}
