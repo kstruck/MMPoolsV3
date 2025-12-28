@@ -19,6 +19,11 @@ export const SuperAdmin: React.FC = () => {
     const [showSimDashboard, setShowSimDashboard] = useState(false);
     const [sportFilter, setSportFilter] = useState<string>('ALL');
 
+    // Log Filters
+    const [logStatusFilter, setLogStatusFilter] = useState<string>('ALL');
+    const [logTagFilter, setLogTagFilter] = useState<string>('ALL');
+    const [logTimeFilter, setLogTimeFilter] = useState<string>('24H'); // Default to last 24h
+
     // Edit/View State
     const [viewingPool, setViewingPool] = useState<Pool | null>(null);
     const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -286,6 +291,35 @@ export const SuperAdmin: React.FC = () => {
     const getComputedReferrals = (userId: string) => {
         return users.filter(u => u.referredBy === userId).length;
     };
+
+    // Filtered Logs Logic
+    const filteredLogs = systemLogs.filter(log => {
+        // 1. Text Search
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            const text = ((log.message || '') + (JSON.stringify(log.details) || '')).toLowerCase();
+            if (!text.includes(term)) return false;
+        }
+
+        // 2. Status Filter
+        if (logStatusFilter !== 'ALL' && log.status !== logStatusFilter) return false;
+
+        // 3. Tag Filter
+        if (logTagFilter !== 'ALL' && log.type !== logTagFilter) return false;
+
+        // 4. Time Filter
+        if (logTimeFilter !== 'ALL') {
+            const time = log.timestamp?.toDate ? log.timestamp.toDate().getTime() : new Date(log.timestamp).getTime();
+            const now = Date.now();
+            const hours = (now - time) / (1000 * 60 * 60); // hours diff
+
+            if (logTimeFilter === '1H' && hours > 1) return false;
+            if (logTimeFilter === '24H' && hours > 24) return false;
+            if (logTimeFilter === '7D' && hours > 24 * 7) return false;
+        }
+
+        return true;
+    });
 
     return (
         <div className="max-w-7xl mx-auto p-4 md:p-6 relative text-slate-100">
@@ -854,21 +888,57 @@ export const SuperAdmin: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Filters */}
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder="Filter logs..."
-                                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white placeholder:text-slate-600 w-full max-w-xs focus:ring-1 focus:ring-indigo-500 outline-none"
-                                    onChange={(e) => {
-                                        const term = e.target.value.toLowerCase();
-                                        const rows = document.querySelectorAll('.log-row');
-                                        rows.forEach((row: any) => {
-                                            const text = row.innerText.toLowerCase();
-                                            row.style.display = text.includes(term) ? '' : 'none';
-                                        });
-                                    }}
-                                />
+                            {/* Filters Toolbar */}
+                            <div className="flex flex-wrap gap-2 items-center bg-slate-900/50 p-2 rounded-lg border border-slate-700">
+                                {/* Status Filter */}
+                                <select
+                                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    value={logStatusFilter}
+                                    onChange={(e) => setLogStatusFilter(e.target.value)}
+                                >
+                                    <option value="ALL">All Statuses</option>
+                                    <option value="success">Success</option>
+                                    <option value="error">Error</option>
+                                    <option value="partial">Partial</option>
+                                </select>
+
+                                {/* Tag Filter */}
+                                <select
+                                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    value={logTagFilter}
+                                    onChange={(e) => setLogTagFilter(e.target.value)}
+                                >
+                                    <option value="ALL">All Tags</option>
+                                    <option value="ESPN_FETCH_SUCCESS">ESPN Update</option>
+                                    <option value="ESPN_FETCH_FAIL">ESPN Error</option>
+                                    <option value="SYNC_GAME_STATUS">System Sync</option>
+                                    <option value="POOL_SYNC_ERROR">Pool Error</option>
+                                    <option value="SIMULATION">Sim Run</option>
+                                </select>
+
+                                {/* Time Filter */}
+                                <select
+                                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    value={logTimeFilter}
+                                    onChange={(e) => setLogTimeFilter(e.target.value)}
+                                >
+                                    <option value="ALL">All Time</option>
+                                    <option value="1H">Last Hour</option>
+                                    <option value="24H">Last 24 Hours</option>
+                                    <option value="7D">Last 7 Days</option>
+                                </select>
+
+                                {/* Search Input */}
+                                <div className="relative flex-1 min-w-[150px]">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" size={12} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search logs..."
+                                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 pl-7 text-xs text-white placeholder:text-slate-600 w-full focus:ring-1 focus:ring-indigo-500 outline-none"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -883,10 +953,10 @@ export const SuperAdmin: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-700/50">
-                                    {systemLogs.length === 0 ? (
-                                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No logs found</td></tr>
+                                    {filteredLogs.length === 0 ? (
+                                        <tr><td colSpan={4} className="p-8 text-center text-slate-500">No logs found matching filters</td></tr>
                                     ) : (
-                                        systemLogs.map((log, i) => (
+                                        filteredLogs.map((log, i) => (
                                             <tr key={i} className={`log-row hover:bg-slate-700/20 font-mono text-xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''}`}>
                                                 <td className="p-3 text-slate-400 whitespace-nowrap">
                                                     {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : new Date(log.timestamp).toLocaleString()}
