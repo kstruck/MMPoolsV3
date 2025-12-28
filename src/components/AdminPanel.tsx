@@ -19,7 +19,7 @@ interface AdminPanelProps {
 }
 
 // Internal Debounced Input Component to fix cursor jumping
-const DebouncedInput = ({ value, onChange, className, placeholder, type = "text" }: { value: string, onChange: (val: string) => void, className?: string, placeholder?: string, type?: string }) => {
+const DebouncedInput = ({ value, onChange, className, placeholder, type = "text", disabled }: { value: string, onChange: (val: string) => void, className?: string, placeholder?: string, type?: string, disabled?: boolean }) => {
   const [localValue, setLocalValue] = useState(value);
 
   React.useEffect(() => {
@@ -42,6 +42,7 @@ const DebouncedInput = ({ value, onChange, className, placeholder, type = "text"
       onChange={(e) => setLocalValue(e.target.value)}
       className={className}
       placeholder={placeholder}
+      disabled={disabled}
     />
   );
 };
@@ -973,8 +974,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     updateConfig({ name: `${val} vs ${gameState.homeTeam || 'Home'} Squares` });
                   }
                 }}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none"
-                placeholder="e.g. Away Team"
+                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="Select a game above"
+                disabled={true}
               />
             </div></div>
             <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-rose-500/50 transition-colors"><label className="block text-xs font-bold text-rose-400 uppercase mb-4 text-center">Row Team (Left)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div>
@@ -986,8 +988,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     updateConfig({ name: `${gameState.awayTeam || 'Away'} vs ${val} Squares` });
                   }
                 }}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none"
-                placeholder="e.g. Home Team"
+                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="Select a game above"
+                disabled={true}
               />
             </div></div>
           </div>
