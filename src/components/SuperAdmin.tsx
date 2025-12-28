@@ -878,6 +878,7 @@ export const SuperAdmin: React.FC = () => {
                                     <tr>
                                         <th className="p-3 font-bold">Time</th>
                                         <th className="p-3 font-bold">Status</th>
+                                        <th className="p-3 font-bold">Tag</th>
                                         <th className="p-3 font-bold">Details</th>
                                     </tr>
                                 </thead>
@@ -898,8 +899,26 @@ export const SuperAdmin: React.FC = () => {
                                                         {log.status?.toUpperCase() || 'UNKNOWN'}
                                                     </span>
                                                 </td>
+                                                <td className="p-3">
+                                                    {(() => {
+                                                        const type = log.type || 'UNKNOWN';
+                                                        let label = type;
+                                                        let colorClass = 'bg-slate-700 text-slate-300';
+
+                                                        if (type === 'ESPN_FETCH_SUCCESS') { label = 'ESPN Update'; colorClass = 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'; }
+                                                        else if (type === 'ESPN_FETCH_FAIL') { label = 'ESPN Error'; colorClass = 'bg-rose-500/20 text-rose-300 border border-rose-500/30'; }
+                                                        else if (type === 'SYNC_GAME_STATUS') { label = 'System Sync'; colorClass = 'bg-slate-600/30 text-slate-300 border border-slate-600/50'; }
+                                                        else if (type === 'POOL_SYNC_ERROR') { label = 'Pool Error'; colorClass = 'bg-amber-500/20 text-amber-300 border border-amber-500/30'; }
+                                                        else if (type === 'SIMULATION') { label = 'Sim Run'; colorClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'; }
+
+                                                        return <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${colorClass}`}>{label}</span>;
+                                                    })()}
+                                                </td>
                                                 <td className="p-3 text-slate-300">
-                                                    {log.details ? JSON.stringify(log.details) : (log.message || '-')}
+                                                    <div className="flex flex-col gap-1">
+                                                        {log.message && <span className="font-bold text-white mb-1 block">{log.message}</span>}
+                                                        {log.details && <span className="font-mono text-[10px] text-slate-500">{JSON.stringify(log.details)}</span>}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))
