@@ -121,6 +121,12 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // SYSTEM LOGS
+    match /system_logs/{document=**} {
+      allow read: if isSuperAdmin();
+      allow write: if false; 
+    }
+
     // TOURNAMENTS (March Madness Data)
     match /tournaments/{tournamentId} {
       allow read: if true;

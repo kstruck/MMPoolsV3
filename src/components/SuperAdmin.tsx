@@ -782,16 +782,37 @@ export const SuperAdmin: React.FC = () => {
                                 <Activity size={18} className="text-slate-400" />
                                 System Logs
                             </h3>
-                            <button
-                                onClick={() => {
-                                    if (dbService.getSystemLogs) {
-                                        dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
-                                    }
-                                }}
-                                className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition-colors"
-                            >
-                                Refresh
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={async () => {
+                                        if (confirm('Run Retroactive Score Fix? This will scan all active pools and repair missing score events (0-6 Touchdowns) if found.')) {
+                                            try {
+                                                if (dbService.fixPoolScores) {
+                                                    const res = await dbService.fixPoolScores();
+                                                    console.log('Fix Results:', res);
+                                                    alert('Fix Complete. Check console for details.');
+                                                }
+                                            } catch (e) {
+                                                console.error(e);
+                                                alert('Fix Failed');
+                                            }
+                                        }
+                                    }}
+                                    className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded text-white transition-colors font-bold"
+                                >
+                                    Fix Scoring
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (dbService.getSystemLogs) {
+                                            dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
+                                        }
+                                    }}
+                                    className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition-colors"
+                                >
+                                    Refresh
+                                </button>
+                            </div>
                         </div>
 
                         <div className="overflow-x-auto max-h-[600px]">

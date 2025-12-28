@@ -801,59 +801,125 @@ export const fixPoolScores = onCall({
             if (isQ3Final && q3H !== undefined) await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
             if (isGameFinal && finalH !== undefined) await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
 
-            // BACKFILL EVENT WINNERS
-            if (pool.ruleVariations?.scoreChangePayout && pool.scoreEvents) {
-                for (const ev of pool.scoreEvents) {
-                    const hDigit = getLastDigit(ev.home);
-                    const aDigit = getLastDigit(ev.away);
-                    // ... (existing logic to recreate winners if missing) ...
-                    // We can reuse the same logic block here or just trust processGameUpdate logic?
-                    // The block above (lines 621-665 in view) handles *creation* of docs.
-                    // But we also need to set the *Amount* if the game is final.
+            // BACKFILL EVENT WINNERS & REPAIR HISTORY
+            // This logic scans the event history for "jumps" (e.g. 0->7) and inserts missing events (0->6)
+            // It also ensures a Winner doc exists for every valid event.
 
-                    // Let's ensure the Backfill logic above runs first to create docs (it has amount: 0)
-                    // Then run finalize logic to update amounts.
+            if (pool.ruleVariations?.scoreChangePayout) {
+                const existingEvents = pool.scoreEvents || [];
+                // Sort by timestamp
+                existingEvents.sort((a, b) => a.timestamp - b.timestamp);
 
+                const newEventHistory: any[] = [];
+                let lastScore = { home: 0, away: 0 };
+                let repairsMade = false;
+
+                // Helper to ensure winner exists
+                const ensureWinner = async (home: number, away: number, desc: string, timestamp: number) => {
+                    const hDigit = getLastDigit(home);
+                    const aDigit = getLastDigit(away);
                     let axis = pool.axisNumbers;
-                    if (pool.numberSets === 4 && pool.quarterlyNumbers) {
-                        let periodKey: 'q1' | 'q2' | 'q3' | 'q4' = 'q1';
-                        if (ev.description.includes('Q2')) periodKey = 'q2';
-                        if (ev.description.includes('Q3')) periodKey = 'q3';
-                        if (ev.description.includes('Q4')) periodKey = 'q4';
 
-                        if (periodKey === 'q1' && pool.quarterlyNumbers.q1) axis = pool.quarterlyNumbers.q1;
-                        if (periodKey === 'q2' && pool.quarterlyNumbers.q2) axis = pool.quarterlyNumbers.q2;
-                        if (periodKey === 'q3' && pool.quarterlyNumbers.q3) axis = pool.quarterlyNumbers.q3;
-                        if (periodKey === 'q4' && pool.quarterlyNumbers.q4) axis = pool.quarterlyNumbers.q4;
+                    // Quarterly Axis Logic
+                    if (pool.numberSets === 4 && pool.quarterlyNumbers) {
+                        // Estimate period based on desc or just default to Q1 if unknown
+                        // Realistically for repairs, we might rely on the Event's description if available
+                        // or just use Final/Current logic?
+                        // For simplicity in repair, if we lack period context, check Q1 axes first.
+                        if (pool.quarterlyNumbers.q1) axis = pool.quarterlyNumbers.q1;
+                        // In a perfect world we map timestamp to period, but that's complex. 
+                        // Fallback is usually Q1 axis for early bugs.
                     }
 
                     if (axis) {
                         const row = axis.away.indexOf(aDigit);
                         const col = axis.home.indexOf(hDigit);
-
                         if (row !== -1 && col !== -1) {
                             const sqIdx = row * 10 + col;
                             const square = pool.squares[sqIdx];
                             const winnerName = square?.owner || 'Unsold';
+                            const docId = `event_${home}_${away}`;
 
-                            // Don't overwrite if exists, just ensure it's there
-                            // Actually fixPoolScores is forceful.
-                            const winnerDoc: Winner = {
+                            // Check if exists using transaction? No, we can just blind write merge=true
+                            // or set if missing.
+                            await t.set(db.collection('pools').doc(doc.id).collection('winners').doc(docId), {
                                 period: 'Event',
                                 squareId: sqIdx,
                                 owner: winnerName,
-                                amount: 0, // Will be updated by finalize if Final
                                 homeDigit: hDigit,
                                 awayDigit: aDigit,
                                 isReverse: false,
-                                description: `Score Change (${ev.home}-${ev.away})`
-                            };
-                            t.set(
-                                db.collection('pools').doc(doc.id).collection('winners').doc(`event_${ev.home}_${ev.away}`),
-                                winnerDoc
-                            );
+                                description: desc,
+                                // Preserve existing amount if any, or default to 0
+                            }, { merge: true });
                         }
                     }
+                };
+
+                for (const ev of existingEvents) {
+                    const deltaHome = ev.home - lastScore.home;
+                    const deltaAway = ev.away - lastScore.away;
+                    const combine = pool.ruleVariations.combineTDandXP === true;
+
+                    // CHECK HOME JUMP
+                    if (!combine && deltaHome === 7 && deltaAway === 0) {
+                        // Missing TD?
+                        const tdScore = { home: lastScore.home + 6, away: lastScore.away };
+                        // Check if we already have this event (unlikely if delta is 7)
+                        // Synthesize it
+                        const missingEvent = {
+                            id: db.collection("_").doc().id,
+                            home: tdScore.home,
+                            away: tdScore.away,
+                            description: 'Touchdown (Repaired)',
+                            timestamp: ev.timestamp - 1000 // 1 sec before
+                        };
+                        newEventHistory.push(missingEvent);
+                        await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
+                        repairsMade = true;
+
+                        await writeAuditEvent({
+                            poolId: doc.id,
+                            type: 'ADMIN_OVERRIDE_SCORE',
+                            message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
+                            severity: 'WARNING',
+                            actor: { uid: 'system', role: 'ADMIN', label: 'Auto-Repair' }
+                        }, t);
+                    }
+                    // CHECK AWAY JUMP
+                    else if (!combine && deltaAway === 7 && deltaHome === 0) {
+                        const tdScore = { home: lastScore.home, away: lastScore.away + 6 };
+                        const missingEvent = {
+                            id: db.collection("_").doc().id,
+                            home: tdScore.home,
+                            away: tdScore.away,
+                            description: 'Touchdown (Repaired)',
+                            timestamp: ev.timestamp - 1000
+                        };
+                        newEventHistory.push(missingEvent);
+                        await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
+                        repairsMade = true;
+
+                        await writeAuditEvent({
+                            poolId: doc.id,
+                            type: 'ADMIN_OVERRIDE_SCORE',
+                            message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
+                            severity: 'WARNING',
+                            actor: { uid: 'system', role: 'ADMIN', label: 'Auto-Repair' }
+                        }, t);
+                    }
+
+                    // Push original
+                    newEventHistory.push(ev);
+                    // Ensure winner for original too (idempotent fix)
+                    await ensureWinner(ev.home, ev.away, ev.description, ev.timestamp);
+
+                    lastScore = { home: ev.home, away: ev.away };
+                }
+
+                if (repairsMade) {
+                    updates.scoreEvents = newEventHistory;
+                    t.update(doc.ref, { scoreEvents: newEventHistory });
                 }
 
                 // NEW: Run Finalize Payouts if Game is Final

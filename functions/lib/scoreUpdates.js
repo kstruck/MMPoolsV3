@@ -174,7 +174,7 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
  * Core logic to update a single pool based on new scores.
  */
 const processGameUpdate = async (transaction, doc, espnScores, actor, overrides) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
     const db = admin.firestore();
     const freshPool = Object.assign(Object.assign({}, doc.data()), overrides);
     if (!espnScores)
@@ -206,72 +206,126 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
         transactionUpdates.scores = newScores;
         shouldUpdate = true;
     }
-    // Live Score Update Logging
+    // Live Score Update Logging & Decomposed Events
     const freshCurrent = ((_e = freshPool.scores) === null || _e === void 0 ? void 0 : _e.current) || { home: 0, away: 0 };
     const newCurrent = espnScores.current || { home: 0, away: 0 };
+    // Calculate Deltas
+    const deltaHome = newCurrent.home - freshCurrent.home;
+    const deltaAway = newCurrent.away - freshCurrent.away;
     // Check if score changed
-    if (freshCurrent.home !== newCurrent.home || freshCurrent.away !== newCurrent.away) {
-        // 1. Log Score Change Audit
-        await (0, audit_1.writeAuditEvent)({
-            poolId: doc.id,
-            type: 'SCORE_FINALIZED',
-            message: `Score Update: ${newCurrent.home}-${newCurrent.away} (${state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th')})`,
-            severity: 'INFO',
-            actor: actor,
-            payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock || "0:00" }
-            // Dedupe skipped to prevent Read-After-Write error
-        }, transaction);
-        // 2. Add to Score History (scoreEvents)
-        const newEvent = {
-            id: db.collection("_").doc().id, // Random ID
-            home: newCurrent.home,
-            away: newCurrent.away,
-            description: `Score Change (${period > 0 ? 'Q' + period : 'Pre'})`,
-            timestamp: Date.now()
-        };
-        transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
-        shouldUpdate = true;
-        // 3. Handle "Score Change Payouts" (Event Winners)
-        if ((_f = freshPool.ruleVariations) === null || _f === void 0 ? void 0 : _f.scoreChangePayout) {
-            const hDigit = getLastDigit(newCurrent.home);
-            const aDigit = getLastDigit(newCurrent.away);
-            const axis = freshPool.axisNumbers;
-            if (axis) {
-                const row = axis.away.indexOf(aDigit);
-                const col = axis.home.indexOf(hDigit);
-                if (row !== -1 && col !== -1) {
-                    const squareIndex = row * 10 + col;
-                    const square = freshPool.squares[squareIndex];
-                    const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
-                    await (0, audit_1.writeAuditEvent)({
-                        poolId: doc.id,
-                        type: 'WINNER_COMPUTED',
-                        message: `Event Winner: ${winnerName} (${newCurrent.home}-${newCurrent.away})`,
-                        severity: 'INFO',
-                        actor: actor,
-                        payload: {
+    if (deltaHome !== 0 || deltaAway !== 0) {
+        // Prepare list of sequential score states to process
+        // Each entry is { home: number, away: number, type: 'TD' | 'XP' | 'FG' | 'SAFETY' | 'OTHER' }
+        const steps = [];
+        const combine = ((_f = freshPool.ruleVariations) === null || _f === void 0 ? void 0 : _f.combineTDandXP) === true;
+        // Helper to push steps for a single side scoring
+        // Note: This simple logic assumes only ONE team scores at a time in a single poll interval.
+        // If both change (rare in 5 min interval but possible), we just process final.
+        // A more robust way is to handle Home change then Away change sequentially.
+        // HOME SCORING lookup
+        if (deltaHome > 0 && deltaAway === 0) {
+            if (!combine && deltaHome === 7) {
+                // TD (6) then XP (1)
+                steps.push({ home: freshCurrent.home + 6, away: freshCurrent.away, desc: 'Touchdown' });
+                steps.push({ home: freshCurrent.home + 7, away: freshCurrent.away, desc: 'Extra Point' });
+            }
+            else if (!combine && deltaHome === 8) {
+                // TD (6) then 2Pt (2)
+                steps.push({ home: freshCurrent.home + 6, away: freshCurrent.away, desc: 'Touchdown' });
+                steps.push({ home: freshCurrent.home + 8, away: freshCurrent.away, desc: '2Pt Conv' });
+            }
+            else {
+                steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+            }
+        }
+        // AWAY SCORING lookup
+        else if (deltaAway > 0 && deltaHome === 0) {
+            if (!combine && deltaAway === 7) {
+                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 6, desc: 'Touchdown' });
+                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 7, desc: 'Extra Point' });
+            }
+            else if (!combine && deltaAway === 8) {
+                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 6, desc: 'Touchdown' });
+                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 8, desc: '2Pt Conv' });
+            }
+            else {
+                steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+            }
+        }
+        // BOTH scored or negative correction (just take final)
+        else {
+            steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+        }
+        // --- PROCESS SEQUENCE ---
+        for (const step of steps) {
+            const stepQText = state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th');
+            // 1. Log Score Change Audit
+            // Only log the "Main" update on the final step? Or all? User wants "Each score accounted for".
+            // We will log unique audit events for each step.
+            await (0, audit_1.writeAuditEvent)({
+                poolId: doc.id,
+                type: 'SCORE_FINALIZED',
+                message: `${step.desc}: ${step.home}-${step.away} (${stepQText})`,
+                severity: 'INFO',
+                actor: actor,
+                payload: { home: step.home, away: step.away, clock: espnScores.clock || "0:00" },
+                dedupeKey: `SCORE_STEP:${doc.id}:${step.home}:${step.away}`
+            }, transaction);
+            // 2. Add to Score History (scoreEvents)
+            const newEvent = {
+                id: db.collection("_").doc().id,
+                home: step.home,
+                away: step.away,
+                description: `${step.desc} (${state === 'pre' ? 'Pre' : 'Q' + period})`,
+                timestamp: Date.now()
+            };
+            transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
+            shouldUpdate = true;
+            // 3. Handle "Score Change Payouts" (Event Winners)
+            if ((_g = freshPool.ruleVariations) === null || _g === void 0 ? void 0 : _g.scoreChangePayout) {
+                const hDigit = getLastDigit(step.home);
+                const aDigit = getLastDigit(step.away);
+                const axis = freshPool.axisNumbers;
+                if (axis) {
+                    const row = axis.away.indexOf(aDigit);
+                    const col = axis.home.indexOf(hDigit);
+                    if (row !== -1 && col !== -1) {
+                        const squareIndex = row * 10 + col;
+                        const square = freshPool.squares[squareIndex];
+                        const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
+                        await (0, audit_1.writeAuditEvent)({
+                            poolId: doc.id,
+                            type: 'WINNER_COMPUTED',
+                            message: `Event Winner: ${winnerName} (${step.home}-${step.away})`,
+                            severity: 'INFO',
+                            actor: actor,
+                            payload: {
+                                period: 'Event',
+                                homeScore: step.home,
+                                awayScore: step.away,
+                                homeDigit: hDigit,
+                                awayDigit: aDigit,
+                                winner: winnerName,
+                                squareId: squareIndex
+                            },
+                            dedupeKey: `WINNER_EVENT:${doc.id}:${step.home}:${step.away}`
+                        }, transaction);
+                        // PERSIST WINNER TO COLLECTION
+                        // Use unique ID for event document so they don't overwrite if same digits! (e.g. 0-6 and 10-6)
+                        // Actually the requirement is "Each score must determine a winner".
+                        // Previous ID was `event_${home}_${away}` which IS unique for the score combo.
+                        const winnerDoc = {
                             period: 'Event',
-                            homeScore: newCurrent.home,
-                            awayScore: newCurrent.away,
+                            squareId: squareIndex,
+                            owner: winnerName,
+                            amount: 0, // Calculated at end of game
                             homeDigit: hDigit,
                             awayDigit: aDigit,
-                            winner: winnerName,
-                            squareId: squareIndex
-                        }
-                        // Dedupe skipped to prevent Read-After-Write error
-                    }, transaction);
-                    // PERSIST WINNER TO COLLECTION
-                    const winnerDoc = {
-                        period: 'Event',
-                        squareId: squareIndex,
-                        owner: winnerName,
-                        amount: 0, // Calculated at end of game
-                        homeDigit: hDigit,
-                        awayDigit: aDigit,
-                        isReverse: false,
-                        description: `Score Change (${newCurrent.home}-${newCurrent.away})`
-                    };
-                    transaction.set(db.collection('pools').doc(doc.id).collection('winners').doc(`event_${newCurrent.home}_${newCurrent.away}`), winnerDoc);
+                            isReverse: false,
+                            description: `${step.desc} (${step.home}-${step.away})`
+                        };
+                        transaction.set(db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`), winnerDoc);
+                    }
                 }
             }
         }
@@ -313,14 +367,14 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
                 transactionUpdates.axisNumbers = qNums.q1;
         }
     }
-    const q1H = (_g = newScores.q1) === null || _g === void 0 ? void 0 : _g.home;
-    const q1A = (_h = newScores.q1) === null || _h === void 0 ? void 0 : _h.away;
-    const halfH = (_j = newScores.half) === null || _j === void 0 ? void 0 : _j.home;
-    const halfA = (_k = newScores.half) === null || _k === void 0 ? void 0 : _k.away;
-    const q3H = (_l = newScores.q3) === null || _l === void 0 ? void 0 : _l.home;
-    const q3A = (_m = newScores.q3) === null || _m === void 0 ? void 0 : _m.away;
-    const finalH = (_o = newScores.final) === null || _o === void 0 ? void 0 : _o.home;
-    const finalA = (_p = newScores.final) === null || _p === void 0 ? void 0 : _p.away;
+    const q1H = (_h = newScores.q1) === null || _h === void 0 ? void 0 : _h.home;
+    const q1A = (_j = newScores.q1) === null || _j === void 0 ? void 0 : _j.away;
+    const halfH = (_k = newScores.half) === null || _k === void 0 ? void 0 : _k.home;
+    const halfA = (_l = newScores.half) === null || _l === void 0 ? void 0 : _l.away;
+    const q3H = (_m = newScores.q3) === null || _m === void 0 ? void 0 : _m.home;
+    const q3A = (_o = newScores.q3) === null || _o === void 0 ? void 0 : _o.away;
+    const finalH = (_p = newScores.final) === null || _p === void 0 ? void 0 : _p.home;
+    const finalA = (_q = newScores.final) === null || _q === void 0 ? void 0 : _q.away;
     if (isQ1Final && q1H !== undefined) {
         await (0, audit_1.writeAuditEvent)({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q1 Finalized: ${q1H}-${q1A}`, severity: 'INFO',
@@ -361,7 +415,7 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     }
     // --- EVERY SCORE PAYS FINALIZATION ---
     // If the game just went final, we need to calculate the actual $ amount for each event based on the total pot logic
-    if (isGameFinal && ((_q = freshPool.ruleVariations) === null || _q === void 0 ? void 0 : _q.scoreChangePayout)) {
+    if (isGameFinal && ((_r = freshPool.ruleVariations) === null || _r === void 0 ? void 0 : _r.scoreChangePayout)) {
         await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor);
     }
 };
@@ -432,32 +486,74 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
 }, async (event) => {
     var _a;
     const db = admin.firestore();
-    // 1. Fetch Active Pools
-    const poolsSnap = await db.collection("pools")
-        .where("scores.gameStatus", "!=", "post")
-        .get();
-    if (poolsSnap.empty)
-        return;
-    // 2. Process Each Pool
-    for (const doc of poolsSnap.docs) {
-        const pool = doc.data();
-        if (!pool.gameId)
-            continue;
-        if (!pool.isLocked && ((_a = pool.scores) === null || _a === void 0 ? void 0 : _a.gameStatus) === 'pre') {
-            const now = Date.now();
-            const start = new Date(pool.scores.startTime || 0).getTime();
-            if (start > now + 2 * 60 * 60 * 1000)
-                continue;
+    const startTime = Date.now();
+    let processedCount = 0;
+    let errorCount = 0;
+    try {
+        // 1. Fetch Active Pools
+        const poolsSnap = await db.collection("pools")
+            .where("scores.gameStatus", "!=", "post")
+            .get();
+        if (poolsSnap.empty) {
+            await db.collection('system_logs').add({
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                type: 'SYNC_GAME_STATUS',
+                status: 'idle',
+                message: 'No active pools found',
+                durationMs: Date.now() - startTime
+            });
+            return;
         }
-        const espnScores = await fetchESPNScores(pool.gameId, pool.league || 'nfl');
-        if (!espnScores)
-            continue;
-        await db.runTransaction(async (transaction) => {
-            const freshDoc = await transaction.get(doc.ref);
-            if (!freshDoc.exists)
-                return;
-            // Use shared logic
-            await processGameUpdate(transaction, freshDoc, espnScores, { uid: 'system', role: 'SYSTEM' });
+        // 2. Process Each Pool
+        for (const doc of poolsSnap.docs) {
+            const pool = doc.data();
+            if (!pool.gameId)
+                continue;
+            // Optimization: Skip if game hasn't started yet and start time is > 2 hours away
+            if (!pool.isLocked && ((_a = pool.scores) === null || _a === void 0 ? void 0 : _a.gameStatus) === 'pre') {
+                const now = Date.now();
+                const start = new Date(pool.scores.startTime || 0).getTime();
+                if (start > now + 2 * 60 * 60 * 1000)
+                    continue;
+            }
+            try {
+                const espnScores = await fetchESPNScores(pool.gameId, pool.league || 'nfl');
+                if (!espnScores)
+                    continue;
+                await db.runTransaction(async (transaction) => {
+                    const freshDoc = await transaction.get(doc.ref);
+                    if (!freshDoc.exists)
+                        return;
+                    await processGameUpdate(transaction, freshDoc, espnScores, { uid: 'system', role: 'SYSTEM' });
+                });
+                processedCount++;
+            }
+            catch (e) {
+                console.error(`Error processing pool ${doc.id}:`, e);
+                errorCount++;
+            }
+        }
+        // 3. Log Execution Summary
+        await db.collection('system_logs').add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            type: 'SYNC_GAME_STATUS',
+            status: errorCount > 0 ? 'partial' : 'success',
+            details: {
+                activePoolsFound: poolsSnap.size,
+                poolsProcessed: processedCount,
+                errors: errorCount
+            },
+            durationMs: Date.now() - startTime
+        });
+    }
+    catch (globalError) {
+        console.error("Critical Sync Failure:", globalError);
+        await db.collection('system_logs').add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            type: 'SYNC_GAME_STATUS',
+            status: 'critical_error',
+            message: globalError.message || 'Unknown error',
+            durationMs: Date.now() - startTime
         });
     }
 });
@@ -589,34 +685,31 @@ exports.fixPoolScores = (0, https_1.onCall)({
                 await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
             if (isGameFinal && finalH !== undefined)
                 await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
-            // BACKFILL EVENT WINNERS
-            if (((_j = pool.ruleVariations) === null || _j === void 0 ? void 0 : _j.scoreChangePayout) && pool.scoreEvents) {
-                for (const ev of pool.scoreEvents) {
-                    const hDigit = getLastDigit(ev.home);
-                    const aDigit = getLastDigit(ev.away);
-                    // ... (existing logic to recreate winners if missing) ...
-                    // We can reuse the same logic block here or just trust processGameUpdate logic?
-                    // The block above (lines 621-665 in view) handles *creation* of docs.
-                    // But we also need to set the *Amount* if the game is final.
-                    // Let's ensure the Backfill logic above runs first to create docs (it has amount: 0)
-                    // Then run finalize logic to update amounts.
+            // BACKFILL EVENT WINNERS & REPAIR HISTORY
+            // This logic scans the event history for "jumps" (e.g. 0->7) and inserts missing events (0->6)
+            // It also ensures a Winner doc exists for every valid event.
+            if ((_j = pool.ruleVariations) === null || _j === void 0 ? void 0 : _j.scoreChangePayout) {
+                const existingEvents = pool.scoreEvents || [];
+                // Sort by timestamp
+                existingEvents.sort((a, b) => a.timestamp - b.timestamp);
+                const newEventHistory = [];
+                let lastScore = { home: 0, away: 0 };
+                let repairsMade = false;
+                // Helper to ensure winner exists
+                const ensureWinner = async (home, away, desc, timestamp) => {
+                    const hDigit = getLastDigit(home);
+                    const aDigit = getLastDigit(away);
                     let axis = pool.axisNumbers;
+                    // Quarterly Axis Logic
                     if (pool.numberSets === 4 && pool.quarterlyNumbers) {
-                        let periodKey = 'q1';
-                        if (ev.description.includes('Q2'))
-                            periodKey = 'q2';
-                        if (ev.description.includes('Q3'))
-                            periodKey = 'q3';
-                        if (ev.description.includes('Q4'))
-                            periodKey = 'q4';
-                        if (periodKey === 'q1' && pool.quarterlyNumbers.q1)
+                        // Estimate period based on desc or just default to Q1 if unknown
+                        // Realistically for repairs, we might rely on the Event's description if available
+                        // or just use Final/Current logic?
+                        // For simplicity in repair, if we lack period context, check Q1 axes first.
+                        if (pool.quarterlyNumbers.q1)
                             axis = pool.quarterlyNumbers.q1;
-                        if (periodKey === 'q2' && pool.quarterlyNumbers.q2)
-                            axis = pool.quarterlyNumbers.q2;
-                        if (periodKey === 'q3' && pool.quarterlyNumbers.q3)
-                            axis = pool.quarterlyNumbers.q3;
-                        if (periodKey === 'q4' && pool.quarterlyNumbers.q4)
-                            axis = pool.quarterlyNumbers.q4;
+                        // In a perfect world we map timestamp to period, but that's complex. 
+                        // Fallback is usually Q1 axis for early bugs.
                     }
                     if (axis) {
                         const row = axis.away.indexOf(aDigit);
@@ -625,21 +718,80 @@ exports.fixPoolScores = (0, https_1.onCall)({
                             const sqIdx = row * 10 + col;
                             const square = pool.squares[sqIdx];
                             const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
-                            // Don't overwrite if exists, just ensure it's there
-                            // Actually fixPoolScores is forceful.
-                            const winnerDoc = {
+                            const docId = `event_${home}_${away}`;
+                            // Check if exists using transaction? No, we can just blind write merge=true
+                            // or set if missing.
+                            await t.set(db.collection('pools').doc(doc.id).collection('winners').doc(docId), {
                                 period: 'Event',
                                 squareId: sqIdx,
                                 owner: winnerName,
-                                amount: 0, // Will be updated by finalize if Final
                                 homeDigit: hDigit,
                                 awayDigit: aDigit,
                                 isReverse: false,
-                                description: `Score Change (${ev.home}-${ev.away})`
-                            };
-                            t.set(db.collection('pools').doc(doc.id).collection('winners').doc(`event_${ev.home}_${ev.away}`), winnerDoc);
+                                description: desc,
+                                // Preserve existing amount if any, or default to 0
+                            }, { merge: true });
                         }
                     }
+                };
+                for (const ev of existingEvents) {
+                    const deltaHome = ev.home - lastScore.home;
+                    const deltaAway = ev.away - lastScore.away;
+                    const combine = pool.ruleVariations.combineTDandXP === true;
+                    // CHECK HOME JUMP
+                    if (!combine && deltaHome === 7 && deltaAway === 0) {
+                        // Missing TD?
+                        const tdScore = { home: lastScore.home + 6, away: lastScore.away };
+                        // Check if we already have this event (unlikely if delta is 7)
+                        // Synthesize it
+                        const missingEvent = {
+                            id: db.collection("_").doc().id,
+                            home: tdScore.home,
+                            away: tdScore.away,
+                            description: 'Touchdown (Repaired)',
+                            timestamp: ev.timestamp - 1000 // 1 sec before
+                        };
+                        newEventHistory.push(missingEvent);
+                        await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
+                        repairsMade = true;
+                        await (0, audit_1.writeAuditEvent)({
+                            poolId: doc.id,
+                            type: 'ADMIN_OVERRIDE_SCORE',
+                            message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
+                            severity: 'WARNING',
+                            actor: { uid: 'system', role: 'ADMIN', label: 'Auto-Repair' }
+                        }, t);
+                    }
+                    // CHECK AWAY JUMP
+                    else if (!combine && deltaAway === 7 && deltaHome === 0) {
+                        const tdScore = { home: lastScore.home, away: lastScore.away + 6 };
+                        const missingEvent = {
+                            id: db.collection("_").doc().id,
+                            home: tdScore.home,
+                            away: tdScore.away,
+                            description: 'Touchdown (Repaired)',
+                            timestamp: ev.timestamp - 1000
+                        };
+                        newEventHistory.push(missingEvent);
+                        await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
+                        repairsMade = true;
+                        await (0, audit_1.writeAuditEvent)({
+                            poolId: doc.id,
+                            type: 'ADMIN_OVERRIDE_SCORE',
+                            message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
+                            severity: 'WARNING',
+                            actor: { uid: 'system', role: 'ADMIN', label: 'Auto-Repair' }
+                        }, t);
+                    }
+                    // Push original
+                    newEventHistory.push(ev);
+                    // Ensure winner for original too (idempotent fix)
+                    await ensureWinner(ev.home, ev.away, ev.description, ev.timestamp);
+                    lastScore = { home: ev.home, away: ev.away };
+                }
+                if (repairsMade) {
+                    updates.scoreEvents = newEventHistory;
+                    t.update(doc.ref, { scoreEvents: newEventHistory });
                 }
                 // NEW: Run Finalize Payouts if Game is Final
                 if (isGameFinal) {

@@ -252,5 +252,16 @@ export const dbService = {
             console.error("Error fetching system logs:", error);
             return [];
         }
+    },
+
+    fixPoolScores: async (): Promise<any> => {
+        try {
+            const fn = httpsCallable(functions, 'fixPoolScores');
+            const result = await fn();
+            return result.data;
+        } catch (error) {
+            console.error("Error fixing pool scores:", error);
+            throw error;
+        }
     }
 };
