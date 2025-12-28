@@ -321,14 +321,32 @@ const processGameUpdate = async (
             steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
         }
 
+        // DEDUPE PRE-READ: Identify all keys we need to check
+        const dedupeChecks: string[] = [];
+        for (const step of steps) {
+            dedupeChecks.push(`SCORE_STEP:${doc.id}:${step.home}:${step.away}`);
+            if (freshPool.ruleVariations?.scoreChangePayout) {
+                dedupeChecks.push(`WINNER_EVENT:${doc.id}:${step.home}:${step.away}`);
+            }
+        }
+
+        // Perform READS (must be before any writes in the loop)
+        const existingDedupes = new Set<string>();
+        if (dedupeChecks.length > 0) {
+            const refs = dedupeChecks.map(k => db.collection("pools").doc(doc.id).collection("audit_dedupe").doc(k));
+            const snaps = await transaction.getAll(...refs);
+            snaps.forEach(s => { if (s.exists) existingDedupes.add(s.id); });
+        }
+
         // --- PROCESS SEQUENCE ---
         for (const step of steps) {
             const stepQText = state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th');
+            const scoreKey = `SCORE_STEP:${doc.id}:${step.home}:${step.away}`;
+
+            if (existingDedupes.has(scoreKey)) continue;
 
             // 1. Log Score Change Audit
-            // Only log the "Main" update on the final step? Or all? User wants "Each score accounted for".
-            // We will log unique audit events for each step.
-
+            // Use forceWriteDedupe to skip the read check inside writeAuditEvent
             await writeAuditEvent({
                 poolId: doc.id,
                 type: 'SCORE_FINALIZED',
@@ -336,10 +354,11 @@ const processGameUpdate = async (
                 severity: 'INFO',
                 actor: actor,
                 payload: { home: step.home, away: step.away, clock: espnScores.clock || "0:00" },
-                dedupeKey: `SCORE_STEP:${doc.id}:${step.home}:${step.away}`
+                dedupeKey: scoreKey,
+                forceWriteDedupe: true
             }, transaction);
 
-            // 2. Add to Score History (scoreEvents)
+            // 2. Add to Score History
             const newEvent = {
                 id: db.collection("_").doc().id,
                 home: step.home,
@@ -350,8 +369,12 @@ const processGameUpdate = async (
             transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
             shouldUpdate = true;
 
-            // 3. Handle "Score Change Payouts" (Event Winners)
+            // 3. Handle "Score Change Payouts"
             if (freshPool.ruleVariations?.scoreChangePayout) {
+                const winnerKey = `WINNER_EVENT:${doc.id}:${step.home}:${step.away}`;
+
+                if (existingDedupes.has(winnerKey)) continue;
+
                 const hDigit = getLastDigit(step.home);
                 const aDigit = getLastDigit(step.away);
                 const axis = freshPool.axisNumbers;
@@ -380,18 +403,15 @@ const processGameUpdate = async (
                                 winner: winnerName,
                                 squareId: squareIndex
                             },
-                            dedupeKey: `WINNER_EVENT:${doc.id}:${step.home}:${step.away}`
+                            dedupeKey: winnerKey,
+                            forceWriteDedupe: true
                         }, transaction);
 
-                        // PERSIST WINNER TO COLLECTION
-                        // Use unique ID for event document so they don't overwrite if same digits! (e.g. 0-6 and 10-6)
-                        // Actually the requirement is "Each score must determine a winner".
-                        // Previous ID was `event_${home}_${away}` which IS unique for the score combo.
                         const winnerDoc: Winner = {
                             period: 'Event',
                             squareId: squareIndex,
                             owner: winnerName,
-                            amount: 0, // Calculated at end of game
+                            amount: 0,
                             homeDigit: hDigit,
                             awayDigit: aDigit,
                             isReverse: false,
@@ -446,38 +466,38 @@ const processGameUpdate = async (
     const q3H = newScores.q3?.home; const q3A = newScores.q3?.away;
     const finalH = newScores.final?.home; const finalA = newScores.final?.away;
 
-    if (isQ1Final && q1H !== undefined) {
+    // Fix: Only process winners if we JUST finalized it (it wasn't in freshPool)
+    // This prevents re-running winner logic on every sync
+
+    if (isQ1Final && q1H !== undefined && !freshPool.scores?.q1) {
         await writeAuditEvent({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q1 Finalized: ${q1H}-${q1A}`, severity: 'INFO',
             actor: actor, payload: { period: 1, score: { home: q1H, away: q1A } }
-            // Dedupe skipped to prevent Read-After-Write error
+            // Dedupe skipped safe here because we guarded with !freshPool.scores.q1
         }, transaction);
         await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A, true);
     }
 
-    if (isHalfFinal && halfH !== undefined) {
+    if (isHalfFinal && halfH !== undefined && !freshPool.scores?.half) {
         await writeAuditEvent({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Halftime Finalized: ${halfH}-${halfA}`, severity: 'INFO',
             actor: actor, payload: { period: 2, score: { home: halfH, away: halfA } }
-            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
         await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA, true);
     }
 
-    if (isQ3Final && q3H !== undefined) {
+    if (isQ3Final && q3H !== undefined && !freshPool.scores?.q3) {
         await writeAuditEvent({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q3 Finalized: ${q3H}-${q3A}`, severity: 'INFO',
             actor: actor, payload: { period: 3, score: { home: q3H, away: q3A } }
-            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
         await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A, true);
     }
 
-    if (isGameFinal && finalH !== undefined) {
+    if (isGameFinal && finalH !== undefined && !freshPool.scores?.final) {
         await writeAuditEvent({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Game Finalized: ${finalH}-${finalA}`, severity: 'INFO',
             actor: actor, payload: { period: 4, score: { home: finalH, away: finalA } }
-            // Dedupe skipped to prevent Read-After-Write error
         }, transaction);
         await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA, true);
     }

@@ -5,7 +5,7 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 const db = admin.firestore();
 const writeAuditEvent = async (options, existingTransaction) => {
-    const { poolId, type, message, severity, actor, payload, dedupeKey } = options;
+    const { poolId, type, message, severity, actor, payload, dedupeKey, forceWriteDedupe } = options;
     const auditRef = db.collection("pools").doc(poolId).collection("audit");
     const eventId = auditRef.doc().id;
     // Logic to run operations with either existing transaction or a new one
@@ -13,11 +13,13 @@ const writeAuditEvent = async (options, existingTransaction) => {
         // 1. Deduplication Check
         if (dedupeKey) {
             const dedupeRef = db.collection("pools").doc(poolId).collection("audit_dedupe").doc(dedupeKey);
-            const doc = await t.get(dedupeRef);
-            if (doc.exists) {
-                // Return false/special value to indicate dedupe happened
-                console.log(`[Audit] Dedupe hit for ${dedupeKey}`);
-                return "SKIPPED";
+            if (!forceWriteDedupe) {
+                const doc = await t.get(dedupeRef);
+                if (doc.exists) {
+                    // Return false/special value to indicate dedupe happened
+                    console.log(`[Audit] Dedupe hit for ${dedupeKey}`);
+                    return "SKIPPED";
+                }
             }
             t.set(dedupeRef, { timestamp: admin.firestore.Timestamp.now(), originalEventId: eventId });
         }

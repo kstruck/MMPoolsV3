@@ -16,10 +16,11 @@ export interface AuditOptions {
     };
     payload?: any;
     dedupeKey?: string;
+    forceWriteDedupe?: boolean;
 }
 
 export const writeAuditEvent = async (options: AuditOptions, existingTransaction?: admin.firestore.Transaction) => {
-    const { poolId, type, message, severity, actor, payload, dedupeKey } = options;
+    const { poolId, type, message, severity, actor, payload, dedupeKey, forceWriteDedupe } = options;
 
     const auditRef = db.collection("pools").doc(poolId).collection("audit");
     const eventId = auditRef.doc().id;
@@ -29,11 +30,14 @@ export const writeAuditEvent = async (options: AuditOptions, existingTransaction
         // 1. Deduplication Check
         if (dedupeKey) {
             const dedupeRef = db.collection("pools").doc(poolId).collection("audit_dedupe").doc(dedupeKey);
-            const doc = await t.get(dedupeRef);
-            if (doc.exists) {
-                // Return false/special value to indicate dedupe happened
-                console.log(`[Audit] Dedupe hit for ${dedupeKey}`);
-                return "SKIPPED";
+
+            if (!forceWriteDedupe) {
+                const doc = await t.get(dedupeRef);
+                if (doc.exists) {
+                    // Return false/special value to indicate dedupe happened
+                    console.log(`[Audit] Dedupe hit for ${dedupeKey}`);
+                    return "SKIPPED";
+                }
             }
             t.set(dedupeRef, { timestamp: admin.firestore.Timestamp.now(), originalEventId: eventId });
         }
