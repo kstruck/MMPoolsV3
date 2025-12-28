@@ -1451,7 +1451,7 @@ const App: React.FC = () => {
                               </span>
                               <div className="flex flex-col items-end">
                                 <span className="text-white font-mono font-bold">
-                                  ${card.amount.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                  ${(card.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 0 })}
                                 </span>
                                 {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
                               </div>
@@ -1625,7 +1625,7 @@ const App: React.FC = () => {
                             <div className="text-slate-500 font-mono font-bold text-sm uppercase">Accumulating...</div>
                           ) : (
                             <>
-                              <div className="text-2xl font-bold font-mono text-emerald-400">${card.amount.toLocaleString()}</div>
+                              <div className="text-2xl font-bold font-mono text-emerald-400">${(card.amount || 0).toLocaleString()}</div>
                               {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">(Includes ${card.rolloverAdded} Rollover)</span>}
                             </>
                           )}
@@ -1678,7 +1678,7 @@ const App: React.FC = () => {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-mono">
-                          <span className="text-emerald-400 font-bold">${win.amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                          <span className="text-emerald-400 font-bold">${(win.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
                         </td>
                       </tr>
                     )))}
