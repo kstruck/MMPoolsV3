@@ -17,6 +17,7 @@ export const SuperAdmin: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
+    const [sportFilter, setSportFilter] = useState<string>('ALL');
 
     // Edit/View State
     const [viewingPool, setViewingPool] = useState<Pool | null>(null);
@@ -242,11 +243,22 @@ export const SuperAdmin: React.FC = () => {
     };
 
     const filteredPools = pools.filter(p => {
-        if (!searchTerm) return true;
+        let matchesSport = true;
+        if (sportFilter !== 'ALL') {
+            let sport = 'Other';
+            if (p.type === 'BRACKET') {
+                sport = 'March Madness';
+            } else {
+                sport = getLeagueDisplayName(p.league);
+            }
+            if (sport !== sportFilter) matchesSport = false;
+        }
+
+        if (!searchTerm) return matchesSport;
         const lowSearch = searchTerm.toLowerCase();
-        return p.name.toLowerCase().includes(lowSearch) ||
+        return matchesSport && (p.name.toLowerCase().includes(lowSearch) ||
             p.id.toLowerCase().includes(lowSearch) ||
-            ((p as any).ownerId || '').toLowerCase().includes(lowSearch);
+            ((p as any).ownerId || '').toLowerCase().includes(lowSearch));
     });
 
     const poolsBySport = filteredPools.reduce((acc, pool) => {
@@ -354,17 +366,24 @@ export const SuperAdmin: React.FC = () => {
                         <h2 className="text-lg font-bold mb-4">Pools by Sport</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             {Object.entries(poolsBySport).map(([sport, sportPools]) => (
-                                <div key={sport} className="bg-slate-900/50 p-4 rounded-lg text-center">
+                                <button
+                                    key={sport}
+                                    onClick={() => { setActiveTab('pools'); setSportFilter(sport); }}
+                                    className="bg-slate-900/50 p-4 rounded-lg text-center hover:bg-slate-700 transition-colors"
+                                >
                                     <p className="text-2xl font-bold text-white">{sportPools.length}</p>
                                     <p className="text-xs text-slate-400 uppercase font-bold">{sport}</p>
-                                </div>
+                                </button>
                             ))}
                         </div>
                     </div>
 
                     {/* Recent Top Referrers */}
                     <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                        <h2 className="text-lg font-bold mb-4">Top Referrers</h2>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-lg font-bold">Top Referrers</h2>
+                            <button onClick={() => setActiveTab('referrals')} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold">View All</button>
+                        </div>
                         <div className="space-y-2">
                             {[...users]
                                 .map(u => ({ ...u, _computedCount: getComputedReferrals(u.id) }))
@@ -404,6 +423,26 @@ export const SuperAdmin: React.FC = () => {
                                 />
                             </div>
                         </div>
+
+                        {/* SPORT FILTERS */}
+                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                            <button
+                                onClick={() => setSportFilter('ALL')}
+                                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${sportFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                            >
+                                ALL SPORTS
+                            </button>
+                            {Object.keys(poolsBySport).sort().map(sport => (
+                                <button
+                                    key={sport}
+                                    onClick={() => setSportFilter(sport)}
+                                    className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${sportFilter === sport ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                >
+                                    {sport.toUpperCase()}
+                                </button>
+                            ))}
+                        </div>
+
                         {Object.entries(poolsBySport)
                             .sort(([a], [b]) => a.localeCompare(b))
                             .map(([sport, sportPools]) => (
@@ -744,7 +783,11 @@ export const SuperAdmin: React.FC = () => {
                                 System Logs
                             </h3>
                             <button
-                                onClick={() => dbService.getSystemLogs?.().then(setSystemLogs)}
+                                onClick={() => {
+                                    if (dbService.getSystemLogs) {
+                                        dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
+                                    }
+                                }}
                                 className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition-colors"
                             >
                                 Refresh

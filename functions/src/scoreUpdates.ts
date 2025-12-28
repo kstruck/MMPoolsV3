@@ -263,82 +263,140 @@ const processGameUpdate = async (
         shouldUpdate = true;
     }
 
-    // Live Score Update Logging
+    // Live Score Update Logging & Decomposed Events
     const freshCurrent = freshPool.scores?.current || { home: 0, away: 0 };
     const newCurrent = espnScores.current || { home: 0, away: 0 };
 
+    // Calculate Deltas
+    const deltaHome = newCurrent.home - freshCurrent.home;
+    const deltaAway = newCurrent.away - freshCurrent.away;
+
     // Check if score changed
-    if (freshCurrent.home !== newCurrent.home || freshCurrent.away !== newCurrent.away) {
-        // 1. Log Score Change Audit
-        await writeAuditEvent({
-            poolId: doc.id,
-            type: 'SCORE_FINALIZED',
-            message: `Score Update: ${newCurrent.home}-${newCurrent.away} (${state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th')})`,
-            severity: 'INFO',
-            actor: actor,
-            payload: { home: newCurrent.home, away: newCurrent.away, clock: espnScores.clock || "0:00" }
-            // Dedupe skipped to prevent Read-After-Write error
-        }, transaction);
+    if (deltaHome !== 0 || deltaAway !== 0) {
 
-        // 2. Add to Score History (scoreEvents)
-        const newEvent = {
-            id: db.collection("_").doc().id, // Random ID
-            home: newCurrent.home,
-            away: newCurrent.away,
-            description: `Score Change (${period > 0 ? 'Q' + period : 'Pre'})`,
-            timestamp: Date.now()
-        };
-        transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
-        shouldUpdate = true;
+        // Prepare list of sequential score states to process
+        // Each entry is { home: number, away: number, type: 'TD' | 'XP' | 'FG' | 'SAFETY' | 'OTHER' }
+        const steps: { home: number; away: number; desc: string }[] = [];
 
-        // 3. Handle "Score Change Payouts" (Event Winners)
-        if (freshPool.ruleVariations?.scoreChangePayout) {
-            const hDigit = getLastDigit(newCurrent.home);
-            const aDigit = getLastDigit(newCurrent.away);
-            const axis = freshPool.axisNumbers;
+        const combine = freshPool.ruleVariations?.combineTDandXP === true;
 
-            if (axis) {
-                const row = axis.away.indexOf(aDigit);
-                const col = axis.home.indexOf(hDigit);
+        // Helper to push steps for a single side scoring
+        // Note: This simple logic assumes only ONE team scores at a time in a single poll interval.
+        // If both change (rare in 5 min interval but possible), we just process final.
+        // A more robust way is to handle Home change then Away change sequentially.
 
-                if (row !== -1 && col !== -1) {
-                    const squareIndex = row * 10 + col;
-                    const square = freshPool.squares[squareIndex];
-                    const winnerName = square?.owner || 'Unsold';
+        // HOME SCORING lookup
+        if (deltaHome > 0 && deltaAway === 0) {
+            if (!combine && deltaHome === 7) {
+                // TD (6) then XP (1)
+                steps.push({ home: freshCurrent.home + 6, away: freshCurrent.away, desc: 'Touchdown' });
+                steps.push({ home: freshCurrent.home + 7, away: freshCurrent.away, desc: 'Extra Point' });
+            } else if (!combine && deltaHome === 8) {
+                // TD (6) then 2Pt (2)
+                steps.push({ home: freshCurrent.home + 6, away: freshCurrent.away, desc: 'Touchdown' });
+                steps.push({ home: freshCurrent.home + 8, away: freshCurrent.away, desc: '2Pt Conv' });
+            } else {
+                steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+            }
+        }
+        // AWAY SCORING lookup
+        else if (deltaAway > 0 && deltaHome === 0) {
+            if (!combine && deltaAway === 7) {
+                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 6, desc: 'Touchdown' });
+                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 7, desc: 'Extra Point' });
+            } else if (!combine && deltaAway === 8) {
+                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 6, desc: 'Touchdown' });
+                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 8, desc: '2Pt Conv' });
+            } else {
+                steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+            }
+        }
+        // BOTH scored or negative correction (just take final)
+        else {
+            steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+        }
 
-                    await writeAuditEvent({
-                        poolId: doc.id,
-                        type: 'WINNER_COMPUTED',
-                        message: `Event Winner: ${winnerName} (${newCurrent.home}-${newCurrent.away})`,
-                        severity: 'INFO',
-                        actor: actor,
-                        payload: {
+        // --- PROCESS SEQUENCE ---
+        for (const step of steps) {
+            const stepQText = state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th');
+
+            // 1. Log Score Change Audit
+            // Only log the "Main" update on the final step? Or all? User wants "Each score accounted for".
+            // We will log unique audit events for each step.
+
+            await writeAuditEvent({
+                poolId: doc.id,
+                type: 'SCORE_FINALIZED',
+                message: `${step.desc}: ${step.home}-${step.away} (${stepQText})`,
+                severity: 'INFO',
+                actor: actor,
+                payload: { home: step.home, away: step.away, clock: espnScores.clock || "0:00" },
+                dedupeKey: `SCORE_STEP:${doc.id}:${step.home}:${step.away}`
+            }, transaction);
+
+            // 2. Add to Score History (scoreEvents)
+            const newEvent = {
+                id: db.collection("_").doc().id,
+                home: step.home,
+                away: step.away,
+                description: `${step.desc} (${state === 'pre' ? 'Pre' : 'Q' + period})`,
+                timestamp: Date.now()
+            };
+            transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
+            shouldUpdate = true;
+
+            // 3. Handle "Score Change Payouts" (Event Winners)
+            if (freshPool.ruleVariations?.scoreChangePayout) {
+                const hDigit = getLastDigit(step.home);
+                const aDigit = getLastDigit(step.away);
+                const axis = freshPool.axisNumbers;
+
+                if (axis) {
+                    const row = axis.away.indexOf(aDigit);
+                    const col = axis.home.indexOf(hDigit);
+
+                    if (row !== -1 && col !== -1) {
+                        const squareIndex = row * 10 + col;
+                        const square = freshPool.squares[squareIndex];
+                        const winnerName = square?.owner || 'Unsold';
+
+                        await writeAuditEvent({
+                            poolId: doc.id,
+                            type: 'WINNER_COMPUTED',
+                            message: `Event Winner: ${winnerName} (${step.home}-${step.away})`,
+                            severity: 'INFO',
+                            actor: actor,
+                            payload: {
+                                period: 'Event',
+                                homeScore: step.home,
+                                awayScore: step.away,
+                                homeDigit: hDigit,
+                                awayDigit: aDigit,
+                                winner: winnerName,
+                                squareId: squareIndex
+                            },
+                            dedupeKey: `WINNER_EVENT:${doc.id}:${step.home}:${step.away}`
+                        }, transaction);
+
+                        // PERSIST WINNER TO COLLECTION
+                        // Use unique ID for event document so they don't overwrite if same digits! (e.g. 0-6 and 10-6)
+                        // Actually the requirement is "Each score must determine a winner".
+                        // Previous ID was `event_${home}_${away}` which IS unique for the score combo.
+                        const winnerDoc: Winner = {
                             period: 'Event',
-                            homeScore: newCurrent.home,
-                            awayScore: newCurrent.away,
+                            squareId: squareIndex,
+                            owner: winnerName,
+                            amount: 0, // Calculated at end of game
                             homeDigit: hDigit,
                             awayDigit: aDigit,
-                            winner: winnerName,
-                            squareId: squareIndex
-                        }
-                        // Dedupe skipped to prevent Read-After-Write error
-                    }, transaction);
-
-                    // PERSIST WINNER TO COLLECTION
-                    const winnerDoc: Winner = {
-                        period: 'Event',
-                        squareId: squareIndex,
-                        owner: winnerName,
-                        amount: 0, // Calculated at end of game
-                        homeDigit: hDigit,
-                        awayDigit: aDigit,
-                        isReverse: false,
-                        description: `Score Change (${newCurrent.home}-${newCurrent.away})`
-                    };
-                    transaction.set(
-                        db.collection('pools').doc(doc.id).collection('winners').doc(`event_${newCurrent.home}_${newCurrent.away}`),
-                        winnerDoc
-                    );
+                            isReverse: false,
+                            description: `${step.desc} (${step.home}-${step.away})`
+                        };
+                        transaction.set(
+                            db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`),
+                            winnerDoc
+                        );
+                    }
                 }
             }
         }
