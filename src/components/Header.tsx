@@ -1,7 +1,7 @@
 import React from 'react';
 import { Logo } from './Logo';
 import type { User } from '../types';
-import { LayoutGrid, Shield, LogOut, User as UserIcon } from 'lucide-react';
+import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
@@ -39,6 +39,9 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Public Pools
                                 </button>
+                                <button onClick={() => window.location.hash = '#scoreboard'} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors mr-2">
+                                    <Trophy size={14} /> Live Scores
+                                </button>
                                 <div className="flex gap-2">
                                     <button onClick={onOpenAuth} className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 transition-colors">Sign In / Register</button>
                                 </div>
@@ -50,6 +53,9 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 </button>
                                 <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     Public Pools
+                                </button>
+                                <button onClick={() => window.location.hash = '#scoreboard'} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors">
+                                    <Trophy size={14} /> Live Scores
                                 </button>
 
                                 <button

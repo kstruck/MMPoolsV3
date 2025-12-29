@@ -11,7 +11,8 @@ import {
     or,
     Timestamp,
     orderBy,
-    limit
+    limit,
+    arrayUnion
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
@@ -59,6 +60,37 @@ export const dbService = {
             await deleteDoc(doc(db, "pools", poolId));
         } catch (error) {
             console.error("Error deleting pool:", error);
+            throw error;
+        }
+    },
+
+    archivePool: async (poolId: string, archive: boolean) => {
+        try {
+            const poolRef = doc(db, "pools", poolId);
+            await updateDoc(poolRef, {
+                status: archive ? 'archived' : 'active',
+                updatedAt: Timestamp.now()
+            });
+        } catch (error) {
+            console.error("Error archiving pool:", error);
+            throw error;
+        }
+    },
+
+    addToWaitlist: async (poolId: string, email: string, name: string) => {
+        try {
+            const poolRef = doc(db, "pools", poolId);
+            const waitlistEntry = {
+                email,
+                name,
+                timestamp: Date.now()
+            };
+            await updateDoc(poolRef, {
+                waitlist: arrayUnion(waitlistEntry),
+                updatedAt: Timestamp.now()
+            });
+        } catch (error) {
+            console.error("Error adding to waitlist:", error);
             throw error;
         }
     },

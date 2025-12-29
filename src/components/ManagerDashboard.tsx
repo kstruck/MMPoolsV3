@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Heart, DollarSign, Trophy, Plus, Zap, Globe, Lock, Trash2, LayoutDashboard } from 'lucide-react';
+import { Search, Filter, Heart, DollarSign, Trophy, Plus, Zap, Globe, Lock, Trash2, LayoutDashboard, Archive, RotateCcw, Copy } from 'lucide-react';
 import type { GameState, Pool } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -13,6 +13,8 @@ interface ManagerDashboardProps {
     connectionError: string | null;
     onCreatePool: () => void;
     onDeletePool: (id: string) => void;
+    onArchivePool?: (id: string, archive: boolean) => void;
+    onDuplicatePool?: (id: string) => void;
     onOpenAuth: () => void;
     onLogout: () => void;
 }
@@ -24,10 +26,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
     connectionError,
     onCreatePool,
     onDeletePool,
+    onArchivePool,
+    onDuplicatePool,
     onOpenAuth,
     onLogout
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [archiveTab, setArchiveTab] = useState<'active' | 'archived'>('active');
     const [filterCharity, setFilterCharity] = useState(false);
     const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'locked' | 'live' | 'final'>('all');
     const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 10, mid 10-50, high > 50
@@ -36,6 +41,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
     // Filter Logic
     const filteredPools = useMemo(() => {
         return pools.filter(p => {
+            // Archive Tab Filter
+            const poolStatus = (p as GameState).status || 'active';
+            if (archiveTab === 'active' && poolStatus === 'archived') return false;
+            if (archiveTab === 'archived' && poolStatus !== 'archived') return false;
+
             // Search Match
             const searchLower = searchTerm.toLowerCase();
             const isBracket = p.type === 'BRACKET';
@@ -98,7 +108,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
 
             return true;
         });
-    }, [pools, searchTerm, filterCharity, filterStatus, filterPrice, selectedLeague]);
+    }, [pools, searchTerm, filterCharity, filterStatus, filterPrice, selectedLeague, archiveTab]);
 
     if (!user) {
         return (
@@ -271,10 +281,30 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
 
                         {/* Grid Results */}
                         <div className="lg:col-span-3">
+                            {/* Active/Archived Tabs */}
+                            <div className="flex gap-2 mb-6">
+                                <button
+                                    onClick={() => setArchiveTab('active')}
+                                    className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${archiveTab === 'active' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                >
+                                    <Globe size={16} /> Active
+                                </button>
+                                <button
+                                    onClick={() => setArchiveTab('archived')}
+                                    className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${archiveTab === 'archived' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                >
+                                    <Archive size={16} /> Archived
+                                </button>
+                            </div>
+
                             {filteredPools.length === 0 ? (
                                 <div className="col-span-1 md:col-span-2 py-20 text-center text-slate-500 border border-slate-800 border-dashed rounded-xl bg-slate-900/30">
-                                    <p className="mb-2 font-medium text-slate-400">No pools match your filters.</p>
-                                    <button onClick={() => { setSearchTerm(''); setFilterStatus('all'); setFilterPrice('all'); setFilterCharity(false); setSelectedLeague('all'); }} className="text-indigo-400 hover:text-indigo-300 underline text-sm">Clear all filters</button>
+                                    <p className="mb-2 font-medium text-slate-400">
+                                        {archiveTab === 'archived' ? 'No archived pools.' : 'No pools match your filters.'}
+                                    </p>
+                                    {archiveTab === 'active' && (
+                                        <button onClick={() => { setSearchTerm(''); setFilterStatus('all'); setFilterPrice('all'); setFilterCharity(false); setSelectedLeague('all'); }} className="text-indigo-400 hover:text-indigo-300 underline text-sm">Clear all filters</button>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -391,10 +421,31 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                 </div>
 
                                                 {/* ACTION BUTTONS */}
-                                                <div className="grid grid-cols-6 gap-2 relative z-20 pt-4 border-t border-slate-800/50">
-                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#admin/${pool.id}`; }} className="col-span-3 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#pool/${pool.id}`; }} className="col-span-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); onDeletePool(pool.id); }} className="col-span-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/50 rounded-lg flex items-center justify-center transition-all"><Trash2 size={16} /></button>
+                                                <div className="grid grid-cols-12 gap-2 relative z-20 pt-4 border-t border-slate-800/50">
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#admin/${pool.id}`; }} className="col-span-4 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#pool/${pool.id}`; }} className="col-span-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View</button>
+                                                    {onDuplicatePool && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); onDuplicatePool(pool.id); }}
+                                                            className="col-span-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg flex items-center justify-center transition-all border border-slate-700"
+                                                            title="Duplicate Pool"
+                                                        >
+                                                            <Copy size={14} />
+                                                        </button>
+                                                    )}
+                                                    {onArchivePool && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); onArchivePool(pool.id, archiveTab !== 'archived'); }}
+                                                            className={`col-span-2 rounded-lg flex items-center justify-center transition-all border ${archiveTab === 'archived'
+                                                                    ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20'
+                                                                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20'
+                                                                }`}
+                                                            title={archiveTab === 'archived' ? 'Restore Pool' : 'Archive Pool'}
+                                                        >
+                                                            {archiveTab === 'archived' ? <RotateCcw size={14} /> : <Archive size={14} />}
+                                                        </button>
+                                                    )}
+                                                    <button onClick={(e) => { e.stopPropagation(); onDeletePool(pool.id); }} className="col-span-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/50 rounded-lg flex items-center justify-center transition-all"><Trash2 size={14} /></button>
                                                 </div>
                                             </div>
                                         );

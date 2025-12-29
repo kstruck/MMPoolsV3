@@ -29,6 +29,7 @@ import { TermsPage } from './components/TermsPage';
 import { HowItWorksPage } from './components/HowItWorksPage'; // Added import
 import { SupportPage } from './components/SupportPage';
 import { ManagerDashboard } from './components/ManagerDashboard';
+import { Scoreboard } from './components/Scoreboard';
 
 // --- SHARED COMPONENTS ---
 
@@ -509,7 +510,60 @@ const App: React.FC = () => {
     deletePool(id);
   };
 
+  const handleArchivePool = async (id: string, archive: boolean) => {
+    try {
+      await dbService.archivePool(id, archive);
+    } catch (err: any) {
+      console.error('Archive pool failed:', err);
+      alert(`Failed to ${archive ? 'archive' : 'restore'} pool: ${err.message}`);
+    }
+  };
 
+  const handleDuplicatePool = async (id: string) => {
+    try {
+      const sourcePod = pools.find(p => p.id === id) as GameState | undefined;
+      if (!sourcePod || sourcePod.type !== 'SQUARES') {
+        alert('Cannot duplicate this pool type');
+        return;
+      }
+      if (!user) {
+        alert('Please sign in to duplicate pools');
+        return;
+      }
+
+      // Create a copy with reset data
+      const newPool: GameState = {
+        ...sourcePod,
+        id: '', // Will be assigned by createPool
+        name: `${sourcePod.name} (Copy)`,
+        urlSlug: `${sourcePod.urlSlug}-${Date.now().toString(36).slice(-4)}`,
+        squares: Array.from({ length: 100 }, (_, i) => ({ id: i, owner: '' })), // Reset squares
+        axisNumbers: null, // Reset axis numbers
+        scores: {
+          current: null,
+          q1: null,
+          half: null,
+          q3: null,
+          final: null,
+          gameStatus: 'pre',
+        },
+        scoreEvents: [],
+        isLocked: false,
+        status: 'active',
+        waitlist: [],
+        postGameEmailSent: false,
+        ownerId: user.id,
+        createdAt: undefined,
+        updatedAt: undefined,
+      };
+
+      const newPoolId = await addNewPool(newPool);
+      window.location.hash = `#admin/${newPoolId}`;
+    } catch (err: any) {
+      console.error('Duplicate pool failed:', err);
+      alert(`Failed to duplicate pool: ${err.message}`);
+    }
+  };
 
   const openShare = (id?: string) => {
     if (!id) return;
@@ -889,6 +943,8 @@ const App: React.FC = () => {
         connectionError={connectionError}
         onCreatePool={handleCreatePool}
         onDeletePool={handleDeletePool}
+        onArchivePool={handleArchivePool}
+        onDuplicatePool={handleDuplicatePool}
         onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }}
         onLogout={authService.logout}
       />
@@ -995,6 +1051,17 @@ const App: React.FC = () => {
       <HowItWorksPage
         user={user}
         isManager={isManager}
+        onOpenAuth={() => setShowAuthModal(true)}
+        onLogout={authService.logout}
+        onCreatePool={handleCreatePool}
+      />
+    );
+  }
+
+  if (route.view === 'scoreboard') {
+    return (
+      <Scoreboard
+        user={user}
         onOpenAuth={() => setShowAuthModal(true)}
         onLogout={authService.logout}
         onCreatePool={handleCreatePool}

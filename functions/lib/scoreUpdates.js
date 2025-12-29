@@ -118,7 +118,7 @@ async function fetchESPNScores(gameId, league) {
 }
 // Helper to handle winner logging and computation (Shared between sync and fix)
 const processWinners = async (transaction, db, poolId, poolData, periodKey, homeScore, awayScore, skipDedupe = false) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     // Safety check for axis numbers
     if (!poolData.axisNumbers || !poolData.axisNumbers.home || !poolData.axisNumbers.away)
         return;
@@ -128,13 +128,21 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
     const soldSquares = poolData.squares ? poolData.squares.filter((s) => s.owner).length : 0;
     const totalPot = soldSquares * (poolData.costPerSquare || 0);
     // Process Payout Amount
+    // Skip ALL period winners for Equal Split (only score events pay)
     if (((_a = poolData.ruleVariations) === null || _a === void 0 ? void 0 : _a.scoreChangePayout) && ((_b = poolData.ruleVariations) === null || _b === void 0 ? void 0 : _b.scoreChangePayoutStrategy) === 'equal_split') {
         console.log(`[ScoreSync] Skipping Period Winner for Equal Split Pool ${poolId}`);
         return;
     }
+    // For Hybrid: Skip Q1 and Q3 (only Halftime and Final get period payouts)
+    if (((_c = poolData.ruleVariations) === null || _c === void 0 ? void 0 : _c.scoreChangePayout) && ((_d = poolData.ruleVariations) === null || _d === void 0 ? void 0 : _d.scoreChangePayoutStrategy) === 'hybrid') {
+        if (periodKey === 'q1' || periodKey === 'q3') {
+            console.log(`[ScoreSync] Skipping ${periodKey} Winner for Hybrid Pool ${poolId} (only half/final pay)`);
+            return;
+        }
+    }
     const payoutPct = getSafePayout(poolData.payouts, periodKey);
     let amount = (totalPot * payoutPct) / 100;
-    if ((_c = poolData.ruleVariations) === null || _c === void 0 ? void 0 : _c.reverseWinners)
+    if ((_e = poolData.ruleVariations) === null || _e === void 0 ? void 0 : _e.reverseWinners)
         amount /= 2;
     const label = periodKey === 'q1' ? 'Q1' : periodKey === 'half' ? 'Halftime' : periodKey === 'q3' ? 'Q3' : 'Final';
     const axis = poolData.axisNumbers;
@@ -158,7 +166,7 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
             };
             transaction.set(db.collection('pools').doc(poolId).collection('winners').doc(periodKey), winnerDoc);
         }
-        if ((_d = poolData.ruleVariations) === null || _d === void 0 ? void 0 : _d.reverseWinners) {
+        if ((_f = poolData.ruleVariations) === null || _f === void 0 ? void 0 : _f.reverseWinners) {
             const rRow = axis.away.indexOf(hDigit);
             const rCol = axis.home.indexOf(aDigit);
             if (rRow !== -1 && rCol !== -1) {
@@ -222,42 +230,102 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
         // Each entry is { home: number, away: number, type: 'TD' | 'XP' | 'FG' | 'SAFETY' | 'OTHER' }
         const steps = [];
         const combine = ((_f = freshPool.ruleVariations) === null || _f === void 0 ? void 0 : _f.combineTDandXP) === true;
-        // Helper to push steps for a single side scoring
-        // Note: This simple logic assumes only ONE team scores at a time in a single poll interval.
-        // If both change (rare in 5 min interval but possible), we just process final.
-        // A more robust way is to handle Home change then Away change sequentially.
-        // HOME SCORING lookup
-        if (deltaHome > 0 && deltaAway === 0) {
-            if (!combine && deltaHome === 7) {
-                // TD (6) then XP (1)
-                steps.push({ home: freshCurrent.home + 6, away: freshCurrent.away, desc: 'Touchdown' });
-                steps.push({ home: freshCurrent.home + 7, away: freshCurrent.away, desc: 'Extra Point' });
+        // Helper function to decompose scoring for a single team
+        const decomposeScoring = (delta, scoringTeam, currentHome, currentAway) => {
+            const result = [];
+            if (delta <= 0)
+                return result;
+            // Decompose based on common football scoring patterns
+            let remaining = delta;
+            let runningHome = currentHome;
+            let runningAway = currentAway;
+            while (remaining > 0) {
+                let points = 0;
+                let desc = '';
+                // Check for TD+XP (7) or TD+2PT (8) combos
+                if (!combine && remaining >= 7) {
+                    // TD (6 points)
+                    points = 6;
+                    desc = 'Touchdown';
+                    if (scoringTeam === 'home') {
+                        result.push({ home: runningHome + points, away: runningAway, desc });
+                        runningHome += points;
+                    }
+                    else {
+                        result.push({ home: runningHome, away: runningAway + points, desc });
+                        runningAway += points;
+                    }
+                    remaining -= points;
+                    // Now check for XP or 2PT
+                    if (remaining >= 2) {
+                        points = 2;
+                        desc = '2Pt Conv';
+                    }
+                    else if (remaining >= 1) {
+                        points = 1;
+                        desc = 'Extra Point';
+                    }
+                    else {
+                        continue;
+                    }
+                }
+                else if (remaining === 6) {
+                    points = 6;
+                    desc = 'Touchdown';
+                }
+                else if (remaining === 3) {
+                    points = 3;
+                    desc = 'Field Goal';
+                }
+                else if (remaining === 2) {
+                    points = 2;
+                    desc = 'Safety';
+                }
+                else if (remaining === 1) {
+                    points = 1;
+                    desc = 'Extra Point';
+                }
+                else {
+                    // Unknown pattern - just record the remaining as one event
+                    points = remaining;
+                    desc = 'Score Change';
+                }
+                if (scoringTeam === 'home') {
+                    result.push({ home: runningHome + points, away: runningAway, desc });
+                    runningHome += points;
+                }
+                else {
+                    result.push({ home: runningHome, away: runningAway + points, desc });
+                    runningAway += points;
+                }
+                remaining -= points;
             }
-            else if (!combine && deltaHome === 8) {
-                // TD (6) then 2Pt (2)
-                steps.push({ home: freshCurrent.home + 6, away: freshCurrent.away, desc: 'Touchdown' });
-                steps.push({ home: freshCurrent.home + 8, away: freshCurrent.away, desc: '2Pt Conv' });
-            }
-            else {
-                steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+            return result;
+        };
+        // Process HOME scoring first, then AWAY scoring
+        // This ensures we capture all events even when both teams score in the same window
+        let runningHome = freshCurrent.home;
+        let runningAway = freshCurrent.away;
+        if (deltaHome > 0) {
+            const homeSteps = decomposeScoring(deltaHome, 'home', runningHome, runningAway);
+            for (const step of homeSteps) {
+                steps.push(step);
+                runningHome = step.home;
             }
         }
-        // AWAY SCORING lookup
-        else if (deltaAway > 0 && deltaHome === 0) {
-            if (!combine && deltaAway === 7) {
-                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 6, desc: 'Touchdown' });
-                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 7, desc: 'Extra Point' });
-            }
-            else if (!combine && deltaAway === 8) {
-                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 6, desc: 'Touchdown' });
-                steps.push({ home: freshCurrent.home, away: freshCurrent.away + 8, desc: '2Pt Conv' });
-            }
-            else {
-                steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
+        if (deltaAway > 0) {
+            const awaySteps = decomposeScoring(deltaAway, 'away', runningHome, runningAway);
+            for (const step of awaySteps) {
+                steps.push(step);
+                runningAway = step.away;
             }
         }
-        // BOTH scored or negative correction (just take final)
-        else {
+        // Handle negative corrections (score went down - rare but possible)
+        if (deltaHome < 0 || deltaAway < 0) {
+            steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Correction' });
+        }
+        // If no steps were generated but score changed, add a fallback
+        if (steps.length === 0 && (deltaHome !== 0 || deltaAway !== 0)) {
             steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
         }
         // DEDUPE PRE-READ: Identify all keys we need to check
@@ -429,7 +497,6 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
         }, transaction);
         await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA, true);
     }
-    // ... (This function is getting large, consider refactoring if it grows more)
     // FINAL WRITE: Update the pool doc itself
     // Must be last if previous steps involve reads (like audit deduping)
     if (shouldUpdate) {
@@ -443,60 +510,57 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
 };
 // Helper to calculate and backfill amounts for all score events when game is over
 const finalizeEventPayouts = async (transaction, db, poolId, pool, actor) => {
+    var _a, _b;
     // 1. Calculate Pot Logic
     const soldSquares = pool.squares ? pool.squares.filter((s) => s.owner).length : 0;
     const totalPot = soldSquares * (pool.costPerSquare || 0);
     let scoreChangePot = 0;
-    const strategy = pool.ruleVariations.scoreChangePayoutStrategy || 'equal_split';
+    const strategy = ((_a = pool.ruleVariations) === null || _a === void 0 ? void 0 : _a.scoreChangePayoutStrategy) || 'equal_split';
     if (strategy === 'equal_split') {
-        // In "Equal Split" mode (as per user req), usually this means 100% of pot goes to scores??
-        // Or is it implied that PayoutConfig is respected?
-        // Game Logic client-side says: "Option A (Equal Split) = 100% of pot is for scores (technically, if not standard 25/25/25/25)"
-        // But let's assume if payouts are defined (e.g. 25/25/25/25), then Equal Split applies to the *Remainder*?
-        // Actually, for "Every Score Pays", usually the *Entire* pot is split by events.
-        // Let's stick to the GameLogic.ts implementation logic to match client validation.
-        // In GameLogic.ts: if equal_split, scoreChangePot = totalPot (and distributable is 0)
         scoreChangePot = totalPot;
     }
     else {
         // Hybrid
-        const weights = pool.ruleVariations.scoreChangeHybridWeights || { final: 40, halftime: 20, other: 40 };
+        const weights = ((_b = pool.ruleVariations) === null || _b === void 0 ? void 0 : _b.scoreChangeHybridWeights) || { final: 40, halftime: 20, other: 40 };
         const remainingPct = 100 - weights.final - weights.halftime;
         scoreChangePot = (totalPot * remainingPct) / 100;
     }
-    // 2. Filter Valid Events
-    let validEvents = [...(pool.scoreEvents || [])];
-    if (pool.ruleVariations.includeOTInScorePayouts === false) {
-        validEvents = validEvents.filter(e => !e.description.toUpperCase().includes('OT') && !e.description.toUpperCase().includes('OVERTIME'));
-    }
+    // 2. Query ALL Event Winners from Subcollection (more reliable than scoreEvents array)
+    const winnersRef = db.collection('pools').doc(poolId).collection('winners');
+    const winnersSnap = await transaction.get(winnersRef);
+    // Filter to only 'Event' period winners (exclude q1, half, q3, final)
+    const eventWinners = winnersSnap.docs.filter(doc => {
+        const data = doc.data();
+        return data.period === 'Event';
+    });
     // 3. Calculate Amount Per Event
-    const eventCount = validEvents.length;
+    const eventCount = eventWinners.length;
     const amountPerEvent = eventCount > 0 ? (scoreChangePot / eventCount) : 0;
+    console.log(`[FinalizePayouts] Pool ${poolId}: ${eventCount} events, $${totalPot} pot, $${amountPerEvent.toFixed(2)} per event`);
     // 4. Update Winner Docs
-    // We need to find the winner docs corresponding to these events.
-    // The ID format is `event_HOME_AWAY`.
-    // Valid events have unique scores usually, but lets be careful.
     let updatedCount = 0;
-    for (const ev of validEvents) {
-        const docId = `event-${ev.id}`;
-        const winnerRef = db.collection('pools').doc(poolId).collection('winners').doc(docId);
-        // We use transaction.set with merge true to update amount
-        transaction.set(winnerRef, { amount: amountPerEvent }, { merge: true });
-        updatedCount++;
+    for (const winnerDoc of eventWinners) {
+        const currentData = winnerDoc.data();
+        // Only update if amount is different (to avoid unnecessary writes)
+        if (currentData.amount !== amountPerEvent) {
+            transaction.update(winnerDoc.ref, { amount: amountPerEvent });
+            updatedCount++;
+        }
     }
     // 5. Log Action
-    if (updatedCount > 0) {
+    if (updatedCount > 0 || eventCount > 0) {
         await (0, audit_1.writeAuditEvent)({
             poolId: poolId,
             type: 'WINNER_COMPUTED',
-            message: `Finalized Event Payouts: $${amountPerEvent.toFixed(2)} per event (${updatedCount} events)`,
+            message: `Finalized Event Payouts: $${amountPerEvent.toFixed(2)} per event (${eventCount} total events, ${updatedCount} updated)`,
             severity: 'INFO',
             actor: actor,
             payload: {
                 totalPot,
                 scoreChangePot,
                 eventCount,
-                amountPerEvent
+                amountPerEvent,
+                updatedCount
             }
         }, transaction);
     }
@@ -534,7 +598,8 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
             // Optimization: Skip if game hasn't started yet and start time is > 2 hours away
             if (!pool.isLocked && ((_a = pool.scores) === null || _a === void 0 ? void 0 : _a.gameStatus) === 'pre') {
                 const now = Date.now();
-                const start = new Date(pool.scores.startTime || 0).getTime();
+                // Safe handling of startTime
+                const start = pool.scores.startTime ? new Date(pool.scores.startTime).getTime() : 0;
                 if (start > now + 2 * 60 * 60 * 1000)
                     continue;
             }
@@ -661,38 +726,47 @@ exports.simulateGameUpdate = (0, https_1.onCall)({
 });
 // One-time callable function to fix corrupted pool scores AND run winner logic
 exports.fixPoolScores = (0, https_1.onCall)({
-    timeoutSeconds: 120,
-    memory: "256MiB"
+    timeoutSeconds: 300,
+    memory: "512MiB"
 }, async (request) => {
-    var _a;
-    // Only allow super admin
-    if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
-        throw new https_1.HttpsError('permission-denied', 'Only super admin can run this');
+    var _a, _b, _c, _d;
+    // Check Authentication (Admin Only)
+    if (((_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role) !== 'SUPER_ADMIN' && ((_b = request.auth) === null || _b === void 0 ? void 0 : _b.token.email) !== 'kstruck@gmail.com') {
+        if (((_c = request.auth) === null || _c === void 0 ? void 0 : _c.token.role) !== 'SUPER_ADMIN') {
+            throw new https_1.HttpsError('permission-denied', 'Must be Super Admin');
+        }
     }
     const db = admin.firestore();
+    const targetPoolId = (_d = request.data) === null || _d === void 0 ? void 0 : _d.poolId;
+    let poolsSnap;
+    if (targetPoolId) {
+        // Targeted Fix
+        console.log(`[FixPool] Targeting single pool: ${targetPoolId}`);
+        const docSnap = await db.collection("pools").doc(targetPoolId).get();
+        if (!docSnap.exists)
+            return { success: false, message: 'Pool not found' };
+        poolsSnap = { docs: [docSnap], size: 1 };
+    }
+    else {
+        // Global Fix
+        console.log(`[FixPool] Running Global Fix...`);
+        poolsSnap = await db.collection("pools")
+            .where("scores.gameStatus", "in", ["in", "post"])
+            .get();
+    }
     const results = [];
-    const poolsSnap = await db.collection('pools')
-        .where('gameId', '!=', null)
-        .get();
     for (const doc of poolsSnap.docs) {
         try {
             const pool = doc.data();
-            if (!pool.gameId) {
-                results.push({ id: doc.id, status: 'skipped', reason: 'no gameId' });
+            if (!pool.gameId)
                 continue;
-            }
-            const gameStatus = (_a = pool.scores) === null || _a === void 0 ? void 0 : _a.gameStatus;
-            if (gameStatus !== 'in' && gameStatus !== 'post') {
-                results.push({ id: doc.id, status: 'skipped', reason: `gameStatus is ${gameStatus}` });
-                continue;
-            }
             const espnScores = await fetchESPNScores(pool.gameId, pool.league || 'nfl');
             if (!espnScores) {
                 results.push({ id: doc.id, status: 'error', reason: 'ESPN fetch failed' });
                 continue;
             }
-            const period = espnScores.period;
             const state = espnScores.gameStatus;
+            const period = espnScores.period;
             const isQ1Final = (period >= 2) || (state === "post");
             const isHalfFinal = (period >= 3) || (state === "post");
             const isQ3Final = (period >= 4) || (state === "post");
@@ -733,8 +807,6 @@ exports.fixPoolScores = (0, https_1.onCall)({
                 const finalH = (_g = effectivePool.scores.final) === null || _g === void 0 ? void 0 : _g.home;
                 const finalA = (_h = effectivePool.scores.final) === null || _h === void 0 ? void 0 : _h.away;
                 // SKIP QUARTER WINNERS IF "EQUAL SPLIT" IS ACTIVE
-                // If the user chose "Every Score Pays" -> "Equal Split", there are no quarterly winners.
-                // We trust ruleVariations over stale payout percentages.
                 const isEqualSplit = ((_j = pool.ruleVariations) === null || _j === void 0 ? void 0 : _j.scoreChangePayout) && ((_k = pool.ruleVariations) === null || _k === void 0 ? void 0 : _k.scoreChangePayoutStrategy) === 'equal_split';
                 if (!isEqualSplit) {
                     if (isQ1Final && q1H !== undefined)
@@ -751,8 +823,6 @@ exports.fixPoolScores = (0, https_1.onCall)({
                 if ((_l = pool.ruleVariations) === null || _l === void 0 ? void 0 : _l.scoreChangePayout) {
                     const existingEvents = [...currentScoreEvents];
                     existingEvents.sort((a, b) => a.timestamp - b.timestamp);
-                    // Ensure the LATEST score from ESPN is in the event list
-                    // This handles cases where syncGameStatus failed to record the final update
                     const lastRecorded = existingEvents.length > 0 ? existingEvents[existingEvents.length - 1] : { home: 0, away: 0 };
                     if (lastRecorded.home !== espnScores.current.home || lastRecorded.away !== espnScores.current.away) {
                         console.log(`[FixPool] Appending missing tail score: ${espnScores.current.home}-${espnScores.current.away}`);
@@ -783,16 +853,21 @@ exports.fixPoolScores = (0, https_1.onCall)({
                                 const square = pool.squares ? pool.squares[sqIdx] : null;
                                 const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
                                 const docId = `event_${home}_${away}`;
+                                // Calculate Amount
+                                let amount = 0;
+                                if (pool.scoreChangePayoutAmount && pool.scoreChangePayoutAmount > 0) {
+                                    amount = pool.scoreChangePayoutAmount;
+                                }
                                 await t.set(db.collection('pools').doc(doc.id).collection('winners').doc(docId), {
                                     period: 'Event',
                                     squareId: sqIdx,
                                     owner: winnerName,
+                                    amount: amount,
                                     homeDigit: hDigit,
                                     awayDigit: aDigit,
                                     isReverse: false,
                                     description: desc || 'Score Change',
-                                    // Preserve existing amount (it will be overwritten by finalizeEventPayouts if final)
-                                    // BUT if we create it new, it has no amount.
+                                    timestamp: timestamp
                                 }, { merge: true });
                             }
                         }
@@ -851,7 +926,6 @@ exports.fixPoolScores = (0, https_1.onCall)({
                         t.update(doc.ref, { scoreEvents: newEventHistory });
                     }
                     if (isGameFinal) {
-                        // Use the updated event history for finalization so new events get paid!
                         const poolForPayouts = Object.assign(Object.assign({}, effectivePool), { scoreEvents: currentScoreEvents });
                         await finalizeEventPayouts(t, db, doc.id, poolForPayouts, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' });
                     }
@@ -873,7 +947,7 @@ exports.fixPoolScores = (0, https_1.onCall)({
         }
         catch (error) {
             console.error(`Error processing pool ${doc.id}:`, error);
-            results.push({ id: doc.id, status: 'error', message: error.message });
+            results.push({ id: doc.id, status: 'error', reason: error.message });
         }
     }
     return { success: true, pools: results };

@@ -187,6 +187,15 @@ export interface GameState {
   manualScoreOverride?: boolean;
   reminders?: ReminderSettings;
   lastBroadcastTime?: number; // Timestamp of last mass email
+  status?: 'active' | 'archived'; // Pool lifecycle status (default: active)
+  waitlist?: WaitlistEntry[]; // Users waiting for squares to open up
+  postGameEmailSent?: boolean; // Track if post-game summary email was sent
+}
+
+export interface WaitlistEntry {
+  email: string;
+  name: string;
+  timestamp: number;
 }
 
 export interface ReminderSettings {

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateTournamentData = exports.markEntryPaidStatus = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
+exports.onGameComplete = exports.updateTournamentData = exports.markEntryPaidStatus = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -47,4 +47,6 @@ Object.defineProperty(exports, "submitBracketEntry", { enumerable: true, get: fu
 var bracketOps_1 = require("./bracketOps");
 Object.defineProperty(exports, "markEntryPaidStatus", { enumerable: true, get: function () { return bracketOps_1.markEntryPaidStatus; } });
 Object.defineProperty(exports, "updateTournamentData", { enumerable: true, get: function () { return bracketOps_1.updateTournamentData; } });
+var postGameEmail_1 = require("./postGameEmail");
+Object.defineProperty(exports, "onGameComplete", { enumerable: true, get: function () { return postGameEmail_1.onGameComplete; } });
 //# sourceMappingURL=index.js.map

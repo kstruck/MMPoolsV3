@@ -44,6 +44,18 @@ A modern, real-time sports pool application supporting both **Gameday Squares** 
 *   **Date & Time Display:** **NEW!** Pool cards now explicitly show the scheduled Game Time or Bracket Lock Time.
 *   **Payout & Score History:** **Fixed!** "Fix Pool Scores" tool now correctly recalculates all past winners and payouts, ensuring the "Score Change History" audit log is always money-perfect. "No Money Won" status is now accurately reflected.
 
+### 📦 Pool Lifecycle Management (NEW)
+*   **Archive Pools:** Managers can archive completed pools to keep their dashboard clean. Active/Archived tabs filter pools by status. Archived pools can be restored at any time.
+*   **Pool Duplication:** One-click duplication of existing pools preserves all settings (teams, payout rules, costs) while resetting squares and scores for a fresh start.
+*   **Waitlist for Full Grids:** When a pool reaches 100 squares, interested participants can join a waitlist to be notified if a square becomes available.
+*   **Post-Game Summary Email:** Automated email sent to all participants when a game ends, containing final scores, winner highlights, and payout breakdowns.
+
+### 🏈 Live Scoreboard Page (NEW)
+*   **Dedicated Scoreboard:** Full-page view of live NFL and College Football scores powered by ESPN API.
+*   **Auto-Refresh:** Scores update every 30 seconds with manual refresh option.
+*   **Smart Sorting:** Games sorted by status (Live first, then Upcoming, then Completed).
+*   **League Tabs:** Toggle between NFL and College Football with one click.
+
 ### 🃏 Enhanced Status Card (NEW)
 *   **Tabbed Interface:** The pool status card has been completely refactored into a sleek, tabbed design ("Overview", "Rules", "Payment") to organize critical information without clutter.
 *   **Live Countdown Timer:** A dynamic countdown timer shows the exact time until kickoff.
