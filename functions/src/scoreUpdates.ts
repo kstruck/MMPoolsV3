@@ -219,6 +219,22 @@ const processWinners = async (
                         payload: { period: label, type: 'REVERSE', winner: rWinnerName, squareId: rSqIndex, amount: amount },
                         ...(skipDedupe ? {} : { dedupeKey: `WINNER_REV:${poolId}:${periodKey}:${hDigit}:${aDigit}` })
                     }, transaction);
+
+                    // Persist reverse winner to subcollection
+                    const reverseWinnerDoc: Winner = {
+                        period: periodKey,
+                        squareId: rSqIndex,
+                        owner: rWinnerName,
+                        amount: amount,
+                        homeDigit: aDigit,  // Swapped for reverse
+                        awayDigit: hDigit,  // Swapped for reverse
+                        isReverse: true,
+                        description: `${label} Reverse Winner`
+                    };
+                    transaction.set(
+                        db.collection('pools').doc(poolId).collection('winners').doc(`${periodKey}_reverse`),
+                        reverseWinnerDoc
+                    );
                 }
             }
         }

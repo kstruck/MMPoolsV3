@@ -177,6 +177,18 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
                     const rSquare = poolData.squares[rSqIndex];
                     const rWinnerName = (rSquare === null || rSquare === void 0 ? void 0 : rSquare.owner) || 'Unsold';
                     await (0, audit_1.writeAuditEvent)(Object.assign({ poolId: poolId, type: 'WINNER_COMPUTED', message: `${label} Reverse Winner: ${rWinnerName}`, severity: 'INFO', actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' }, payload: { period: label, type: 'REVERSE', winner: rWinnerName, squareId: rSqIndex, amount: amount } }, (skipDedupe ? {} : { dedupeKey: `WINNER_REV:${poolId}:${periodKey}:${hDigit}:${aDigit}` })), transaction);
+                    // Persist reverse winner to subcollection
+                    const reverseWinnerDoc = {
+                        period: periodKey,
+                        squareId: rSqIndex,
+                        owner: rWinnerName,
+                        amount: amount,
+                        homeDigit: aDigit, // Swapped for reverse
+                        awayDigit: hDigit, // Swapped for reverse
+                        isReverse: true,
+                        description: `${label} Reverse Winner`
+                    };
+                    transaction.set(db.collection('pools').doc(poolId).collection('winners').doc(`${periodKey}_reverse`), reverseWinnerDoc);
                 }
             }
         }

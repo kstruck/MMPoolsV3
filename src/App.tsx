@@ -745,17 +745,17 @@ const App: React.FC = () => {
       let hasWinner = false;
 
       // Check for Official Winner (Backend Authoritative)
-      const officialWinner = winners.find(w => w.prizeType === ((period === 'final' || period === 'half') ? period.toUpperCase() : period.toUpperCase()) || w.period === period);
-      // specific check for period keys matching prizeType/period
+      const officialWinner = winners.find(w => (w.period === period && !w.isReverse));
+      // Also check for reverse winner from backend
+      const officialReverseWinner = winners.find(w => (w.period === period && w.isReverse === true));
 
       if (officialWinner) {
         winnerName = officialWinner.owner;
         hasWinner = true;
-        // Check for reverse in winners list? 
-        // Backend stores reverse winners as separate docs usually? Or same doc?
-        // If separate, we need to find it.
-        // For now, let's keep local projected logic as it renders consistently,
-        // BUT if official winner says "Unsold" or specific name, use it.
+        // Use reverse winner from backend if available
+        if (officialReverseWinner) {
+          reverseWinnerName = officialReverseWinner.owner;
+        }
       } else if (squaresPool.axisNumbers) {
         const hD = getLastDigit(home);
         const aD = getLastDigit(away);
