@@ -299,6 +299,7 @@ const App: React.FC = () => {
     if (hash.startsWith('#privacy')) return { view: 'privacy', id: null };
     if (hash.startsWith('#terms')) return { view: 'terms', id: null };
     if (hash.startsWith('#how-it-works')) return { view: 'how-it-works', id: null };
+    if (hash.startsWith('#scoreboard')) return { view: 'scoreboard', id: null };
     if (hash.startsWith('#support')) return { view: 'support', id: null };
     if (hash.startsWith('#support')) return { view: 'support', id: null };
     if (hash.startsWith('#create-pool')) return { view: 'create-pool', id: null };
