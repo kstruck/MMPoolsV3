@@ -19,3 +19,4 @@ export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracke
 export { createBracketEntry, updateBracketEntry, submitBracketEntry } from "./bracketEntries";
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { onGameComplete } from "./postGameEmail";
+export { onAnnouncementCreated } from "./announcements";

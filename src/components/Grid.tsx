@@ -19,6 +19,29 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const [selectedSquares, setSelectedSquares] = useState<number[]>([]);
    const [guestKey, setGuestKey] = useState<string>('');
 
+   // --- 4-SETS LOGIC (Hoisted) ---
+   const [activeSet, setActiveSet] = useState<'q1' | 'q2' | 'q3' | 'final'>('q1');
+
+   // Auto-switch active set based on game progress
+   useEffect(() => {
+      // Determine if we are in Multi-Set mode (4 Sets of numbers)
+      const isMultiSetLocal = gameState.numberSets === 4;
+      if (!isMultiSetLocal) return;
+
+      const period = gameState.scores.period || 1;
+      const status = gameState.scores.gameStatus;
+
+      if (status === 'post' || gameState.scores.final) {
+         setActiveSet('final');
+         return;
+      }
+
+      if (period >= 4) setActiveSet('final');
+      else if (period === 3) setActiveSet('q3');
+      else if (period === 2) setActiveSet('q2');
+      else setActiveSet('q1');
+   }, [gameState.scores.period, gameState.scores.gameStatus, gameState.numberSets]);
+
    // --- Guest Key Init ---
    useEffect(() => {
       let key = localStorage.getItem('mmp_guest_key');
@@ -198,8 +221,26 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       }));
    };
 
+   // Filter winners based on active set (4-Sets Mode) to avoid confusion
+   const visibleWinners = React.useMemo(() => {
+      if (!isMultiSet) return winners;
+
+      return winners.filter(w => {
+         // Map activeSet (q1, q2, q3, final) to Winner Period (q1, half, q3, final)
+         const periodMap: Record<string, string> = {
+            'q1': 'q1',
+            'q2': 'half',
+            'q3': 'q3',
+            'final': 'final'
+         };
+
+         const targetPeriod = periodMap[activeSet];
+         return w.period === targetPeriod;
+      });
+   }, [winners, isMultiSet, activeSet]);
+
    const getWinningDetails = (id: number) => {
-      return winners.filter(w => w.squareId === id);
+      return visibleWinners.filter(w => w.squareId === id);
    };
 
    // --- Claim Code Logic ---
@@ -235,26 +276,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       }
    };
 
-   // --- 4-SETS LOGIC ---
-   // If 4-Sets mode, we toggle between sets rather than showing all at once
-   const [activeSet, setActiveSet] = useState<'q1' | 'q2' | 'q3' | 'final'>('q1');
+   // --- 4-SETS LOGIC removed (hoisted) ---
 
-   // Auto-switch active set based on game progress
-   useEffect(() => {
-      if (!isMultiSet) return;
-      const period = gameState.scores.period || 1;
-      const status = gameState.scores.gameStatus;
-
-      if (status === 'post' || gameState.scores.final) {
-         setActiveSet('final');
-         return;
-      }
-
-      if (period >= 4) setActiveSet('final');
-      else if (period === 3) setActiveSet('q3');
-      else if (period === 2) setActiveSet('activeSet' as any === 'half' ? 'q2' : 'q2'); // map q2 to half logic if needed, but typestate is q2
-      else setActiveSet('q1');
-   }, [gameState.scores.period, gameState.scores.gameStatus, isMultiSet]);
+   // --- Guest Key Init ---
 
    // Helper to get numbers for current view
    const getAxisNumbers = (side: 'home' | 'away') => {
@@ -624,7 +648,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          </div>
 
          {/* --- SECTION 3: THE GRID --- */}
-         <div className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-x-auto overflow-y-hidden w-full max-w-[80vh] mx-auto border-x border-b border-slate-800">
+         <div id="printable-grid" className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-x-auto overflow-y-hidden w-full max-w-[80vh] mx-auto border-x border-b border-slate-800">
             <div className="w-full transition-transform duration-200 origin-top-left" style={{ transform: `scale(${zoomLevel})`, width: zoomLevel !== 1 ? `${100 / zoomLevel}%` : '100%' }}>
                {/* Grid Layout: BACK TO STANDARD 11x11 ALWAYS */}
                <div className="grid grid-cols-11 gap-0.5 sm:gap-1 select-none">
@@ -869,8 +893,37 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
             </div>
          </div>
 
-         {/* --- COLOR LEGEND --- */}
-         <div className="w-full max-w-4xl mt-6 px-4 mb-24 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
+   // Filter winners based on active set (4-Sets Mode) to avoid confusion
+   const visibleWinners = React.useMemo(() => {
+      if (!isMultiSet) return winners;
+
+      return winners.filter(w => {
+         // Map activeSet (q1, q2, q3, final) to Winner Period (q1, half, q3, final)
+         // Note: We currently treat 'Event' winners as visible everywhere OR filtered?
+         // User Request: "Only show winners for each quarter... numbers change."
+         // Since numbers change, showing granular event winners from Q1 on Q3 grid is also confusing.
+         // We will filter STRICTLY to the current bucket.
+         
+         const periodMap: Record<string, string> = {
+            'q1': 'q1',
+         'q2': 'half',
+         'q3': 'q3',
+         'final': 'final' 
+         };
+
+         const targetPeriod = periodMap[activeSet];
+         return w.period === targetPeriod;
+      });
+   }, [winners, isMultiSet, activeSet]);
+
+   const getWinningDetails = (id: number) => {
+      return visibleWinners.filter(w => w.squareId === id);
+   };
+
+         // ... (Rest of code)
+
+         // --- COLOR LEGEND ---
+         <div className="w-full max-w-4xl mt-6 px-4 mb-24 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100 print:hidden">
             <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800 flex flex-wrap justify-center items-center gap-6 md:gap-8">
                <div className="flex items-center gap-3">
                   <div className="w-6 h-6 rounded bg-emerald-600 border border-emerald-500 shadow-sm flex items-center justify-center">
@@ -934,7 +987,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          {/* --- STICKY FOOTER --- */}
          {
             selectedSquares.length > 0 && (
-               <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-2xl border border-indigo-500/30 flex items-center gap-6 z-40 animate-in slide-in-from-bottom-10 ring-1 ring-white/10">
+               <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-2xl border border-indigo-500/30 flex items-center gap-6 z-40 animate-in slide-in-from-bottom-10 ring-1 ring-white/10 print:hidden">
                   <div className="flex flex-col">
                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Selected</span>
                      <span className="font-bold text-xl leading-none">{selectedSquares.length} <span className="text-sm font-normal text-slate-400">sq</span></span>

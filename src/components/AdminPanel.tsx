@@ -7,7 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
-import { emailService } from '../services/emailService';
+import { AnnouncementManager } from './AnnouncementManager';
 
 interface AdminPanelProps {
   gameState: GameState;
@@ -19,6 +19,7 @@ interface AdminPanelProps {
   onShare: () => void;
   checkSlugAvailable: (slug: string) => boolean;
   checkNameAvailable: (name: string) => boolean;
+  currentUser: any;
 }
 
 // Internal Debounced Input Component to fix cursor jumping
@@ -84,7 +85,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onBack,
   onShare,
   checkSlugAvailable,
-  checkNameAvailable
+  checkNameAvailable,
+  currentUser
 }) => {
   const [aiIdea, setAiIdea] = useState<string>('');
   const [isThinking, setIsThinking] = useState(false);
@@ -112,16 +114,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
   const [editingPlayer, setEditingPlayer] = useState<{ originalName: string, name: string, email: string, phone: string, notes: string } | null>(null);
 
-  // Email Broadcast State
-  const [emailFilter, setEmailFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
-  const [emailSubject, setEmailSubject] = useState('');
-  const [emailBody, setEmailBody] = useState('');
-  const [includeRules, setIncludeRules] = useState(true);
-  const [includePayouts, setIncludePayouts] = useState(true);
-  const [includeLink, setIncludeLink] = useState(true);
-  const [includeReplyTo, setIncludeReplyTo] = useState(true);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
-  const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
+  // Email Broadcast State removed (replaced by AnnouncementManager)
   const [showQRCode, setShowQRCode] = useState(false);
 
   // Theme State
@@ -273,120 +266,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleSendBroadcast = async () => {
-    // 1. Rate Limit Check (15 mins)
-    const now = Date.now();
-    const lastSent = gameState.lastBroadcastTime || 0;
-    const cooldown = 15 * 60 * 1000;
+  // handleSendBroadcast removed
 
-    if (now - lastSent < cooldown) {
-      const remaining = Math.ceil((cooldown - (now - lastSent)) / 60000);
-      setEmailStatus({ type: 'error', msg: `Please wait ${remaining} minutes before sending another email.` });
-      return;
-    }
-
-    if (!emailSubject || !emailBody) {
-      setEmailStatus({ type: 'error', msg: 'Subject and Message are required.' });
-      return;
-    }
-
-    setIsSendingEmail(true);
-    setEmailStatus(null);
-
-    // 2. Filter Recipients
-    const recipients = new Set<string>();
-    gameState.squares.forEach(s => {
-      if (!s.owner) return;
-      const email = s.playerDetails?.email;
-      if (!email) return;
-
-      const matchesFilter =
-        emailFilter === 'all' ||
-        (emailFilter === 'paid' && s.isPaid) ||
-        (emailFilter === 'unpaid' && !s.isPaid);
-
-      if (matchesFilter) {
-        recipients.add(email);
-      }
-    });
-
-    const recipientList = Array.from(recipients);
-
-    if (recipientList.length === 0) {
-      setEmailStatus({ type: 'error', msg: 'No recipients found matching criteria.' });
-      setIsSendingEmail(false);
-      return;
-    }
-
-
-
-    // 3. Construct Content (Using bcc for privacy)
-    const poolLink = `${window.location.origin}/#pool/${gameState.id}`;
-    let htmlContent = `
-      <div style="font-family: sans-serif; color: #333;">
-        <h2>${gameState.name} Update</h2>
-        <p>${emailBody.replace(/\n/g, '<br>')}</p>
-        <hr style="border: 1px solid #eee; margin: 20px 0;" />
-    `;
-
-    if (includeLink) {
-      htmlContent += `
-        <p><strong>Access the Pool:</strong> <a href="${poolLink}">${poolLink}</a></p>
-      `;
-    }
-
-    if (includeRules) {
-      htmlContent += `
-        <h3>Key Rules</h3>
-        <ul>
-          <li><strong>Cost:</strong> $${gameState.costPerSquare} per square</li>
-          <li><strong>Lock Time:</strong> ${gameState.reminders?.lock.lockAt ? new Date(gameState.reminders.lock.lockAt).toLocaleString() : 'Not Set'}</li>
-          <li><strong>Numbers:</strong> ${gameState.numberSets === 4 ? 'New numbers every quarter' : 'Same numbers all game'}</li>
-        </ul>
-      `;
-    }
-
-    if (includePayouts) {
-      const totalPot = gameState.squares.filter(s => s.owner).length * gameState.costPerSquare;
-      const charityDed = gameState.charity?.enabled ? (totalPot * (gameState.charity.percentage / 100)) : 0;
-      const netPot = totalPot - charityDed;
-
-      htmlContent += `
-        <h3>Payouts (Est. based on current sales)</h3>
-        <ul>
-          <li><strong>Q1 (${gameState.payouts.q1}%):</strong> $${Math.floor(netPot * (gameState.payouts.q1 / 100))}</li>
-          <li><strong>Half (${gameState.payouts.half}%):</strong> $${Math.floor(netPot * (gameState.payouts.half / 100))}</li>
-          <li><strong>Q3 (${gameState.payouts.q3}%):</strong> $${Math.floor(netPot * (gameState.payouts.q3 / 100))}</li>
-          <li><strong>Final (${gameState.payouts.final}%):</strong> $${Math.floor(netPot * (gameState.payouts.final / 100))}</li>
-        </ul>
-      `;
-    }
-
-    htmlContent += `
-      <p style="font-size: 12px; color: #666; margin-top: 30px;">
-        Sent via March Melee Pools • <a href="${poolLink}">View Pool</a>
-      </p>
-      </div>
-    `;
-
-    // 4. Send - Use BCC logic
-    const replyTo = includeReplyTo && gameState.contactEmail ? gameState.contactEmail : undefined;
-
-    try {
-      // recipientList contains emails implicitly due to filtering logic
-      await emailService.sendBroadcast(recipientList, emailSubject, htmlContent, replyTo, gameState.ownerId);
-      updateConfig({ lastBroadcastTime: now });
-      setEmailStatus({ type: 'success', msg: `Sent to ${recipientList.length} recipients!` });
-      // Reset form slightly
-      setEmailSubject('');
-      setEmailBody('');
-    } catch (e) {
-      console.error(e);
-      setEmailStatus({ type: 'error', msg: 'Failed to trigger email service.' });
-    }
-
-    setIsSendingEmail(false);
-  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1925,126 +1806,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         )}
 
-        {/* COMMUNICATIONS TAB (EMAIL BLAST) */}
+        {/* COMMUNICATIONS TAB (ANNOUNCEMENTS) */}
         {activeTab === 'communications' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right duration-500">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                    <Mail size={20} className="text-indigo-400" /> Mass Email Tool
-                  </h3>
-                  <p className="text-slate-400 text-sm">Send updates to your pool participants. 15-minute cooldown between sends.</p>
-                </div>
-                {gameState.lastBroadcastTime && (
-                  <div className="text-right text-xs text-slate-500">
-                    <span className="block font-bold uppercase">Last Sent</span>
-                    <Clock size={12} className="inline mr-1" />
-                    {new Date(gameState.lastBroadcastTime).toLocaleString()}
-                  </div>
-                )}
-              </div>
-
-              {/* RECIPIENT FILTER */}
-              <div className="mb-6 p-4 bg-slate-950 rounded-lg border border-slate-800">
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Recipients</label>
-                <div className="flex gap-4 mb-3">
-                  {['all', 'paid', 'unpaid'].map(filter => (
-                    <button
-                      key={filter}
-                      onClick={() => setEmailFilter(filter as any)}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition-colors ${emailFilter === filter ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
-                    >
-                      {filter}
-                    </button>
-                  ))}
-                </div>
-                <div className="text-sm text-indigo-400 font-bold">
-                  {(() => {
-                    const count = gameState.squares.filter(s => {
-                      if (!s.owner || !s.playerDetails?.email) return false;
-                      if (emailFilter === 'paid') return s.isPaid;
-                      if (emailFilter === 'unpaid') return !s.isPaid;
-                      return true;
-                    }).map(s => s.playerDetails?.email).filter((v, i, a) => a.indexOf(v) === i).length;
-                    return `${count} Unique Recipient(s) Selected`;
-                  })()}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* COMPOSER */}
-                <div className="md:col-span-2 space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Subject</label>
-                    <input
-                      type="text"
-                      value={emailSubject}
-                      onChange={(e) => setEmailSubject(e.target.value)}
-                      placeholder="e.g. Pool is locked!"
-                      className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Message</label>
-                    <textarea
-                      value={emailBody}
-                      onChange={(e) => setEmailBody(e.target.value)}
-                      placeholder="Write your update here..."
-                      className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-48 resize-none"
-                    />
-                  </div>
-
-                  {/* INCLUDE CHECKBOXES */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-slate-600">
-                      <input type="checkbox" checked={includeRules} onChange={(e) => setIncludeRules(e.target.checked)} className="rounded bg-slate-800 border-slate-600 text-indigo-500" />
-                      <span className="text-sm text-slate-300">Include Rules & Deadlines</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-slate-600">
-                      <input type="checkbox" checked={includePayouts} onChange={(e) => setIncludePayouts(e.target.checked)} className="rounded bg-slate-800 border-slate-600 text-indigo-500" />
-                      <span className="text-sm text-slate-300">Include Est. Payouts</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-slate-600">
-                      <input type="checkbox" checked={includeLink} onChange={(e) => setIncludeLink(e.target.checked)} className="rounded bg-slate-800 border-slate-600 text-indigo-500" />
-                      <span className="text-sm text-slate-300">Include Pool Link</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-slate-600">
-                      <input type="checkbox" checked={includeReplyTo} onChange={(e) => setIncludeReplyTo(e.target.checked)} className="rounded bg-slate-800 border-slate-600 text-indigo-500" />
-                      <span className="text-sm text-slate-300">Reply-To: {gameState.contactEmail}</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* PREVIEW & SEND */}
-                <div className="space-y-4">
-                  <div className="bg-white text-slate-900 p-4 rounded-lg text-sm max-h-96 overflow-y-auto border-4 border-slate-800">
-                    <h4 className="font-bold border-b pb-2 mb-2 text-xs uppercase text-slate-400 tracking-wider">Preview</h4>
-                    <div className="font-bold text-lg mb-2">{emailSubject || '(No Subject)'}</div>
-                    <div className="whitespace-pre-wrap mb-4">{emailBody || '(No Message)'}</div>
-                    {includeLink && <div className="text-indigo-600 underline text-xs mb-2">Link to Pool</div>}
-                    {includeRules && <div className="bg-slate-100 p-2 rounded text-xs mb-2"><strong>Key Rules:</strong><br />Cost: ${gameState.costPerSquare}<br />Lock: ...</div>}
-                    {includePayouts && <div className="bg-slate-100 p-2 rounded text-xs"><strong>Payouts:</strong><br />Q1: ...<br />Final: ...</div>}
-                  </div>
-
-                  {emailStatus && (
-                    <div className={`p-3 rounded text-sm font-bold ${emailStatus.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                      {emailStatus.msg}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={handleSendBroadcast}
-                    disabled={isSendingEmail}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"
-                  >
-                    {isSendingEmail ? <RefreshCw className="animate-spin" size={18} /> : <Mail size={18} />}
-                    {isSendingEmail ? 'Sending...' : 'Send Broadcast'}
-                  </button>
-                </div>
-              </div>
-
-            </div>
+            <AnnouncementManager pool={gameState} currentUser={currentUser} />
           </div>
         )}
 

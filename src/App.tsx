@@ -1014,8 +1014,9 @@ const App: React.FC = () => {
             return pooledSlug === slug && p.id !== currentPool.id;
           })}
           checkNameAvailable={(name) => !pools.some(p => p.name === name && p.id !== currentPool.id)}
+          currentUser={user}
         />
-        <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
+        <ShareModal isOpen={showShareModal} onClose={() => setShowAuthModal(false)} shareUrl={shareUrl} />
         <Footer />
       </>
     );

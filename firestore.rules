@@ -139,6 +139,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // POOL THEMES
+    match /pool_themes/{themeId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
     // EMAIL TRIGGERS:
     // - Public write allowed (for now, to support legacy client-side trigger)
     match /mail/{document=**} {

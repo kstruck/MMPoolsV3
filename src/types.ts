@@ -493,4 +493,16 @@ export interface SystemSettings {
   currentSeason: number;
 }
 
-export type Pool = GameState | BracketPool;
+
+// --- ANNOUNCEMENTS ---
+
+export interface Announcement {
+  id: string;
+  poolId: string;
+  authorId: string;
+  subject: string;
+  message: string;
+  html?: string;
+  createdAt: number;
+  readBy?: string[];
+}

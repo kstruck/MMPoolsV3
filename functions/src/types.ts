@@ -66,6 +66,18 @@ export interface AxisNumbers {
     away: number[]; // Array of 10 numbers (0-9)
 }
 
+// --- ANNOUNCEMENTS ---
+export interface Announcement {
+    id: string;
+    poolId: string;
+    authorId: string;
+    subject: string;
+    message: string;
+    html?: string;
+    createdAt: number;
+    readBy?: string[];
+}
+
 export interface ScoreEvent {
     id: string;
     home: number;

@@ -2,83 +2,110 @@
 @tailwind components;
 @tailwind utilities;
 
-body { font-family: 'Inter', sans-serif; }
+body {
+  font-family: 'Inter', sans-serif;
+}
 
 /* Custom Scrollbar */
 .grid-scroll::-webkit-scrollbar {
   height: 8px;
   width: 8px;
 }
+
 .grid-scroll::-webkit-scrollbar-track {
   background: #1e293b;
 }
+
 .grid-scroll::-webkit-scrollbar-thumb {
   background: #475569;
   border-radius: 4px;
 }
+
 .grid-scroll::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
 
 /* Print Styles - Clean grid output for printing */
 @media print {
-  /* Hide non-essential elements */
-  header, footer, nav,
-  .print\\:hidden,
-  [class*="fixed"],
-  [class*="sticky"],
-  .fixed,
-  .sticky,
-  button:not(.print-show),
-  .shadow-2xl,
-  .backdrop-blur-sm,
-  [class*="animate-"] {
-    display: none !important;
+
+  /* Hide EVERYTHING by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Only show the grid container and its children */
+  #printable-grid,
+  #printable-grid * {
+    visibility: visible;
+  }
+
+  /* Position the grid at the top-left */
+  #printable-grid {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    max-width: none !important;
   }
 
   /* Reset backgrounds for printing */
-  body, html {
+  body,
+  html {
     background: white !important;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Ensure grid squares print with borders and colors */
+  [class*="grid-cols-11"]>div {
+    border: 1px solid #94a3b8 !important;
+    /* slate-400 */
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Grid styling for print */
-  .bg-slate-950,
-  .bg-slate-900,
-  .bg-slate-800 {
-    background: white !important;
-    border-color: #333 !important;
-  }
-
-  /* Ensure grid squares print with borders */
-  [class*="grid-cols-11"] > div {
-    border: 1px solid #333 !important;
-    print-color-adjust: exact !important;
-    -webkit-print-color-adjust: exact !important;
-  }
-
-  /* Keep winner colors visible */
+  /* Force background colors to print */
   .bg-emerald-600 {
-    background: #10b981 !important;
+    background-color: #10b981 !important;
+    color: white !important;
   }
-  
+
   .bg-orange-500 {
-    background: #f97316 !important;
+    background-color: #f97316 !important;
+    color: white !important;
   }
 
   .bg-amber-400 {
-    background: #fbbf24 !important;
+    background-color: #fbbf24 !important;
+    color: black !important;
   }
 
-  /* Text contrast for print */
-  .text-white, .text-slate-100, .text-slate-200, .text-slate-300 {
-    color: #1e293b !important;
+  .bg-cyan-600 {
+    background-color: #0891b2 !important;
+    color: white !important;
   }
+
+  /* Text adjustments */
+  .text-white,
+  .text-slate-100 {
+    color: #000 !important;
+  }
+
+  .text-slate-200,
+  .text-slate-300,
+  .text-slate-400 {
+    color: #334155 !important;
+  }
+
+  /* slate-700 */
 
   /* Page settings */
   @page {
     size: landscape;
-    margin: 0.5in;
+    margin: 0.25in;
   }
 }
