@@ -491,7 +491,10 @@ const App: React.FC = () => {
   const deletePool = async (id: string) => {
     if (!confirm('Are you sure? This cannot be undone.')) return;
     await dbService.deletePool(id);
-    window.location.hash = '';
+    // Only redirect if we are actively viewing the pool being deleted
+    if (currentPool?.id === id) {
+      window.location.hash = '';
+    }
   };
 
   async function handleCreatePool() {

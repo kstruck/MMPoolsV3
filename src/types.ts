@@ -1,5 +1,6 @@
 // Core Pool Types
 export type PoolType = 'SQUARES' | 'BRACKET';
+export type Pool = GameState | BracketPool;
 
 export interface Player {
   name: string;
