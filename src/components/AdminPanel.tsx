@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { GameState, Scores, PayoutConfig, Square } from '../types';
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe, Trophy, Zap } from 'lucide-react';
+import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe, Trophy, Zap, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
@@ -119,6 +120,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [includeReplyTo, setIncludeReplyTo] = useState(true);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
+  const [showQRCode, setShowQRCode] = useState(false);
 
   const updatePlayerDetails = (originalName: string, newDetails: { name: string, email: string, phone: string, notes: string }) => {
     const newSquares = gameState.squares.map(sq => {
@@ -1555,6 +1557,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <input type="checkbox" checked={gameState.isPublic} onChange={(e) => updateConfig({ isPublic: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
                 <span className="text-sm text-slate-300">List in Public Directory</span>
               </label>
+            </div>
+          </div>
+
+          {/* QR Code Sharing */}
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-700">
+            <h4 className="font-bold text-white mb-4 flex items-center gap-2"><QrCode size={16} className="text-emerald-400" /> Share via QR Code</h4>
+            <div className="text-center">
+              <button
+                onClick={() => setShowQRCode(!showQRCode)}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 mx-auto"
+              >
+                <QrCode size={16} />
+                {showQRCode ? 'Hide QR Code' : 'Generate QR Code'}
+              </button>
+              {showQRCode && (
+                <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                  <div className="bg-white p-4 rounded-xl inline-block">
+                    <QRCodeSVG
+                      id="pool-qr-code"
+                      value={`${window.location.origin}/#pool/${gameState.urlSlug || gameState.id}`}
+                      size={180}
+                      level="H"
+                      includeMargin
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 mt-3">Scan to join pool</p>
+                  <button
+                    onClick={() => {
+                      const svg = document.getElementById('pool-qr-code');
+                      if (!svg) return;
+                      const svgData = new XMLSerializer().serializeToString(svg);
+                      const canvas = document.createElement('canvas');
+                      const ctx = canvas.getContext('2d');
+                      const img = new Image();
+                      img.onload = () => {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx?.drawImage(img, 0, 0);
+                        const pngUrl = canvas.toDataURL('image/png');
+                        const a = document.createElement('a');
+                        a.href = pngUrl;
+                        a.download = `${gameState.urlSlug || 'pool'}_qr.png`;
+                        a.click();
+                      };
+                      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+                    }}
+                    className="mt-3 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors inline-flex items-center gap-2"
+                  >
+                    <Download size={14} /> Download PNG
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

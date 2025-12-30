@@ -221,12 +221,26 @@ export const dbService = {
     subscribeToWinners: (poolId: string, callback: (winners: any[]) => void) => {
         const q = query(collection(db, "pools", poolId, "winners"));
         return onSnapshot(q, (snapshot) => {
-            const winners = snapshot.docs.map(doc => doc.data());
+            const winners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             callback(winners);
         }, (error) => {
             console.error("Error subscribing to winners:", error);
             callback([]);
         });
+    },
+
+    // Update winner paid status
+    updateWinnerPaidStatus: async (poolId: string, winnerId: string, isPaid: boolean, paidByUid?: string) => {
+        try {
+            const winnerRef = doc(db, "pools", poolId, "winners", winnerId);
+            await setDoc(winnerRef, {
+                isPaid,
+                paidAt: isPaid ? Date.now() : null,
+                paidByUid: isPaid ? paidByUid : null
+            }, { merge: true });
+        } catch (error) {
+            console.error("Error updating winner paid status:", error);
+        }
     },
 
     // --- USERS ---

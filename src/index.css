@@ -19,3 +19,66 @@ body { font-family: 'Inter', sans-serif; }
 .grid-scroll::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
+
+/* Print Styles - Clean grid output for printing */
+@media print {
+  /* Hide non-essential elements */
+  header, footer, nav,
+  .print\\:hidden,
+  [class*="fixed"],
+  [class*="sticky"],
+  .fixed,
+  .sticky,
+  button:not(.print-show),
+  .shadow-2xl,
+  .backdrop-blur-sm,
+  [class*="animate-"] {
+    display: none !important;
+  }
+
+  /* Reset backgrounds for printing */
+  body, html {
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Grid styling for print */
+  .bg-slate-950,
+  .bg-slate-900,
+  .bg-slate-800 {
+    background: white !important;
+    border-color: #333 !important;
+  }
+
+  /* Ensure grid squares print with borders */
+  [class*="grid-cols-11"] > div {
+    border: 1px solid #333 !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  /* Keep winner colors visible */
+  .bg-emerald-600 {
+    background: #10b981 !important;
+  }
+  
+  .bg-orange-500 {
+    background: #f97316 !important;
+  }
+
+  .bg-amber-400 {
+    background: #fbbf24 !important;
+  }
+
+  /* Text contrast for print */
+  .text-white, .text-slate-100, .text-slate-200, .text-slate-300 {
+    color: #1e293b !important;
+  }
+
+  /* Page settings */
+  @page {
+    size: landscape;
+    margin: 0.5in;
+  }
+}

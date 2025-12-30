@@ -253,6 +253,10 @@ export interface Winner {
   isReverse?: boolean;
   isRollover?: boolean;
   description?: string;
+  // Payout tracking
+  isPaid?: boolean;
+  paidAt?: number; // Timestamp
+  paidByUid?: string; // Who marked it paid
 }
 
 // --- AUDIT LOG ---

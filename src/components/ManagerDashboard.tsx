@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Heart, DollarSign, Trophy, Plus, Zap, Globe, Lock, Trash2, LayoutDashboard, Archive, RotateCcw, Copy } from 'lucide-react';
+import { Search, Filter, Heart, DollarSign, Trophy, Plus, Zap, Globe, Lock, Trash2, LayoutDashboard, Archive, RotateCcw, Copy, AlertTriangle, X, ArrowUpDown } from 'lucide-react';
 import type { GameState, Pool } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -37,6 +37,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
     const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'locked' | 'live' | 'final'>('all');
     const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 10, mid 10-50, high > 50
     const [selectedLeague, setSelectedLeague] = useState<string>('all');
+    const [sortBy, setSortBy] = useState<'name' | 'date' | 'price' | 'fill'>('date');
+
+    // Delete confirmation modal state
+    const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; poolId: string; poolName: string }>({ isOpen: false, poolId: '', poolName: '' });
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
     // Filter Logic
     const filteredPools = useMemo(() => {
@@ -107,8 +112,31 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
             }
 
             return true;
+        }).sort((a, b) => {
+            const aIsBracket = a.type === 'BRACKET';
+            const bIsBracket = b.type === 'BRACKET';
+
+            if (sortBy === 'name') {
+                return a.name.localeCompare(b.name);
+            }
+            if (sortBy === 'date') {
+                const aDate = aIsBracket ? 0 : new Date((a as GameState).scores?.startTime || 0).getTime();
+                const bDate = bIsBracket ? 0 : new Date((b as GameState).scores?.startTime || 0).getTime();
+                return bDate - aDate; // Newest first
+            }
+            if (sortBy === 'price') {
+                const aPrice = aIsBracket ? ((a as any).settings?.entryFee || 0) : (a as GameState).costPerSquare;
+                const bPrice = bIsBracket ? ((b as any).settings?.entryFee || 0) : (b as GameState).costPerSquare;
+                return bPrice - aPrice; // Highest first
+            }
+            if (sortBy === 'fill') {
+                const aFill = aIsBracket ? 0 : (a as GameState).squares.filter(s => s.owner).length;
+                const bFill = bIsBracket ? 0 : (b as GameState).squares.filter(s => s.owner).length;
+                return bFill - aFill; // Fullest first
+            }
+            return 0;
         });
-    }, [pools, searchTerm, filterCharity, filterStatus, filterPrice, selectedLeague, archiveTab]);
+    }, [pools, searchTerm, filterCharity, filterStatus, filterPrice, selectedLeague, archiveTab, sortBy]);
 
     if (!user) {
         return (
@@ -297,6 +325,24 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                 </button>
                             </div>
 
+                            {/* Sort Options */}
+                            <div className="flex items-center justify-between mb-4">
+                                <span className="text-sm text-slate-400">{filteredPools.length} pool{filteredPools.length !== 1 ? 's' : ''}</span>
+                                <div className="flex items-center gap-2">
+                                    <ArrowUpDown size={14} className="text-slate-500" />
+                                    <select
+                                        value={sortBy}
+                                        onChange={(e) => setSortBy(e.target.value as any)}
+                                        className="bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500"
+                                    >
+                                        <option value="date">Sort by Date</option>
+                                        <option value="name">Sort by Name</option>
+                                        <option value="price">Sort by Price</option>
+                                        <option value="fill">Sort by Fill %</option>
+                                    </select>
+                                </div>
+                            </div>
+
                             {filteredPools.length === 0 ? (
                                 <div className="col-span-1 md:col-span-2 py-20 text-center text-slate-500 border border-slate-800 border-dashed rounded-xl bg-slate-900/30">
                                     <p className="mb-2 font-medium text-slate-400">
@@ -437,15 +483,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); onArchivePool(pool.id, archiveTab !== 'archived'); }}
                                                             className={`col-span-2 rounded-lg flex items-center justify-center transition-all border ${archiveTab === 'archived'
-                                                                    ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20'
-                                                                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20'
+                                                                ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20'
+                                                                : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20'
                                                                 }`}
                                                             title={archiveTab === 'archived' ? 'Restore Pool' : 'Archive Pool'}
                                                         >
                                                             {archiveTab === 'archived' ? <RotateCcw size={14} /> : <Archive size={14} />}
                                                         </button>
                                                     )}
-                                                    <button onClick={(e) => { e.stopPropagation(); onDeletePool(pool.id); }} className="col-span-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/50 rounded-lg flex items-center justify-center transition-all"><Trash2 size={14} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setDeleteModal({ isOpen: true, poolId: pool.id, poolName: pool.name }); }} className="col-span-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/50 rounded-lg flex items-center justify-center transition-all"><Trash2 size={14} /></button>
                                                 </div>
                                             </div>
                                         );
@@ -456,6 +502,66 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                     </div>
                 )}
             </main>
+
+            {/* Delete Confirmation Modal */}
+            {deleteModal.isOpen && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-md w-full relative">
+                        <button onClick={() => { setDeleteModal({ isOpen: false, poolId: '', poolName: '' }); setDeleteConfirmText(''); }} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+                            <X size={20} />
+                        </button>
+
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center">
+                                <AlertTriangle size={24} className="text-rose-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">Delete Pool</h3>
+                                <p className="text-sm text-slate-400">This action cannot be undone</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900 rounded-lg p-4 mb-4 border border-slate-700">
+                            <p className="text-sm text-slate-300 mb-3">
+                                To confirm deletion, please type the pool name:
+                            </p>
+                            <p className="text-sm font-mono bg-slate-950 px-3 py-2 rounded border border-slate-800 text-amber-400 mb-3">
+                                {deleteModal.poolName}
+                            </p>
+                            <input
+                                type="text"
+                                value={deleteConfirmText}
+                                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                placeholder="Type pool name here..."
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                            />
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => { setDeleteModal({ isOpen: false, poolId: '', poolName: '' }); setDeleteConfirmText(''); }}
+                                className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (deleteConfirmText === deleteModal.poolName) {
+                                        onDeletePool(deleteModal.poolId);
+                                        setDeleteModal({ isOpen: false, poolId: '', poolName: '' });
+                                        setDeleteConfirmText('');
+                                    }
+                                }}
+                                disabled={deleteConfirmText !== deleteModal.poolName}
+                                className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Trash2 size={16} /> Delete Forever
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <Footer />
         </div>
     );

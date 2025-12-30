@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import confetti from 'canvas-confetti';
 import { Grid } from './components/Grid';
 import { AdminPanel } from './components/AdminPanel';
 import { Auth } from './components/Auth';
@@ -13,7 +14,7 @@ import { calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2 } from 'lucide-react';
+import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2, Check } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
@@ -416,12 +417,33 @@ const App: React.FC = () => {
 
   // Fetch Winners from Subcollection (Authoritative)
   const [winners, setWinners] = useState<any[]>([]);
+  const prevWinnersCountRef = useRef<number>(0);
+
   useEffect(() => {
     if (!currentPool || currentPool.type === 'BRACKET') {
       setWinners([]);
+      prevWinnersCountRef.current = 0;
       return;
     }
     const unsub = dbService.subscribeToWinners(currentPool.id, (wins) => {
+      // Check if new winner was added (trigger celebration)
+      if (wins.length > prevWinnersCountRef.current && prevWinnersCountRef.current > 0) {
+        // 🎉 Trigger confetti celebration!
+        confetti({
+          particleCount: 150,
+          spread: 80,
+          origin: { y: 0.6 },
+          colors: ['#FF6600', '#10B981', '#FBBF24', '#3B82F6', '#F472B6']
+        });
+
+        // Play celebration sound if enabled
+        const audio = document.getElementById('winner-sound') as HTMLAudioElement;
+        if (audio) {
+          audio.currentTime = 0;
+          audio.play().catch(() => { }); // Ignore autoplay errors
+        }
+      }
+      prevWinnersCountRef.current = wins.length;
       setWinners(wins);
     });
     return () => unsub();
@@ -1723,6 +1745,7 @@ const App: React.FC = () => {
                     <th className="px-4 py-3">Event</th>
                     <th className="px-4 py-3">Winner</th>
                     <th className="px-4 py-3 text-right">Prize</th>
+                    {isManager && <th className="px-4 py-3 text-center">Paid</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
@@ -1753,6 +1776,17 @@ const App: React.FC = () => {
                         <td className="px-4 py-3 text-right font-mono">
                           <span className="text-emerald-400 font-bold">${(win.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
                         </td>
+                        {isManager && (
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => dbService.updateWinnerPaidStatus(currentPool.id, win.id, !win.isPaid, user?.id)}
+                              className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${win.isPaid ? 'bg-emerald-500 border-emerald-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-emerald-500'}`}
+                              title={win.isPaid ? `Paid on ${new Date(win.paidAt).toLocaleDateString()}` : 'Mark as paid'}
+                            >
+                              {win.isPaid && <Check size={14} />}
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     )))}
                 </tbody>
@@ -1832,6 +1866,10 @@ const App: React.FC = () => {
 
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
         {showAudit && <AuditLog poolId={currentPool.id} onClose={() => setShowAudit(false)} />}
+
+        {/* Winner Celebration Sound Effect */}
+        <audio id="winner-sound" preload="auto" src="https://assets.mixkit.co/active_storage/sfx/2020/2020-preview.mp3" />
+
         <Footer />
       </div >
     );

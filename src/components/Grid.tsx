@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { GameState, Winner, PlayerDetails, User } from '../types';
-import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon, Zap } from 'lucide-react';
+import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon, Zap, Printer, ZoomIn, ZoomOut } from 'lucide-react';
 import { getTeamLogo } from '../constants';
 
 interface GridProps {
@@ -59,6 +59,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const [isConfirming, setIsConfirming] = useState(false);
    const [errorMsg, setErrorMsg] = useState<string | null>(null);
    const [showGuestSync, setShowGuestSync] = useState(false); // Toggle for advanced guest features
+   const [zoomLevel, setZoomLevel] = useState(1); // Grid zoom level for mobile
 
    // Auto-scroll to error when it appears
    useEffect(() => {
@@ -516,9 +517,38 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
             </div>
          </div>
 
+         {/* --- ZOOM CONTROLS (Mobile-Friendly) --- */}
+         <div className="w-full max-w-[80vh] mx-auto flex justify-between items-center px-2 mb-2 md:hidden">
+            <span className="text-xs text-slate-500 font-bold uppercase">
+               Zoom: {Math.round(zoomLevel * 100)}%
+            </span>
+            <div className="flex gap-2">
+               <button
+                  onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
+                  disabled={zoomLevel <= 0.5}
+                  className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white p-2 rounded-lg transition-colors border border-slate-700"
+               >
+                  <ZoomOut size={18} />
+               </button>
+               <button
+                  onClick={() => setZoomLevel(1)}
+                  className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors border border-slate-700"
+               >
+                  Reset
+               </button>
+               <button
+                  onClick={() => setZoomLevel(Math.min(1.5, zoomLevel + 0.1))}
+                  disabled={zoomLevel >= 1.5}
+                  className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white p-2 rounded-lg transition-colors border border-slate-700"
+               >
+                  <ZoomIn size={18} />
+               </button>
+            </div>
+         </div>
+
          {/* --- SECTION 3: THE GRID --- */}
-         <div className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-hidden w-full max-w-[80vh] mx-auto border-x border-b border-slate-800">
-            <div className="w-full">
+         <div className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-x-auto overflow-y-hidden w-full max-w-[80vh] mx-auto border-x border-b border-slate-800">
+            <div className="w-full transition-transform duration-200 origin-top-left" style={{ transform: `scale(${zoomLevel})`, width: zoomLevel !== 1 ? `${100 / zoomLevel}%` : '100%' }}>
                {/* Grid Container - 11x11 layout */}
                <div className="grid grid-cols-11 gap-0.5 sm:gap-1 select-none">
 
@@ -827,6 +857,17 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   </div>
                )}
             </div>
+         </div>
+
+         {/* --- PRINT BUTTON --- */}
+         <div className="w-full max-w-4xl px-4 mb-4 flex justify-center print:hidden">
+            <button
+               onClick={() => window.print()}
+               className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 border border-slate-700"
+            >
+               <Printer size={16} />
+               Print Grid
+            </button>
          </div>
 
          {/* --- STICKY FOOTER --- */}

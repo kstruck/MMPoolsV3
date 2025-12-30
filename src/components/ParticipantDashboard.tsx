@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { User, GameState } from '../types';
+import type { User, GameState, Winner } from '../types';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
-import { LayoutGrid, User as UserIcon, Search, ChevronRight, Loader, Calendar, Shield } from 'lucide-react';
+import { LayoutGrid, User as UserIcon, Search, ChevronRight, Loader, Calendar, Shield, DollarSign, Trophy, TrendingUp } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 
@@ -17,6 +17,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'all' | 'open' | 'live' | 'completed'>('live');
     const [searchQuery, setSearchQuery] = useState('');
+    const [poolWinners, setPoolWinners] = useState<Record<string, Winner[]>>({});
 
     useEffect(() => {
         const unsubscribe = dbService.subscribeToPools((pools) => {
@@ -34,9 +35,50 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             });
             setMyPools(participating);
             setIsLoading(false);
+
+            // Subscribe to winners for each pool
+            participating.forEach(pool => {
+                dbService.subscribeToWinners(pool.id, (winners) => {
+                    setPoolWinners(prev => ({ ...prev, [pool.id]: winners }));
+                });
+            });
         });
         return () => unsubscribe();
     }, [user.id]);
+
+    // Lifetime Stats Calculation
+    const lifetimeStats = useMemo(() => {
+        const emailPrefix = user.email ? user.email.split('@')[0].toLowerCase() : '';
+        let totalSquares = 0;
+        let totalWinnings = 0;
+        let totalWins = 0;
+
+        myPools.forEach(pool => {
+            const userSquares = pool.squares.filter(s =>
+                s.reservedByUid === user.id ||
+                s.owner === user.name ||
+                (emailPrefix && s.owner?.toLowerCase() === emailPrefix)
+            );
+            totalSquares += userSquares.length;
+
+            // Check winners for this pool
+            const winners = poolWinners[pool.id] || [];
+            winners.forEach(winner => {
+                const isMyWin = userSquares.some(s => s.id === winner.squareId);
+                if (isMyWin) {
+                    totalWins++;
+                    totalWinnings += winner.amount || 0;
+                }
+            });
+        });
+
+        return {
+            totalPools: myPools.length,
+            totalSquares,
+            totalWins,
+            totalWinnings
+        };
+    }, [myPools, poolWinners, user.id, user.name, user.email]);
 
     // Derived State for Filtering
     const filteredPools = useMemo(() => {
@@ -102,6 +144,46 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder:text-slate-500"
                         />
+                    </div>
+                </div>
+
+                {/* Lifetime Stats Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                            <LayoutGrid size={20} className="text-indigo-400" />
+                        </div>
+                        <div>
+                            <p className="text-xs text-slate-400 uppercase font-bold">Pools</p>
+                            <p className="text-2xl font-bold text-white">{lifetimeStats.totalPools}</p>
+                        </div>
+                    </div>
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                            <TrendingUp size={20} className="text-emerald-400" />
+                        </div>
+                        <div>
+                            <p className="text-xs text-slate-400 uppercase font-bold">Squares</p>
+                            <p className="text-2xl font-bold text-white">{lifetimeStats.totalSquares}</p>
+                        </div>
+                    </div>
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                            <Trophy size={20} className="text-amber-400" />
+                        </div>
+                        <div>
+                            <p className="text-xs text-slate-400 uppercase font-bold">Wins</p>
+                            <p className="text-2xl font-bold text-white">{lifetimeStats.totalWins}</p>
+                        </div>
+                    </div>
+                    <div className="bg-gradient-to-br from-emerald-900/30 to-slate-800/50 border border-emerald-500/30 rounded-xl p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-500/30 flex items-center justify-center">
+                            <DollarSign size={20} className="text-emerald-400" />
+                        </div>
+                        <div>
+                            <p className="text-xs text-emerald-400 uppercase font-bold">Winnings</p>
+                            <p className="text-2xl font-bold text-emerald-400 font-mono">${lifetimeStats.totalWinnings.toLocaleString()}</p>
+                        </div>
                     </div>
                 </div>
 

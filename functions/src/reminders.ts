@@ -77,10 +77,15 @@ async function logAudit(poolId: string, message: string, type: string, payload?:
 
 export const runReminders = functions.scheduler.onSchedule("every 15 minutes", async (event) => {
     const now = Date.now();
+    console.log(`[runReminders] Starting reminder check at ${new Date(now).toISOString()}`);
     const poolsSnapshot = await db.collection("pools").get();
+    console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check`);
 
     for (const doc of poolsSnapshot.docs) {
-        const pool = doc.data() as GameState;
+        // CRITICAL FIX: doc.data() does NOT include the document ID!
+        // We must add it manually for pool.id to work in downstream functions.
+        const pool = { id: doc.id, ...doc.data() } as GameState;
+
         if (!pool.reminders) continue; // Skip if not configured
 
         // 1. PAYMENT REMINDERS
@@ -90,9 +95,11 @@ export const runReminders = functions.scheduler.onSchedule("every 15 minutes", a
 
         // 2. LOCK REMINDERS
         if (pool.reminders.lock?.enabled) {
+            console.log(`[runReminders] Checking lock for pool ${pool.id}: lockAt=${pool.reminders.lock.lockAt}, isLocked=${pool.isLocked}`);
             await checkLockReminders(pool, now);
         }
     }
+    console.log(`[runReminders] Completed reminder check`);
 });
 
 async function checkPaymentReminders(pool: GameState, now: number) {
