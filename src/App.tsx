@@ -1702,6 +1702,18 @@ const App: React.FC = () => {
                         <div className="flex justify-center gap-4 text-white font-bold text-2xl mb-2 items-center">
                           <span>{card.home}</span> <span className="text-slate-600">-</span> <span>{card.away}</span>
                         </div>
+
+                        {/* Winning Digits Display */}
+                        <div className="flex justify-center gap-6 mb-4 bg-slate-900/50 py-1.5 rounded border border-slate-800/50">
+                          <div className="flex flex-col items-center">
+                            <span className="text-[9px] text-rose-400/80 uppercase font-bold tracking-wider">Home Digit</span>
+                            <span className="font-mono text-lg font-bold text-white leading-none mt-0.5">{card.home !== undefined ? getLastDigit(card.home) : '-'}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[9px] text-indigo-400/80 uppercase font-bold tracking-wider">Away Digit</span>
+                            <span className="font-mono text-lg font-bold text-white leading-none mt-0.5">{card.away !== undefined ? getLastDigit(card.away) : '-'}</span>
+                          </div>
+                        </div>
                         <p className="text-xs text-slate-500 mb-6 font-medium">This Quarter: {card.qPointsHome} - {card.qPointsAway}</p>
                         <div className="mb-4">
                           <p className="text-xs text-slate-400 uppercase font-bold mb-1">In the money:</p>

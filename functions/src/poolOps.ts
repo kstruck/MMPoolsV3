@@ -105,3 +105,74 @@ export const createPool = onCall(async (request) => {
         throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
     }
 });
+
+// ============ RECALCULATE POOL WINNERS ============
+// Used to fix pools affected by the home/away reversal bug
+// SuperAdmin only - re-fetches ESPN scores and recalculates all winners
+export const recalculatePoolWinners = onCall(async (request) => {
+    const db = admin.firestore();
+
+    // Auth check
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'Must be logged in.');
+    }
+
+    const uid = request.auth.uid;
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (!userDoc.exists || userDoc.data()?.role !== 'SUPER_ADMIN') {
+        throw new HttpsError('permission-denied', 'SuperAdmin access required.');
+    }
+
+    const { poolId } = request.data;
+    if (!poolId) {
+        throw new HttpsError('invalid-argument', 'poolId is required.');
+    }
+
+    // Get pool data
+    const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists) {
+        throw new HttpsError('not-found', `Pool ${poolId} not found.`);
+    }
+
+    const pool = poolSnap.data() as any;
+
+    // Delete existing winners subcollection
+    const winnersRef = poolRef.collection('winners');
+    const existingWinners = await winnersRef.get();
+    const deleteBatch = db.batch();
+    existingWinners.docs.forEach(doc => deleteBatch.delete(doc.ref));
+    await deleteBatch.commit();
+    console.log(`[RecalcWinners] Deleted ${existingWinners.size} existing winners for pool ${poolId}`);
+
+    // Clear stored period scores to trigger recalculation on next sync
+    await poolRef.update({
+        'scores.q1': null,
+        'scores.half': null,
+        'scores.q3': null,
+        'scores.final': null,
+        '_winnersCleared': admin.firestore.FieldValue.serverTimestamp(),
+        '_winnersManualFix': true
+    });
+
+    // Log to audit
+    await db.collection('pools').doc(poolId).collection('audit').add({
+        type: 'WINNERS_RECALCULATED',
+        message: `Winners cleared and pool queued for resync. ${existingWinners.size} winners deleted.`,
+        severity: 'WARNING',
+        actor: { uid, role: 'SUPER_ADMIN', label: 'Manual Fix' },
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        payload: {
+            clearedWinners: existingWinners.size,
+            poolName: pool.name,
+            espnGameId: pool.espnGameId || 'N/A'
+        }
+    });
+
+    return {
+        success: true,
+        message: `Cleared ${existingWinners.size} winners for pool "${pool.name}". Pool will resync on next score update.`,
+        clearedWinners: existingWinners.size
+    };
+});
+

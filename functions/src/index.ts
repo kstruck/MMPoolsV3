@@ -13,7 +13,7 @@ export { onUserCreated, syncAllUsers } from "./userSync";
 export { runReminders, onWinnerComputed } from "./reminders";
 export { onPoolLocked, recalculateGlobalStats } from "./statsTrigger";
 export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
-export { createPool } from "./poolOps";
+export { createPool, recalculatePoolWinners } from "./poolOps";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
 export { createBracketEntry, updateBracketEntry, submitBracketEntry } from "./bracketEntries";

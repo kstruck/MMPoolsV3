@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.onGameComplete = void 0;
 const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
+const emailStyles_1 = require("./emailStyles");
 const db = admin.firestore();
 /**
  * Trigger when pool document is updated
@@ -63,64 +64,38 @@ exports.onGameComplete = functions.firestore.onDocumentUpdated("pools/{poolId}",
             var _a;
             return `
                 <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid #333;">${periodLabels[w.period] || w.period}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #333;">${w.winner || 'N/A'}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #333;">$${((_a = w.amount) === null || _a === void 0 ? void 0 : _a.toFixed(2)) || '0.00'}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #334155;">${periodLabels[w.period] || w.period}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #64748b;">${w.winner || 'N/A'}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #334155;">$${((_a = w.amount) === null || _a === void 0 ? void 0 : _a.toFixed(2)) || '0.00'}</td>
                 </tr>
             `;
         }).join('');
-        const emailHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background: #1e293b; border-radius: 12px; padding: 24px; }
-        .header { text-align: center; margin-bottom: 24px; }
-        .score { font-size: 32px; font-weight: bold; color: #10b981; }
-        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-        th { text-align: left; padding: 8px; color: #94a3b8; border-bottom: 2px solid #334155; }
-        .footer { text-align: center; margin-top: 24px; color: #64748b; font-size: 12px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1 style="color: #818cf8;">🏈 Game Complete!</h1>
-            <h2>${after.awayTeam || 'Away'} @ ${after.homeTeam || 'Home'}</h2>
-            <div class="score">${awayScore} - ${homeScore}</div>
-        </div>
-        
-        <h3 style="color: #f59e0b;">🏆 Winners</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Period</th>
-                    <th>Winner</th>
-                    <th>Payout</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${winnersHtml || '<tr><td colspan="3" style="padding: 8px;">No winners recorded</td></tr>'}
-            </tbody>
-        </table>
-        
-        <div style="margin-top: 24px; padding: 16px; background: #0f172a; border-radius: 8px;">
-            <p style="margin: 0;"><strong>Total Pot:</strong> $${totalPot.toFixed(2)}</p>
-            <p style="margin: 8px 0 0 0;"><strong>Squares Sold:</strong> ${soldSquares}/100</p>
-        </div>
-        
-        <p style="text-align: center; margin-top: 24px;">
-            <a href="https://marchmeleepools.com/#pool/${after.urlSlug || poolId}" style="background: #6366f1; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">View Pool</a>
-        </p>
-        
-        <div class="footer">
-            <p>Thanks for playing on March Melee Pools!</p>
-        </div>
-    </div>
-</body>
-</html>
+        const emailBody = `
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <h2 style="color: #0f172a; margin: 0;">${after.awayTeam || 'Away'} @ ${after.homeTeam || 'Home'}</h2>
+                    <div style="font-size: 32px; font-weight: bold; color: #10b981; margin: 10px 0;">${awayScore} - ${homeScore}</div>
+                </div>
+                
+                <h3 style="color: #334155; font-size: 16px; margin-bottom: 10px;">🏆 Winners</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <thead>
+                        <tr style="background-color: #f1f5f9; text-align: left;">
+                            <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; color: #475569;">Period</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; color: #475569;">Winner</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: right; color: #475569;">Payout</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${winnersHtml || '<tr><td colspan="3" style="padding: 10px; text-align: center; color: #64748b;">No winners recorded</td></tr>'}
+                    </tbody>
+                </table>
+                
+                <div style="margin-top: 24px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                    <p style="margin: 0; color: #334155;"><strong>Total Pot:</strong> $${totalPot.toFixed(2)}</p>
+                    <p style="margin: 8px 0 0 0; color: #334155;"><strong>Squares Sold:</strong> ${soldSquares}/100</p>
+                </div>
             `;
+        const emailHtml = (0, emailStyles_1.renderEmailHtml)('Game Complete!', emailBody, `${emailStyles_1.BASE_URL}/#pool/${after.urlSlug || poolId}`, 'View Pool Result');
         // Store email request for EmailJS or other email service to process
         await db.collection('mail').add({
             to: Array.from(recipientEmails),

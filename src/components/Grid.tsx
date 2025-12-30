@@ -69,7 +69,11 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    }, [errorMsg]);
 
    const homeLogo = gameState.homeTeamLogo || getTeamLogo(gameState.homeTeam);
+
    const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam);
+
+   // Determine if we are in Multi-Set mode (4 Sets of numbers)
+   const isMultiSet = gameState.numberSets === 4; // We show the layout regardless, if missing numbers we show '?'
 
    // --- Limit Calculation ---
    const maxPerPlayer = Number(gameState.maxSquaresPerPlayer) || 100;
@@ -549,11 +553,11 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          {/* --- SECTION 3: THE GRID --- */}
          <div className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-x-auto overflow-y-hidden w-full max-w-[80vh] mx-auto border-x border-b border-slate-800">
             <div className="w-full transition-transform duration-200 origin-top-left" style={{ transform: `scale(${zoomLevel})`, width: zoomLevel !== 1 ? `${100 / zoomLevel}%` : '100%' }}>
-               {/* Grid Container - 11x11 layout */}
-               <div className="grid grid-cols-11 gap-0.5 sm:gap-1 select-none">
+               {/* Grid Container - 11x11 layout or 14x14 for Multi-Set */}
+               <div className={`grid ${isMultiSet ? 'grid-cols-14' : 'grid-cols-11'} gap-0.5 sm:gap-1 select-none`}>
 
                   {/* Top-Left Corner (Logo/Team Names) */}
-                  <div className="col-span-1 row-span-1 bg-slate-900 flex flex-col items-center justify-center p-1 rounded-lg border border-slate-800 relative overflow-hidden shadow-inner">
+                  <div className={`${isMultiSet ? 'col-span-4 row-span-4' : 'col-span-1 row-span-1'} bg-slate-900 flex flex-col items-center justify-center p-1 rounded-lg border border-slate-800 relative overflow-hidden shadow-inner`}>
                      <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 via-transparent to-rose-500/20"></div>
                      {/* Diagonal Divider */}
                      <div className="absolute w-[200%] h-px bg-slate-700/50 rotate-45 transform origin-center z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></div>
@@ -576,45 +580,87 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   </div>
 
                   {/* Top Row Headers (Home Team Numbers) */}
-                  {Array.from({ length: 10 }).map((_, i) => {
-                     const digit = gameState.axisNumbers ? gameState.axisNumbers.home[i] : null; // Top is Home
-                     const isHighlighted = highlightHomeDigit !== undefined && digit !== null && digit === highlightHomeDigit && gameState.isLocked;
-                     const baseClass = "flex flex-col items-center justify-center font-bold text-sm sm:text-xl md:text-2xl aspect-square rounded-md sm:rounded-lg border relative overflow-hidden group transition-all duration-300";
-                     const colorClass = isHighlighted
-                        ? "bg-gradient-to-b from-rose-600 to-rose-800 text-white border-rose-400 shadow-[0_0_15px_rgba(225,29,72,0.5)] z-20 scale-105"
-                        : "bg-slate-900 text-rose-200/70 border-slate-800 hover:border-rose-500/30 hover:bg-slate-800";
+                  {/* Top Row Headers (Home Team Numbers) - Single or Multi-Row */}
+                  {(isMultiSet ? ['q1', 'q2', 'q3', 'final'] : ['single']).map((periodKey, rowIdx) => (
+                     <React.Fragment key={`top-header-row-${periodKey}`}>
+                        {Array.from({ length: 10 }).map((_, i) => {
+                           // Determine Digit based on mode
+                           let digit: number | null = null;
+                           if (isMultiSet) {
+                              const qKey = periodKey === 'final' ? 'q4' : periodKey;
+                              const axis = (gameState.quarterlyNumbers as any)?.[qKey]?.home;
+                              digit = axis ? axis[i] : null;
+                              // Fallback to Main Axis if missing (or show ? later)
+                              if (digit === null && gameState.axisNumbers) digit = gameState.axisNumbers.home[i];
+                           } else {
+                              digit = gameState.axisNumbers ? gameState.axisNumbers.home[i] : null;
+                           }
 
-                     return (
-                        <div key={`head-top-${i}`} className={`${baseClass} ${colorClass}`}>
-                           <span className={`text-[9px] absolute top-1 uppercase tracking-widest w-full text-center px-1 truncate font-bold flex justify-center items-center gap-1 ${isHighlighted ? 'text-rose-100' : 'text-slate-600'}`}>
-                              {gameState.homeTeam.substring(0, 3)}
-                           </span>
-                           <span className="mt-2 font-mono drop-shadow-sm">{digit !== null ? digit : '?'}</span>
-                        </div>
-                     );
-                  })}
+                           const isHighlighted = highlightHomeDigit !== undefined && digit !== null && digit === highlightHomeDigit && gameState.isLocked;
+                           const baseClass = "flex flex-col items-center justify-center font-bold text-sm sm:text-xl md:text-2xl aspect-square rounded-md sm:rounded-lg border relative overflow-hidden group transition-all duration-300";
+
+                           // Different styling for Multi-set headers to differentiate rows
+                           const multiSetBg = rowIdx % 2 === 0 ? "bg-slate-900" : "bg-slate-800/50";
+
+                           const colorClass = isHighlighted
+                              ? "bg-gradient-to-b from-rose-600 to-rose-800 text-white border-rose-400 shadow-[0_0_15px_rgba(225,29,72,0.5)] z-20 scale-105"
+                              : `${multiSetBg} text-rose-200/70 border-slate-800 hover:border-rose-500/30 hover:bg-slate-800`;
+
+                           const label = isMultiSet
+                              ? (periodKey === 'final' ? 'FIN' : periodKey.toUpperCase())
+                              : gameState.homeTeam.substring(0, 3);
+
+                           return (
+                              <div key={`head-top-${periodKey}-${i}`} className={`${baseClass} ${colorClass}`}>
+                                 <span className={`text-[9px] absolute top-1 uppercase tracking-widest w-full text-center px-1 truncate font-bold flex justify-center items-center gap-1 ${isHighlighted ? 'text-rose-100' : 'text-slate-600'}`}>
+                                    {label}
+                                 </span>
+                                 <span className="mt-2 font-mono drop-shadow-sm">{digit !== null ? digit : '?'}</span>
+                              </div>
+                           );
+                        })}
+                     </React.Fragment>
+                  ))}
 
                   {/* Render Rows (Away Team Numbers is now Left) */}
                   {Array.from({ length: 10 }).map((_, rowIndex) => (
                      <React.Fragment key={`row-${rowIndex}`}>
                         {/* Left Column Header (Away Team Number) */}
-                        {(() => {
-                           const digit = gameState.axisNumbers ? gameState.axisNumbers.away[rowIndex] : null; // Left is Away
+                        {/* Left Column Header (Away Team Number) */}
+                        {(isMultiSet ? ['q1', 'q2', 'q3', 'final'] : ['single']).map((periodKey, colIdx) => {
+                           let digit: number | null = null;
+                           if (isMultiSet) {
+                              const qKey = periodKey === 'final' ? 'q4' : periodKey;
+                              const axis = (gameState.quarterlyNumbers as any)?.[qKey]?.away;
+                              digit = axis ? axis[rowIndex] : null;
+                              if (digit === null && gameState.axisNumbers) digit = gameState.axisNumbers.away[rowIndex];
+                           } else {
+                              digit = gameState.axisNumbers ? gameState.axisNumbers.away[rowIndex] : null; // Left is Away
+                           }
+
                            const isHighlighted = highlightAwayDigit !== undefined && digit !== null && digit === highlightAwayDigit && gameState.isLocked;
                            const baseClass = "flex flex-col items-center justify-center font-bold text-sm sm:text-xl md:text-2xl w-full aspect-square rounded-md sm:rounded-lg border relative overflow-hidden transition-all duration-300";
+
+                           // Multi-set alternating colors
+                           const multiSetBg = colIdx % 2 === 0 ? "bg-slate-900" : "bg-slate-800/50";
+
                            const colorClass = isHighlighted
                               ? "bg-gradient-to-r from-indigo-600 to-indigo-800 text-white border-indigo-400 shadow-[0_0_15px_rgba(79,70,229,0.5)] z-20 scale-105"
-                              : "bg-slate-900 text-indigo-200/70 border-slate-800 hover:border-indigo-500/30 hover:bg-slate-800";
+                              : `${multiSetBg} text-indigo-200/70 border-slate-800 hover:border-indigo-500/30 hover:bg-slate-800`;
+
+                           const label = isMultiSet
+                              ? (periodKey === 'final' ? 'FIN' : periodKey.toUpperCase())
+                              : gameState.awayTeam.substring(0, 3);
 
                            return (
-                              <div className={`${baseClass} ${colorClass}`}>
+                              <div key={`head-left-${periodKey}-${rowIndex}`} className={`${baseClass} ${colorClass}`}>
                                  <span className={`text-[9px] absolute top-1 uppercase tracking-widest w-full text-center px-1 truncate font-bold flex justify-center items-center gap-1 ${isHighlighted ? 'text-indigo-100' : 'text-slate-600'}`}>
-                                    {gameState.awayTeam.substring(0, 3)}
+                                    {label}
                                  </span>
                                  <span className="mt-2 font-mono drop-shadow-sm">{digit !== null ? digit : '?'}</span>
                               </div>
                            );
-                        })()}
+                        })}
 
                         {/* 10 Squares for this row */}
                         {Array.from({ length: 10 }).map((_, colIndex) => {

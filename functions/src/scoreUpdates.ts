@@ -51,6 +51,37 @@ const getSafePayout = (payouts: any, key: string): number => {
 // Helper: Get last digit for squares logic
 const getLastDigit = (n: number) => Math.abs(n) % 10;
 
+// Helper: Check if two team names match (fuzzy match for abbreviations vs full names)
+const teamNamesMatch = (poolTeam: string | undefined, espnTeam: string | undefined): boolean => {
+    if (!poolTeam || !espnTeam) return false;
+    const p = poolTeam.toLowerCase().trim();
+    const e = espnTeam.toLowerCase().trim();
+    // Exact match
+    if (p === e) return true;
+    // One contains the other (handles "Kansas City Chiefs" vs "KC" or "Chiefs")
+    if (p.includes(e) || e.includes(p)) return true;
+    // Check if last word matches (e.g., "Falcons" in "Atlanta Falcons")
+    const pLast = p.split(/\s+/).pop() || '';
+    const eLast = e.split(/\s+/).pop() || '';
+    if (pLast.length > 2 && eLast.length > 2 && (pLast === eLast || pLast.includes(eLast) || eLast.includes(pLast))) return true;
+    return false;
+};
+
+// Helper: Determine if ESPN home/away should be swapped based on pool team names
+const shouldSwapHomeAway = (pool: GameState, espnHomeTeam: string, espnAwayTeam: string): boolean => {
+    // If pool's homeTeam matches ESPN's awayTeam, scores need to be swapped
+    const poolHomeMatchesEspnAway = teamNamesMatch(pool.homeTeam, espnAwayTeam);
+    const poolAwayMatchesEspnHome = teamNamesMatch(pool.awayTeam, espnHomeTeam);
+    // Only swap if both match in reverse (to avoid false positives)
+    return poolHomeMatchesEspnAway && poolAwayMatchesEspnHome;
+};
+
+// Helper: Swap home/away in a score pair
+const swapScores = (scores: { home: number, away: number } | undefined): { home: number, away: number } | undefined => {
+    if (!scores) return undefined;
+    return { home: scores.away, away: scores.home };
+};
+
 // Fetch and calculate scores from ESPN API
 async function fetchESPNScores(gameId: string, league: string): Promise<any | null> {
     try {
@@ -112,6 +143,9 @@ async function fetchESPNScores(gameId: string, league: string): Promise<any | nu
             // Final stores cumulative or API total
             final: { home: regFinalHome, away: regFinalAway },
             apiTotal: { home: apiTotalHome, away: apiTotalAway },
+            // Team names for matching against pool configuration
+            homeTeamName: homeComp.team?.abbreviation || homeComp.team?.displayName || '',
+            awayTeamName: awayComp.team?.abbreviation || awayComp.team?.displayName || '',
             gameStatus: state,
             period,
             clock,
@@ -255,6 +289,27 @@ const processGameUpdate = async (
     const freshPool = { ...doc.data() as GameState, ...overrides };
 
     if (!espnScores) return;
+
+    // ============ CRITICAL: Detect and correct home/away team orientation ============
+    // ESPN returns scores based on actual venue (Falcons = home in Atlanta)
+    // Pool's homeTeam/awayTeam are just labels that may not match ESPN's designation
+    // If reversed, we need to swap all scores before processing
+    const needsSwap = shouldSwapHomeAway(
+        freshPool,
+        espnScores.homeTeamName || '',
+        espnScores.awayTeamName || ''
+    );
+
+    if (needsSwap) {
+        console.log(`[ScoreSync] Team order mismatch detected for pool ${doc.id}. ESPN: ${espnScores.homeTeamName}(H) vs ${espnScores.awayTeamName}(A), Pool: ${freshPool.homeTeam}(H) vs ${freshPool.awayTeam}(A). Swapping scores.`);
+        espnScores.current = swapScores(espnScores.current);
+        espnScores.q1 = swapScores(espnScores.q1);
+        espnScores.half = swapScores(espnScores.half);
+        espnScores.q3 = swapScores(espnScores.q3);
+        espnScores.final = swapScores(espnScores.final);
+        espnScores.apiTotal = swapScores(espnScores.apiTotal);
+    }
+    // ============ END: Team orientation correction ============
 
     const period = espnScores.period;
     const state = espnScores.gameStatus;
