@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.recalculatePoolWinners = exports.createPool = exports.assertPoolOwnerOrSuperAdmin = void 0;
+exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.assertPoolOwnerOrSuperAdmin = void 0;
 const admin = require("firebase-admin");
+const audit_1 = require("./audit");
 const https_1 = require("firebase-functions/v2/https");
 // Helper to determine if user can manage pool
 const assertPoolOwnerOrSuperAdmin = (pool, uid, userRole) => {
@@ -146,5 +147,66 @@ exports.recalculatePoolWinners = (0, https_1.onCall)(async (request) => {
         message: `Cleared ${existingWinners.size} winners for pool "${pool.name}". Pool will resync on next score update.`,
         clearedWinners: existingWinners.size
     };
+});
+// ============ TOGGLE WINNER PAID STATUS ============
+exports.toggleWinnerPaid = (0, https_1.onCall)(async (request) => {
+    var _a;
+    const db = admin.firestore();
+    if (!request.auth)
+        throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
+    const { poolId, winnerId } = request.data; // winnerId is the doc ID (e.g. 'q1', 'final')
+    if (!poolId || !winnerId)
+        throw new https_1.HttpsError('invalid-argument', 'Missing poolId or winnerId');
+    const uid = request.auth.uid;
+    const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists)
+        throw new https_1.HttpsError('not-found', 'Pool not found');
+    const pool = poolSnap.data();
+    // Check permissions
+    // Note: assertPoolOwnerOrSuperAdmin helper takes (pool, uid, role?), we might need user role.
+    // For now, let's just check ownerId directly or fetch user claim if needed.
+    // The helper is defined above: assertPoolOwnerOrSuperAdmin(pool: any, uid: string, userRole?: string)
+    // We can fetch user role optionally or assume owner check is enough for most.
+    // Fetch user role if we want to support SuperAdmin override properly
+    let userRole = 'USER';
+    if (request.auth.token.role)
+        userRole = request.auth.token.role; // Custom claim if set
+    // Or fetch doc if claims not trusted/set
+    // For MVP, just try/catch the helper
+    try {
+        (0, exports.assertPoolOwnerOrSuperAdmin)(pool, uid, userRole);
+    }
+    catch (e) {
+        // Fallback: fetch user doc to check real role if claim missing
+        const userDoc = await db.collection('users').doc(uid).get();
+        if (userDoc.exists && ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) === 'SUPER_ADMIN') {
+            // Allowed
+        }
+        else {
+            throw new https_1.HttpsError('permission-denied', 'Only the pool owner can manage payouts.');
+        }
+    }
+    const winnerRef = poolRef.collection('winners').doc(winnerId);
+    const winnerSnap = await winnerRef.get();
+    if (!winnerSnap.exists)
+        throw new https_1.HttpsError('not-found', 'Winner not found');
+    const winnerData = winnerSnap.data();
+    const isNowPaid = !(winnerData === null || winnerData === void 0 ? void 0 : winnerData.isPaid);
+    await winnerRef.update({
+        isPaid: isNowPaid,
+        paidAt: isNowPaid ? admin.firestore.FieldValue.serverTimestamp() : null,
+        paidByUid: isNowPaid ? uid : null
+    });
+    // Audit
+    await (0, audit_1.writeAuditEvent)({
+        poolId,
+        type: 'SQUARE_MARKED_PAID', // Generic payment type
+        message: `Winner ${winnerId} marked as ${isNowPaid ? 'PAID' : 'UNPAID'} by ${uid}`,
+        severity: 'INFO',
+        actor: { uid, role: 'ADMIN', label: 'Host' },
+        payload: { winnerId, isPaid: isNowPaid }
+    });
+    return { success: true, isPaid: isNowPaid, winnerId };
 });
 //# sourceMappingURL=poolOps.js.map

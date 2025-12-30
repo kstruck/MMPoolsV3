@@ -841,7 +841,8 @@ const App: React.FC = () => {
         baseAmount,
         rolloverAdded: rolloverContribution,
         isLocked: isFinal,
-        isRollover
+        isRollover,
+        isPaid: officialWinner?.isPaid
       };
     });
   }, [currentPool, winners]);
@@ -1739,6 +1740,35 @@ const App: React.FC = () => {
                             </>
                           )}
                         </div>
+
+                        {/* Payout Status Control */}
+                        {card.winnerName && card.winnerName !== 'Unsold' && (
+                          <div className="mb-4">
+                            {card.isPaid ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                  <Check size={10} strokeWidth={4} /> Paid
+                                </span>
+                                {isManager && (
+                                  <button
+                                    onClick={() => dbService.updateWinnerPaidStatus(currentPool.id, card.label.toLowerCase(), false)}
+                                    className="text-slate-500 hover:text-white text-[10px] underline"
+                                  >Undo</button>
+                                )}
+                              </div>
+                            ) : (
+                              isManager && (
+                                <button
+                                  onClick={() => dbService.updateWinnerPaidStatus(currentPool.id, card.label.toLowerCase(), true)}
+                                  className="text-slate-500 hover:text-emerald-400 text-[10px] font-bold uppercase tracking-wider border border-slate-700 hover:border-emerald-500 px-2 py-1 rounded transition-colors"
+                                >
+                                  Mark Paid
+                                </button>
+                              )
+                            )}
+                          </div>
+                        )}
+
                         {card.isLocked ? <Lock size={20} className="text-rose-500/50 mx-auto" /> : <Unlock size={20} className="text-emerald-500/30 mx-auto" />}
                       </div>
                     );

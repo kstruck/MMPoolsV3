@@ -28,6 +28,10 @@ export interface Winner {
     isReverse?: boolean;
     isRollover?: boolean;
     description?: string;
+    // Payout tracking
+    isPaid?: boolean;
+    paidAt?: number; // Timestamp
+    paidByUid?: string; // Who marked it paid
 }
 
 export interface Scores {
@@ -196,6 +200,7 @@ export type AuditEventType =
     | 'ADMIN_OVERRIDE_WINNER'
     | 'ADMIN_OVERRIDE_DIGITS'
     | 'ADMIN_OVERRIDE_SQUARE_STATE'
+    | 'SQUARE_MARKED_PAID'
     | 'AI_ARTIFACT_CREATED';
 
 export interface AuditLogEvent {

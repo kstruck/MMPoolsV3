@@ -97,6 +97,17 @@ export const dbService = {
 
 
     // --- CLOUD FUNCTIONS ---
+    toggleWinnerPaid: async (poolId: string, winnerId: string): Promise<{ success: boolean; isPaid: boolean }> => {
+        try {
+            const fn = httpsCallable(functions, 'toggleWinnerPaid');
+            const result = await fn({ poolId, winnerId });
+            return result.data as { success: boolean; isPaid: boolean };
+        } catch (error) {
+            console.error("Error calling toggleWinnerPaid:", error);
+            throw error;
+        }
+    },
+
     syncAllUsers: async (): Promise<{ success: boolean; count: number }> => {
         try {
             const syncFn = httpsCallable(functions, 'syncAllUsers');
@@ -230,16 +241,16 @@ export const dbService = {
     },
 
     // Update winner paid status
-    updateWinnerPaidStatus: async (poolId: string, winnerId: string, isPaid: boolean, paidByUid?: string) => {
+    // Update winner paid status (via Cloud Function)
+    updateWinnerPaidStatus: async (poolId: string, winnerId: string, _isPaid: boolean, _paidByUid?: string) => {
         try {
-            const winnerRef = doc(db, "pools", poolId, "winners", winnerId);
-            await setDoc(winnerRef, {
-                isPaid,
-                paidAt: isPaid ? Date.now() : null,
-                paidByUid: isPaid ? paidByUid : null
-            }, { merge: true });
+            const fn = httpsCallable(functions, 'toggleWinnerPaid');
+            // Cloud function toggles based on current state, so isPaid arg is technically ignored but good for intent.
+            // Actually, my CF is a toggle. UI passes !win.isPaid. So calling toggle is correct.
+            await fn({ poolId, winnerId });
         } catch (error) {
             console.error("Error updating winner paid status:", error);
+            throw error;
         }
     },
 
