@@ -1120,6 +1120,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
         </div>
 
+        {/* Visual Mode Preview */}
+        <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 mb-4">
+          {!gameState.ruleVariations.scoreChangePayout ? (
+            <div className="animate-in fade-in">
+              <div className="text-xs font-bold text-slate-500 uppercase mb-3">Standard Quarterly Preview</div>
+              <div className="flex items-center justify-between gap-2">
+                {['Q1', 'Half', 'Q3', 'Final'].map((q, i) => (
+                  <div key={q} className="flex-1 text-center">
+                    <div className={`h-2 rounded-full mb-1 ${i === 3 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ opacity: 0.3 + (i * 0.2) }}></div>
+                    <span className="text-[10px] text-slate-400 font-bold">{q}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-center text-slate-500 mt-2">4 payout opportunities per game</p>
+            </div>
+          ) : (
+            <div className="animate-in fade-in">
+              <div className="text-xs font-bold text-slate-500 uppercase mb-3">Every Score Pays Preview</div>
+              <div className="flex items-center gap-1">
+                {[...Array(12)].map((_, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center">
+                    <div className={`w-2 h-2 rounded-full ${i % 3 === 0 ? 'bg-emerald-500' : 'bg-indigo-500'} animate-pulse`} style={{ animationDelay: `${i * 100}ms` }}></div>
+                    <div className="w-px h-2 bg-slate-700"></div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex text-[8px] text-slate-500 justify-between mt-1">
+                <span>TD</span><span>FG</span><span>TD</span><span>SAF</span><span>FG</span><span>TD</span><span>FG</span><span>TD</span><span>FG</span><span>TD</span><span>FG</span><span>Final</span>
+              </div>
+              <p className="text-[10px] text-center text-emerald-400 mt-2 font-bold">~10-15 payout opportunities per game!</p>
+            </div>
+          )}
+        </div>
+
         {/* 2. Standard Sliders (Only if NOT Every Score Mode OR if using Hybrid) */}
         {(!gameState.ruleVariations.scoreChangePayout) && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
@@ -1259,12 +1293,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-xl font-bold text-white mb-4">Other Game Logic</h3>
         <div className="space-y-3">
-          <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded border border-slate-800 hover:border-indigo-500/30">
-            <div>
-              <span className="font-bold text-slate-300 block">Reverse Winners</span>
-              <span className="text-xs text-slate-500">Pay out the reverse score too (Split Pot 50/50).</span>
+          <label className="flex items-start gap-4 cursor-pointer p-4 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/30 transition-all">
+            <input type="checkbox" checked={gameState.ruleVariations.reverseWinners} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, reverseWinners: e.target.checked } })} className="w-6 h-6 mt-1 rounded border-slate-600 bg-slate-800 text-indigo-600 shrink-0" />
+            <div className="flex-1">
+              <span className="font-bold text-slate-200 block text-lg">Reverse Winners</span>
+              <span className="text-sm text-slate-400 block mb-3">Pay out both the regular AND reverse score digits (Pot split 50/50).</span>
+
+              {/* Visual Diagram */}
+              <div className={`transition-all overflow-hidden ${gameState.ruleVariations.reverseWinners ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className="bg-slate-900 rounded-lg p-3 border border-slate-700 mt-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2">
+                    <span>Example: Score 24-17</span>
+                    <span className="text-indigo-400">Q1 Prize: $100</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 text-center">
+                      <div className="text-[10px] text-emerald-400 font-bold uppercase mb-1">Regular Winner</div>
+                      <div className="text-white font-mono font-bold">4 - 7</div>
+                      <div className="text-emerald-400 font-bold text-sm">$50 (50%)</div>
+                    </div>
+                    <div className="bg-indigo-500/10 border border-indigo-500/30 rounded p-2 text-center">
+                      <div className="text-[10px] text-indigo-400 font-bold uppercase mb-1">Reverse Winner</div>
+                      <div className="text-white font-mono font-bold">7 - 4</div>
+                      <div className="text-indigo-400 font-bold text-sm">$50 (50%)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <input type="checkbox" checked={gameState.ruleVariations.reverseWinners} onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, reverseWinners: e.target.checked } })} className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600" />
           </label>
 
 
