@@ -309,5 +309,71 @@ export const dbService = {
             console.error("Error fixing pool scores:", error);
             throw error;
         }
+    },
+
+    // --- THEMES ---
+    subscribeToThemes: (callback: (themes: any[]) => void) => {
+        const q = query(collection(db, "themes"), orderBy("name"));
+        return onSnapshot(q, (snapshot) => {
+            const themes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            callback(themes);
+        }, (error) => {
+            console.error("Error subscribing to themes:", error);
+            callback([]);
+        });
+    },
+
+    getActiveThemes: async (): Promise<any[]> => {
+        try {
+            const q = query(collection(db, "themes"), where("isActive", "==", true), orderBy("name"));
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } catch (error) {
+            console.error("Error fetching active themes:", error);
+            return [];
+        }
+    },
+
+    saveTheme: async (theme: any): Promise<string> => {
+        try {
+            const themeId = theme.id || doc(collection(db, "themes")).id;
+            const themeRef = doc(db, "themes", themeId);
+            await setDoc(themeRef, {
+                ...theme,
+                id: themeId,
+                updatedAt: Date.now()
+            }, { merge: true });
+            return themeId;
+        } catch (error) {
+            console.error("Error saving theme:", error);
+            throw error;
+        }
+    },
+
+    deleteTheme: async (themeId: string): Promise<void> => {
+        try {
+            await deleteDoc(doc(db, "themes", themeId));
+        } catch (error) {
+            console.error("Error deleting theme:", error);
+            throw error;
+        }
+    },
+
+    setDefaultTheme: async (themeId: string): Promise<void> => {
+        try {
+            // First, unset any existing default
+            const q = query(collection(db, "themes"), where("isDefault", "==", true));
+            const snapshot = await getDocs(q);
+            for (const docSnap of snapshot.docs) {
+                if (docSnap.id !== themeId) {
+                    await updateDoc(doc(db, "themes", docSnap.id), { isDefault: false });
+                }
+            }
+            // Set the new default
+            await updateDoc(doc(db, "themes", themeId), { isDefault: true });
+        } catch (error) {
+            console.error("Error setting default theme:", error);
+            throw error;
+        }
     }
 };

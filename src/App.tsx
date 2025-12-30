@@ -18,6 +18,8 @@ import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twi
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
+// Theme utilities available: import { themeToStyleVars, getPoolBackground } from './utils/themeUtils';
+// Theme type available: import type { PoolTheme } from './types';
 
 // Lazy load SuperAdmin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));

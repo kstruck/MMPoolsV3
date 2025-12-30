@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { dbService } from '../services/dbService';
+import type { PoolTheme } from '../types';
 import type { GameState, Scores, PayoutConfig, Square } from '../types';
 import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe, Trophy, Zap, QrCode } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -121,6 +123,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
   const [showQRCode, setShowQRCode] = useState(false);
+
+  // Theme State
+  const [availableThemes, setAvailableThemes] = useState<PoolTheme[]>([]);
+
+  // Fetch active themes
+  useEffect(() => {
+    const fetchThemes = async () => {
+      const themes = await dbService.getActiveThemes();
+      setAvailableThemes(themes as PoolTheme[]);
+    };
+    fetchThemes();
+  }, []);
 
   const updatePlayerDetails = (originalName: string, newDetails: { name: string, email: string, phone: string, notes: string }) => {
     const newSquares = gameState.squares.map(sq => {
@@ -1465,6 +1479,70 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const renderWizardStep5 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      {/* Theme Selector */}
+      {availableThemes.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+            <Sparkles size={20} className="text-amber-400" /> Pool Theme
+          </h3>
+          <p className="text-slate-400 text-sm mb-6">Select a color theme for your pool. This changes the overall look and feel.</p>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {/* No Theme Option */}
+            <button
+              onClick={() => updateConfig({ themeId: undefined })}
+              className={`p-4 rounded-xl border transition-all text-left ${!gameState.themeId ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-500/10' : 'border-slate-700 hover:border-slate-500 bg-slate-950'}`}
+            >
+              <div className="h-12 rounded-lg bg-slate-800 mb-3 flex items-center justify-center">
+                <span className="text-slate-500 text-xs">Default</span>
+              </div>
+              <span className="font-bold text-white text-sm">Classic Dark</span>
+              <span className="text-xs text-slate-400 block">Original theme</span>
+            </button>
+
+            {availableThemes.map((theme) => (
+              <button
+                key={theme.id}
+                onClick={() => updateConfig({ themeId: theme.id })}
+                className={`p-4 rounded-xl border transition-all text-left ${gameState.themeId === theme.id ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-700 hover:border-slate-500'}`}
+              >
+                {/* Theme Preview */}
+                <div
+                  className="h-12 rounded-lg mb-3 flex items-center justify-center"
+                  style={{ background: theme.colors?.background }}
+                >
+                  {/* Mini grid preview */}
+                  <div className="flex gap-0.5">
+                    {[0, 1, 2, 3].map(i => (
+                      <div
+                        key={i}
+                        className="w-2 h-2 rounded-sm"
+                        style={{
+                          background: i % 2 === 0 ? theme.grid?.cellBackground : theme.grid?.cellBackgroundAlt,
+                          border: `1px solid ${theme.grid?.cellBorder}`
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <span className="font-bold text-white text-sm">{theme.name}</span>
+                <span className="text-xs text-slate-400 block truncate">{theme.description}</span>
+                {/* Color dots */}
+                <div className="flex gap-1 mt-2">
+                  {['primary', 'secondary', 'success'].map(key => (
+                    <div
+                      key={key}
+                      className="w-3 h-3 rounded-full border border-slate-600"
+                      style={{ background: (theme.colors as any)?.[key] }}
+                    />
+                  ))}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-xl font-bold text-white mb-2">Customization</h3>
         <p className="text-slate-400 text-sm mb-6">Make the pool your own with a custom logo and background.</p>

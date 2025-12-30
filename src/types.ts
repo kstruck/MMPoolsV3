@@ -190,6 +190,7 @@ export interface GameState {
   status?: 'active' | 'archived'; // Pool lifecycle status (default: active)
   waitlist?: WaitlistEntry[]; // Users waiting for squares to open up
   postGameEmailSent?: boolean; // Track if post-game summary email was sent
+  themeId?: string; // Reference to custom theme from themes collection
 }
 
 export interface WaitlistEntry {
@@ -435,6 +436,53 @@ export interface Team {
   seed: number;
   region: string;
   logoUrl?: string;
+}
+
+// --- POOL THEMES ---
+
+export interface ThemeColors {
+  primary: string;           // Main accent (buttons, highlights)
+  secondary: string;         // Secondary accent
+  background: string;        // Page background
+  surface: string;           // Card backgrounds
+  surfaceAlt: string;        // Alternating surfaces
+  text: string;              // Primary text
+  textMuted: string;         // Secondary text
+  border: string;            // Border color
+  success: string;           // Winner/positive
+  warning: string;           // Alerts
+  error: string;             // Errors
+}
+
+export interface ThemeGrid {
+  cellBackground: string;    // Default cell bg
+  cellBackgroundAlt: string; // Alternating pattern
+  cellBorder: string;        // Cell borders
+  headerBackground: string;  // Row/column headers
+  winnerGlow: boolean;       // Glow effect on winners
+  winnerGlowColor: string;   // Glow color
+}
+
+export interface ThemeBranding {
+  logoUrl?: string;          // Optional theme logo
+  backgroundPattern?: string; // CSS pattern or image URL
+  gradientOverlay?: string;  // CSS gradient
+}
+
+export interface PoolTheme {
+  id: string;
+  name: string;
+  description: string;
+  category: 'sports' | 'holiday' | 'classic' | 'custom';
+  isActive: boolean;         // SuperAdmin controls visibility
+  isDefault: boolean;        // Only one can be default
+  createdAt: number;
+  createdBy: string;         // SuperAdmin UID
+  updatedAt: number;
+  colors: ThemeColors;
+  grid: ThemeGrid;
+  branding?: ThemeBranding;
+  previewImage?: string;     // Auto-generated or uploaded
 }
 
 // --- SYSTEM TYPES ---

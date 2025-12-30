@@ -3,7 +3,7 @@ import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import type { GameState, Pool, User, SystemSettings } from '../types';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X } from 'lucide-react';
 
 
 export const SuperAdmin: React.FC = () => {
@@ -13,7 +13,7 @@ export const SuperAdmin: React.FC = () => {
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
 
     // UI State
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'settings' | 'system'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
@@ -30,6 +30,11 @@ export const SuperAdmin: React.FC = () => {
     const [viewingUser, setViewingUser] = useState<User | null>(null);
     const [editName, setEditName] = useState('');
     const [editEmail, setEditEmail] = useState('');
+
+    // Theme Builder State
+    const [themes, setThemes] = useState<any[]>([]);
+    const [editingTheme, setEditingTheme] = useState<any | null>(null);
+    const [showThemeBuilder, setShowThemeBuilder] = useState(false);
 
     const fetchUsers = () => {
         dbService.getAllUsers()
@@ -55,6 +60,12 @@ export const SuperAdmin: React.FC = () => {
             unsubSettings();
         };
     }, [activeTab]);
+
+    // Theme Subscription
+    useEffect(() => {
+        const unsubThemes = dbService.subscribeToThemes(setThemes);
+        return () => unsubThemes();
+    }, []);
 
     const handleDeletePool = async (id: string) => {
         if (confirm('Create: Super Delete Pool?')) {
@@ -300,6 +311,7 @@ export const SuperAdmin: React.FC = () => {
         { id: 'pools', label: `Pools (${filteredPools.length})`, icon: <Shield size={16} /> },
         { id: 'users', label: `Users (${users.length})`, icon: <Users size={16} /> },
         { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
+        { id: 'themes', label: `Themes (${themes.length})`, icon: <Palette size={16} /> },
         { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
     ] as const;
 
@@ -801,6 +813,391 @@ export const SuperAdmin: React.FC = () => {
                                         })}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ============ THEMES TAB ============ */}
+            {activeTab === 'themes' && (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h2 className="text-xl font-bold text-white">Theme Manager</h2>
+                            <p className="text-sm text-slate-400">Create and manage custom pool themes. Only active themes are visible to pool managers.</p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                // Create new theme from defaults
+                                import('../constants/presetThemes').then(({ createEmptyTheme }) => {
+                                    setEditingTheme({
+                                        ...createEmptyTheme(),
+                                        createdAt: Date.now(),
+                                        createdBy: 'SUPER_ADMIN'
+                                    });
+                                    setShowThemeBuilder(true);
+                                });
+                            }}
+                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold transition-colors"
+                        >
+                            <Plus size={18} /> Create Theme
+                        </button>
+                    </div>
+
+                    {/* Seed Presets Button */}
+                    {themes.length === 0 && (
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center">
+                            <p className="text-amber-400 mb-3">No themes found. Seed the preset themes to get started.</p>
+                            <button
+                                onClick={async () => {
+                                    const { PRESET_THEMES } = await import('../constants/presetThemes');
+                                    for (const preset of PRESET_THEMES) {
+                                        await dbService.saveTheme({
+                                            ...preset,
+                                            createdAt: Date.now(),
+                                            createdBy: 'SYSTEM'
+                                        });
+                                    }
+                                    alert(`Seeded ${PRESET_THEMES.length} preset themes!`);
+                                }}
+                                className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg font-bold"
+                            >
+                                Seed Preset Themes
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Theme Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {themes.map((theme) => (
+                            <div
+                                key={theme.id}
+                                className={`bg-slate-800 rounded-xl border overflow-hidden transition-all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'}`}
+                            >
+                                {/* Preview */}
+                                <div
+                                    className="h-24 relative"
+                                    style={{ background: theme.colors?.background || '#0f172a' }}
+                                >
+                                    {/* Mini Grid Preview */}
+                                    <div className="absolute inset-2 flex items-center justify-center">
+                                        <div className="grid grid-cols-5 gap-0.5">
+                                            {[...Array(15)].map((_, i) => (
+                                                <div
+                                                    key={i}
+                                                    className="w-3 h-3 rounded-sm"
+                                                    style={{
+                                                        background: i % 2 === 0 ? theme.grid?.cellBackground : theme.grid?.cellBackgroundAlt,
+                                                        border: `1px solid ${theme.grid?.cellBorder || '#334155'}`
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {/* Status Badges */}
+                                    <div className="absolute top-2 right-2 flex gap-1">
+                                        {theme.isDefault && (
+                                            <span className="bg-amber-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                                <Star size={10} /> DEFAULT
+                                            </span>
+                                        )}
+                                        {theme.isActive ? (
+                                            <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                                <Eye size={10} /> ACTIVE
+                                            </span>
+                                        ) : (
+                                            <span className="bg-slate-700 text-slate-400 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                                <EyeOff size={10} /> HIDDEN
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Info */}
+                                <div className="p-4">
+                                    <h3 className="font-bold text-white text-lg">{theme.name}</h3>
+                                    <p className="text-xs text-slate-400 mb-3 line-clamp-1">{theme.description || 'No description'}</p>
+
+                                    {/* Color Swatches */}
+                                    <div className="flex gap-1 mb-4">
+                                        {['primary', 'secondary', 'success', 'warning', 'error'].map(key => (
+                                            <div
+                                                key={key}
+                                                className="w-5 h-5 rounded-full border border-slate-600"
+                                                style={{ background: theme.colors?.[key] }}
+                                                title={key}
+                                            />
+                                        ))}
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex gap-2 flex-wrap">
+                                        <button
+                                            onClick={() => { setEditingTheme(theme); setShowThemeBuilder(true); }}
+                                            className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-bold"
+                                        >
+                                            Edit
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                await dbService.saveTheme({ ...theme, isActive: !theme.isActive });
+                                            }}
+                                            className={`text-xs px-3 py-1.5 rounded font-bold border ${theme.isActive ? 'border-slate-600 text-slate-400 hover:bg-slate-700' : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20'}`}
+                                        >
+                                            {theme.isActive ? 'Deactivate' : 'Activate'}
+                                        </button>
+                                        {!theme.isDefault && (
+                                            <button
+                                                onClick={() => dbService.setDefaultTheme(theme.id)}
+                                                className="text-xs border border-amber-500/50 text-amber-400 hover:bg-amber-500/20 px-3 py-1.5 rounded font-bold"
+                                            >
+                                                Set Default
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={async () => {
+                                                const { id, ...rest } = theme;
+                                                await dbService.saveTheme({
+                                                    ...rest,
+                                                    name: `${theme.name} (Copy)`,
+                                                    id: undefined,
+                                                    isDefault: false,
+                                                    createdAt: Date.now()
+                                                });
+                                            }}
+                                            className="text-xs border border-slate-600 text-slate-400 hover:bg-slate-700 px-2 py-1.5 rounded"
+                                            title="Duplicate"
+                                        >
+                                            <Copy size={12} />
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                if (confirm(`Delete theme "${theme.name}"?`)) {
+                                                    await dbService.deleteTheme(theme.id);
+                                                }
+                                            }}
+                                            className="text-xs text-rose-400 hover:bg-rose-500/20 px-2 py-1.5 rounded"
+                                            title="Delete"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ============ THEME BUILDER MODAL ============ */}
+            {showThemeBuilder && editingTheme && (
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-auto">
+                    <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-5xl max-h-[90vh] overflow-auto">
+                        {/* Modal Header */}
+                        <div className="p-4 border-b border-slate-700 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
+                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Palette size={20} className="text-indigo-400" />
+                                {editingTheme.id ? 'Edit Theme' : 'Create Theme'}
+                            </h2>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={async () => {
+                                        await dbService.saveTheme(editingTheme);
+                                        setShowThemeBuilder(false);
+                                        setEditingTheme(null);
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold"
+                                >
+                                    Save Theme
+                                </button>
+                                <button
+                                    onClick={() => { setShowThemeBuilder(false); setEditingTheme(null); }}
+                                    className="text-slate-400 hover:text-white p-2"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+                            {/* Left: Settings */}
+                            <div className="space-y-6">
+                                {/* Basic Info */}
+                                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                                    <h3 className="font-bold text-white mb-4">Basic Info</h3>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Theme Name</label>
+                                            <input
+                                                type="text"
+                                                value={editingTheme.name}
+                                                onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
+                                                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Description</label>
+                                            <input
+                                                type="text"
+                                                value={editingTheme.description}
+                                                onChange={(e) => setEditingTheme({ ...editingTheme, description: e.target.value })}
+                                                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Category</label>
+                                            <select
+                                                value={editingTheme.category}
+                                                onChange={(e) => setEditingTheme({ ...editingTheme, category: e.target.value })}
+                                                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                                            >
+                                                <option value="sports">Sports</option>
+                                                <option value="holiday">Holiday</option>
+                                                <option value="classic">Classic</option>
+                                                <option value="custom">Custom</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Color Palette */}
+                                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                                    <h3 className="font-bold text-white mb-4">Color Palette</h3>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {Object.entries(editingTheme.colors || {}).map(([key, value]) => (
+                                            <div key={key} className="flex items-center gap-2">
+                                                <input
+                                                    type="color"
+                                                    value={value as string}
+                                                    onChange={(e) => setEditingTheme({
+                                                        ...editingTheme,
+                                                        colors: { ...editingTheme.colors, [key]: e.target.value }
+                                                    })}
+                                                    className="w-8 h-8 rounded cursor-pointer border border-slate-600"
+                                                />
+                                                <span className="text-xs text-slate-300 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Grid Styling */}
+                                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                                    <h3 className="font-bold text-white mb-4">Grid Styling</h3>
+                                    <div className="space-y-3">
+                                        {['cellBackground', 'cellBackgroundAlt', 'cellBorder', 'headerBackground', 'winnerGlowColor'].map((key) => (
+                                            <div key={key} className="flex items-center gap-2">
+                                                <input
+                                                    type="color"
+                                                    value={(editingTheme.grid as any)?.[key] || '#1e293b'}
+                                                    onChange={(e) => setEditingTheme({
+                                                        ...editingTheme,
+                                                        grid: { ...editingTheme.grid, [key]: e.target.value }
+                                                    })}
+                                                    className="w-8 h-8 rounded cursor-pointer border border-slate-600"
+                                                />
+                                                <span className="text-xs text-slate-300 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                                            </div>
+                                        ))}
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={editingTheme.grid?.winnerGlow || false}
+                                                onChange={(e) => setEditingTheme({
+                                                    ...editingTheme,
+                                                    grid: { ...editingTheme.grid, winnerGlow: e.target.checked }
+                                                })}
+                                                className="w-5 h-5 rounded"
+                                            />
+                                            <span className="text-xs text-slate-300">Enable Winner Glow Effect</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right: Live Preview */}
+                            <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                                <h3 className="font-bold text-white mb-4">Live Preview</h3>
+                                <div
+                                    className="rounded-lg p-4 min-h-[400px]"
+                                    style={{ background: editingTheme.colors?.background }}
+                                >
+                                    {/* Header Preview */}
+                                    <div className="flex justify-between items-center mb-4" style={{ color: editingTheme.colors?.text }}>
+                                        <span className="font-bold text-lg">Sample Pool</span>
+                                        <span className="text-sm" style={{ color: editingTheme.colors?.textMuted }}>Chiefs @ Eagles</span>
+                                    </div>
+
+                                    {/* Card Preview */}
+                                    <div
+                                        className="rounded-lg p-3 mb-4"
+                                        style={{ background: editingTheme.colors?.surface, border: `1px solid ${editingTheme.colors?.border}` }}
+                                    >
+                                        <p style={{ color: editingTheme.colors?.text }} className="font-bold mb-1">Score: 24 - 17</p>
+                                        <p style={{ color: editingTheme.colors?.success }} className="text-sm font-bold">🎉 Winner: John Smith</p>
+                                    </div>
+
+                                    {/* Grid Preview */}
+                                    <div className="grid grid-cols-6 gap-1">
+                                        {/* Header Row */}
+                                        <div style={{ background: editingTheme.grid?.headerBackground }} className="rounded-sm h-8" />
+                                        {[0, 1, 2, 3, 4].map(n => (
+                                            <div
+                                                key={n}
+                                                style={{ background: editingTheme.grid?.headerBackground, color: editingTheme.colors?.text }}
+                                                className="rounded-sm h-8 flex items-center justify-center text-xs font-bold"
+                                            >
+                                                {n}
+                                            </div>
+                                        ))}
+                                        {/* Body Rows */}
+                                        {[0, 1, 2, 3, 4].map(row => (
+                                            <React.Fragment key={row}>
+                                                <div
+                                                    style={{ background: editingTheme.grid?.headerBackground, color: editingTheme.colors?.text }}
+                                                    className="rounded-sm h-8 flex items-center justify-center text-xs font-bold"
+                                                >
+                                                    {row}
+                                                </div>
+                                                {[0, 1, 2, 3, 4].map(col => {
+                                                    const isWinner = row === 2 && col === 3;
+                                                    return (
+                                                        <div
+                                                            key={col}
+                                                            style={{
+                                                                background: (row + col) % 2 === 0 ? editingTheme.grid?.cellBackground : editingTheme.grid?.cellBackgroundAlt,
+                                                                border: `1px solid ${editingTheme.grid?.cellBorder}`,
+                                                                boxShadow: isWinner && editingTheme.grid?.winnerGlow ? `0 0 10px ${editingTheme.grid?.winnerGlowColor}` : undefined
+                                                            }}
+                                                            className="rounded-sm h-8 flex items-center justify-center text-[10px]"
+                                                        >
+                                                            {isWinner && <span style={{ color: editingTheme.colors?.success }}>★</span>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+
+                                    {/* Button Preview */}
+                                    <div className="mt-4 flex gap-2">
+                                        <button
+                                            style={{ background: editingTheme.colors?.primary }}
+                                            className="px-4 py-2 rounded-lg text-white font-bold text-sm"
+                                        >
+                                            Primary
+                                        </button>
+                                        <button
+                                            style={{ background: editingTheme.colors?.secondary }}
+                                            className="px-4 py-2 rounded-lg text-white font-bold text-sm"
+                                        >
+                                            Secondary
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
