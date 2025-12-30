@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
@@ -106,7 +107,7 @@ export const SuperAdmin: React.FC = () => {
     // Pool Edit/View State
 
     const handleRunSim = async (pool: GameState) => {
-        const confirmSim = confirm(`Run simulation for ${pool.name}? This will advance the game state.`);
+        const confirmSim = confirm(`Run simulation for ${pool.name} ? This will advance the game state.`);
         if (!confirmSim) return;
         try {
             const { simulatePoolGame } = await import('../utils/simulationUtils');
@@ -234,7 +235,7 @@ export const SuperAdmin: React.FC = () => {
             if (actionDescription) {
                 // Call Cloud Function
                 await simulatePoolGame(pool.id, nextState);
-                alert(`Simulated: ${actionDescription}`);
+                alert(`Simulated: ${actionDescription} `);
             }
 
         } catch (e: any) {
@@ -245,7 +246,7 @@ export const SuperAdmin: React.FC = () => {
 
     // Fix Scores Handler
     const handleFixScores = async (pool: GameState) => {
-        const confirmFix = confirm(`Reprocess scores for "${pool.name}"? This will fetch the latest scores from ESPN, backfill missing history, and recalculate payouts.`);
+        const confirmFix = confirm(`Reprocess scores for "${pool.name}" ? This will fetch the latest scores from ESPN, backfill missing history, and recalculate payouts.`);
         if (!confirmFix) return;
 
         try {
@@ -257,7 +258,7 @@ export const SuperAdmin: React.FC = () => {
             }
         } catch (error: any) {
             console.error('Fix Score Error:', error);
-            alert(`Failed to fix scores: ${error.message}`);
+            alert(`Failed to fix scores: ${error.message} `);
         }
     };
 
@@ -308,10 +309,10 @@ export const SuperAdmin: React.FC = () => {
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: <Activity size={16} /> },
-        { id: 'pools', label: `Pools (${filteredPools.length})`, icon: <Shield size={16} /> },
-        { id: 'users', label: `Users (${users.length})`, icon: <Users size={16} /> },
+        { id: 'pools', label: `Pools(${filteredPools.length})`, icon: <Shield size={16} /> },
+        { id: 'users', label: `Users(${users.length})`, icon: <Users size={16} /> },
         { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
-        { id: 'themes', label: `Themes (${themes.length})`, icon: <Palette size={16} /> },
+        { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
         { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
     ] as const;
 
@@ -361,10 +362,10 @@ export const SuperAdmin: React.FC = () => {
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-bold text-sm transition-colors whitespace-nowrap ${activeTab === tab.id
+                        className={`flex items - center gap - 2 px - 4 py - 2 rounded - t - lg font - bold text - sm transition - colors whitespace - nowrap ${activeTab === tab.id
                             ? 'bg-slate-800 text-white border-b-2 border-indigo-500'
                             : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                            }`}
+                            } `}
                     >
                         {tab.icon} {tab.label}
                     </button>
@@ -415,7 +416,7 @@ export const SuperAdmin: React.FC = () => {
                                 </div>
                                 <button
                                     onClick={() => settingsService.update({ maintenanceMode: !settings?.maintenanceMode })}
-                                    className={`transition-colors ${settings?.maintenanceMode ? 'text-amber-400' : 'text-slate-500'}`}
+                                    className={`transition - colors ${settings?.maintenanceMode ? 'text-amber-400' : 'text-slate-500'} `}
                                 >
                                     {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-amber-500/20" /> : <ToggleLeft size={40} />}
                                 </button>
@@ -427,7 +428,7 @@ export const SuperAdmin: React.FC = () => {
                     <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
                         <h2 className="text-lg font-bold mb-4">Pools by Sport</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {Object.entries(poolsBySport).map(([sport, sportPools]) => (
+                            {(Object.entries(poolsBySport) as [string, Pool[]][]).map(([sport, sportPools]) => (
                                 <button
                                     key={sport}
                                     onClick={() => { setActiveTab('pools'); setSportFilter(sport); }}
@@ -454,7 +455,7 @@ export const SuperAdmin: React.FC = () => {
                                 .slice(0, 5)
                                 .map((u, i) => (
                                     <div key={u.id} className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg">
-                                        <span className={`text-lg font-bold ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-orange-500' : 'text-slate-500'}`}>#{i + 1}</span>
+                                        <span className={`text - lg font - bold ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-orange-500' : 'text-slate-500'} `}>#{i + 1}</span>
                                         <button onClick={() => handleViewUser(u)} className="font-bold text-white hover:text-indigo-400">{u.name}</button>
                                         <span className="text-slate-500 text-sm flex-1">{u.email}</span>
                                         <span className="text-indigo-400 font-bold">{u._computedCount} referrals</span>
@@ -490,7 +491,7 @@ export const SuperAdmin: React.FC = () => {
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                             <button
                                 onClick={() => setSportFilter('ALL')}
-                                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${sportFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                className={`px - 4 py - 2 rounded - full text - xs font - bold whitespace - nowrap transition - colors ${sportFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'} `}
                             >
                                 ALL SPORTS
                             </button>
@@ -498,14 +499,14 @@ export const SuperAdmin: React.FC = () => {
                                 <button
                                     key={sport}
                                     onClick={() => setSportFilter(sport)}
-                                    className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${sportFilter === sport ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                    className={`px - 4 py - 2 rounded - full text - xs font - bold whitespace - nowrap transition - colors ${sportFilter === sport ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'} `}
                                 >
                                     {sport.toUpperCase()}
                                 </button>
                             ))}
                         </div>
 
-                        {Object.entries(poolsBySport)
+                        {(Object.entries(poolsBySport) as [string, Pool[]][])
                             .sort(([a], [b]) => a.localeCompare(b))
                             .map(([sport, sportPools]) => (
                                 <div key={sport} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
@@ -537,7 +538,7 @@ export const SuperAdmin: React.FC = () => {
                                                     const isBracket = pool.type === 'BRACKET';
                                                     // Normalize data access
                                                     const createdAt = typeof pool.createdAt === 'number' ? new Date(pool.createdAt).toLocaleDateString() : (pool.createdAt?.seconds ? new Date(pool.createdAt.seconds * 1000).toLocaleDateString() : 'N/A');
-                                                    const matchUp = isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} @ ${(pool as GameState).homeTeam}`;
+                                                    const matchUp = isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} @${(pool as GameState).homeTeam} `;
                                                     const ownerId = isBracket ? (pool as any).managerUid : (pool as any).ownerId;
                                                     const contact = users.find(u => u.id === ownerId)?.email || (isBracket ? 'N/A' : (pool as GameState).contactEmail);
 
@@ -582,13 +583,13 @@ export const SuperAdmin: React.FC = () => {
                                                             <td className="p-4">
                                                                 <div className="flex items-center gap-2">
                                                                     <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-                                                                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${filledPct}%` }}></div>
+                                                                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${filledPct}% ` }}></div>
                                                                     </div>
                                                                     <span className="text-xs text-slate-500">{filledPct}%</span>
                                                                 </div>
                                                             </td>
                                                             <td className="p-4 flex gap-2">
-                                                                <a href={`#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</a>
+                                                                <a href={`#admin / ${pool.id} `} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</a>
                                                                 {!isBracket && (
                                                                     <button onClick={() => handleRunSim(pool as GameState)} className="text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 px-2 py-1 rounded">Sim</button>
                                                                 )}
@@ -680,12 +681,12 @@ export const SuperAdmin: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-slate-400">{u.email}</td>
                                             <td className="p-4">
-                                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'POOL_MANAGER' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                                                <span className={`text - [10px] uppercase font - bold px - 2 py - 1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'POOL_MANAGER' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-700 text-slate-400 border-slate-600'} `}>
                                                     {u.role || 'USER'}
                                                 </span>
                                             </td>
                                             <td className="p-4">
-                                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
+                                                <span className={`text - [10px] uppercase font - bold px - 2 py - 1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'} `}>
                                                     {u.registrationMethod || 'EMAIL'}
                                                 </span>
                                             </td>
@@ -746,9 +747,9 @@ export const SuperAdmin: React.FC = () => {
                                 .sort((a, b) => b._computedCount - a._computedCount)
                                 .slice(0, 3)
                                 .map((u, i) => (
-                                    <div key={u.id} className={`p-4 rounded-xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'}`}>
+                                    <div key={u.id} className={`p - 4 rounded - xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'} `}>
                                         <div className="flex items-center gap-3">
-                                            <div className={`text-2xl font-black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'}`}>#{i + 1}</div>
+                                            <div className={`text - 2xl font - black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'} `}>#{i + 1}</div>
                                             <div className="flex-1 min-w-0">
                                                 <button onClick={() => handleViewUser(u)} className="font-bold text-white truncate hover:text-indigo-400">{u.name}</button>
                                                 <p className="text-xs text-slate-400 truncate">{u.email}</p>
@@ -794,7 +795,7 @@ export const SuperAdmin: React.FC = () => {
                                                         <code className="text-xs bg-slate-900 px-2 py-1 rounded text-indigo-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
                                                     </td>
                                                     <td className="p-3 text-center">
-                                                        <span className={`font-bold ${u._computedCount > 0 ? 'text-indigo-400' : 'text-slate-500'}`}>{u._computedCount}</span>
+                                                        <span className={`font - bold ${u._computedCount > 0 ? 'text-indigo-400' : 'text-slate-500'} `}>{u._computedCount}</span>
                                                     </td>
                                                     <td className="p-3">
                                                         {referrer ? (
@@ -873,7 +874,7 @@ export const SuperAdmin: React.FC = () => {
                         {themes.map((theme) => (
                             <div
                                 key={theme.id}
-                                className={`bg-slate-800 rounded-xl border overflow-hidden transition-all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'}`}
+                                className={`bg - slate - 800 rounded - xl border overflow - hidden transition - all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'} `}
                             >
                                 {/* Preview */}
                                 <div
@@ -889,7 +890,7 @@ export const SuperAdmin: React.FC = () => {
                                                     className="w-3 h-3 rounded-sm"
                                                     style={{
                                                         background: i % 2 === 0 ? theme.grid?.cellBackground : theme.grid?.cellBackgroundAlt,
-                                                        border: `1px solid ${theme.grid?.cellBorder || '#334155'}`
+                                                        border: `1px solid ${theme.grid?.cellBorder || '#334155'} `
                                                     }}
                                                 />
                                             ))}
@@ -943,7 +944,7 @@ export const SuperAdmin: React.FC = () => {
                                             onClick={async () => {
                                                 await dbService.saveTheme({ ...theme, isActive: !theme.isActive });
                                             }}
-                                            className={`text-xs px-3 py-1.5 rounded font-bold border ${theme.isActive ? 'border-slate-600 text-slate-400 hover:bg-slate-700' : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20'}`}
+                                            className={`text - xs px - 3 py - 1.5 rounded font - bold border ${theme.isActive ? 'border-slate-600 text-slate-400 hover:bg-slate-700' : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20'} `}
                                         >
                                             {theme.isActive ? 'Deactivate' : 'Activate'}
                                         </button>
@@ -973,7 +974,7 @@ export const SuperAdmin: React.FC = () => {
                                         </button>
                                         <button
                                             onClick={async () => {
-                                                if (confirm(`Delete theme "${theme.name}"?`)) {
+                                                if (confirm(`Delete theme "${theme.name}" ? `)) {
                                                     await dbService.deleteTheme(theme.id);
                                                 }
                                             }}
@@ -1133,7 +1134,7 @@ export const SuperAdmin: React.FC = () => {
                                     {/* Card Preview */}
                                     <div
                                         className="rounded-lg p-3 mb-4"
-                                        style={{ background: editingTheme.colors?.surface, border: `1px solid ${editingTheme.colors?.border}` }}
+                                        style={{ background: editingTheme.colors?.surface, border: `1px solid ${editingTheme.colors?.border} ` }}
                                     >
                                         <p style={{ color: editingTheme.colors?.text }} className="font-bold mb-1">Score: 24 - 17</p>
                                         <p style={{ color: editingTheme.colors?.success }} className="text-sm font-bold">🎉 Winner: John Smith</p>
@@ -1168,8 +1169,8 @@ export const SuperAdmin: React.FC = () => {
                                                             key={col}
                                                             style={{
                                                                 background: (row + col) % 2 === 0 ? editingTheme.grid?.cellBackground : editingTheme.grid?.cellBackgroundAlt,
-                                                                border: `1px solid ${editingTheme.grid?.cellBorder}`,
-                                                                boxShadow: isWinner && editingTheme.grid?.winnerGlow ? `0 0 10px ${editingTheme.grid?.winnerGlowColor}` : undefined
+                                                                border: `1px solid ${editingTheme.grid?.cellBorder} `,
+                                                                boxShadow: isWinner && editingTheme.grid?.winnerGlow ? `0 0 10px ${editingTheme.grid?.winnerGlowColor} ` : undefined
                                                             }}
                                                             className="rounded-sm h-8 flex items-center justify-center text-[10px]"
                                                         >
@@ -1259,7 +1260,7 @@ export const SuperAdmin: React.FC = () => {
 
                                             // 3. Generate CSV
                                             const headers = ['Name', 'Email'];
-                                            const rows = Array.from(allEmails.entries()).map(([email, name]) => `"${name}","${email}"`);
+                                            const rows = Array.from(allEmails.entries()).map(([email, name]) => `"${name}", "${email}"`);
                                             const csvContent = [headers.join(','), ...rows].join('\n');
 
                                             // 4. Download
@@ -1375,15 +1376,15 @@ export const SuperAdmin: React.FC = () => {
                                         <tr><td colSpan={4} className="p-8 text-center text-slate-500">No logs found matching filters</td></tr>
                                     ) : (
                                         filteredLogs.map((log, i) => (
-                                            <tr key={i} className={`log-row hover:bg-slate-700/20 font-mono text-xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''}`}>
+                                            <tr key={i} className={`log - row hover: bg - slate - 700 / 20 font - mono text - xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''} `}>
                                                 <td className="p-3 text-slate-400 whitespace-nowrap">
                                                     {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : new Date(log.timestamp).toLocaleString()}
                                                 </td>
                                                 <td className="p-3">
-                                                    <span className={`px-2 py-0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                    <span className={`px - 2 py - 0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
                                                         log.status === 'partial' ? 'bg-amber-500/10 text-amber-400' :
                                                             'bg-rose-500/10 text-rose-400'
-                                                        }`}>
+                                                        } `}>
                                                         {log.status?.toUpperCase() || 'UNKNOWN'}
                                                     </span>
                                                 </td>
@@ -1399,7 +1400,7 @@ export const SuperAdmin: React.FC = () => {
                                                         else if (type === 'POOL_SYNC_ERROR') { label = 'Pool Error'; colorClass = 'bg-amber-500/20 text-amber-300 border border-amber-500/30'; }
                                                         else if (type === 'SIMULATION') { label = 'Sim Run'; colorClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'; }
 
-                                                        return <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${colorClass}`}>{label}</span>;
+                                                        return <span className={`px - 2 py - 0.5 rounded text - [10px] font - bold uppercase tracking - wider whitespace - nowrap ${colorClass} `}>{label}</span>;
                                                     })()}
                                                 </td>
                                                 <td className="p-3 text-slate-300">
@@ -1434,7 +1435,7 @@ export const SuperAdmin: React.FC = () => {
                                 </div>
                                 <button
                                     onClick={() => settingsService.update({ enableBracketPools: !settings?.enableBracketPools })}
-                                    className={`transition-colors ${settings?.enableBracketPools ? 'text-emerald-400' : 'text-slate-500'}`}
+                                    className={`transition - colors ${settings?.enableBracketPools ? 'text-emerald-400' : 'text-slate-500'} `}
                                 >
                                     {settings?.enableBracketPools ? <ToggleRight size={40} className="fill-emerald-500/20" /> : <ToggleLeft size={40} />}
                                 </button>
@@ -1447,7 +1448,7 @@ export const SuperAdmin: React.FC = () => {
                                 </div>
                                 <button
                                     onClick={() => settingsService.update({ maintenanceMode: !settings?.maintenanceMode })}
-                                    className={`transition-colors ${settings?.maintenanceMode ? 'text-amber-400' : 'text-slate-500'}`}
+                                    className={`transition - colors ${settings?.maintenanceMode ? 'text-amber-400' : 'text-slate-500'} `}
                                 >
                                     {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-amber-500/20" /> : <ToggleLeft size={40} />}
                                 </button>
@@ -1561,9 +1562,9 @@ export const SuperAdmin: React.FC = () => {
                                     .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
                                     .slice(0, 3)
                                     .map((u, i) => (
-                                        <div key={u.id} className={`p-4 rounded-xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'}`}>
+                                        <div key={u.id} className={`p - 4 rounded - xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'} `}>
                                             <div className="flex items-center gap-3">
-                                                <div className={`text-2xl font-black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'}`}>#{i + 1}</div>
+                                                <div className={`text - 2xl font - black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'} `}>#{i + 1}</div>
                                                 <div className="flex-1 min-w-0">
                                                     <button onClick={() => handleViewUser(u)} className="font-bold text-white truncate hover:text-indigo-400">{u.name}</button>
                                                     <p className="text-xs text-slate-400 truncate">{u.email}</p>
@@ -1608,7 +1609,7 @@ export const SuperAdmin: React.FC = () => {
                                                             <code className="text-xs bg-slate-900 px-2 py-1 rounded text-indigo-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
                                                         </td>
                                                         <td className="p-3 text-center">
-                                                            <span className={`font-bold ${(u.referralCount || 0) > 0 ? 'text-indigo-400' : 'text-slate-500'}`}>{u.referralCount || 0}</span>
+                                                            <span className={`font - bold ${(u.referralCount || 0) > 0 ? 'text-indigo-400' : 'text-slate-500'} `}>{u.referralCount || 0}</span>
                                                         </td>
                                                         <td className="p-3">
                                                             {referrer ? (
@@ -1696,8 +1697,8 @@ export const SuperAdmin: React.FC = () => {
                                                 {viewingPool.type === 'BRACKET'
                                                     ? `${(viewingPool as any).entryCount || 0} Entries`
                                                     : `${(viewingPool as GameState).squares.filter(s => s.owner).length} / 100`}
-                                            </div>
-                                        </div>
+                                            </div >
+                                        </div >
                                         <div>
                                             <div className="text-xs text-slate-500">Price</div>
                                             <div className="text-white font-bold">
@@ -1712,18 +1713,20 @@ export const SuperAdmin: React.FC = () => {
                                                     : (viewingPool as GameState).squares.filter(s => s.owner).length * (viewingPool as GameState).costPerSquare}
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
+                                    </div >
+                                </div >
 
                                 {/* Charity Info */}
-                                {viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && (
-                                    <div className="bg-rose-900/10 p-4 rounded-xl border border-rose-500/20">
-                                        <h4 className="text-rose-400 text-xs font-bold uppercase mb-2 flex items-center gap-1"><Heart size={12} fill="currentColor" /> Fundraising for Charity</h4>
-                                        <p className="text-white font-bold">{(viewingPool as GameState).charity?.name}</p>
-                                        <a href={(viewingPool as GameState).charity?.url} target="_blank" rel="noreferrer" className="text-rose-400 text-sm hover:underline truncate block">{(viewingPool as GameState).charity?.url}</a>
-                                        <p className="text-xs text-rose-300/70 mt-2">Donating {(viewingPool as GameState).charity?.percentage}% of the pot</p>
-                                    </div>
-                                )}
+                                {
+                                    viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && (
+                                        <div className="bg-rose-900/10 p-4 rounded-xl border border-rose-500/20">
+                                            <h4 className="text-rose-400 text-xs font-bold uppercase mb-2 flex items-center gap-1"><Heart size={12} fill="currentColor" /> Fundraising for Charity</h4>
+                                            <p className="text-white font-bold">{(viewingPool as GameState).charity?.name}</p>
+                                            <a href={(viewingPool as GameState).charity?.url} target="_blank" rel="noreferrer" className="text-rose-400 text-sm hover:underline truncate block">{(viewingPool as GameState).charity?.url}</a>
+                                            <p className="text-xs text-rose-300/70 mt-2">Donating {(viewingPool as GameState).charity?.percentage}% of the pot</p>
+                                        </div>
+                                    )
+                                }
 
                                 {/* Actions */}
                                 <div className="flex gap-3 pt-4 border-t border-slate-700">
@@ -1734,9 +1737,9 @@ export const SuperAdmin: React.FC = () => {
                                         View Live Grid
                                     </a>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
+                            </div >
+                        </div >
+                    </div >
                 )
             }
 
@@ -1856,15 +1859,11 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                )
-            }
+            )}
 
-            {
-                showSimDashboard && (
-                    <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />
-                )
-            }
-        </div >
+            {showSimDashboard && (
+                <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />
+            )}
+        </div>
     );
 };
-

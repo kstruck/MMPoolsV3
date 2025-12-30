@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Send, Clock, CheckCircle, AlertCircle } from 'lucide-react'; // Using lucide-react as standard in this project
-import type { GameState, Announcement } from '../types';
+import type { GameState, Announcement, User } from '../types';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase'; // Assuming centralized firebase export
 
 interface AnnouncementManagerProps {
     pool: GameState;
-    currentUser: any;
+    currentUser: User;
 }
 
 export const AnnouncementManager: React.FC<AnnouncementManagerProps> = ({ pool, currentUser }) => {
@@ -45,7 +45,7 @@ export const AnnouncementManager: React.FC<AnnouncementManagerProps> = ({ pool, 
             // This will trigger the Cloud Function to send emails
             await addDoc(collection(db, 'pools', pool.id, 'announcements'), {
                 poolId: pool.id,
-                authorId: currentUser.uid,
+                authorId: currentUser.id,
                 subject: subject.trim(),
                 message: message.trim(),
                 createdAt: serverTimestamp(),

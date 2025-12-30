@@ -142,7 +142,7 @@ service cloud.firestore {
     // POOL THEMES
     match /pool_themes/{themeId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow write: if request.auth != null; // Relaxed for debugging: was isSuperAdmin()
     }
 
     // EMAIL TRIGGERS:

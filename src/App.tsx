@@ -1495,7 +1495,7 @@ const App: React.FC = () => {
                       <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
                         <span className="text-slate-400">Total Pot</span>
                         <span className="text-white font-mono font-bold">
-                          ${(currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare).toLocaleString()}
+                          ${(currentPool.squares.filter((s: any) => s.owner).length * currentPool.costPerSquare).toLocaleString()}
                         </span>
                       </div>
 
@@ -1504,7 +1504,7 @@ const App: React.FC = () => {
                         <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
                           <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({currentPool.charity.percentage}%)</span>
                           <span className="font-mono font-bold">
-                            -${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
+                            -${(Math.floor((currentPool.squares.filter((s: any) => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
                           </span>
                         </div>
                       )}
@@ -1513,7 +1513,7 @@ const App: React.FC = () => {
                       <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
                         <span className="text-white font-bold">Net Prize Pool</span>
                         <span className="text-emerald-400 font-mono font-bold text-lg">
-                          ${(Math.floor((currentPool.squares.filter(s => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
+                          ${(Math.floor((currentPool.squares.filter((s: any) => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
                         </span>
                       </div>
 
