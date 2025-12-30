@@ -14,7 +14,7 @@ import { calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2, Check } from 'lucide-react';
+import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2, Check, Shuffle } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
@@ -1405,6 +1405,15 @@ const App: React.FC = () => {
                             <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1">
                               <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
                                 <Zap size={12} className="fill-indigo-400" /> Reverse Winners Active
+                              </div>
+                              <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
+                            </button>
+                          )}
+
+                          {squaresPool.numberSets === 4 && (
+                            <button onClick={() => setShowRulesModal(true)} title="New random numbers are generated for every quarter (4 sets total)." className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1">
+                              <div className="bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
+                                <Shuffle size={12} className="text-blue-400" /> 4 Sets (Quarterly Numbers)
                               </div>
                               <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
                             </button>

@@ -874,7 +874,7 @@ export const SuperAdmin: React.FC = () => {
                         {themes.map((theme) => (
                             <div
                                 key={theme.id}
-                                className={`bg - slate - 800 rounded - xl border overflow - hidden transition - all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'} `}
+                                className={`bg-slate-800 rounded-xl border overflow-hidden transition-all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'}`}
                             >
                                 {/* Preview */}
                                 <div
@@ -944,7 +944,7 @@ export const SuperAdmin: React.FC = () => {
                                             onClick={async () => {
                                                 await dbService.saveTheme({ ...theme, isActive: !theme.isActive });
                                             }}
-                                            className={`text - xs px - 3 py - 1.5 rounded font - bold border ${theme.isActive ? 'border-slate-600 text-slate-400 hover:bg-slate-700' : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20'} `}
+                                            className={`text-xs px-3 py-1.5 rounded font-bold border ${theme.isActive ? 'border-slate-600 text-slate-400 hover:bg-slate-700' : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20'}`}
                                         >
                                             {theme.isActive ? 'Deactivate' : 'Activate'}
                                         </button>
@@ -1376,15 +1376,15 @@ export const SuperAdmin: React.FC = () => {
                                         <tr><td colSpan={4} className="p-8 text-center text-slate-500">No logs found matching filters</td></tr>
                                     ) : (
                                         filteredLogs.map((log, i) => (
-                                            <tr key={i} className={`log - row hover: bg - slate - 700 / 20 font - mono text - xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''} `}>
+                                            <tr key={i} className={`log-row hover:bg-slate-700/20 font-mono text-xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''}`}>
                                                 <td className="p-3 text-slate-400 whitespace-nowrap">
                                                     {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : new Date(log.timestamp).toLocaleString()}
                                                 </td>
                                                 <td className="p-3">
-                                                    <span className={`px - 2 py - 0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                    <span className={`px-2 py-0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
                                                         log.status === 'partial' ? 'bg-amber-500/10 text-amber-400' :
                                                             'bg-rose-500/10 text-rose-400'
-                                                        } `}>
+                                                        }`}>
                                                         {log.status?.toUpperCase() || 'UNKNOWN'}
                                                     </span>
                                                 </td>
@@ -1859,7 +1859,7 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
                     </div>
-            )}
+                )}
 
             {showSimDashboard && (
                 <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />

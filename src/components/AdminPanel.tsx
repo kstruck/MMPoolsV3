@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import type { PoolTheme } from '../types';
 import type { GameState, Scores, PayoutConfig, Square } from '../types';
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe, Trophy, Zap, QrCode } from 'lucide-react';
+import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe, Trophy, Zap, QrCode, Activity } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
@@ -991,62 +991,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const renderWizardStep4 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
 
-      {/* 1. Main Payout Mode Toggle */}
+      {/* 1. Main Payout Mode Selection (Card Based) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-4">Payout Configuration</h3>
-        <div className="flex bg-slate-950 p-1.5 rounded-lg border border-slate-800 mb-6">
+        <h3 className="text-xl font-bold text-white mb-2">Payout Config</h3>
+        <p className="text-slate-400 text-sm mb-6">Choose how players get paid. This is the most important rule!</p>
+
+        <div className="grid md:grid-cols-2 gap-4 mb-8">
+          {/* Card 1: Standard Quarterly */}
           <button
             onClick={() => updateConfig({
               payouts: { q1: 25, half: 25, q3: 25, final: 25 },
               ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: false }
             })}
-            className={`flex-1 py-3 rounded-md font-bold text-sm transition-all ${!gameState.ruleVariations.scoreChangePayout ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
+            className={`relative p-6 rounded-2xl border-2 text-left transition-all group ${!gameState.ruleVariations.scoreChangePayout
+              ? 'bg-indigo-600/10 border-indigo-500 ring-4 ring-indigo-500/10'
+              : 'bg-slate-950 border-slate-800 hover:border-slate-600'
+              }`}
           >
-            Standard Quarterly
+            <div className="flex justify-between items-start mb-4">
+              <div className={`p-3 rounded-xl ${!gameState.ruleVariations.scoreChangePayout ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                <Trophy size={24} />
+              </div>
+              {!gameState.ruleVariations.scoreChangePayout && (
+                <div className="bg-indigo-500 text-white text-[10px] uppercase font-bold px-2 py-1 rounded-full">
+                  Selected
+                </div>
+              )}
+            </div>
+            <h4 className={`text-lg font-bold mb-2 ${!gameState.ruleVariations.scoreChangePayout ? 'text-white' : 'text-slate-300'}`}>
+              Standard Quarterly
+            </h4>
+            <p className="text-sm text-slate-400 leading-relaxed mb-4">
+              The classic pool format. Payouts happen only at the end of each quarter (Q1, Halftime, Q3, Final).
+            </p>
+            <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-400/10 w-fit px-2 py-1 rounded">
+              <Users size={12} />
+              <span>4 Winners Total</span>
+            </div>
           </button>
+
+          {/* Card 2: Every Score Pays */}
           <button
             onClick={() => updateConfig({
               payouts: { q1: 0, half: 0, q3: 0, final: 0 },
               ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: true }
             })}
-            className={`flex-1 py-3 rounded-md font-bold text-sm transition-all ${gameState.ruleVariations.scoreChangePayout ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-900'}`}
+            className={`relative p-6 rounded-2xl border-2 text-left transition-all group ${gameState.ruleVariations.scoreChangePayout
+              ? 'bg-indigo-600/10 border-indigo-500 ring-4 ring-indigo-500/10'
+              : 'bg-slate-950 border-slate-800 hover:border-slate-600'
+              }`}
           >
-            Every Score Pays
+            <div className="flex justify-between items-start mb-4">
+              <div className={`p-3 rounded-xl ${gameState.ruleVariations.scoreChangePayout ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                <Zap size={24} />
+              </div>
+              {gameState.ruleVariations.scoreChangePayout && (
+                <div className="bg-indigo-500 text-white text-[10px] uppercase font-bold px-2 py-1 rounded-full">
+                  Selected
+                </div>
+              )}
+            </div>
+            <h4 className={`text-lg font-bold mb-2 ${gameState.ruleVariations.scoreChangePayout ? 'text-white' : 'text-slate-300'}`}>
+              Every Score Pays
+            </h4>
+            <p className="text-sm text-slate-400 leading-relaxed mb-4">
+              A modern twist! Someone wins money every single time the score changes (Touchdowns, FGs, Safeties).
+            </p>
+            <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-400/10 w-fit px-2 py-1 rounded">
+              <Activity size={12} />
+              <span>~15-20 Winners Total</span>
+            </div>
           </button>
-        </div>
-
-        {/* Visual Mode Preview */}
-        <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 mb-4">
-          {!gameState.ruleVariations.scoreChangePayout ? (
-            <div className="animate-in fade-in">
-              <div className="text-xs font-bold text-slate-500 uppercase mb-3">Standard Quarterly Preview</div>
-              <div className="flex items-center justify-between gap-2">
-                {['Q1', 'Half', 'Q3', 'Final'].map((q, i) => (
-                  <div key={q} className="flex-1 text-center">
-                    <div className={`h-2 rounded-full mb-1 ${i === 3 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ opacity: 0.3 + (i * 0.2) }}></div>
-                    <span className="text-[10px] text-slate-400 font-bold">{q}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[10px] text-center text-slate-500 mt-2">4 payout opportunities per game</p>
-            </div>
-          ) : (
-            <div className="animate-in fade-in">
-              <div className="text-xs font-bold text-slate-500 uppercase mb-3">Every Score Pays Preview</div>
-              <div className="flex items-center gap-1">
-                {[...Array(12)].map((_, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center">
-                    <div className={`w-2 h-2 rounded-full ${i % 3 === 0 ? 'bg-emerald-500' : 'bg-indigo-500'} animate-pulse`} style={{ animationDelay: `${i * 100}ms` }}></div>
-                    <div className="w-px h-2 bg-slate-700"></div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex text-[8px] text-slate-500 justify-between mt-1">
-                <span>TD</span><span>FG</span><span>TD</span><span>SAF</span><span>FG</span><span>TD</span><span>FG</span><span>TD</span><span>FG</span><span>TD</span><span>FG</span><span>Final</span>
-              </div>
-              <p className="text-[10px] text-center text-emerald-400 mt-2 font-bold">~10-15 payout opportunities per game!</p>
-            </div>
-          )}
         </div>
 
         {/* 2. Standard Sliders (Only if NOT Every Score Mode OR if using Hybrid) */}
@@ -1078,26 +1093,60 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         )}
 
-        {/* 3. Every Score Pays Configuration */}
+        {/* 2. Every Score Pays - Strategy Selection (Required) */}
         {gameState.ruleVariations.scoreChangePayout && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
 
-            {/* Strategy Selection */}
+            <div className="flex items-center gap-2 mb-2">
+              <h4 className="font-bold text-white text-lg">Payout Strategy</h4>
+              <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">Required</span>
+            </div>
+
             <div className="grid md:grid-cols-2 gap-4">
               <button
                 onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'equal_split' } })}
-                className={`p-4 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? 'bg-indigo-500/20 border-indigo-500 ring-1 ring-indigo-500' : 'bg-slate-950 border-slate-700 hover:border-indigo-500/50'}`}
+                className={`relative p-5 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split'
+                    ? 'bg-indigo-500/20 border-indigo-500 ring-2 ring-indigo-500'
+                    : 'bg-slate-950 border-slate-700 hover:border-slate-500'
+                  }`}
               >
-                <div className="font-bold text-white mb-2 flex items-center gap-2"><Zap size={18} className={gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? 'text-indigo-400' : 'text-slate-500'} /> Option A: Equal Split</div>
-                <p className="text-xs text-slate-400 leading-relaxed">Most fair. The total pot is divided by the total number of scoring events. Every score is worth the exact same amount.</p>
+                {gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' && (
+                  <div className="absolute top-3 right-3 bg-indigo-500 text-white p-1 rounded-full">
+                    <CheckCircle size={14} />
+                  </div>
+                )}
+                <div className="font-bold text-white mb-2 flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg ${gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                    <Zap size={16} />
+                  </div>
+                  Option A: Equal Split
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed pl-9">
+                  Most fair. The total pot is divided by the total number of scoring events. Every score is worth the exact same amount.
+                </p>
               </button>
 
               <button
                 onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'hybrid' } })}
-                className={`p-4 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? 'bg-indigo-500/20 border-indigo-500 ring-1 ring-indigo-500' : 'bg-slate-950 border-slate-700 hover:border-indigo-500/50'}`}
+                className={`relative p-5 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid'
+                    ? 'bg-indigo-500/20 border-indigo-500 ring-2 ring-indigo-500'
+                    : 'bg-slate-950 border-slate-700 hover:border-slate-500'
+                  }`}
               >
-                <div className="font-bold text-white mb-2 flex items-center gap-2"><Trophy size={18} className={gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? 'text-indigo-400' : 'text-slate-500'} /> Option B: Hybrid</div>
-                <p className="text-xs text-slate-400 leading-relaxed">Reserve larger payouts for Final/Halftime, and split the remainder across all other scoring events.</p>
+                {gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' && (
+                  <div className="absolute top-3 right-3 bg-indigo-500 text-white p-1 rounded-full">
+                    <CheckCircle size={14} />
+                  </div>
+                )}
+                <div className="font-bold text-white mb-2 flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg ${gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                    <Trophy size={16} />
+                  </div>
+                  Option B: Hybrid (Best of Both)
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed pl-9">
+                  Reserve larger payouts for Final/Halftime, and split the remainder across all other scoring events to keep it exciting.
+                </p>
               </button>
             </div>
 
