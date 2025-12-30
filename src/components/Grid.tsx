@@ -893,36 +893,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
             </div>
          </div>
 
-   // Filter winners based on active set (4-Sets Mode) to avoid confusion
-   const visibleWinners = React.useMemo(() => {
-      if (!isMultiSet) return winners;
 
-      return winners.filter(w => {
-         // Map activeSet (q1, q2, q3, final) to Winner Period (q1, half, q3, final)
-         // Note: We currently treat 'Event' winners as visible everywhere OR filtered?
-         // User Request: "Only show winners for each quarter... numbers change."
-         // Since numbers change, showing granular event winners from Q1 on Q3 grid is also confusing.
-         // We will filter STRICTLY to the current bucket.
-         
-         const periodMap: Record<string, string> = {
-            'q1': 'q1',
-         'q2': 'half',
-         'q3': 'q3',
-         'final': 'final' 
-         };
 
-         const targetPeriod = periodMap[activeSet];
-         return w.period === targetPeriod;
-      });
-   }, [winners, isMultiSet, activeSet]);
-
-   const getWinningDetails = (id: number) => {
-      return visibleWinners.filter(w => w.squareId === id);
-   };
-
-         // ... (Rest of code)
-
-         // --- COLOR LEGEND ---
+         {/* --- COLOR LEGEND --- */}
          <div className="w-full max-w-4xl mt-6 px-4 mb-24 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100 print:hidden">
             <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800 flex flex-wrap justify-center items-center gap-6 md:gap-8">
                <div className="flex items-center gap-3">
