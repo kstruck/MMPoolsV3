@@ -52,14 +52,16 @@ export const dbService = {
     },
 
     updatePool: async (poolId: string, updates: Partial<GameState>) => {
+        console.log('[dbService] updatePool called', { poolId, updates });
         try {
             const poolRef = doc(db, "pools", poolId);
             await updateDoc(poolRef, {
                 ...updates,
                 updatedAt: Timestamp.now()
             });
+            console.log('[dbService] updatePool SUCCESS');
         } catch (error) {
-            console.error("Error updating pool:", error);
+            console.error("[dbService] Error updating pool:", error);
             throw error;
         }
     },

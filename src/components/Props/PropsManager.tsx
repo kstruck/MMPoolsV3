@@ -54,7 +54,12 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
 
     const handleAddQuestion = () => {
         const validOptions = options.filter(o => o.trim() !== '');
-        if (!newQuestionText || validOptions.length < 2) return;
+        console.log('[PropsManager] handleAddQuestion called', { newQuestionText, validOptions, points });
+
+        if (!newQuestionText || validOptions.length < 2) {
+            console.log('[PropsManager] Validation FAILED - question text or options missing');
+            return;
+        }
 
         let updatedQuestions: PropQuestion[];
 
@@ -66,16 +71,18 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                 points: points
             } : q);
         } else {
+            // Note: Don't include correctOption - Firestore rejects undefined values
             const newQ: PropQuestion = {
                 id: crypto.randomUUID(),
                 text: newQuestionText,
                 options: validOptions,
-                correctOption: undefined,
                 points: points,
                 type: 'standard'
             };
             updatedQuestions = [...questions, newQ];
         }
+
+        console.log('[PropsManager] Calling updateConfig with:', { props: { enabled: propsEnabled, cost: propCost, questions: updatedQuestions } });
 
         updateConfig({
             props: {
