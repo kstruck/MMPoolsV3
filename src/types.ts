@@ -155,8 +155,10 @@ export interface LinkItem {
 export interface PropQuestion {
   id: string;
   text: string;
-  options: string[];
-  correctOption?: number; // 0 or 1, etc.
+  options: string[]; // Supports 2-4 options
+  correctOption?: number; // 0, 1, 2, or 3
+  points?: number; // Point value for correct answer (default: 1)
+  type?: 'standard' | 'tiebreaker'; // Question type (default: 'standard')
 }
 
 export interface PropCard {
