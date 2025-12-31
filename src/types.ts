@@ -168,6 +168,14 @@ export interface PropCard {
   tiebreakerVal?: number;
 }
 
+export interface PropSeed {
+  id: string; // Auto-id
+  text: string;
+  options: string[];
+  category?: string; // e.g. "Game", "Player", "Fun"
+  createdAt: number;
+}
+
 export interface GameState {
   id: string; // Unique ID
   type: 'SQUARES'; // Discriminated Union

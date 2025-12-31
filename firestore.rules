@@ -12,8 +12,11 @@ service cloud.firestore {
     //     - Actually, even Owner should use lockPool for RNG.
     //     - But Owner might need to toggle lock manually? 
     //     - Let's restrict 'axisNumbers' to only be writable if unchanged or via Admin SDK (which bypasses rules).
-    //     - So: allow update if request.auth.uid == resource.data.ownerId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers']))
-    // - DELETE: Owner only
+    // PROP QUESTIONS (Global Seeds)
+    match /prop_questions/{questionId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
     
     function isSuperAdmin() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SUPER_ADMIN';
@@ -87,6 +90,14 @@ service cloud.firestore {
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
           isSuperAdmin()
         );
+      }
+
+      // PROP CARDS
+      match /propCards/{userId} {
+        // Read: Owner (Admin), The User themselves, or SuperAdmin
+        allow read: if request.auth != null;
+        // Write: Only via Cloud Function 'purchasePropCard'
+        allow write: if false;
       }
     }
     

@@ -385,8 +385,9 @@ async function executeAutoLock(pool) {
         });
         // Notify Host
         if (pool.contactEmail) {
-            await sendEmail(pool.contactEmail, `Pool Locked & Numbers Generated: ${pool.name}`, `<p>Your pool <strong>${pool.name}</strong> has been auto-locked and numbers have been generated.</p>
-                 <p><a href="https://marchmeleepools.com/#pool/${pool.id}">View Pool</a></p>`);
+            const emailBody = `<p>Your pool <strong>${pool.name}</strong> has been auto-locked and numbers have been generated.</p>`;
+            const html = (0, emailStyles_1.renderEmailHtml)(`Pool Locked & Numbers Generated`, emailBody, `${emailStyles_1.BASE_URL}/#pool/${pool.id}`, 'View Pool');
+            await sendEmail(pool.contactEmail, `Pool Locked & Numbers Generated: ${pool.name}`, html);
         }
     }
     catch (e) {

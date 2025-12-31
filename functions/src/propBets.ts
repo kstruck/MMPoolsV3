@@ -17,7 +17,18 @@ export const purchasePropCard = onCall(async (request) => {
         throw new HttpsError('invalid-argument', 'Missing poolId or answers.');
     }
 
+    // Check if pool is locked
     const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists) {
+        throw new HttpsError('not-found', 'Pool not found.');
+    }
+    const poolData = poolSnap.data() as GameState;
+
+    // Check Status (isLocked covers most cases)
+    if (poolData.isLocked) {
+        throw new HttpsError('failed-precondition', 'Pool is locked. No new entries allowed.');
+    }
 
     // Check if user already bought one
     const cardRef = poolRef.collection('propCards').doc(userId);
@@ -57,8 +68,15 @@ export const gradeProp = onCall(async (request) => {
     if (!poolSnap.exists) throw new HttpsError('not-found', 'Pool not found');
 
     const poolData = poolSnap.data() as GameState;
-    if (poolData.ownerId !== request.auth.uid) {
-        // throw new HttpsError('permission-denied', 'Only owner can grade.');
+
+    // Check Owner, Manager, or SuperAdmin
+    const isOwner = poolData.ownerId === request.auth.uid;
+    const isManager = poolData.managerUid === request.auth.uid;
+    // Note: SuperAdmin check usually requires checking Custom Claims or a User doc. 
+    // For now we enforce Pool Owner/Manager.
+
+    if (!isOwner && !isManager) {
+        throw new HttpsError('permission-denied', 'Only pool owner/manager can grade.');
     }
 
     const questions = poolData.props?.questions || [];

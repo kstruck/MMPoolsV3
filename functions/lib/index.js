@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.calculatePlayoffScores = exports.submitPlayoffPicks = exports.onAnnouncementCreated = exports.onGameComplete = exports.updateTournamentData = exports.markEntryPaidStatus = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.gradeProp = exports.purchasePropCard = exports.confirmPayment = exports.reserveSquare = exports.lockPool = void 0;
+exports.joinWaitlist = exports.calculatePlayoffScores = exports.submitPlayoffPicks = exports.onAnnouncementCreated = exports.onGameComplete = exports.updateTournamentData = exports.markEntryPaidStatus = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.gradeProp = exports.purchasePropCard = exports.confirmPayment = exports.reserveSquare = exports.lockPool = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -61,4 +61,6 @@ Object.defineProperty(exports, "onAnnouncementCreated", { enumerable: true, get:
 var playoffPools_1 = require("./playoffPools");
 Object.defineProperty(exports, "submitPlayoffPicks", { enumerable: true, get: function () { return playoffPools_1.submitPlayoffPicks; } });
 Object.defineProperty(exports, "calculatePlayoffScores", { enumerable: true, get: function () { return playoffPools_1.calculatePlayoffScores; } });
+var waitlist_1 = require("./waitlist");
+Object.defineProperty(exports, "joinWaitlist", { enumerable: true, get: function () { return waitlist_1.joinWaitlist; } });
 //# sourceMappingURL=index.js.map

@@ -3,6 +3,7 @@ import type { GameState, Winner, PlayerDetails, User } from '../types';
 import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon, Zap, Printer, ZoomIn, ZoomOut, DollarSign } from 'lucide-react';
 import { getTeamLogo } from '../constants';
 import { PropCardForm } from './Props/PropCardForm';
+import { PropLeaderboard } from './Props/PropLeaderboard';
 import { dbService } from '../services/dbService';
 
 interface GridProps {
@@ -850,30 +851,40 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
          {/* --- VIEW: SIDE HUSTLE --- */}
          {viewMode === 'props' && (
-            <div className="container mx-auto max-w-4xl px-4 pb-20 animate-in fade-in slide-in-from-bottom-4">
-               {!currentUser ? (
-                  <div className="text-center p-12 bg-slate-900/50 rounded-xl border border-slate-800">
-                     <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Lock className="text-slate-500" size={32} />
-                     </div>
-                     <h3 className="text-xl font-bold text-white mb-2">Sign In Required</h3>
-                     <p className="text-slate-400 mb-6 max-w-md mx-auto">
-                        You really need to be signed in to participate in the Side Hustle so we can track your score.
-                     </p>
-                     <button
-                        onClick={onLogin}
-                        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition-colors"
-                     >
-                        Sign In / Register
-                     </button>
+            <div className="container mx-auto max-w-6xl px-4 pb-20 animate-in fade-in slide-in-from-bottom-4">
+               <div className="grid lg:grid-cols-2 gap-8 items-start">
+                  {/* LEFT COLUMN: Entry Form */}
+                  <div className="order-2 lg:order-1">
+                     {!currentUser ? (
+                        <div className="text-center p-12 bg-slate-900/50 rounded-xl border border-slate-800 sticky top-4">
+                           <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <Lock className="text-slate-500" size={32} />
+                           </div>
+                           <h3 className="text-xl font-bold text-white mb-2">Sign In Required</h3>
+                           <p className="text-slate-400 mb-6 max-w-md mx-auto">
+                              You really need to be signed in to participate in the Side Hustle so we can track your score.
+                           </p>
+                           <button
+                              onClick={onLogin}
+                              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition-colors"
+                           >
+                              Sign In / Register
+                           </button>
+                        </div>
+                     ) : (
+                        <PropCardForm
+                           gameState={gameState}
+                           currentUser={currentUser}
+                           userCard={userPropCard}
+                        />
+                     )}
                   </div>
-               ) : (
-                  <PropCardForm
-                     gameState={gameState}
-                     currentUser={currentUser}
-                     userCard={userPropCard}
-                  />
-               )}
+
+                  {/* RIGHT COLUMN: Leaderboard */}
+                  <div className="order-1 lg:order-2">
+                     <PropLeaderboard gameState={gameState} currentUser={currentUser} />
+                  </div>
+               </div>
             </div>
          )}
 

@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
-import type { GameState, Pool, User, SystemSettings } from '../types';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X } from 'lucide-react';
+import type { GameState, Pool, User, SystemSettings, PropSeed } from '../types';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List } from 'lucide-react';
 
 
 export const SuperAdmin: React.FC = () => {
@@ -14,7 +14,7 @@ export const SuperAdmin: React.FC = () => {
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
 
     // UI State
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
@@ -39,6 +39,13 @@ export const SuperAdmin: React.FC = () => {
     const [themes, setThemes] = useState<any[]>([]);
     const [editingTheme, setEditingTheme] = useState<any | null>(null);
     const [showThemeBuilder, setShowThemeBuilder] = useState(false);
+
+    // Prop Seeds State
+    const [propSeeds, setPropSeeds] = useState<PropSeed[]>([]);
+    const [editingSeed, setEditingSeed] = useState<PropSeed | null>(null);
+    const [seedText, setSeedText] = useState('');
+    const [seedOpt1, setSeedOpt1] = useState('');
+    const [seedOpt2, setSeedOpt2] = useState('');
 
     const fetchUsers = () => {
         dbService.getAllUsers()
@@ -65,11 +72,49 @@ export const SuperAdmin: React.FC = () => {
         };
     }, [activeTab]);
 
-    // Theme Subscription
+    // Theme & Seed Subscription
     useEffect(() => {
         const unsubThemes = dbService.subscribeToThemes(setThemes);
-        return () => unsubThemes();
+        const unsubSeeds = dbService.subscribeToPropSeeds(setPropSeeds);
+        return () => {
+            unsubThemes();
+            unsubSeeds();
+        };
     }, []);
+
+    const handleSaveSeed = async () => {
+        if (!seedText || !seedOpt1 || !seedOpt2) return;
+
+        const seed: Partial<PropSeed> = {
+            text: seedText,
+            options: [seedOpt1, seedOpt2],
+            category: 'General'
+        };
+
+        if (editingSeed) {
+            seed.id = editingSeed.id;
+        }
+
+        await dbService.savePropSeed(seed);
+        setEditingSeed(null);
+        setSeedText('');
+        setSeedOpt1('');
+        setSeedOpt2('');
+    };
+
+    const handleEditSeed = (seed: PropSeed) => {
+        setEditingSeed(seed);
+        setSeedText(seed.text);
+        setSeedOpt1(seed.options[0]);
+        setSeedOpt2(seed.options[1]);
+        setActiveTab('props'); // Ensure on tab
+    };
+
+    const handleDeleteSeed = async (id: string) => {
+        if (confirm('Delete this seed question?')) {
+            await dbService.deletePropSeed(id);
+        }
+    };
 
     const handleDeletePool = async (id: string) => {
         if (confirm('Create: Super Delete Pool?')) {
@@ -357,6 +402,7 @@ export const SuperAdmin: React.FC = () => {
         { id: 'users', label: `Users(${users.length})`, icon: <Users size={16} /> },
         { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
         { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
+        { id: 'props', label: 'Global Props', icon: <List size={16} /> },
         { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
     ] as const;
 
@@ -1966,6 +2012,84 @@ export const SuperAdmin: React.FC = () => {
             {showSimDashboard && (
                 <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />
             )}
+
+            {/* ============ PROPS TAB ============ */}
+            {activeTab === 'props' && (
+                <div className="space-y-6">
+                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold mb-4">{editingSeed ? 'Edit Seed Question' : 'Add New Seed Question'}</h3>
+                        <div className="grid gap-4 bg-slate-900/50 p-4 rounded-lg">
+                            <input
+                                className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
+                                placeholder="Question Text (e.g. Who wins the coin toss?)"
+                                value={seedText}
+                                onChange={e => setSeedText(e.target.value)}
+                            />
+                            <div className="grid grid-cols-2 gap-4">
+                                <input
+                                    className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
+                                    placeholder="Option 1 (e.g. Heads)"
+                                    value={seedOpt1}
+                                    onChange={e => setSeedOpt1(e.target.value)}
+                                />
+                                <input
+                                    className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
+                                    placeholder="Option 2 (e.g. Tails)"
+                                    value={seedOpt2}
+                                    onChange={e => setSeedOpt2(e.target.value)}
+                                />
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                {editingSeed && (
+                                    <button
+                                        onClick={() => { setEditingSeed(null); setSeedText(''); setSeedOpt1(''); setSeedOpt2(''); }}
+                                        className="px-4 py-2 text-slate-400 hover:text-white"
+                                    >
+                                        Cancel
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleSaveSeed}
+                                    disabled={!seedText || !seedOpt1 || !seedOpt2}
+                                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold"
+                                >
+                                    {editingSeed ? 'Update Seed' : 'Add Seed'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                        <div className="p-4 border-b border-slate-700 bg-slate-900/50">
+                            <h3 className="font-bold">Seed Library ({propSeeds.length})</h3>
+                        </div>
+                        <div className="divide-y divide-slate-700">
+                            {propSeeds.map(seed => (
+                                <div key={seed.id} className="p-4 hover:bg-slate-700/20 flex justify-between items-center group">
+                                    <div>
+                                        <p className="font-medium text-white">{seed.text}</p>
+                                        <p className="text-sm text-slate-400">{seed.options.join(' vs ')}</p>
+                                    </div>
+                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => handleEditSeed(seed)} className="text-indigo-400 hover:text-indigo-300 p-2 bg-slate-800 rounded">
+                                            <Settings size={16} />
+                                        </button>
+                                        <button onClick={() => handleDeleteSeed(seed.id)} className="text-rose-400 hover:text-rose-300 p-2 bg-slate-800 rounded">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                            {propSeeds.length === 0 && (
+                                <div className="p-8 text-center text-slate-500">
+                                    No seed questions yet. Add one above.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };

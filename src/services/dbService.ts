@@ -17,7 +17,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
 export { db };
-import type { GameState, User, Winner, PoolTheme, PlayerDetails } from "../types";
+import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed } from "../types";
 
 /** Global statistics tracked across all pools */
 export interface GlobalStats {
@@ -125,6 +125,17 @@ export const dbService = {
         const docRef = doc(db, 'pools', poolId, 'propCards', userId);
         return onSnapshot(docRef, (doc) => {
             callback(doc.exists() ? doc.data() : null);
+        });
+    },
+
+    subscribeToAllPropCards: (poolId: string, callback: (cards: any[]) => void) => {
+        const q = collection(db, 'pools', poolId, 'propCards');
+        return onSnapshot(q, (snapshot) => {
+            const cards = snapshot.docs.map(doc => doc.data());
+            callback(cards);
+        }, (error) => {
+            console.error("Error subscribing to all prop cards:", error);
+            callback([]);
         });
     },
 
@@ -439,6 +450,43 @@ export const dbService = {
             await updateDoc(doc(db, "themes", themeId), { isDefault: true });
         } catch (error) {
             console.error("Error setting default theme:", error);
+            throw error;
+        }
+    },
+
+    // --- PROP SEEDS ---
+    subscribeToPropSeeds: (callback: (seeds: PropSeed[]) => void) => {
+        const q = query(collection(db, "prop_questions"), orderBy("createdAt", "desc"));
+        return onSnapshot(q, (snapshot) => {
+            const seeds = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PropSeed));
+            callback(seeds);
+        }, (error) => {
+            console.error("Error subscribing to prop seeds:", error);
+            callback([]);
+        });
+    },
+
+    savePropSeed: async (seed: Partial<PropSeed> & { id?: string }): Promise<string> => {
+        try {
+            const id = seed.id || doc(collection(db, "prop_questions")).id;
+            const ref = doc(db, "prop_questions", id);
+            await setDoc(ref, {
+                ...seed,
+                id,
+                createdAt: seed.createdAt || Date.now()
+            }, { merge: true });
+            return id;
+        } catch (error) {
+            console.error("Error saving prop seed:", error);
+            throw error;
+        }
+    },
+
+    deletePropSeed: async (id: string): Promise<void> => {
+        try {
+            await deleteDoc(doc(db, "prop_questions", id));
+        } catch (error) {
+            console.error("Error deleting prop seed:", error);
             throw error;
         }
     }
