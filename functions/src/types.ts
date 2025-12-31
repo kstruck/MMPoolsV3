@@ -226,6 +226,7 @@ export type AuditEventType =
     | 'ADMIN_OVERRIDE_DIGITS'
     | 'ADMIN_OVERRIDE_SQUARE_STATE'
     | 'SQUARE_MARKED_PAID'
+    | 'PAYMENT_CONFIRMED'
     | 'AI_ARTIFACT_CREATED';
 
 export interface AuditLogEvent {

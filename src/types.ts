@@ -47,6 +47,8 @@ export interface Square {
   paidAt?: number | null;
   reservedByUid?: string | null;
   paidByUid?: string | null;
+  paymentConfirmedAt?: number | null;
+  paymentConfirmedByUid?: string | null;
 }
 
 export interface GameScore {

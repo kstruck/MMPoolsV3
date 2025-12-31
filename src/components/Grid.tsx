@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { GameState, Winner, PlayerDetails, User } from '../types';
-import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon, Zap, Printer, ZoomIn, ZoomOut } from 'lucide-react';
+import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon, Zap, Printer, ZoomIn, ZoomOut, DollarSign } from 'lucide-react';
 import { getTeamLogo } from '../constants';
 
 interface GridProps {
@@ -14,9 +14,10 @@ interface GridProps {
    onCreateClaimCode?: (guestKey: string) => Promise<{ claimCode: string; claimId: string }>;
    onClaimByCode?: (code: string) => Promise<{ success: boolean; poolId: string }>;
    onJoinWaitlist?: (name: string, email: string) => Promise<{ success: boolean; message?: string }>;
+   onConfirmPayment?: (squareIds: number[]) => Promise<{ success: boolean; squaresConfirmed: number }>;
 }
 
-export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, highlightHomeDigit, highlightAwayDigit, currentUser, onLogin, onCreateClaimCode, onClaimByCode, onJoinWaitlist }) => {
+export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, highlightHomeDigit, highlightAwayDigit, currentUser, onLogin, onCreateClaimCode, onClaimByCode, onJoinWaitlist, onConfirmPayment }) => {
    const [selectedSquares, setSelectedSquares] = useState<number[]>([]);
    const [guestKey, setGuestKey] = useState<string>('');
 
@@ -90,6 +91,10 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
    const [waitlistMsg, setWaitlistMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+   // Payment confirmation state
+   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
+   const [paymentConfirmMsg, setPaymentConfirmMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
    // Auto-scroll to error when it appears
    useEffect(() => {
       if (errorMsg) {
@@ -112,6 +117,26 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       if (!playerInfo.name) return 0;
       return gameState.squares.filter(s =>
          s.owner && s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase()
+      ).length;
+   }, [gameState.squares, playerInfo.name]);
+
+   const unpaidSquaresCount = React.useMemo(() => {
+      if (!playerInfo.name) return 0;
+      return gameState.squares.filter(s =>
+         s.owner &&
+         s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase() &&
+         !s.isPaid &&
+         !s.paymentConfirmedAt
+      ).length;
+   }, [gameState.squares, playerInfo.name]);
+
+   const pendingConfirmationCount = React.useMemo(() => {
+      if (!playerInfo.name) return 0;
+      return gameState.squares.filter(s =>
+         s.owner &&
+         s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase() &&
+         !s.isPaid &&
+         s.paymentConfirmedAt
       ).length;
    }, [gameState.squares, playerInfo.name]);
 
@@ -250,6 +275,37 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          setIsConfirming(false);
       } finally {
          setIsSubmitting(false);
+      }
+   };
+
+   const handleConfirmPayment = async () => {
+      if (!onConfirmPayment || !playerInfo.name) return;
+
+      // Identify squares owned by this user
+      const ownedSquareIds = gameState.squares
+         .filter(s => s.owner && s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase() && !s.isPaid && !s.paymentConfirmedAt)
+         .map(s => s.id);
+
+      if (ownedSquareIds.length === 0) {
+         setPaymentConfirmMsg({ type: 'error', text: "No unpaid squares found to confirm." });
+         return;
+      }
+
+      setIsConfirmingPayment(true);
+      setPaymentConfirmMsg(null);
+
+      try {
+         const result = await onConfirmPayment(ownedSquareIds);
+         if (result.success) {
+            setPaymentConfirmMsg({ type: 'success', text: `Payment confirmed for ${result.squaresConfirmed} squares! The host has been notified.` });
+         } else {
+            setPaymentConfirmMsg({ type: 'error', text: "Failed to confirm payment. Please try again." });
+         }
+      } catch (e) {
+         console.error(e);
+         setPaymentConfirmMsg({ type: 'error', text: "An error occurred. Please contact the host directly." });
+      } finally {
+         setIsConfirmingPayment(false);
       }
    };
 
@@ -519,6 +575,134 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         </div>
                      )}
 
+                  </div>
+               )}
+            </div>
+         )}
+
+
+         {/* --- PAYMENT CONFIRMATION SECTION --- */}
+         {/* Show if user has unpaid squares OR has pending confirmations OR we have a success message */}
+         {isIdentitySet && (unpaidSquaresCount > 0 || pendingConfirmationCount > 0 || paymentConfirmMsg) && (
+            <div className="w-full max-w-2xl mb-6 p-4 bg-slate-900/80 border border-indigo-500/30 rounded-xl shadow-lg relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+
+               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <DollarSign className="text-emerald-400" size={20} /> Payment Status
+                     </h3>
+
+                     <div className="mt-2 space-y-1 text-sm">
+                        {unpaidSquaresCount > 0 && (
+                           <p className="text-slate-300">
+                              You have <span className="font-bold text-white">{unpaidSquaresCount}</span> unpaid square{unpaidSquaresCount !== 1 ? 's' : ''}.
+                              Total due: <span className="font-mono text-emerald-400 font-bold">${unpaidSquaresCount * gameState.costPerSquare}</span>
+                           </p>
+                        )}
+                        {pendingConfirmationCount > 0 && (
+                           <p className="text-slate-400 italic flex items-center gap-1.5">
+                              <Check size={14} className="text-indigo-400" />
+                              Payment confirmation sent for {pendingConfirmationCount} square{pendingConfirmationCount !== 1 ? 's' : ''}.
+                           </p>
+                        )}
+                        {unpaidSquaresCount === 0 && pendingConfirmationCount === 0 && !paymentConfirmMsg && (
+                           <p className="text-emerald-400 font-bold flex items-center gap-1">
+                              <Check size={16} /> All squares marked as paid!
+                           </p>
+                        )}
+                     </div>
+                  </div>
+
+                  {unpaidSquaresCount > 0 && (
+                     <button
+                        onClick={handleConfirmPayment}
+                        disabled={isConfirmingPayment}
+                        className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all whitespace-nowrap"
+                     >
+                        {isConfirmingPayment ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
+                        {isConfirmingPayment ? 'Sending...' : "I've Sent Payment"}
+                     </button>
+                  )}
+               </div>
+
+               {/* Feedback Message */}
+               {paymentConfirmMsg && (
+                  <div className={`mt-3 p-3 rounded-lg flex items-center gap-2 text-sm animate-in fade-in slide-in-from-top-1 ${paymentConfirmMsg.type === 'success' ? 'bg-emerald-900/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-900/20 text-rose-400 border border-rose-500/30'}`}>
+                     {paymentConfirmMsg.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
+                     {paymentConfirmMsg.text}
+                  </div>
+               )}
+
+               {/* Payment Instructions (Collapsible/Tooltip-ish) */}
+               {gameState.paymentInstructions && unpaidSquaresCount > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-800/50">
+                     <p className="text-xs text-slate-500 uppercase font-bold mb-1">Payment Instructions:</p>
+                     <p className="text-sm text-slate-300 whitespace-pre-wrap">{gameState.paymentInstructions}</p>
+                  </div>
+               )}
+            </div>
+         )}
+
+
+         {/* --- PAYMENT CONFIRMATION SECTION --- */}
+         {/* Show if user has unpaid squares OR has pending confirmations OR we have a success message */}
+         {isIdentitySet && (unpaidSquaresCount > 0 || pendingConfirmationCount > 0 || paymentConfirmMsg) && (
+            <div className="w-full max-w-2xl mb-6 p-4 bg-slate-900/80 border border-indigo-500/30 rounded-xl shadow-lg relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+
+               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <DollarSign className="text-emerald-400" size={20} /> Payment Status
+                     </h3>
+
+                     <div className="mt-2 space-y-1 text-sm">
+                        {unpaidSquaresCount > 0 && (
+                           <p className="text-slate-300">
+                              You have <span className="font-bold text-white">{unpaidSquaresCount}</span> unpaid square{unpaidSquaresCount !== 1 ? 's' : ''}.
+                              Total due: <span className="font-mono text-emerald-400 font-bold">${unpaidSquaresCount * gameState.costPerSquare}</span>
+                           </p>
+                        )}
+                        {pendingConfirmationCount > 0 && (
+                           <p className="text-slate-400 italic flex items-center gap-1.5">
+                              <Check size={14} className="text-indigo-400" />
+                              Payment confirmation sent for {pendingConfirmationCount} square{pendingConfirmationCount !== 1 ? 's' : ''}.
+                           </p>
+                        )}
+                        {unpaidSquaresCount === 0 && pendingConfirmationCount === 0 && !paymentConfirmMsg && (
+                           <p className="text-emerald-400 font-bold flex items-center gap-1">
+                              <Check size={16} /> All squares marked as paid!
+                           </p>
+                        )}
+                     </div>
+                  </div>
+
+                  {unpaidSquaresCount > 0 && (
+                     <button
+                        onClick={handleConfirmPayment}
+                        disabled={isConfirmingPayment}
+                        className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all whitespace-nowrap"
+                     >
+                        {isConfirmingPayment ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
+                        {isConfirmingPayment ? 'Sending...' : "I've Sent Payment"}
+                     </button>
+                  )}
+               </div>
+
+               {/* Feedback Message */}
+               {paymentConfirmMsg && (
+                  <div className={`mt-3 p-3 rounded-lg flex items-center gap-2 text-sm animate-in fade-in slide-in-from-top-1 ${paymentConfirmMsg.type === 'success' ? 'bg-emerald-900/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-900/20 text-rose-400 border border-rose-500/30'}`}>
+                     {paymentConfirmMsg.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
+                     {paymentConfirmMsg.text}
+                  </div>
+               )}
+
+               {/* Payment Instructions (Collapsible/Tooltip-ish) */}
+               {gameState.paymentInstructions && unpaidSquaresCount > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-800/50">
+                     <p className="text-xs text-slate-500 uppercase font-bold mb-1">Payment Instructions:</p>
+                     <p className="text-sm text-slate-300 whitespace-pre-wrap">{gameState.paymentInstructions}</p>
                   </div>
                )}
             </div>

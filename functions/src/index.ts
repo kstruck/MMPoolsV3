@@ -20,3 +20,4 @@ export { createBracketEntry, updateBracketEntry, submitBracketEntry } from "./br
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { onGameComplete } from "./postGameEmail";
 export { onAnnouncementCreated } from "./announcements";
+export { confirmPayment } from "./confirmPayment";

@@ -1607,6 +1607,7 @@ const App: React.FC = () => {
                 onCreateClaimCode={(k) => dbService.createClaimCode(squaresPool.id, k)}
                 onClaimByCode={(c) => dbService.claimByCode(c)}
                 onJoinWaitlist={(name, email) => handleJoinWaitlist(name, email)}
+                onConfirmPayment={(ids) => dbService.confirmPayment(squaresPool.id, ids)}
               />
             </div>
             {/* Home Logo (Right - Matches Cols) */}

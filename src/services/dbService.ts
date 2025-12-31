@@ -173,6 +173,17 @@ export const dbService = {
         }
     },
 
+    confirmPayment: async (poolId: string, squareIds: number[]): Promise<{ success: boolean; squaresConfirmed: number }> => {
+        try {
+            const confirmPaymentFn = httpsCallable<{ poolId: string; squareIds: number[] }, { success: boolean; squaresConfirmed: number }>(functions, 'confirmPayment');
+            const result = await confirmPaymentFn({ poolId, squareIds });
+            return result.data;
+        } catch (error) {
+            console.error("Error calling confirmPayment function:", error);
+            throw error;
+        }
+    },
+
     createClaimCode: async (poolId: string, guestDeviceKey: string): Promise<{ claimCode: string; claimId: string }> => {
         try {
             const fn = httpsCallable(functions, 'createClaimCode');
