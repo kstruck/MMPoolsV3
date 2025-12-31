@@ -19,6 +19,9 @@ export const SuperAdmin: React.FC = () => {
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
     const [sportFilter, setSportFilter] = useState<string>('ALL');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'locked' | 'live' | 'final'>('all');
+    const [priceFilter, setPriceFilter] = useState<'all' | 'low' | 'mid' | 'high'>('all');
+    const [charityFilter, setCharityFilter] = useState(false);
 
     // Log Filters
     const [logStatusFilter, setLogStatusFilter] = useState<string>('ALL');
@@ -276,22 +279,63 @@ export const SuperAdmin: React.FC = () => {
     };
 
     const filteredPools = pools.filter(p => {
+        const isBracket = p.type === 'BRACKET';
+
+        // Sport filter
         let matchesSport = true;
         if (sportFilter !== 'ALL') {
             let sport = 'Other';
-            if (p.type === 'BRACKET') {
+            if (isBracket) {
                 sport = 'March Madness';
             } else {
                 sport = getLeagueDisplayName(p.league);
             }
             if (sport !== sportFilter) matchesSport = false;
         }
+        if (!matchesSport) return false;
 
-        if (!searchTerm) return matchesSport;
+        // Status filter
+        if (statusFilter !== 'all') {
+            let isLocked = false;
+            let isLive = false;
+            let isClosed = false;
+
+            if (isBracket) {
+                const bp = p as any;
+                isClosed = bp.status === 'COMPLETED';
+                isLocked = bp.status === 'LOCKED' || bp.status === 'COMPLETED';
+            } else {
+                const sp = p as GameState;
+                isClosed = sp.scores?.gameStatus === 'post';
+                isLive = sp.scores?.gameStatus === 'in';
+                isLocked = sp.isLocked;
+            }
+
+            if (statusFilter === 'open' && isLocked) return false;
+            if (statusFilter === 'locked' && (!isLocked || isLive || isClosed)) return false;
+            if (statusFilter === 'live' && !isLive) return false;
+            if (statusFilter === 'final' && !isClosed) return false;
+        }
+
+        // Price filter
+        if (priceFilter !== 'all') {
+            const cost = isBracket ? ((p as any).settings?.entryFee || 0) : (p as GameState).costPerSquare || 0;
+            if (priceFilter === 'low' && cost >= 20) return false;
+            if (priceFilter === 'mid' && (cost < 20 || cost > 50)) return false;
+            if (priceFilter === 'high' && cost <= 50) return false;
+        }
+
+        // Charity filter
+        if (charityFilter) {
+            if (isBracket || !(p as GameState).charity?.enabled) return false;
+        }
+
+        // Search term
+        if (!searchTerm) return true;
         const lowSearch = searchTerm.toLowerCase();
-        return matchesSport && (p.name.toLowerCase().includes(lowSearch) ||
+        return p.name.toLowerCase().includes(lowSearch) ||
             p.id.toLowerCase().includes(lowSearch) ||
-            ((p as any).ownerId || '').toLowerCase().includes(lowSearch));
+            ((p as any).ownerId || '').toLowerCase().includes(lowSearch);
     });
 
     const poolsBySport = filteredPools.reduce((acc, pool) => {
@@ -491,7 +535,7 @@ export const SuperAdmin: React.FC = () => {
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                             <button
                                 onClick={() => setSportFilter('ALL')}
-                                className={`px - 4 py - 2 rounded - full text - xs font - bold whitespace - nowrap transition - colors ${sportFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'} `}
+                                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${sportFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
                             >
                                 ALL SPORTS
                             </button>
@@ -499,12 +543,70 @@ export const SuperAdmin: React.FC = () => {
                                 <button
                                     key={sport}
                                     onClick={() => setSportFilter(sport)}
-                                    className={`px - 4 py - 2 rounded - full text - xs font - bold whitespace - nowrap transition - colors ${sportFilter === sport ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'} `}
+                                    className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${sportFilter === sport ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
                                 >
                                     {sport.toUpperCase()}
                                 </button>
                             ))}
                         </div>
+
+                        {/* STATUS, PRICE & CHARITY FILTERS */}
+                        <div className="flex flex-wrap gap-4 items-center bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                            {/* Status Filter */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-500 uppercase">Status:</span>
+                                {[
+                                    { id: 'all', label: 'All' },
+                                    { id: 'open', label: 'Open' },
+                                    { id: 'locked', label: 'Locked' },
+                                    { id: 'live', label: 'Live' },
+                                    { id: 'final', label: 'Final' }
+                                ].map(status => (
+                                    <button
+                                        key={status.id}
+                                        onClick={() => setStatusFilter(status.id as any)}
+                                        className={`px-3 py-1 rounded text-xs font-bold transition-colors ${statusFilter === status.id
+                                            ? status.id === 'live' ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white'
+                                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
+                                    >
+                                        {status.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Price Filter */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-500 uppercase">Price:</span>
+                                {[
+                                    { id: 'all', label: 'Any' },
+                                    { id: 'low', label: '< $20' },
+                                    { id: 'mid', label: '$20-$50' },
+                                    { id: 'high', label: '$50+' }
+                                ].map(price => (
+                                    <button
+                                        key={price.id}
+                                        onClick={() => setPriceFilter(price.id as any)}
+                                        className={`px-3 py-1 rounded text-xs font-bold transition-colors ${priceFilter === price.id
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
+                                    >
+                                        {price.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Charity Filter */}
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <span className="text-xs font-bold text-slate-500 uppercase">Charity Only:</span>
+                                <button
+                                    onClick={() => setCharityFilter(!charityFilter)}
+                                    className={`w-10 h-5 rounded-full relative transition-colors ${charityFilter ? 'bg-rose-500' : 'bg-slate-700'}`}
+                                >
+                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${charityFilter ? 'left-6' : 'left-1'}`} />
+                                </button>
+                            </label>
+                        </div>
+
 
                         {(Object.entries(poolsBySport) as [string, Pool[]][])
                             .sort(([a], [b]) => a.localeCompare(b))

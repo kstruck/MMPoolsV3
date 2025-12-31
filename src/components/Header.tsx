@@ -2,7 +2,6 @@ import React from 'react';
 import { Logo } from './Logo';
 import type { User } from '../types';
 import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy } from 'lucide-react';
-import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
     user: User | null;
@@ -27,7 +26,6 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                         <Logo height="h-20" />
                     </div>
                     <div className="flex items-center gap-4 flex-wrap justify-center">
-                        <ThemeToggle />
                         {!user ? (
                             <>
                                 <button onClick={() => window.location.hash = '#features'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
