@@ -133,12 +133,23 @@ export const dbService = {
     subscribeToAllPropCards: (poolId: string, callback: (cards: any[]) => void) => {
         const q = collection(db, 'pools', poolId, 'propCards');
         return onSnapshot(q, (snapshot) => {
-            const cards = snapshot.docs.map(doc => doc.data());
+            const cards = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
             callback(cards);
         }, (error) => {
             console.error("Error subscribing to all prop cards:", error);
             callback([]);
         });
+    },
+
+    deletePropCard: async (poolId: string, cardId: string) => {
+        try {
+            const cardRef = doc(db, 'pools', poolId, 'propCards', cardId);
+            await deleteDoc(cardRef);
+            console.log('[dbService] Prop card deleted:', cardId);
+        } catch (error) {
+            console.error("[dbService] Error deleting prop card:", error);
+            throw error;
+        }
     },
 
     // Alias for Grid component compatibility - uses Cloud Function to bypass security rules

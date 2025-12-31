@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import type { GameState, PropQuestion, PropSeed } from '../../types';
-import { Plus, Trash2, Check, Download, Save, X, Edit2, Star, Zap } from 'lucide-react';
+import type { GameState, PropQuestion, PropSeed, PropCard } from '../../types';
+import { Plus, Trash2, Check, Download, Save, X, Edit2, Star, Zap, Users } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 
 interface PropsManagerProps {
@@ -22,6 +22,18 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
         const unsub = dbService.subscribeToPropSeeds(setSeeds);
         return () => unsub();
     }, []);
+
+    // Prop Cards State (for admin management)
+    const [propCards, setPropCards] = useState<(PropCard & { id: string })[]>([]);
+    const [showManageCards, setShowManageCards] = useState(false);
+
+    useEffect(() => {
+        if (!gameState.id) return;
+        const unsub = dbService.subscribeToAllPropCards(gameState.id, (cards) => {
+            setPropCards(cards as any);
+        });
+        return () => unsub();
+    }, [gameState.id]);
 
     const handleImportSeed = (seed: PropSeed) => {
         setNewQuestionText(seed.text);
@@ -343,6 +355,47 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    )}
+
+                    {/* Manage Entries (Admin) */}
+                    {propCards.length > 0 && (
+                        <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+                                    <Users size={16} /> Manage Entries ({propCards.length})
+                                </h4>
+                                <button
+                                    onClick={() => setShowManageCards(!showManageCards)}
+                                    className="text-xs text-indigo-400 hover:text-indigo-300"
+                                >
+                                    {showManageCards ? 'Hide' : 'Show'}
+                                </button>
+                            </div>
+                            {showManageCards && (
+                                <div className="space-y-2">
+                                    {propCards.map((card) => (
+                                        <div key={card.id} className="bg-slate-800 p-3 rounded-lg flex items-center justify-between">
+                                            <div>
+                                                <div className="text-white font-medium">{card.userName || card.userId}</div>
+                                                <div className="text-xs text-slate-500">
+                                                    Score: {card.score || 0} • Answers: {Object.keys(card.answers || {}).length} • TB: {card.tiebreakerVal || 'N/A'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={async () => {
+                                                    if (confirm(`Delete prop card for ${card.userName || card.userId}?`)) {
+                                                        await dbService.deletePropCard(gameState.id, card.id);
+                                                    }
+                                                }}
+                                                className="text-rose-400 hover:text-rose-300 p-2"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
