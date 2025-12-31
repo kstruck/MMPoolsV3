@@ -13,7 +13,7 @@ import { calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { HelpCircle, Lock, ExternalLink, Unlock, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2, Check, Shuffle, ArrowRight } from 'lucide-react';
+import { HelpCircle, Lock, ExternalLink, Unlock, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2, Check, Copy, Shuffle, ArrowRight } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
@@ -101,6 +101,7 @@ const App: React.FC = () => {
   }, []);
 
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [gPayCopied, setGPayCopied] = useState(false);
 
   useEffect(() => {
     return authService.onAuthStateChanged(async (u) => {
@@ -1371,6 +1372,17 @@ const App: React.FC = () => {
                             {currentPool.paymentHandles?.googlePay && (
                               <div className="bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center w-full">
                                 <span className="text-slate-400 text-xs uppercase mr-1">GPay:</span> {currentPool.paymentHandles.googlePay}
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(currentPool.paymentHandles?.googlePay || '');
+                                    setGPayCopied(true);
+                                    setTimeout(() => setGPayCopied(false), 2000);
+                                  }}
+                                  className="ml-2 bg-slate-700 hover:bg-slate-600 p-1.5 rounded transition-colors"
+                                  title="Copy GPay Address"
+                                >
+                                  {gPayCopied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-slate-400 opacity-80" />}
+                                </button>
                               </div>
                             )}
                           </div>

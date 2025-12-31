@@ -67,11 +67,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Theme State
   const [availableThemes, setAvailableThemes] = useState<PoolTheme[]>([]);
 
-  // Fetch active themes
   useEffect(() => {
     const fetchThemes = async () => {
       const themes = await dbService.getActiveThemes();
-      setAvailableThemes(themes as PoolTheme[]);
+      if (themes && themes.length > 0) {
+        setAvailableThemes(themes as PoolTheme[]);
+      } else {
+        // Fallback to presets if DB is empty
+        const { PRESET_THEMES } = await import('../constants/presetThemes');
+        setAvailableThemes(PRESET_THEMES as unknown as PoolTheme[]);
+      }
     };
     fetchThemes();
   }, []);
