@@ -156,6 +156,79 @@ async function checkPaymentReminders(pool, now) {
             }
         }
     }
+    // AUTO-RELEASE LOGIC
+    if (settings.autoRelease && settings.autoReleaseHours) {
+        const releaseThresholdMs = settings.autoReleaseHours * 60 * 60 * 1000;
+        // Find squares that have exceeded the auto-release threshold
+        const squaresToRelease = pool.squares.filter(s => {
+            if (s.isPaid || !s.owner)
+                return false;
+            if (!s.reservedAt)
+                return false; // Can't auto-release without reservedAt timestamp
+            return (now - s.reservedAt) > releaseThresholdMs;
+        });
+        if (squaresToRelease.length > 0) {
+            const poolRef = db.collection("pools").doc(pool.id);
+            try {
+                await db.runTransaction(async (t) => {
+                    const doc = await t.get(poolRef);
+                    if (!doc.exists)
+                        return;
+                    const currentPool = doc.data();
+                    const updatedSquares = currentPool.squares.map(s => {
+                        const shouldRelease = squaresToRelease.some(r => r.id === s.id);
+                        if (shouldRelease) {
+                            return Object.assign(Object.assign({}, s), { owner: null, playerDetails: undefined, guestDeviceKey: null, guestClaimId: null, reservedAt: null, reservedByUid: null });
+                        }
+                        return s;
+                    });
+                    t.update(poolRef, {
+                        squares: updatedSquares,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                });
+                // Log audit event
+                await logAudit(pool.id, `Auto-released ${squaresToRelease.length} unpaid squares after ${settings.autoReleaseHours} hours`, 'NOTIFICATION_SENT', {
+                    releasedSquares: squaresToRelease.map(s => s.id),
+                    autoReleaseHours: settings.autoReleaseHours
+                });
+                // Notify waitlist if any
+                if (pool.waitlist && pool.waitlist.length > 0) {
+                    await notifyWaitlist(pool, squaresToRelease.length);
+                }
+                // Notify host
+                const emailBody = `
+                    <p>Hi ${pool.managerName},</p>
+                    <p><strong>${squaresToRelease.length} squares</strong> have been automatically released due to non-payment after ${settings.autoReleaseHours} hours.</p>
+                    <p>Released squares: ${squaresToRelease.map(s => `#${s.id}`).join(', ')}</p>
+                `;
+                const html = (0, emailStyles_1.renderEmailHtml)(`Squares Auto-Released`, emailBody, `${emailStyles_1.BASE_URL}/#pool/${pool.id}`, 'View Pool');
+                await sendEmail(pool.contactEmail, `${squaresToRelease.length} Squares Auto-Released: ${pool.name}`, html);
+                console.log(`[AutoRelease] Released ${squaresToRelease.length} squares from pool ${pool.id}`);
+            }
+            catch (e) {
+                console.error(`[AutoRelease] Error releasing squares for pool ${pool.id}:`, e);
+            }
+        }
+    }
+}
+// --- WAITLIST NOTIFICATION ---
+async function notifyWaitlist(pool, releasedCount) {
+    if (!pool.waitlist || pool.waitlist.length === 0)
+        return;
+    const emailSubject = `Squares Available: ${pool.name}`;
+    const emailBody = `
+        <p>Good news! <strong>${releasedCount} squares</strong> have just become available in ${pool.name}.</p>
+        <p>First come, first served! Click below to claim your squares now.</p>
+    `;
+    const html = (0, emailStyles_1.renderEmailHtml)(`Squares Available!`, emailBody, `${emailStyles_1.BASE_URL}/#pool/${pool.id}`, 'Claim Squares Now');
+    for (const entry of pool.waitlist) {
+        await sendEmail(entry.email, emailSubject, html);
+    }
+    await logAudit(pool.id, `Notified ${pool.waitlist.length} waitlisted users about ${releasedCount} released squares`, 'NOTIFICATION_SENT', {
+        waitlistCount: pool.waitlist.length,
+        releasedCount
+    });
 }
 async function checkLockReminders(pool, now) {
     const settings = pool.reminders.lock;

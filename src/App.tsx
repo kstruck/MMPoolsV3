@@ -672,6 +672,25 @@ const App: React.FC = () => {
     return { success: true };
   };
 
+  const handleJoinWaitlist = async (name: string, email: string): Promise<{ success: boolean; message?: string }> => {
+    if (!currentPool || currentPool.type === 'BRACKET') return { success: false, message: 'Invalid pool' };
+
+    const squaresPool = currentPool as GameState;
+
+    // Check if already on waitlist
+    if (squaresPool.waitlist?.some(w => w.email.toLowerCase() === email.toLowerCase())) {
+      return { success: false, message: 'You are already on the waitlist!' };
+    }
+
+    try {
+      await dbService.joinWaitlist(currentPool.id, { email, name, timestamp: Date.now() });
+      return { success: true, message: 'You have been added to the waitlist! We will notify you when squares become available.' };
+    } catch (error: any) {
+      console.error('Join waitlist failed', error);
+      return { success: false, message: error.message || 'Failed to join waitlist.' };
+    }
+  };
+
 
 
   const sanitize = (n: any) => {
@@ -1672,6 +1691,7 @@ const App: React.FC = () => {
                 onLogin={() => { setAuthMode('login'); setShowAuthModal(true); }}
                 onCreateClaimCode={(k) => dbService.createClaimCode(squaresPool.id, k)}
                 onClaimByCode={(c) => dbService.claimByCode(c)}
+                onJoinWaitlist={(name, email) => handleJoinWaitlist(name, email)}
               />
             </div>
             {/* Home Logo (Right - Matches Cols) */}

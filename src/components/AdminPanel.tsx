@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import type { PoolTheme } from '../types';
 import type { GameState, Scores, PayoutConfig, Square } from '../types';
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe, Trophy, Zap, QrCode, Activity } from 'lucide-react';
+import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe, Trophy, Zap, QrCode, Activity, TrendingUp } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
 import { AnnouncementManager } from './AnnouncementManager';
+import { PoolStatistics } from './PoolStatistics';
 
 interface AdminPanelProps {
   gameState: GameState;
@@ -93,7 +94,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [slugError, setSlugError] = useState<string | null>(null);
 
   // Updated Tab Order and Default
-  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'communications'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'communications' | 'stats'>('settings');
 
   /* handleSlugChange removed in favor of inline DebouncedInput handler */
 
@@ -544,7 +545,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, graceMinutes: parseInt(e.target.value) || 0 } } })}
                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">Wait time after reservation before nagging.</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Wait time after reservation before detailed reminder.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Repeat Every (Hours)</label>
@@ -556,6 +557,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   />
                   <p className="text-[10px] text-slate-500 mt-1">Frequency of follow-up emails.</p>
                 </div>
+
+                {/* Notify Users Toggle */}
                 <label className="md:col-span-2 flex items-center gap-3 cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800">
                   <input
                     type="checkbox"
@@ -565,6 +568,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   />
                   <span className="text-sm text-slate-300">Also email the <strong>Participants</strong> directly (not just Host summary)</span>
                 </label>
+
+                {/* Auto-Release Configuration */}
+                <div className="md:col-span-2 pt-4 border-t border-slate-800 mt-2">
+                  <label className="flex items-center justify-between cursor-pointer p-2 mb-2">
+                    <div>
+                      <span className="font-bold text-rose-400 block flex items-center gap-2">
+                        <Trash2 size={14} /> Auto-Release Unpaid Squares
+                      </span>
+                      <span className="text-xs text-slate-500">Automatically remove reservation if not paid in time.</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={safeReminders.payment.autoRelease}
+                      onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, autoRelease: e.target.checked } } })}
+                      className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-rose-600 focus:ring-rose-500"
+                    />
+                  </label>
+
+                  {safeReminders.payment.autoRelease && (
+                    <div className="pl-4 animate-in fade-in">
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Release After (Hours)</label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          value={safeReminders.payment.autoReleaseHours || 24}
+                          onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, autoReleaseHours: parseInt(e.target.value) || 0 } } })}
+                          className="w-24 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-rose-500"
+                        />
+                        <span className="text-xs text-slate-500">hours from reservation time.</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -1106,8 +1142,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'equal_split' } })}
                 className={`relative p-5 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split'
-                    ? 'bg-indigo-500/20 border-indigo-500 ring-2 ring-indigo-500'
-                    : 'bg-slate-950 border-slate-700 hover:border-slate-500'
+                  ? 'bg-indigo-500/20 border-indigo-500 ring-2 ring-indigo-500'
+                  : 'bg-slate-950 border-slate-700 hover:border-slate-500'
                   }`}
               >
                 {gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' && (
@@ -1129,8 +1165,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'hybrid' } })}
                 className={`relative p-5 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid'
-                    ? 'bg-indigo-500/20 border-indigo-500 ring-2 ring-indigo-500'
-                    : 'bg-slate-950 border-slate-700 hover:border-slate-500'
+                  ? 'bg-indigo-500/20 border-indigo-500 ring-2 ring-indigo-500'
+                  : 'bg-slate-950 border-slate-700 hover:border-slate-500'
                   }`}
               >
                 {gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' && (
@@ -1695,13 +1731,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
         <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm">
           <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm overflow-x-auto">
-            {(['settings', 'reminders', 'players', 'scoring', 'game', 'communications'] as const).map((tab) => (
+            {(['settings', 'reminders', 'players', 'scoring', 'game', 'communications', 'stats'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`py-3 border-b-2 transition-colors font-medium whitespace-nowrap ${activeTab === tab ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
               >
-                {tab === 'settings' ? 'Setup Wizard' : tab === 'reminders' ? 'Smart Reminders' : tab === 'game' ? 'Game Status' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'settings' ? 'Setup Wizard' : tab === 'reminders' ? 'Smart Reminders' : tab === 'game' ? 'Game Status' : tab === 'stats' ? 'Statistics' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -2053,6 +2089,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             )}
 
+          </div>
+        )}
+
+        {/* STATISTICS TAB */}
+        {activeTab === 'stats' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/30">
+                <TrendingUp size={24} className="text-indigo-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white">Pool Statistics</h2>
+                <p className="text-sm text-slate-500">Revenue, participation, and performance metrics</p>
+              </div>
+            </div>
+            <PoolStatistics pool={gameState} />
           </div>
         )}
       </div>

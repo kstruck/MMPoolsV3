@@ -13,9 +13,10 @@ interface GridProps {
    onLogin?: () => void;
    onCreateClaimCode?: (guestKey: string) => Promise<{ claimCode: string; claimId: string }>;
    onClaimByCode?: (code: string) => Promise<{ success: boolean; poolId: string }>;
+   onJoinWaitlist?: (name: string, email: string) => Promise<{ success: boolean; message?: string }>;
 }
 
-export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, highlightHomeDigit, highlightAwayDigit, currentUser, onLogin, onCreateClaimCode, onClaimByCode }) => {
+export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, highlightHomeDigit, highlightAwayDigit, currentUser, onLogin, onCreateClaimCode, onClaimByCode, onJoinWaitlist }) => {
    const [selectedSquares, setSelectedSquares] = useState<number[]>([]);
    const [guestKey, setGuestKey] = useState<string>('');
 
@@ -83,6 +84,11 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const [errorMsg, setErrorMsg] = useState<string | null>(null);
    const [showGuestSync, setShowGuestSync] = useState(false); // Toggle for advanced guest features
    const [zoomLevel, setZoomLevel] = useState(1); // Grid zoom level for mobile
+   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+   const [waitlistName, setWaitlistName] = useState('');
+   const [waitlistEmail, setWaitlistEmail] = useState('');
+   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
+   const [waitlistMsg, setWaitlistMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
    // Auto-scroll to error when it appears
    useEffect(() => {
@@ -152,6 +158,39 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       // Save to local storage
       localStorage.setItem('sbSquaresPlayer', JSON.stringify(playerInfo));
    };
+
+   const handleJoinWaitlist = async () => {
+      if (!waitlistName.trim() || !waitlistEmail.trim()) {
+         setWaitlistMsg({ type: 'error', text: 'Name and email are required.' });
+         return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(waitlistEmail)) {
+         setWaitlistMsg({ type: 'error', text: 'Please enter a valid email.' });
+         return;
+      }
+      if (!onJoinWaitlist) return;
+
+      setWaitlistSubmitting(true);
+      setWaitlistMsg(null);
+      try {
+         const result = await onJoinWaitlist(waitlistName.trim(), waitlistEmail.trim());
+         if (result.success) {
+            setWaitlistMsg({ type: 'success', text: result.message || 'You have been added to the waitlist!' });
+            setWaitlistName('');
+            setWaitlistEmail('');
+         } else {
+            setWaitlistMsg({ type: 'error', text: result.message || 'Failed to join waitlist.' });
+         }
+      } catch (e) {
+         setWaitlistMsg({ type: 'error', text: 'An error occurred. Please try again.' });
+      } finally {
+         setWaitlistSubmitting(false);
+      }
+   };
+
+   // Compute whether the grid is full
+   const squaresRemaining = 100 - gameState.squares.filter(s => s.owner).length;
+   const isGridFull = squaresRemaining === 0;
 
    // Auto-fill name from Current User
    useEffect(() => {
@@ -544,6 +583,87 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      </button>
                   </div>
                </div>
+            </div>
+         )}
+
+         {/* --- WAITLIST MODAL --- */}
+         {showWaitlistModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+               <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                     <UserPlus className="text-indigo-400" /> Join Waitlist
+                  </h3>
+                  <p className="text-slate-400 text-sm mb-6">
+                     The grid is currently full. Add your name to the waitlist and we'll notify you when squares become available.
+                  </p>
+
+                  <div className="space-y-4 mb-6">
+                     <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Your Name *</label>
+                        <input
+                           type="text"
+                           value={waitlistName}
+                           onChange={(e) => setWaitlistName(e.target.value)}
+                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                           placeholder="John Smith"
+                        />
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Email *</label>
+                        <input
+                           type="email"
+                           value={waitlistEmail}
+                           onChange={(e) => setWaitlistEmail(e.target.value)}
+                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                           placeholder="john@example.com"
+                        />
+                     </div>
+                  </div>
+
+                  {waitlistMsg && (
+                     <div className={`text-sm mb-4 p-3 rounded-lg flex items-center gap-2 ${waitlistMsg.type === 'success' ? 'bg-emerald-900/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-900/20 text-rose-400 border border-rose-500/30'}`}>
+                        {waitlistMsg.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
+                        {waitlistMsg.text}
+                     </div>
+                  )}
+
+                  <div className="flex gap-3">
+                     <button
+                        onClick={() => setShowWaitlistModal(false)}
+                        className="flex-1 py-3 text-slate-400 hover:bg-slate-700 rounded-lg font-bold transition-colors"
+                     >
+                        Cancel
+                     </button>
+                     <button
+                        onClick={handleJoinWaitlist}
+                        disabled={waitlistSubmitting}
+                        className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-bold shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all"
+                     >
+                        {waitlistSubmitting ? <Loader size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                        {waitlistSubmitting ? 'Joining...' : 'Join Waitlist'}
+                     </button>
+                  </div>
+               </div>
+            </div>
+         )}
+
+         {/* --- GRID FULL BANNER --- */}
+         {!gameState.isLocked && isGridFull && onJoinWaitlist && (
+            <div className="w-full max-w-2xl mb-6 p-6 bg-gradient-to-r from-amber-900/30 to-orange-900/30 border border-amber-500/30 rounded-xl text-center animate-in fade-in">
+               <div className="flex items-center justify-center gap-3 mb-3">
+                  <Ban className="text-amber-400" size={24} />
+                  <h3 className="text-xl font-bold text-amber-400">Grid is Full!</h3>
+               </div>
+               <p className="text-slate-300 mb-4">All 100 squares have been claimed. Join the waitlist to be notified if any squares become available.</p>
+               <button
+                  onClick={() => setShowWaitlistModal(true)}
+                  className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg shadow-amber-500/20 flex items-center gap-2 mx-auto transition-all"
+               >
+                  <UserPlus size={18} /> Join Waitlist
+               </button>
+               {gameState.waitlist && gameState.waitlist.length > 0 && (
+                  <p className="text-xs text-slate-500 mt-3">{gameState.waitlist.length} {gameState.waitlist.length === 1 ? 'person is' : 'people are'} already on the waitlist.</p>
+               )}
             </div>
          )}
 

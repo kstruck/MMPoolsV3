@@ -206,6 +206,8 @@ export interface ReminderSettings {
     graceMinutes: number; // e.g., 60
     repeatEveryHours: number; // e.g., 12
     notifyUsers: boolean;
+    autoRelease?: boolean; // If true, unpaid squares are released after X hours
+    autoReleaseHours?: number; // Default 24?
   };
   lock: {
     enabled: boolean;

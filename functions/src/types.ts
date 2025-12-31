@@ -11,6 +11,10 @@ export interface Square {
     owner: string | null; // Name of owner
     playerDetails?: PlayerDetails;
     isPaid?: boolean;
+    reservedAt?: number | null;
+    guestDeviceKey?: string | null;
+    guestClaimId?: string | null;
+    reservedByUid?: string | null;
 }
 
 export interface GameScore {
@@ -166,6 +170,13 @@ export interface GameState {
     status?: 'DRAFT' | 'LOCKED' | 'LIVE' | 'FINAL';
     manualScoreOverride?: boolean;
     reminders?: ReminderSettings;
+    waitlist?: WaitlistEntry[];
+}
+
+export interface WaitlistEntry {
+    email: string;
+    name: string;
+    timestamp: number;
 }
 
 export interface ReminderSettings {
@@ -174,6 +185,8 @@ export interface ReminderSettings {
         graceMinutes: number;
         repeatEveryHours: number;
         notifyUsers: boolean;
+        autoRelease?: boolean;
+        autoReleaseHours?: number;
     };
     lock: {
         enabled: boolean;

@@ -95,6 +95,20 @@ export const dbService = {
         }
     },
 
+    // Alias for Grid component compatibility
+    joinWaitlist: async (poolId: string, entry: { email: string; name: string; timestamp: number }) => {
+        try {
+            const poolRef = doc(db, "pools", poolId);
+            await updateDoc(poolRef, {
+                waitlist: arrayUnion(entry),
+                updatedAt: Timestamp.now()
+            });
+        } catch (error) {
+            console.error("Error joining waitlist:", error);
+            throw error;
+        }
+    },
+
 
     // --- CLOUD FUNCTIONS ---
     toggleWinnerPaid: async (poolId: string, winnerId: string): Promise<{ success: boolean; isPaid: boolean }> => {
