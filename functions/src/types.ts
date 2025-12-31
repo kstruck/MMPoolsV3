@@ -397,8 +397,10 @@ export interface PlayoffEntry {
 export interface PlayoffPool {
     id: string;
     type: 'NFL_PLAYOFFS';
+    league: 'NFL';
     name: string;
-    adminId: string;
+    ownerId: string;
+    urlSlug?: string;
     season: string;
     createdAt: number;
 

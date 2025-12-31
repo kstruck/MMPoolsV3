@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { GripVertical, Check, Save } from 'lucide-react';
 import type { PlayoffPool, PlayoffTeam, User } from '../../types';
-import { dbService } from '../../services/dbService';
+import { functions } from '../../firebase';
+import { httpsCallable } from 'firebase/functions';
 
 interface RankingFormProps {
     pool: PlayoffPool;
@@ -83,14 +84,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
             });
 
             // Optimistic update via updatePool (later replace with Cloud Function if complex validation needed)
-            const entry = {
-                userId: user.id,
-                userName: (user as any).displayName || user.email || 'Anonymous',
-                rankings: rankingsMap,
-                tiebreaker: Number(tiebreaker),
-                totalScore: 0, // Recalc later
-                submittedAt: Date.now()
-            };
+            // Optimistic update via updatePool (actual save via Cloud Function)
 
             // We need to update nested field `entries.${userId}`.
             // dbService.updatePool takes Partial<GameState>.
@@ -101,17 +95,13 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
             // OR use a dedicated `submitPlayoffEntry` function if I create one.
             // I'll create a helper in dbService or just do it here carefully.
 
-            // NOTE: This race condition is bad. 'entries' requires atomic update.
-            // I should use `dbService.submitPlayoffPick` (conceptually).
-            // Since it doesn't exist, I'll update the WHOLE entries map (Current local + My update).
-            // This is "Good Enough" for prototype/dev.
-
-            const updatedEntries = {
-                ...pool.entries,
-                [user.id]: entry
-            };
-
-            await dbService.updatePool(pool.id, { entries: updatedEntries } as any);
+            // Call Cloud Function
+            const submitPicks = httpsCallable(functions, 'submitPlayoffPicks');
+            await submitPicks({
+                poolId: pool.id,
+                rankings: rankingsMap,
+                tiebreaker: Number(tiebreaker)
+            });
 
             setSuccess(true);
             setTimeout(() => setSuccess(false), 3000);

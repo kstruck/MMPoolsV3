@@ -448,11 +448,13 @@ async function executeAutoLock(pool: GameState) {
 
         // Notify Host
         if (pool.contactEmail) {
+            const emailBody = `<p>Your pool <strong>${pool.name}</strong> has been auto-locked and numbers have been generated.</p>`;
+            const html = renderEmailHtml(`Pool Locked & Numbers Generated`, emailBody, `${BASE_URL}/#pool/${pool.id}`, 'View Pool');
+
             await sendEmail(
                 pool.contactEmail,
                 `Pool Locked & Numbers Generated: ${pool.name}`,
-                `<p>Your pool <strong>${pool.name}</strong> has been auto-locked and numbers have been generated.</p>
-                 <p><a href="https://marchmeleepools.com/#pool/${pool.id}">View Pool</a></p>`
+                html
             );
         }
 

@@ -135,6 +135,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const handleThemeSelect = async (theme: PoolTheme) => {
+    if (!theme.id) {
+      // Must be a preset. Save it to DB to make it real.
+      const newId = await dbService.saveTheme(theme);
+      // Update user config
+      updateConfig({ themeId: newId });
+      // Update local list to reflect reality
+      setAvailableThemes(prev => prev.map(t => t.name === theme.name ? { ...t, id: newId } : t));
+    } else {
+      updateConfig({ themeId: theme.id });
+    }
+  };
+
   const handleSave = () => {
     setSaveMessage('Settings Saved Successfully!');
     setTimeout(() => {
@@ -1011,8 +1024,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {availableThemes.map((theme) => (
               <button
-                key={theme.id}
-                onClick={() => updateConfig({ themeId: theme.id })}
+                key={theme.id || theme.name}
+                onClick={() => handleThemeSelect(theme)}
                 className={`p-4 rounded-xl border transition-all text-left relative z-10 cursor-pointer ${gameState.themeId === theme.id ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-700 hover:border-slate-500'}`}
               >
                 {/* Theme Preview */}
@@ -1274,13 +1287,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
         <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm">
           <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm overflow-x-auto">
-            {(['settings', 'reminders', 'players', 'scoring', 'game', 'payouts', 'communications', 'stats'] as const).map((tab) => (
+            {(['settings', 'reminders', 'players', 'scoring', 'game', 'payouts', 'props', 'communications', 'stats'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`py-3 border-b-2 transition-colors font-medium whitespace-nowrap ${activeTab === tab ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
               >
-                {tab === 'settings' ? 'Setup Wizard' : tab === 'reminders' ? 'Smart Reminders' : tab === 'game' ? 'Game Status' : tab === 'stats' ? 'Statistics' : tab === 'payouts' ? 'Payouts' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'settings' ? 'Setup Wizard' : tab === 'reminders' ? 'Smart Reminders' : tab === 'game' ? 'Game Status' : tab === 'stats' ? 'Statistics' : tab === 'payouts' ? 'Payouts' : tab === 'props' ? 'Side Hustle' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>

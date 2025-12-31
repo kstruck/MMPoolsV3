@@ -83,9 +83,45 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         </div>
                     )}
                     {activeTab === 'leaderboard' && (
-                        <div className="text-center p-12 bg-slate-900 rounded-xl border border-slate-800">
-                            <h3 className="text-xl font-bold mb-4">Leaderboard</h3>
-                            <p className="text-slate-400">Rankings will appear here after lock.</p>
+                        <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b border-slate-800 bg-slate-950/50">
+                                        <th className="p-4 text-slate-400 font-bold text-sm">Rank</th>
+                                        <th className="p-4 text-slate-400 font-bold text-sm">Player</th>
+                                        <th className="p-4 text-slate-400 font-bold text-sm text-right">Score</th>
+                                        <th className="p-4 text-slate-400 font-bold text-sm text-right hidden md:table-cell">Tiebreaker</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.values(pool.entries || {})
+                                        .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
+                                        .map((entry, index) => {
+                                            const isMe = user?.id === entry.userId;
+                                            return (
+                                                <tr key={entry.userId} className={`border-b border-slate-800/50 ${isMe ? 'bg-indigo-900/20' : 'hover:bg-slate-800/50'}`}>
+                                                    <td className="p-4 font-bold text-slate-300">
+                                                        {index + 1}
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>{entry.userName}</div>
+                                                    </td>
+                                                    <td className="p-4 text-right font-black text-emerald-400 text-lg">
+                                                        {entry.totalScore || 0}
+                                                    </td>
+                                                    <td className="p-4 text-right text-slate-500 hidden md:table-cell">
+                                                        {entry.tiebreaker}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    {(!pool.entries || Object.keys(pool.entries).length === 0) && (
+                                        <tr>
+                                            <td colSpan={4} className="p-8 text-center text-slate-500 italic">No entries yet. Be the first!</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     )}
                     {activeTab === 'rules' && (
