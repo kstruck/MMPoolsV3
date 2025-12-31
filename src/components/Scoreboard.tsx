@@ -3,6 +3,7 @@ import { RefreshCw, Trophy, PlayCircle, Calendar } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
+import type { User } from '../types';
 
 interface Game {
     id: string;
@@ -37,7 +38,7 @@ interface Game {
 }
 
 interface ScoreboardProps {
-    user: any;
+    user: User | null;
     onOpenAuth: () => void;
     onLogout: () => void;
     onCreatePool: () => void;

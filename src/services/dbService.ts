@@ -17,13 +17,22 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
 export { db };
-import type { GameState, User } from "../types";
+import type { GameState, User, Winner, PoolTheme, PlayerDetails } from "../types";
+
+/** Global statistics tracked across all pools */
+export interface GlobalStats {
+    totalPools: number;
+    totalSquaresSold: number;
+    totalRevenue: number;
+    totalUsers: number;
+    lastUpdated?: number;
+}
 
 export const dbService = {
     // --- POOLS ---
-    onGlobalStatsUpdate: (callback: (stats: any | null) => void, onError?: (error: any) => void) => {
+    onGlobalStatsUpdate: (callback: (stats: GlobalStats | null) => void, onError?: (error: Error) => void) => {
         return onSnapshot(doc(db, 'stats', 'global'), (doc) => {
-            callback(doc.exists() ? doc.data() : null);
+            callback(doc.exists() ? doc.data() as GlobalStats : null);
         }, (err) => {
             console.error("Global Stats Subscription Error:", err);
             if (onError) onError(err);
@@ -154,7 +163,7 @@ export const dbService = {
         }
     },
 
-    reserveSquare: async (poolId: string, squareId: number, customerDetails?: any, guestDeviceKey?: string, pickedAsName?: string): Promise<void> => {
+    reserveSquare: async (poolId: string, squareId: number, customerDetails?: PlayerDetails, guestDeviceKey?: string, pickedAsName?: string): Promise<void> => {
         try {
             const reserveSquareFn = httpsCallable(functions, 'reserveSquare');
             await reserveSquareFn({ poolId, squareId, customerDetails, guestDeviceKey, pickedAsName });
@@ -198,7 +207,7 @@ export const dbService = {
     },
 
     // Real-time listener for ALL public pools OR user's pools
-    subscribeToPools: (callback: (pools: GameState[]) => void, onError?: (error: any) => void, ownerId?: string) => {
+    subscribeToPools: (callback: (pools: GameState[]) => void, onError?: (error: Error) => void, ownerId?: string) => {
         let q;
         if (ownerId) {
             q = query(collection(db, "pools"), or(where("ownerId", "==", ownerId), where("managerUid", "==", ownerId)));
@@ -216,7 +225,7 @@ export const dbService = {
     },
 
     // Admin: Fetch ALL pools (relies on SuperAdmin permissions)
-    subscribeToAllPools: (callback: (pools: GameState[]) => void, onError?: (error: any) => void) => {
+    subscribeToAllPools: (callback: (pools: GameState[]) => void, onError?: (error: Error) => void) => {
         const q = query(collection(db, "pools"));
         return onSnapshot(q, (snapshot) => {
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GameState));
@@ -228,7 +237,7 @@ export const dbService = {
     },
 
     // Real-time listener for a SINGLE pool (Robust deep-linking)
-    subscribeToPool: (poolId: string, callback: (pool: GameState | null) => void, onError?: (error: any) => void) => {
+    subscribeToPool: (poolId: string, callback: (pool: GameState | null) => void, onError?: (error: Error) => void) => {
         return onSnapshot(doc(db, "pools", poolId), (docSnap) => {
             if (docSnap.exists()) {
                 callback({ ...docSnap.data(), id: docSnap.id } as GameState);
@@ -243,10 +252,10 @@ export const dbService = {
     },
 
     // Winners Subcollection Listener
-    subscribeToWinners: (poolId: string, callback: (winners: any[]) => void) => {
+    subscribeToWinners: (poolId: string, callback: (winners: Winner[]) => void) => {
         const q = query(collection(db, "pools", poolId, "winners"));
         return onSnapshot(q, (snapshot) => {
-            const winners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const winners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as Winner);
             callback(winners);
         }, (error) => {
             console.error("Error subscribing to winners:", error);
@@ -337,10 +346,10 @@ export const dbService = {
     },
 
     // --- THEMES ---
-    subscribeToThemes: (callback: (themes: any[]) => void) => {
+    subscribeToThemes: (callback: (themes: PoolTheme[]) => void) => {
         const q = query(collection(db, "themes"), orderBy("name"));
         return onSnapshot(q, (snapshot) => {
-            const themes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const themes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PoolTheme));
             callback(themes);
         }, (error) => {
             console.error("Error subscribing to themes:", error);
@@ -348,18 +357,18 @@ export const dbService = {
         });
     },
 
-    getActiveThemes: async (): Promise<any[]> => {
+    getActiveThemes: async (): Promise<PoolTheme[]> => {
         try {
             const q = query(collection(db, "themes"), where("isActive", "==", true), orderBy("name"));
             const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PoolTheme));
         } catch (error) {
             console.error("Error fetching active themes:", error);
             return [];
         }
     },
 
-    saveTheme: async (theme: any): Promise<string> => {
+    saveTheme: async (theme: Partial<PoolTheme> & { id?: string }): Promise<string> => {
         try {
             const themeId = theme.id || doc(collection(db, "themes")).id;
             const themeRef = doc(db, "themes", themeId);

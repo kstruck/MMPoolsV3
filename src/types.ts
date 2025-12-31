@@ -1,3 +1,11 @@
+// Firestore Timestamp compatibility type
+export interface FirestoreTimestamp {
+  seconds: number;
+  nanoseconds: number;
+  toDate: () => Date;
+  toMillis: () => number;
+}
+
 // Core Pool Types
 export type PoolType = 'SQUARES' | 'BRACKET';
 export type Pool = GameState | BracketPool;
@@ -9,6 +17,7 @@ export interface Player {
 }
 
 export interface PlayerDetails {
+  name?: string; // Customer name for reservations
   email?: string;
   phone?: string;
   address?: string;
@@ -151,8 +160,8 @@ export interface GameState {
 
   isPublic: boolean; // Visibility on public listing
   squares: Square[];
-  createdAt?: any; // Firestore Timestamp
-  updatedAt?: any; // Firestore Timestamp
+  createdAt?: any; // Firestore Timestamp - kept as any for method access compatibility
+  updatedAt?: any; // Firestore Timestamp - kept as any for method access compatibility
   axisNumbers: AxisNumbers | null; // For Single Set (or current set)
   quarterlyNumbers?: {
     q1?: AxisNumbers;
@@ -294,7 +303,7 @@ export interface AuditLogEvent {
     role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST';
     label?: string; // e.g. "Kevin" or "Scheduler"
   };
-  payload?: any; // Structured details (JSON)
+  payload?: Record<string, unknown>; // Structured details (JSON)
   dedupeKey?: string; // For idempotency
 }
 
@@ -305,7 +314,7 @@ export interface NotificationLog {
   recipient: string; // uid or email
   sentAt: number;
   status: 'SENT' | 'FAILED' | 'SKIPPED';
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 // --- AI COMMISSIONER ---

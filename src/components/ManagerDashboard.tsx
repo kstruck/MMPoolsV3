@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Filter, Heart, DollarSign, Trophy, Plus, Zap, Globe, Lock, Trash2, LayoutDashboard, Archive, RotateCcw, Copy, AlertTriangle, X, ArrowUpDown } from 'lucide-react';
-import type { GameState, Pool } from '../types';
+import type { GameState, Pool, User } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import { Loader } from 'lucide-react';
 
 interface ManagerDashboardProps {
-    user: any; // Using any for User type for simplicity as imports might vary, strictly it's User
+    user: User | null;
     pools: Pool[];
     isLoading: boolean;
     connectionError: string | null;
