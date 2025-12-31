@@ -639,7 +639,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Date</label>
                       <input
                         type="date"
-                        value={new Date(safeReminders.lock.lockAt).toISOString().split('T')[0]}
+                        value={(() => {
+                          // Fix: Use LOCAL date, not UTC (toISOString uses UTC)
+                          const d = new Date(safeReminders.lock.lockAt);
+                          const year = d.getFullYear();
+                          const month = String(d.getMonth() + 1).padStart(2, '0');
+                          const day = String(d.getDate()).padStart(2, '0');
+                          return `${year}-${month}-${day}`;
+                        })()}
                         onChange={(e) => {
                           if (!e.target.value) return;
                           const [y, m, d] = e.target.value.split('-').map(Number);
@@ -1657,6 +1664,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Waitlist Section - Added for visibility */}
+            {gameState.waitlist && gameState.waitlist.length > 0 && (
+              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden mb-6">
+                <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
+                  <h3 className="font-bold text-white flex items-center gap-2">
+                    <Clock size={18} className="text-amber-400" /> Waitlist
+                    <span className="bg-amber-500/10 text-amber-400 text-xs px-2 py-0.5 rounded-full border border-amber-500/20">{gameState.waitlist.length}</span>
+                  </h3>
+                  <button onClick={() => updateConfig({ waitlist: [] })} className="text-xs text-rose-400 hover:text-rose-300">Clear List</button>
+                </div>
+                <div className="divide-y divide-slate-800">
+                  {gameState.waitlist.map((entry, idx) => (
+                    <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-800/20 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 text-xs font-bold">
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <div className="font-bold text-white text-sm">{entry.name}</div>
+                          <div className="text-xs text-slate-500">{entry.email}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className="text-[10px] slate-500 uppercase font-bold text-slate-600">Joined</div>
+                          <div className="text-xs text-slate-400">{new Date(entry.timestamp).toLocaleDateString()}</div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const newList = [...gameState.waitlist!];
+                            newList.splice(idx, 1);
+                            updateConfig({ waitlist: newList });
+                          }}
+                          className="text-slate-600 hover:text-rose-500 transition-colors p-2"
+                          title="Remove from waitlist"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
               <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">

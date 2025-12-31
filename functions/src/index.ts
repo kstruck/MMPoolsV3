@@ -23,3 +23,4 @@ export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { onGameComplete } from "./postGameEmail";
 export { onAnnouncementCreated } from "./announcements";
 export { submitPlayoffPicks, calculatePlayoffScores } from "./playoffPools";
+export { joinWaitlist } from "./waitlist";

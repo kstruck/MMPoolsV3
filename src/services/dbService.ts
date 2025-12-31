@@ -128,14 +128,11 @@ export const dbService = {
         });
     },
 
-    // Alias for Grid component compatibility
+    // Alias for Grid component compatibility - uses Cloud Function to bypass security rules
     joinWaitlist: async (poolId: string, entry: { email: string; name: string; timestamp: number }) => {
         try {
-            const poolRef = doc(db, "pools", poolId);
-            await updateDoc(poolRef, {
-                waitlist: arrayUnion(entry),
-                updatedAt: Timestamp.now()
-            });
+            const fn = httpsCallable(functions, 'joinWaitlist');
+            await fn({ poolId, name: entry.name, email: entry.email });
         } catch (error) {
             console.error("Error joining waitlist:", error);
             throw error;
