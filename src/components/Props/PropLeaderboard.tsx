@@ -8,24 +8,42 @@ interface PropLeaderboardProps {
     currentUser: any;
 }
 
+interface LeaderboardEntry extends PropCard {
+    id: string;
+    calculatedScore: number;
+    correctCount: number;
+}
+
 export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, currentUser }) => {
-    const [cards, setCards] = useState<PropCard[]>([]);
+    const [cards, setCards] = useState<LeaderboardEntry[]>([]);
+
+    const questions = gameState.props?.questions || [];
+    const totalPossiblePoints = questions.reduce((sum, q) => sum + (q.points || 1), 0);
 
     useEffect(() => {
         const unsub = dbService.subscribeToAllPropCards(gameState.id, (data) => {
-            const sorted = data.sort((a, b) => {
-                // Sort by Score DESC
-                if ((b.score || 0) !== (a.score || 0)) return (b.score || 0) - (a.score || 0);
-                // Tiebreaker: Closest to actual total (if we knew actual total... but we don't know actual total yet?)
-                // Actually, tiebreakerVal is a prediction. We win if closest to Actual.
-                // Since we don't have Actual, we can't sort by tiebreaker accuracy yet.
-                // Just sort by score for now.
-                return 0;
+            // Calculate scores from questions
+            const enriched: LeaderboardEntry[] = data.map((card: any) => {
+                let calculatedScore = 0;
+                let correctCount = 0;
+                questions.forEach(q => {
+                    if (q.correctOption !== undefined && card.answers?.[q.id] === q.correctOption) {
+                        calculatedScore += (q.points || 1);
+                        correctCount++;
+                    }
+                });
+                return { ...card, calculatedScore, correctCount };
+            });
+
+            // Sort by score DESC, then tiebreaker
+            const sorted = enriched.sort((a, b) => {
+                if (b.calculatedScore !== a.calculatedScore) return b.calculatedScore - a.calculatedScore;
+                return (a.tiebreakerVal || 0) - (b.tiebreakerVal || 0);
             });
             setCards(sorted);
         });
         return () => unsub();
-    }, [gameState.id]);
+    }, [gameState.id, questions]);
 
     const getRankIcon = (index: number) => {
         if (index === 0) return <Trophy className="text-amber-400" size={20} />;
@@ -40,16 +58,17 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                 <h3 className="font-bold text-white flex items-center gap-2">
                     <Trophy size={18} className="text-indigo-400" /> Leaderboard
                 </h3>
-                <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">{cards.length} Players</span>
+                <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">{cards.length} Entries</span>
             </div>
 
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-slate-900/50 text-slate-400 uppercase font-bold text-xs">
                         <tr>
-                            <th className="p-4 w-16 text-center">Rank</th>
+                            <th className="p-4 w-12 text-center">Rank</th>
                             <th className="p-4">Player</th>
                             <th className="p-4 text-center">Score</th>
+                            <th className="p-4 text-center">Correct</th>
                             <th className="p-4 text-center">TB</th>
                         </tr>
                     </thead>
@@ -57,29 +76,33 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                         {cards.map((card, idx) => {
                             const isMe = currentUser && card.userId === currentUser.uid;
                             return (
-                                <tr key={card.userId} className={`${isMe ? 'bg-indigo-500/10' : 'hover:bg-slate-800/50'} transition-colors`}>
+                                <tr key={card.id || card.userId} className={`${isMe ? 'bg-indigo-500/10' : 'hover:bg-slate-800/50'} transition-colors`}>
                                     <td className="p-4 text-center flex justify-center">
                                         {getRankIcon(idx)}
                                     </td>
                                     <td className="p-4">
                                         <div className="font-bold text-white flex items-center gap-2">
-                                            {card.userName}
+                                            {card.userName || 'Anonymous'}
                                             {isMe && <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded uppercase">You</span>}
                                         </div>
                                     </td>
                                     <td className="p-4 text-center">
-                                        <span className="font-mono text-emerald-400 font-bold text-lg">{card.score || 0}</span>
-                                        <span className="text-slate-600 text-xs ml-1">/ {gameState.props?.questions.length || 0}</span>
+                                        <span className="font-mono text-emerald-400 font-bold text-lg">{card.calculatedScore}</span>
+                                        <span className="text-slate-600 text-xs ml-1">/{totalPossiblePoints}</span>
+                                    </td>
+                                    <td className="p-4 text-center">
+                                        <span className="font-mono text-indigo-400">{card.correctCount}</span>
+                                        <span className="text-slate-600 text-xs ml-1">/{questions.length}</span>
                                     </td>
                                     <td className="p-4 text-center font-mono text-slate-400">
-                                        {card.tiebreakerVal}
+                                        {card.tiebreakerVal || '-'}
                                     </td>
                                 </tr>
                             );
                         })}
                         {cards.length === 0 && (
                             <tr>
-                                <td colSpan={4} className="p-8 text-center text-slate-500">
+                                <td colSpan={5} className="p-8 text-center text-slate-500">
                                     No players have joined yet. Be the first!
                                 </td>
                             </tr>
@@ -90,3 +113,4 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
         </div>
     );
 };
+

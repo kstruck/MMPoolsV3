@@ -8,6 +8,7 @@ import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
 import { AnnouncementManager } from './AnnouncementManager';
 import { PropsManager } from './Props/PropsManager';
+import { PropGradingDashboard } from './Props/PropGradingDashboard';
 import { PoolStatistics } from './PoolStatistics';
 import { DebouncedInput, DebouncedTextarea, WizardStepPayouts } from './admin';
 
@@ -40,7 +41,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [slugError, setSlugError] = useState<string | null>(null);
 
   // Updated Tab Order and Default
-  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats' | 'props'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats' | 'props' | 'grading'>('settings');
 
   /* handleSlugChange removed in favor of inline DebouncedInput handler */
 
@@ -1294,13 +1295,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
         <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm">
           <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm overflow-x-auto">
-            {(['settings', 'reminders', 'players', 'scoring', 'game', 'payouts', 'props', 'communications', 'stats'] as const).map((tab) => (
+            {(['settings', 'reminders', 'players', 'scoring', 'game', 'payouts', 'props', 'grading', 'communications', 'stats'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`py-3 border-b-2 transition-colors font-medium whitespace-nowrap ${activeTab === tab ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
               >
-                {tab === 'settings' ? 'Setup Wizard' : tab === 'reminders' ? 'Smart Reminders' : tab === 'game' ? 'Game Status' : tab === 'stats' ? 'Statistics' : tab === 'payouts' ? 'Payouts' : tab === 'props' ? 'Side Hustle' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'settings' ? 'Setup Wizard' : tab === 'reminders' ? 'Smart Reminders' : tab === 'game' ? 'Game Status' : tab === 'stats' ? 'Statistics' : tab === 'payouts' ? 'Payouts' : tab === 'props' ? 'Side Hustle' : tab === 'grading' ? 'Grading' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -1599,6 +1600,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
               <PropsManager gameState={gameState} updateConfig={updateConfig} />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'grading' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <PropGradingDashboard gameState={gameState} />
             </div>
           </div>
         )}
