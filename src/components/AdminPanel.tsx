@@ -40,7 +40,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [slugError, setSlugError] = useState<string | null>(null);
 
   // Updated Tab Order and Default
-  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'communications' | 'stats'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats'>('settings');
 
   /* handleSlugChange removed in favor of inline DebouncedInput handler */
 
@@ -693,6 +693,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
                     <CheckCircle size={10} /> Grid will automatically lock and numbers will be generated at this time.
                   </p>
+                  <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                    📍 Times shown in your local timezone: <span className="font-mono text-slate-400">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+                  </p>
                 </div>
               )}
             </div>
@@ -1266,13 +1269,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
         <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm">
           <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm overflow-x-auto">
-            {(['settings', 'reminders', 'players', 'scoring', 'game', 'communications', 'stats'] as const).map((tab) => (
+            {(['settings', 'reminders', 'players', 'scoring', 'game', 'payouts', 'communications', 'stats'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`py-3 border-b-2 transition-colors font-medium whitespace-nowrap ${activeTab === tab ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
               >
-                {tab === 'settings' ? 'Setup Wizard' : tab === 'reminders' ? 'Smart Reminders' : tab === 'game' ? 'Game Status' : tab === 'stats' ? 'Statistics' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'settings' ? 'Setup Wizard' : tab === 'reminders' ? 'Smart Reminders' : tab === 'game' ? 'Game Status' : tab === 'stats' ? 'Statistics' : tab === 'payouts' ? 'Payouts' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -1423,6 +1426,138 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               })()
             )}
 
+          </div>
+        )}
+
+        {/* PAYOUTS TAB */}
+        {activeTab === 'payouts' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800">
+              <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                <DollarSign size={20} className="text-emerald-400" /> Winner Payout Tracking
+              </h3>
+              <p className="text-slate-400 text-sm mb-6">Track which winners have been paid out.</p>
+
+              {(() => {
+                // Calculate all winners from gameState
+                const winners: { period: string; label: string; homeDigit: number; awayDigit: number; owner: string | null; squareId: number; amount: number; isPaid: boolean; paidAt?: number }[] = [];
+                const periods = ['q1', 'half', 'q3', 'final'] as const;
+                const periodLabels = { q1: 'Q1', half: 'Halftime', q3: 'Q3', final: 'Final' };
+
+                if (gameState.axisNumbers) {
+                  const totalPot = gameState.costPerSquare * gameState.squares.filter(s => s.owner).length;
+                  const charityDeduction = gameState.charity?.enabled ? (totalPot * (gameState.charity.percentage / 100)) : 0;
+                  const netPot = totalPot - charityDeduction;
+
+                  periods.forEach((period) => {
+                    const score = gameState.scores[period];
+                    if (score) {
+                      const homeDigit = score.home % 10;
+                      const awayDigit = score.away % 10;
+                      const homeIdx = gameState.axisNumbers!.home.indexOf(homeDigit);
+                      const awayIdx = gameState.axisNumbers!.away.indexOf(awayDigit);
+                      const squareId = homeIdx * 10 + awayIdx;
+                      const square = gameState.squares[squareId];
+                      const payoutPct = gameState.payouts[period as keyof typeof gameState.payouts] || 0;
+                      const amount = netPot * (payoutPct / 100);
+
+                      winners.push({
+                        period,
+                        label: periodLabels[period],
+                        homeDigit,
+                        awayDigit,
+                        owner: square?.owner || null,
+                        squareId,
+                        amount,
+                        isPaid: square?.isPaid || false,
+                        paidAt: square?.paidAt ?? undefined
+                      });
+                    }
+                  });
+                }
+
+                const totalOwed = winners.reduce((acc, w) => acc + w.amount, 0);
+                const totalPaid = winners.filter(w => w.isPaid).reduce((acc, w) => acc + w.amount, 0);
+
+                return (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div className="bg-slate-950 border border-slate-700 p-4 rounded-lg">
+                        <p className="text-slate-400 text-xs font-bold uppercase mb-1">Total Prize Pool</p>
+                        <div className="text-2xl font-bold text-white font-mono">${totalOwed.toLocaleString()}</div>
+                      </div>
+                      <div className="bg-slate-950 border border-emerald-500/30 p-4 rounded-lg">
+                        <p className="text-emerald-400 text-xs font-bold uppercase mb-1">Paid Out</p>
+                        <div className="text-2xl font-bold text-emerald-400 font-mono">${totalPaid.toLocaleString()}</div>
+                      </div>
+                      <div className="bg-slate-950 border border-amber-500/30 p-4 rounded-lg">
+                        <p className="text-amber-400 text-xs font-bold uppercase mb-1">Pending</p>
+                        <div className="text-2xl font-bold text-amber-400 font-mono">${(totalOwed - totalPaid).toLocaleString()}</div>
+                      </div>
+                    </div>
+
+                    {/* Winners Table */}
+                    {winners.length === 0 ? (
+                      <div className="text-center py-12 text-slate-500">
+                        <DollarSign size={40} className="mx-auto mb-4 opacity-50" />
+                        <p className="font-bold">No winners yet</p>
+                        <p className="text-sm">Winners will appear here once quarterly scores are recorded.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {winners.map((win) => (
+                          <div
+                            key={win.period}
+                            className={`p-4 rounded-lg border flex items-center justify-between transition-all ${win.isPaid ? 'bg-emerald-900/10 border-emerald-500/30' : 'bg-slate-950 border-slate-700'}`}
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className={`p-2 rounded-lg ${win.isPaid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+                                <DollarSign size={20} />
+                              </div>
+                              <div>
+                                <div className="font-bold text-white flex items-center gap-2">
+                                  {win.label}
+                                  <span className="text-xs font-mono text-slate-500">({win.homeDigit}-{win.awayDigit})</span>
+                                </div>
+                                <div className="text-sm text-slate-400">
+                                  {win.owner || <span className="text-rose-400 italic">Unclaimed Square</span>}
+                                  <span className="text-slate-600 ml-2">• Square #{win.squareId}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <div className="font-bold text-lg text-emerald-400 font-mono">${win.amount.toLocaleString()}</div>
+                                {win.isPaid && win.paidAt && (
+                                  <div className="text-[10px] text-slate-500">Paid {new Date(win.paidAt).toLocaleDateString()}</div>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const newSquares = [...gameState.squares];
+                                  newSquares[win.squareId] = {
+                                    ...newSquares[win.squareId],
+                                    isPaid: !win.isPaid,
+                                    paidAt: !win.isPaid ? Date.now() : undefined
+                                  };
+                                  updateConfig({ squares: newSquares });
+                                }}
+                                className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${win.isPaid
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`}
+                              >
+                                {win.isPaid ? '✓ Paid' : 'Mark Paid'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
 
