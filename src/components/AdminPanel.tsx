@@ -1000,7 +1000,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {/* No Theme Option */}
             <button
               onClick={() => updateConfig({ themeId: undefined })}
-              className={`p-4 rounded-xl border transition-all text-left ${!gameState.themeId ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-500/10' : 'border-slate-700 hover:border-slate-500 bg-slate-950'}`}
+              className={`p-4 rounded-xl border transition-all text-left relative z-10 cursor-pointer ${!gameState.themeId ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-500/10' : 'border-slate-700 hover:border-slate-500 bg-slate-950'}`}
             >
               <div className="h-12 rounded-lg bg-slate-800 mb-3 flex items-center justify-center">
                 <span className="text-slate-500 text-xs">Default</span>
@@ -1013,7 +1013,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 key={theme.id}
                 onClick={() => updateConfig({ themeId: theme.id })}
-                className={`p-4 rounded-xl border transition-all text-left ${gameState.themeId === theme.id ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-700 hover:border-slate-500'}`}
+                className={`p-4 rounded-xl border transition-all text-left relative z-10 cursor-pointer ${gameState.themeId === theme.id ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-700 hover:border-slate-500'}`}
               >
                 {/* Theme Preview */}
                 <div
