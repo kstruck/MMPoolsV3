@@ -39,7 +39,7 @@ export const dbService = {
         });
     },
 
-    createPool: async (pool: GameState): Promise<string> => {
+    createPool: async (pool: any): Promise<string> => {
         try {
             const createPoolFn = httpsCallable(functions, 'createPool');
             const result = await createPoolFn(pool);
@@ -102,6 +102,30 @@ export const dbService = {
             console.error("Error adding to waitlist:", error);
             throw error;
         }
+    },
+
+    // --- PROP BETS ---
+    purchasePropCard: async (poolId: string, answers: Record<string, number>, tiebreakerVal: number, userName: string) => {
+        const fn = httpsCallable(functions, 'purchasePropCard');
+        await fn({ poolId, answers, tiebreakerVal, userName });
+    },
+
+    gradeProp: async (poolId: string, questionId: string, correctOptionIndex: number) => {
+        const fn = httpsCallable(functions, 'gradeProp');
+        await fn({ poolId, questionId, correctOptionIndex });
+    },
+
+    getPropCards: async (poolId: string) => {
+        const q = collection(db, 'pools', poolId, 'propCards');
+        const snap = await getDocs(q);
+        return snap.docs.map(d => d.data());
+    },
+
+    subscribeToPropCard: (poolId: string, userId: string, callback: (card: any | null) => void) => {
+        const docRef = doc(db, 'pools', poolId, 'propCards', userId);
+        return onSnapshot(docRef, (doc) => {
+            callback(doc.exists() ? doc.data() : null);
+        });
     },
 
     // Alias for Grid component compatibility

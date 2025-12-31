@@ -7,8 +7,58 @@ export interface FirestoreTimestamp {
 }
 
 // Core Pool Types
-export type PoolType = 'SQUARES' | 'BRACKET';
-export type Pool = GameState | BracketPool;
+// Core Pool Types
+export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS';
+export type Pool = GameState | BracketPool | PlayoffPool;
+
+// --- NFL Playoff Pool Types ---
+
+export type PlayoffRound = 'WILD_CARD' | 'DIVISIONAL' | 'CONF_CHAMP' | 'SUPER_BOWL';
+
+export interface PlayoffTeam {
+  id: string; // e.g. "KC", "SF"
+  name: string; // "Kansas City Chiefs"
+  conference: 'AFC' | 'NFC';
+  seed: number; // 1-7
+  eliminated: boolean;
+  eliminatedRound?: PlayoffRound;
+}
+
+export interface PlayoffEntry {
+  userId: string;
+  userName: string; // Denormalized for display
+  rankings: Record<string, number>; // teamId -> rank (1-14)
+  tiebreaker: number; // Super Bowl Total Score
+  totalScore: number;
+  submittedAt: number;
+}
+
+export interface PlayoffPool {
+  id: string;
+  type: 'NFL_PLAYOFFS';
+  league: 'NFL';
+  name: string;
+  ownerId: string;
+  urlSlug?: string;
+  season: string; // "2024"
+  createdAt: number;
+
+  // Settings
+  entryFee: number;
+  payouts: PayoutConfig; // Could reuse existing or define custom
+
+  // State
+  teams: PlayoffTeam[]; // All 14 teams
+  entries: Record<string, PlayoffEntry>; // userId -> Entry
+
+  // Scoring State
+  results: {
+    [key in PlayoffRound]?: string[]; // Array of winner teamIds
+  };
+
+  isLocked: boolean;
+  lockDate?: number;
+}
 
 export interface Player {
   name: string;
@@ -100,6 +150,22 @@ export interface LinkItem {
   id: string;
   url: string;
   text: string;
+}
+
+export interface PropQuestion {
+  id: string;
+  text: string;
+  options: string[];
+  correctOption?: number; // 0 or 1, etc.
+}
+
+export interface PropCard {
+  userId: string;
+  userName?: string;
+  purchasedAt: number;
+  answers: Record<string, number>; // { questionId: optionIndex }
+  score: number;
+  tiebreakerVal?: number;
 }
 
 export interface GameState {
@@ -198,6 +264,13 @@ export interface GameState {
   ownerId?: string; // ID of the user who owns this pool
   manualScoreOverride?: boolean;
   reminders?: ReminderSettings;
+
+  // Prop Bets / Side Hustle
+  props?: {
+    enabled: boolean;
+    cost: number;
+    questions: PropQuestion[];
+  };
   lastBroadcastTime?: number; // Timestamp of last mass email
   status?: 'active' | 'archived'; // Pool lifecycle status (default: active)
   waitlist?: WaitlistEntry[]; // Users waiting for squares to open up

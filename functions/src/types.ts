@@ -96,6 +96,22 @@ export interface LinkItem {
     text: string;
 }
 
+export interface PropQuestion {
+    id: string;
+    text: string;
+    options: string[];
+    correctOption?: number; // 0 or 1, etc.
+}
+
+export interface PropCard {
+    userId: string;
+    userName?: string;
+    purchasedAt: number;
+    answers: Record<string, number>; // { questionId: optionIndex }
+    score: number;
+    tiebreakerVal?: number;
+}
+
 export interface GameState {
     id: string; // Unique ID
     name: string; // Pool Name (Title)
@@ -169,8 +185,15 @@ export interface GameState {
     createdByUid?: string; // Required for RBAC
     status?: 'DRAFT' | 'LOCKED' | 'LIVE' | 'FINAL';
     manualScoreOverride?: boolean;
-    reminders?: ReminderSettings;
+    reminders?: any; // Simplified for backend
     waitlist?: WaitlistEntry[];
+
+    // Prop Bets / Side Hustle
+    props?: {
+        enabled: boolean;
+        cost: number;
+        questions: PropQuestion[];
+    };
 }
 
 export interface WaitlistEntry {
@@ -343,6 +366,55 @@ export interface Team {
     seed: number;
     region: string;
     logoUrl?: string;
+}
+
+// --- Core Pool Types
+export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS';
+export type Pool = GameState | BracketPool | PlayoffPool;
+
+// --- NFL Playoff Pool Types ---
+
+export type PlayoffRound = 'WILD_CARD' | 'DIVISIONAL' | 'CONF_CHAMP' | 'SUPER_BOWL';
+
+export interface PlayoffTeam {
+    id: string;
+    name: string;
+    conference: 'AFC' | 'NFC';
+    seed: number;
+    eliminated: boolean;
+    eliminatedRound?: PlayoffRound;
+}
+
+export interface PlayoffEntry {
+    userId: string;
+    userName: string;
+    rankings: Record<string, number>; // teamId -> rank (1-14)
+    tiebreaker: number;
+    totalScore: number;
+    submittedAt: number;
+}
+
+export interface PlayoffPool {
+    id: string;
+    type: 'NFL_PLAYOFFS';
+    name: string;
+    adminId: string;
+    season: string;
+    createdAt: number;
+
+    entryFee: number;
+    // Note: Using PayoutConfig from existing types or custom if needed
+    payouts: any;
+
+    teams: PlayoffTeam[];
+    entries: Record<string, PlayoffEntry>;
+
+    results: {
+        [key in PlayoffRound]?: string[];
+    };
+
+    isLocked: boolean;
+    lockDate?: number;
 }
 
 // --- BRACKET POOL TYPES ---

@@ -6,7 +6,9 @@ if (!admin.apps.length) {
 
 // Exported Cloud Functions
 export { lockPool } from "./poolParams";
-export { reserveSquare } from "./squares";
+export { reserveSquare } from './squares';
+export { confirmPayment } from './confirmPayment';
+export { purchasePropCard, gradeProp } from './propBets';
 export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdates";
 export { onWinnerUpdate, onAIRequest } from "./aiCommissioner";
 export { onUserCreated, syncAllUsers } from "./userSync";
@@ -20,4 +22,3 @@ export { createBracketEntry, updateBracketEntry, submitBracketEntry } from "./br
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { onGameComplete } from "./postGameEmail";
 export { onAnnouncementCreated } from "./announcements";
-export { confirmPayment } from "./confirmPayment";

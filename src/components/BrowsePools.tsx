@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Search, Trophy, Heart, DollarSign, Activity, Lock, Unlock } from 'lucide-react';
-import type { GameState, User, BracketPool } from '../types';
+import type { GameState, User, BracketPool, Pool, PlayoffPool } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
@@ -9,7 +9,7 @@ import { getPoolTypeName } from '../utils/poolUtils';
 
 interface BrowsePoolsProps {
     user: User | null;
-    pools: (GameState | BracketPool)[];
+    pools: Pool[];
     onOpenAuth: () => void;
     onLogout: () => void;
 }
@@ -24,13 +24,13 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
     // Filter Logic
     const filteredPools = useMemo(() => {
         return pools.filter(p => {
-            // Cast helper
-            const isBracket = p.type === 'BRACKET';
-            const isSquares = !p.type || p.type === 'SQUARES'; // Default to squares if undefined
-
             // Common fields
             const name = p.name || '';
-            const isPublic = isBracket ? (p as BracketPool).isListedPublic : (p as GameState).isPublic;
+            const isBracket = p.type === 'BRACKET';
+            const isSquares = !p.type || p.type === 'SQUARES';
+            const isPlayoff = p.type === 'NFL_PLAYOFFS';
+
+            const isPublic = isBracket ? (p as BracketPool).isListedPublic : (isPlayoff ? true : (p as GameState).isPublic); // Start Playoff as public for now
 
             if (!isPublic) return false;
 
@@ -50,7 +50,11 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
 
             // Price Filter
             if (filterPrice !== 'all') {
-                const cost = isBracket ? (p as any).settings?.entryFee : (p as GameState).costPerSquare;
+                let cost = 0;
+                if (isBracket) cost = (p as any).settings?.entryFee || 0;
+                else if (isSquares) cost = (p as GameState).costPerSquare || 0;
+                else if (isPlayoff) cost = (p as PlayoffPool).entryFee || 0;
+
                 if (filterPrice === 'low' && cost >= 20) return false;
                 if (filterPrice === 'mid' && (cost < 20 || cost > 50)) return false;
                 if (filterPrice === 'high' && cost <= 50) return false;
@@ -247,6 +251,15 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     awayTeam = 'Bracket';
                                     cost = bp.settings.entryFee;
                                     isLocked = bp.status !== 'DRAFT' && bp.status !== 'PUBLISHED';
+                                    isLocked = bp.status !== 'DRAFT' && bp.status !== 'PUBLISHED';
+                                } else if (pool.type === 'NFL_PLAYOFFS') {
+                                    const pp = pool as PlayoffPool;
+                                    filled = Object.keys(pp.entries || {}).length;
+                                    pct = 50; // Arbitrary for now
+                                    homeTeam = 'NFL';
+                                    awayTeam = 'Playoffs';
+                                    cost = pp.entryFee;
+                                    isLocked = pp.isLocked;
                                 } else {
                                     const sp = pool as GameState;
                                     filled = sp.squares.filter(s => s.owner).length;

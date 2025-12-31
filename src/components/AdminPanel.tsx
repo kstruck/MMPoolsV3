@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
-import type { PoolTheme } from '../types';
-import type { GameState, Scores, Square } from '../types';
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User, Shield, Heart, Bell, Clock, Download, Globe, QrCode, TrendingUp } from 'lucide-react';
+import type { PoolTheme, GameState, Scores, Square } from '../types';
+import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User as UserIcon, Shield, Heart, Bell, Clock, Download, Globe, QrCode, TrendingUp } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
 import { AnnouncementManager } from './AnnouncementManager';
+import { PropsManager } from './Props/PropsManager';
 import { PoolStatistics } from './PoolStatistics';
 import { DebouncedInput, DebouncedTextarea, WizardStepPayouts } from './admin';
 
@@ -40,7 +40,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [slugError, setSlugError] = useState<string | null>(null);
 
   // Updated Tab Order and Default
-  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats' | 'props'>('settings');
 
   /* handleSlugChange removed in favor of inline DebouncedInput handler */
 
@@ -1568,8 +1568,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* COMMUNICATIONS TAB (ANNOUNCEMENTS) */}
         {activeTab === 'communications' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right duration-500">
-            <AnnouncementManager pool={gameState} currentUser={currentUser} />
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <AnnouncementManager pool={gameState} currentUser={currentUser} />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'props' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <PropsManager gameState={gameState} updateConfig={updateConfig} />
+            </div>
           </div>
         )}
 
@@ -1652,7 +1662,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.name ? null : player.name)}>
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
-                            <User size={20} className="text-slate-400" />
+                            <UserIcon size={20} className="text-slate-400" />
                           </div>
                           <div>
                             <h4 className="font-bold text-white text-sm">{player.name}</h4>

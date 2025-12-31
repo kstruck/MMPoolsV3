@@ -8,6 +8,7 @@ import type { User } from '../types';
 interface CreatePoolSelectionProps {
     onSelectSquares: () => void;
     onSelectBracket: () => void;
+    onSelectPlayoff: () => void;
     user: User | null;
     isManager: boolean;
     onOpenAuth: () => void;
@@ -18,6 +19,7 @@ interface CreatePoolSelectionProps {
 export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
     onSelectSquares,
     onSelectBracket,
+    onSelectPlayoff,
     user,
     isManager,
     onOpenAuth,
@@ -117,6 +119,26 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                 Locked <Lock size={14} />
                             </span>
                         )}
+                    </button>
+
+                    {/* NFL PLAYOFFS OPTION */}
+                    <button
+                        onClick={onSelectPlayoff}
+                        className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-emerald-500 rounded-2xl p-8 text-left transition-all hover:-translate-y-1 shadow-xl md:col-span-2 lg:col-span-1"
+                    >
+                        <div className="absolute top-4 right-4 bg-emerald-500/20 p-3 rounded-xl group-hover:bg-emerald-500 transition-colors">
+                            <Trophy size={32} className="text-emerald-400 group-hover:text-white" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-white mb-2">NFL Playoff Rank'em</h3>
+                        <p className="text-slate-400 mb-6 min-h-[48px]">Rank the 14 Playoff Teams from strongest to weakest. Earn points as they win.</p>
+                        <ul className="text-sm text-slate-500 space-y-2 mb-8">
+                            <li className="flex items-center gap-2">✓ Progressive scoring (10x, 12x, 15x, 20x)</li>
+                            <li className="flex items-center gap-2">✓ Drag & Drop Rankings</li>
+                            <li className="flex items-center gap-2">✓ Strategic multipliers</li>
+                        </ul>
+                        <span className="inline-flex items-center gap-2 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
+                            Create Playoff Pool <ArrowRight size={16} />
+                        </span>
                     </button>
                 </div>
             </main>

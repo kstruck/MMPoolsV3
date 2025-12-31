@@ -6,9 +6,11 @@ import { LandingPage } from './components/LandingPage';
 import { BracketWizard } from './components/BracketWizard/BracketWizard';
 import { CreatePoolSelection } from './components/CreatePoolSelection';
 import { BracketPoolDashboard } from './components/BracketPoolDashboard/BracketPoolDashboard';
+import { PlayoffWizard } from './components/PlayoffPool/PlayoffWizard';
+import { PlayoffDashboard } from './components/PlayoffPool/PlayoffDashboard';
 
 import { createNewPool, getTeamLogo, PERIOD_LABELS } from './constants';
-import type { GameState, Scores, PlayerDetails, User, Pool } from './types';
+import type { GameState, Scores, PlayerDetails, User, Pool, PlayoffPool } from './types';
 import { calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
@@ -223,6 +225,7 @@ const App: React.FC = () => {
     if (hash.startsWith('#support')) return { view: 'support', id: null };
     if (hash.startsWith('#create-pool')) return { view: 'create-pool', id: null };
     if (hash.startsWith('#bracket-wizard')) return { view: 'bracket-wizard', id: null };
+    if (hash.startsWith('#playoff-wizard')) return { view: 'playoff-wizard', id: null };
     return { view: 'home', id: null };
   }, [hash]);
 
@@ -519,7 +522,7 @@ const App: React.FC = () => {
 
   const handleClaimSquares = async (ids: number[], name: string, details: PlayerDetails, guestKey?: string): Promise<{ success: boolean; message?: string }> => {
     if (!currentPool) return { success: false };
-    if (currentPool.type === 'BRACKET') return { success: false, message: "Use bracket builder" };
+    if (currentPool.type === 'BRACKET' || currentPool.type === 'NFL_PLAYOFFS') return { success: false, message: "Use correct pool function" };
 
     const squaresPool = currentPool as GameState;
     const normalizedName = name.trim();
@@ -936,11 +939,15 @@ const App: React.FC = () => {
       );
     }
 
+    if (currentPool.type !== 'SQUARES' && (!currentPool.type)) {
+      return <div className="text-white p-20 text-center font-bold">Admin not yet supported for this pool type.</div>;
+    }
+
     return (
       <>
         <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
         <AdminPanel
-          gameState={currentPool}
+          gameState={currentPool as GameState}
           updateConfig={(updates) => updatePool(currentPool.id, updates)}
           updateScores={(scores) => updateScores(currentPool.id, scores)}
           generateNumbers={() => dbService.lockPool(currentPool.id)}
@@ -1041,6 +1048,7 @@ const App: React.FC = () => {
         isManager={isManager}
         onSelectSquares={handleSquaresPoolCreate}
         onSelectBracket={() => { window.location.hash = '#bracket-wizard'; }}
+        onSelectPlayoff={() => { window.location.hash = '#playoff-wizard'; }}
         onOpenAuth={() => setShowAuthModal(true)}
         onLogout={authService.logout}
         onCreatePool={handleCreatePool}
@@ -1060,6 +1068,16 @@ const App: React.FC = () => {
         onSuccess={(poolId) => {
           window.location.hash = `#admin/${poolId}`;
         }}
+      />
+    );
+  }
+
+  if (route.view === 'playoff-wizard') {
+    return (
+      <PlayoffWizard
+        user={user}
+        onCancel={() => window.location.hash = '#'}
+        onComplete={(newId) => window.location.hash = `#pool/${newId}`}
       />
     );
   }
@@ -1131,6 +1149,20 @@ const App: React.FC = () => {
       return (
         <BracketPoolDashboard
           pool={currentPool}
+          user={user}
+          onBack={() => window.location.hash = '#'}
+          onShare={() => {
+            navigator.clipboard.writeText(window.location.href);
+            alert("Link copied!");
+          }}
+        />
+      );
+    }
+
+    if (currentPool.type === 'NFL_PLAYOFFS') {
+      return (
+        <PlayoffDashboard
+          pool={currentPool as PlayoffPool}
           user={user}
           onBack={() => window.location.hash = '#'}
           onShare={() => {
@@ -1219,7 +1251,7 @@ const App: React.FC = () => {
           </div>
 
           <div className={`transition-all duration-500 ease-in-out overflow-hidden ${showPoolInfo ? 'max-h-[1000px] opacity-100 mb-6' : 'max-h-0 opacity-0 mb-0'}`}>
-            <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${squaresPool.charity?.enabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2 max-w-5xl mx-auto'}`}>
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${(squaresPool as GameState).charity?.enabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2 max-w-5xl mx-auto'}`}>
               {/* 1. Status Card (Tabbed) */}
               <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
                 {/* Tabs Header */}

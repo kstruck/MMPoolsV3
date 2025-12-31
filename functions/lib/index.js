@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.confirmPayment = exports.onAnnouncementCreated = exports.onGameComplete = exports.updateTournamentData = exports.markEntryPaidStatus = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.reserveSquare = exports.lockPool = void 0;
+exports.onAnnouncementCreated = exports.onGameComplete = exports.updateTournamentData = exports.markEntryPaidStatus = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.onWinnerComputed = exports.runReminders = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.gradeProp = exports.purchasePropCard = exports.confirmPayment = exports.reserveSquare = exports.lockPool = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -10,6 +10,11 @@ var poolParams_1 = require("./poolParams");
 Object.defineProperty(exports, "lockPool", { enumerable: true, get: function () { return poolParams_1.lockPool; } });
 var squares_1 = require("./squares");
 Object.defineProperty(exports, "reserveSquare", { enumerable: true, get: function () { return squares_1.reserveSquare; } });
+var confirmPayment_1 = require("./confirmPayment");
+Object.defineProperty(exports, "confirmPayment", { enumerable: true, get: function () { return confirmPayment_1.confirmPayment; } });
+var propBets_1 = require("./propBets");
+Object.defineProperty(exports, "purchasePropCard", { enumerable: true, get: function () { return propBets_1.purchasePropCard; } });
+Object.defineProperty(exports, "gradeProp", { enumerable: true, get: function () { return propBets_1.gradeProp; } });
 var scoreUpdates_1 = require("./scoreUpdates");
 Object.defineProperty(exports, "syncGameStatus", { enumerable: true, get: function () { return scoreUpdates_1.syncGameStatus; } });
 Object.defineProperty(exports, "fixPoolScores", { enumerable: true, get: function () { return scoreUpdates_1.fixPoolScores; } });
@@ -53,6 +58,4 @@ var postGameEmail_1 = require("./postGameEmail");
 Object.defineProperty(exports, "onGameComplete", { enumerable: true, get: function () { return postGameEmail_1.onGameComplete; } });
 var announcements_1 = require("./announcements");
 Object.defineProperty(exports, "onAnnouncementCreated", { enumerable: true, get: function () { return announcements_1.onAnnouncementCreated; } });
-var confirmPayment_1 = require("./confirmPayment");
-Object.defineProperty(exports, "confirmPayment", { enumerable: true, get: function () { return confirmPayment_1.confirmPayment; } });
 //# sourceMappingURL=index.js.map
