@@ -9,6 +9,7 @@ import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
 import { AnnouncementManager } from './AnnouncementManager';
 import { PoolStatistics } from './PoolStatistics';
+import { DebouncedInput, DebouncedTextarea } from './admin';
 
 interface AdminPanelProps {
   gameState: GameState;
@@ -22,61 +23,6 @@ interface AdminPanelProps {
   checkNameAvailable: (name: string) => boolean;
   currentUser: any;
 }
-
-// Internal Debounced Input Component to fix cursor jumping
-const DebouncedInput = ({ value, onChange, className, placeholder, type = "text", disabled }: { value: string, onChange: (val: string) => void, className?: string, placeholder?: string, type?: string, disabled?: boolean }) => {
-  const [localValue, setLocalValue] = useState(value);
-
-  React.useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
-
-  React.useEffect(() => {
-    const handler = setTimeout(() => {
-      if (localValue !== value) {
-        onChange(localValue);
-      }
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [localValue, value, onChange]);
-
-  return (
-    <input
-      type={type}
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      className={className}
-      placeholder={placeholder}
-      disabled={disabled}
-    />
-  );
-};
-
-const DebouncedTextarea = ({ value, onChange, className, placeholder }: { value: string, onChange: (val: string) => void, className?: string, placeholder?: string }) => {
-  const [localValue, setLocalValue] = useState(value);
-
-  React.useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
-
-  React.useEffect(() => {
-    const handler = setTimeout(() => {
-      if (localValue !== value) {
-        onChange(localValue);
-      }
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [localValue, value, onChange]);
-
-  return (
-    <textarea
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      className={className}
-      placeholder={placeholder}
-    />
-  );
-};
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   gameState,

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { Grid } from './components/Grid';
 import { AdminPanel } from './components/AdminPanel';
-import { Auth } from './components/Auth';
 import { LandingPage } from './components/LandingPage';
 import { BracketWizard } from './components/BracketWizard/BracketWizard';
 import { CreatePoolSelection } from './components/CreatePoolSelection';
@@ -14,7 +13,7 @@ import { calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
-import { Share2, HelpCircle, Lock, ArrowRight, ExternalLink, LogOut, Unlock, Twitter, Facebook, Link as LinkIcon, MessageCircle, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2, Check, Shuffle } from 'lucide-react';
+import { HelpCircle, Lock, ExternalLink, Unlock, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2, Check, Shuffle, ArrowRight } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
 import { AICommissioner } from './components/AICommissioner';
@@ -33,92 +32,8 @@ import { HowItWorksPage } from './components/HowItWorksPage'; // Added import
 import { SupportPage } from './components/SupportPage';
 import { ManagerDashboard } from './components/ManagerDashboard';
 import { Scoreboard } from './components/Scoreboard';
-
-// --- SHARED COMPONENTS ---
-
-const ShareModal: React.FC<{ isOpen: boolean; onClose: () => void; shareUrl: string }> = ({ isOpen, onClose, shareUrl }) => {
-  if (!isOpen) return null;
-  const encodedUrl = encodeURIComponent(shareUrl);
-  const text = "Join my Game Day Squares pool! Pick your winning squares now.";
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full relative">
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white"><LogOut className="rotate-45" size={20} /></button>
-        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Share2 size={20} className="text-indigo-400" /> Share Pool</h3>
-        <p className="text-sm text-slate-400 mb-6">Invite friends to join the action.</p>
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <a href={`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-indigo-500 transition-colors"><Twitter size={20} className="fill-white" /></div><span className="text-xs text-slate-400">X</span></a>
-          <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-blue-500 transition-colors"><Facebook size={20} className="text-blue-500" /></div><span className="text-xs text-slate-400">Facebook</span></a>
-          <a href={`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + shareUrl)}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-emerald-500 transition-colors"><MessageCircle size={20} className="text-emerald-500" /></div><span className="text-xs text-slate-400">WhatsApp</span></a>
-          <button onClick={() => { navigator.clipboard.writeText(shareUrl); alert("Link copied!"); }} className="flex flex-col items-center gap-2 group"><div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-amber-500 transition-colors"><LinkIcon size={20} className="text-amber-500" /></div><span className="text-xs text-slate-400">Copy</span></button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void; initialMode?: 'login' | 'register' }> = ({ isOpen, onClose, initialMode = 'login' }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-md relative">
-        <button onClick={onClose} className="absolute -top-12 right-0 text-slate-400 hover:text-white transition-colors p-2"><X size={24} /></button>
-        <Auth onLogin={() => { onClose(); }} defaultIsRegistering={initialMode === 'register'} />
-      </div>
-    </div>
-  );
-};
-
-const PoolTimer = ({ targetDate, gameStatus, isLocked }: { targetDate?: string | number, gameStatus?: string, isLocked: boolean }) => {
-  const [timeLeft, setTimeLeft] = useState<{ d: number, h: number, m: number, s: number } | null>(null);
-
-  useEffect(() => {
-    if (!targetDate || gameStatus === 'in' || gameStatus === 'post') {
-      setTimeLeft(null);
-      return;
-    }
-
-    const target = new Date(targetDate).getTime();
-    const update = () => {
-      const now = Date.now();
-      const diff = target - now;
-      if (diff <= 0) {
-        setTimeLeft({ d: 0, h: 0, m: 0, s: 0 });
-        return;
-      }
-      setTimeLeft({
-        d: Math.floor(diff / (1000 * 60 * 60 * 24)),
-        h: Math.floor((diff / (1000 * 60 * 60)) % 24),
-        m: Math.floor((diff / 1000 / 60) % 60),
-        s: Math.floor((diff / 1000) % 60)
-      });
-    };
-
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [targetDate, gameStatus]);
-
-  if (gameStatus === 'post' || gameStatus === 'final') return <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">Game Complete</span>;
-  if (gameStatus === 'in') return <span className="text-emerald-400 font-bold uppercase tracking-wider text-xs animate-pulse">Game In Progress</span>;
-  if (!timeLeft) return <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">{isLocked ? "Pool Locked" : "Waiting for Schedule"}</span>;
-
-  // Determine color
-  const totalHours = timeLeft.d * 24 + timeLeft.h;
-  let color = 'text-emerald-400';
-  if (totalHours === 0 && timeLeft.m < 10) color = 'text-rose-500 animate-pulse';
-  else if (totalHours === 0) color = 'text-amber-500';
-
-  return (
-    <div className={`font-mono font-bold text-xl ${color}`}>
-      {timeLeft.d > 0 && <span>{timeLeft.d}d </span>}
-      <span>{timeLeft.h.toString().padStart(2, '0')}h </span>
-      <span>{timeLeft.m.toString().padStart(2, '0')}m </span>
-      <span>{timeLeft.s.toString().padStart(2, '0')}s</span>
-      <p className="text-[10px] text-slate-500 font-sans uppercase tracking-widest mt-1">Time Until Kickoff</p>
-    </div>
-  );
-};
+import { ShareModal, AuthModal } from './components/modals';
+import { PoolTimer } from './components/PoolTimer';
 
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
