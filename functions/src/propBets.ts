@@ -3,14 +3,32 @@ import * as admin from 'firebase-admin';
 import { PropCard, GameState } from './types';
 
 // 1. Purchase Prop Card (Supports multiple cards per user)
+// 1. Purchase Prop Card (Supports multiple cards per user)
 export const purchasePropCard = onCall(async (request) => {
-    // request.data = { poolId, answers: { qId: idx }, tiebreakerVal, userName, cardName }
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Must be logged in.');
+    // request.data = { poolId, answers: { qId: idx }, tiebreakerVal, userName, cardName, email }
+
+    // Auth Handling
+    let userId: string;
+    let finalUserName: string;
+    let userEmail: string | undefined;
+
+    const { poolId, answers, tiebreakerVal, userName, cardName, email } = request.data;
+
+    if (request.auth) {
+        userId = request.auth.uid;
+        finalUserName = userName || request.auth.token.name || 'Anonymous';
+        userEmail = request.auth.token.email; // Optional
+    } else {
+        // Guest Mode
+        if (!userName || !email) {
+            throw new HttpsError('unauthenticated', 'Must be logged in OR provide Name and Email to play as guest.');
+        }
+        // Create a stable ID for the guest based on email to track card limits
+        userId = `guest:${email.toLowerCase().trim()}`;
+        finalUserName = userName;
+        userEmail = email;
     }
 
-    const { poolId, answers, tiebreakerVal, userName, cardName } = request.data;
-    const userId = request.auth.uid;
     const db = admin.firestore();
 
     if (!poolId || !answers) {
@@ -45,16 +63,23 @@ export const purchasePropCard = onCall(async (request) => {
     // Create Card with auto-generated ID (supports multiple cards)
     const card: PropCard = {
         userId,
-        userName: userName || 'Anonymous',
+        userName: finalUserName,
         cardName: cardName || `Card #${existingCards.size + 1}`,
         purchasedAt: Date.now(),
         answers,
         score: 0,
-        tiebreakerVal: Number(tiebreakerVal) || 0
-    };
+        tiebreakerVal: Number(tiebreakerVal) || 0,
+        // Store email if available (guest or auth) for future claiming/notifications
+        email: userEmail
+    } as any; // Cast to any to add 'email' if not in PropCard type yet
 
     // Use add() instead of doc(userId).set() to allow multiple cards
     await poolRef.collection('propCards').add(card);
+
+    // Increment entryCount on the main pool document
+    await poolRef.update({
+        entryCount: admin.firestore.FieldValue.increment(1)
+    });
 
     return { success: true, cardCount: existingCards.size + 1 };
 });

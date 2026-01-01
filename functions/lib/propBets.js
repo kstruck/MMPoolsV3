@@ -4,14 +4,30 @@ exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 // 1. Purchase Prop Card (Supports multiple cards per user)
+// 1. Purchase Prop Card (Supports multiple cards per user)
 exports.purchasePropCard = (0, https_1.onCall)(async (request) => {
+    // request.data = { poolId, answers: { qId: idx }, tiebreakerVal, userName, cardName, email }
     var _a;
-    // request.data = { poolId, answers: { qId: idx }, tiebreakerVal, userName, cardName }
-    if (!request.auth) {
-        throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
+    // Auth Handling
+    let userId;
+    let finalUserName;
+    let userEmail;
+    const { poolId, answers, tiebreakerVal, userName, cardName, email } = request.data;
+    if (request.auth) {
+        userId = request.auth.uid;
+        finalUserName = userName || request.auth.token.name || 'Anonymous';
+        userEmail = request.auth.token.email; // Optional
     }
-    const { poolId, answers, tiebreakerVal, userName, cardName } = request.data;
-    const userId = request.auth.uid;
+    else {
+        // Guest Mode
+        if (!userName || !email) {
+            throw new https_1.HttpsError('unauthenticated', 'Must be logged in OR provide Name and Email to play as guest.');
+        }
+        // Create a stable ID for the guest based on email to track card limits
+        userId = `guest:${email.toLowerCase().trim()}`;
+        finalUserName = userName;
+        userEmail = email;
+    }
     const db = admin.firestore();
     if (!poolId || !answers) {
         throw new https_1.HttpsError('invalid-argument', 'Missing poolId or answers.');
@@ -39,15 +55,21 @@ exports.purchasePropCard = (0, https_1.onCall)(async (request) => {
     // Create Card with auto-generated ID (supports multiple cards)
     const card = {
         userId,
-        userName: userName || 'Anonymous',
+        userName: finalUserName,
         cardName: cardName || `Card #${existingCards.size + 1}`,
         purchasedAt: Date.now(),
         answers,
         score: 0,
-        tiebreakerVal: Number(tiebreakerVal) || 0
-    };
+        tiebreakerVal: Number(tiebreakerVal) || 0,
+        // Store email if available (guest or auth) for future claiming/notifications
+        email: userEmail
+    }; // Cast to any to add 'email' if not in PropCard type yet
     // Use add() instead of doc(userId).set() to allow multiple cards
     await poolRef.collection('propCards').add(card);
+    // Increment entryCount on the main pool document
+    await poolRef.update({
+        entryCount: admin.firestore.FieldValue.increment(1)
+    });
     return { success: true, cardCount: existingCards.size + 1 };
 });
 // 2. Grade Prop (Admin Only)

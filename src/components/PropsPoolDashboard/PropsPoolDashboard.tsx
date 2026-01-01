@@ -42,7 +42,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
     return (
         <div className="min-h-screen bg-slate-950 text-white pb-20">
             {/* Header */}
-            <header className="bg-slate-900/50 backdrop-blur-md sticky top-0 z-40 border-b border-slate-800">
+            <header className="bg-slate-900/50 backdrop-blur-md relative border-b border-slate-800">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors">

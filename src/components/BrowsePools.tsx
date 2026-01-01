@@ -345,7 +345,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                                     <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                                                         <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }}></div>
                                                     </div>
-                                                    <span>{isBracket ? `${filled} Entries` : `${100 - filled} Left`}</span>
+                                                    <span>{(isBracket || pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') ? `${filled} Entries` : `${100 - filled} Left`}</span>
                                                 </div>
                                             </div>
 

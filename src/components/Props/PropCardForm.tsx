@@ -28,6 +28,11 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const [viewingCardId, setViewingCardId] = useState<string | null>(null);
     const [editingCardId, setEditingCardId] = useState<string | null>(null); // NEW: editing mode
     const [showNewCardForm, setShowNewCardForm] = useState(false);
+
+    // Guest State
+    const [guestName, setGuestName] = useState('');
+    const [guestEmail, setGuestEmail] = useState('');
+
     const activeCards = userCards || fetchedCards;
     const [isConfirming, setIsConfirming] = useState(false);
     const [liabilityAccepted, setLiabilityAccepted] = useState(false);
@@ -63,7 +68,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     }, [userCards]);
 
     const handleInitPurchase = () => {
-        if (!currentUser) return;
+        // if (!currentUser) return; // Allow guests
         setError(null);
 
         if (Object.keys(answers).length < questions.length) {
@@ -76,19 +81,35 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             return;
         }
 
+        if (!currentUser) {
+            if (!guestName.trim()) {
+                setError("Guest Name is required.");
+                return;
+            }
+            if (!guestEmail.trim() || !guestEmail.includes('@')) {
+                setError("Valid Guest Email is required.");
+                return;
+            }
+        }
+
         setLiabilityAccepted(false); // Reset checkbox
         setIsConfirming(true);
     };
 
     const handleFinalizePurchase = async () => {
-        if (!currentUser) return;
+        // if (!currentUser) return; // Allow guests
         setIsSubmitting(true);
         setError(null);
 
         try {
             const name = cardName.trim() || `Card #${activeCards.length + 1}`;
-            await dbService.purchasePropCard(effectivePoolId, answers, Number(tiebreaker), currentUser.name || currentUser.email, name);
+            // If guest, use guest data
+            const finalUserName = currentUser ? (currentUser.name || currentUser.email) : guestName;
+            const finalEmail = currentUser ? undefined : guestEmail;
+
+            await dbService.purchasePropCard(effectivePoolId, answers, Number(tiebreaker), finalUserName, name, finalEmail);
             // Reset form
+
             setAnswers({});
             setTiebreaker('');
             setCardName('');
@@ -346,6 +367,41 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         />
                     </div>
 
+                    {/* Guest Fields (if not logged in) */}
+                    {!currentUser && (
+                        <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700">
+                            <h4 className="text-white font-medium text-lg mb-2 flex items-center gap-2">
+                                Guest Info <span className="text-xs font-normal text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">Required</span>
+                            </h4>
+                            <div className="space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-slate-400 font-bold uppercase">Name</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Enter your name"
+                                        className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded-lg"
+                                        value={guestName}
+                                        onChange={e => setGuestName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-slate-400 font-bold uppercase">Email</label>
+                                    <input
+                                        type="email"
+                                        placeholder="Enter your email (for verification)"
+                                        className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded-lg"
+                                        value={guestEmail}
+                                        onChange={e => setGuestEmail(e.target.value)}
+                                    />
+                                    <p className="text-[10px] text-slate-500">
+                                        We use this to verify your entry if you win. {` `}
+                                        <button onClick={() => window.location.hash = '#auth'} className="text-indigo-400 hover:text-white underline">Sign In</button> to track your history.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {error && (
                         <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl text-rose-400 text-center">
                             {error}
@@ -403,7 +459,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         <div className="bg-slate-900 rounded-lg p-4 mb-4 space-y-3">
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-400">Player:</span>
-                                <span className="text-white font-bold">{currentUser?.name || currentUser?.email}</span>
+                                <span className="text-white font-bold">{currentUser ? (currentUser.name || currentUser.email) : `${guestName} (Guest)`}</span>
                             </div>
                             <div className="border-t border-slate-700 pt-3 flex justify-between text-lg">
                                 <span className="text-slate-300 font-bold">Total Due:</span>

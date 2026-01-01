@@ -1085,23 +1085,49 @@ const App: React.FC = () => {
       return null;
     }
     return (
-      <BracketWizard
-        user={user}
-        onCancel={() => window.location.hash = '#participant'}
-        onSuccess={(poolId) => {
-          window.location.hash = `#admin/${poolId}`;
-        }}
-      />
+      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+        <Header
+          user={user}
+          isManager={isManager}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
+        />
+        <div className="flex-grow">
+          <BracketWizard
+            user={user}
+            onCancel={() => window.location.hash = '#participant'}
+            onSuccess={(poolId) => {
+              window.location.hash = `#admin/${poolId}`;
+            }}
+          />
+        </div>
+        <Footer />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </div>
     );
   }
 
   if (route.view === 'playoff-wizard') {
     return (
-      <PlayoffWizard
-        user={user}
-        onCancel={() => window.location.hash = '#'}
-        onComplete={(newId) => window.location.hash = `#pool/${newId}`}
-      />
+      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+        <Header
+          user={user}
+          isManager={isManager}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
+        />
+        <div className="flex-grow">
+          <PlayoffWizard
+            user={user}
+            onCancel={() => window.location.hash = '#'}
+            onComplete={(newId) => window.location.hash = `#pool/${newId}`}
+          />
+        </div>
+        <Footer />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </div>
     );
   }
 
@@ -1190,41 +1216,80 @@ const App: React.FC = () => {
 
     if (currentPool.type === 'BRACKET') {
       return (
-        <BracketPoolDashboard
-          pool={currentPool}
-          user={user}
-          onBack={() => window.location.hash = '#'}
-          onShare={() => {
-            navigator.clipboard.writeText(window.location.href);
-            alert("Link copied!");
-          }}
-        />
+        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+          <Header
+            user={user}
+            isManager={isManager}
+            onOpenAuth={() => setShowAuthModal(true)}
+            onLogout={authService.logout}
+            onCreatePool={handleCreatePool}
+          />
+          <div className="flex-grow">
+            <BracketPoolDashboard
+              pool={currentPool}
+              user={user}
+              onBack={() => window.location.hash = '#'}
+              onShare={() => {
+                navigator.clipboard.writeText(window.location.href);
+                alert("Link copied!");
+              }}
+            />
+          </div>
+          <Footer />
+          <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+        </div>
       );
     }
 
     if (currentPool.type === 'PROPS') {
       return (
-        <PropsPoolDashboard
-          pool={currentPool as PropsPool}
-          user={user}
-          isManager={isCurrentPoolManager}
-          isAdmin={isSuperAdmin}
-          onBack={() => { window.location.hash = ''; }}
-        />
+        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+          <Header
+            user={user}
+            isManager={isManager}
+            onOpenAuth={() => setShowAuthModal(true)}
+            onLogout={authService.logout}
+            onCreatePool={handleCreatePool}
+          />
+          <div className="flex-grow">
+            <PropsPoolDashboard
+              pool={currentPool as PropsPool}
+              user={user}
+              isManager={isCurrentPoolManager}
+              isAdmin={isSuperAdmin}
+              onBack={() => { window.location.hash = ''; }}
+            />
+          </div>
+          <Footer />
+          <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+        </div>
       );
     }
 
     if (currentPool.type === 'NFL_PLAYOFFS') {
       return (
-        <PlayoffDashboard
-          pool={currentPool as PlayoffPool}
-          user={user}
-          onBack={() => window.location.hash = '#'}
-          onShare={() => {
-            navigator.clipboard.writeText(window.location.href);
-            alert("Link copied!");
-          }}
-        />
+        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+          <Header
+            user={user}
+            isManager={isManager}
+            onOpenAuth={() => setShowAuthModal(true)}
+            onLogout={authService.logout}
+            onCreatePool={handleCreatePool}
+          />
+          <div className="flex-grow">
+            <PlayoffDashboard
+              pool={currentPool as PlayoffPool}
+              user={user}
+              onBack={() => window.location.hash = '#'}
+              onShare={() => {
+                navigator.clipboard.writeText(window.location.href);
+                alert("Link copied!");
+              }}
+            />
+          </div>
+          <Footer />
+          <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+        </div>
       );
     }
 
