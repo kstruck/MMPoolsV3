@@ -35,9 +35,14 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
 
     // --- Derived Data ---
     const categories = useMemo(() => {
-        const cats = new Set<string>(['Game', 'Player', 'Fun']); // Defaults
+        const cats = new Set<string>(['Game', 'Player', 'Fun', 'Offense', 'Defense', 'Yards', 'TD']);
+        const allItems = [...questions, ...(allCards ? [] : [])]; // Shim if needed
         questions.forEach(q => {
-            if (q.category) cats.add(q.category);
+            if (q.categories && q.categories.length > 0) {
+                q.categories.forEach(c => cats.add(c));
+            } else if (q.category) {
+                cats.add(q.category);
+            }
         });
         return Array.from(cats).sort();
     }, [questions]);
@@ -45,7 +50,9 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
     const filteredQuestions = useMemo(() => {
         return questions.filter(q => {
             const matchesSearch = q.text.toLowerCase().includes(questionSearch.toLowerCase());
-            const matchesCategory = selectedCategory === 'All' || q.category === selectedCategory;
+            const matchesCategory = selectedCategory === 'All'
+                ? true
+                : (q.categories?.includes(selectedCategory) || q.category === selectedCategory);
             return matchesSearch && matchesCategory;
         });
     }, [questions, questionSearch, selectedCategory]);
@@ -63,7 +70,8 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
             options: newQuestionOptions.filter(o => o.trim().length > 0),
             points: newQuestionPoints,
             type: newQuestionType,
-            category: newQuestionCategory
+            category: newQuestionCategory, // Keep for legacy
+            categories: [newQuestionCategory] // Add new array
         };
 
         setQuestions([...questions, newQ]);

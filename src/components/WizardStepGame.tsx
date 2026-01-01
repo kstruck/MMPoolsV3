@@ -257,9 +257,18 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                         <p className="text-xs text-slate-500 mb-2">Players cannot submit or edit cards after this time.</p>
                         <input
                             type="datetime-local"
-                            value={(gameState as any).lockDate ? new Date((gameState as any).lockDate).toISOString().slice(0, 16) : ''}
+                            value={(() => {
+                                const t = (gameState as any).lockDate;
+                                if (!t) return '';
+                                const d = new Date(t);
+                                const offset = d.getTimezoneOffset() * 60000;
+                                const localISOTime = new Date(d.getTime() - offset).toISOString().slice(0, 16);
+                                return localISOTime;
+                            })()}
                             onChange={(e) => {
-                                const date = new Date(e.target.value);
+                                const val = e.target.value;
+                                if (!val) return;
+                                const date = new Date(val);
                                 updateConfig({ lockDate: date.getTime(), date: date.getTime() } as any);
                             }}
                             className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"

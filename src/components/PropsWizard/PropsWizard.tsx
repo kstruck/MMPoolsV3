@@ -26,6 +26,19 @@ const STEPS = [
 ];
 
 export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComplete }) => {
+    if (!user) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-400">
+                <AlertTriangle size={48} className="text-amber-500 mb-4" />
+                <h2 className="text-xl font-bold text-white mb-2">Login Required</h2>
+                <p>You must be signed in to create a pool.</p>
+                <div className="mt-6 flex gap-4">
+                    <button onClick={onCancel} className="px-6 py-2 rounded-lg font-bold text-slate-300 hover:bg-slate-800 transition-colors">Cancel</button>
+                    {/* Parent should handle login modal open via Header or similar if we could callback, but for now just block */}
+                </div>
+            </div>
+        );
+    }
     const [step, setStep] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
