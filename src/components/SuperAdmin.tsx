@@ -1085,7 +1085,7 @@ export const SuperAdmin: React.FC = () => {
                         {themes.map((theme) => (
                             <div
                                 key={theme.id}
-                                className={`bg - slate - 800 rounded - xl border overflow - hidden transition - all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'} `}
+                                className={`bg-slate-800 rounded-xl border overflow-hidden transition-all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'}`}
                             >
                                 {/* Preview */}
                                 <div
