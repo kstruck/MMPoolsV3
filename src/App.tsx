@@ -961,6 +961,16 @@ const App: React.FC = () => {
       );
     }
 
+    if ('type' in currentPool && currentPool.type === 'PROPS') {
+      return (
+        <PropsPoolDashboard
+          pool={currentPool as PropsPool}
+          user={user}
+          onBack={() => window.location.hash = '#participant'}
+        />
+      );
+    }
+
     if (currentPool.type && currentPool.type !== 'SQUARES') {
       return <div className="text-white p-20 text-center font-bold">Admin panel is only available for SQUARES pools. Use the appropriate admin interface for this pool type.</div>;
     }
