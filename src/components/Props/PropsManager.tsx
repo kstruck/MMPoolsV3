@@ -36,7 +36,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
     // --- Derived Data ---
     const categories = useMemo(() => {
         const cats = new Set<string>(['Game', 'Player', 'Fun', 'Offense', 'Defense', 'Yards', 'TD']);
-        const allItems = [...questions, ...(allCards ? [] : [])]; // Shim if needed
+
         questions.forEach(q => {
             if (q.categories && q.categories.length > 0) {
                 q.categories.forEach(c => cats.add(c));
