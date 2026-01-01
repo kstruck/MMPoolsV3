@@ -135,15 +135,28 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
     };
 
     // --- Seed Import Logic ---
+    const [showInspiration, setShowInspiration] = useState(false);
     const [seeds, setSeeds] = useState<PropSeed[]>([]);
     const [seedsLoading, setSeedsLoading] = useState(false);
 
+    const toggleInspiration = () => {
+        const newState = !showInspiration;
+        setShowInspiration(newState);
+        if (newState && seeds.length === 0) {
+            loadSeeds();
+        }
+    };
+
     const loadSeeds = async () => {
-        if (seeds.length > 0) return; // Already loaded
         setSeedsLoading(true);
-        const fetched = await dbService.getPropSeeds();
-        setSeeds(fetched);
-        setSeedsLoading(false);
+        try {
+            const fetched = await dbService.getPropSeeds();
+            setSeeds(fetched);
+        } catch (error) {
+            console.error("Failed to load seeds:", error);
+        } finally {
+            setSeedsLoading(false);
+        }
     };
 
     const filteredSeeds = useMemo(() => {
@@ -243,7 +256,12 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
 
                         {/* Questions List */}
                         <div className="space-y-3">
-                            {filteredQuestions.length === 0 ? (
+                            {questions.length === 0 ? (
+                                <div className="text-center py-12 text-slate-500 bg-slate-900/50 rounded-xl border border-slate-800 border-dashed">
+                                    <p className="font-bold text-slate-400 mb-2">No Questions Added Yet</p>
+                                    <p className="text-sm">Use the form on the right to add custom questions,<br />or click "Need Inspiration?" to browse templates.</p>
+                                </div>
+                            ) : filteredQuestions.length === 0 ? (
                                 <div className="text-center py-12 text-slate-500 bg-slate-900/50 rounded-xl border border-slate-800 border-dashed">
                                     <p>No questions found matching your filters.</p>
                                 </div>
@@ -453,16 +471,16 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                         {/* Seed Import Panel */}
                         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
                             <button
-                                onClick={() => loadSeeds()}
+                                onClick={toggleInspiration}
                                 className="w-full flex items-center justify-between p-4 bg-slate-800 hover:bg-slate-700 transition-colors"
                             >
                                 <span className="font-bold text-white flex items-center gap-2">
                                     <AlertTriangle size={18} className="text-amber-400" /> Need Inspiration?
                                 </span>
-                                <ChevronDown size={20} className={`text-slate-400 transition-transform ${seeds.length > 0 ? 'rotate-180' : ''}`} />
+                                <ChevronDown size={20} className={`text-slate-400 transition-transform ${showInspiration ? 'rotate-180' : ''}`} />
                             </button>
 
-                            {seeds.length > 0 && (
+                            {showInspiration && (
                                 <div className="p-4 border-t border-slate-800 max-h-[500px] overflow-y-auto">
                                     <div className="mb-4">
                                         <input
@@ -474,35 +492,44 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                         />
                                     </div>
 
-                                    {seedsLoading && <div className="text-center p-4 text-slate-500">Loading templates...</div>}
-
-                                    <div className="space-y-6">
-                                        {Object.entries(seedsByCategory).map(([category, items]) => (
-                                            <div key={category}>
-                                                <h4 className="text-xs font-bold text-indigo-400 uppercase mb-2 sticky top-0 bg-slate-900 py-1">{category}</h4>
-                                                <div className="space-y-2">
-                                                    {items.map(seed => (
-                                                        <div key={seed.id} className="group flex items-center justify-between p-2 rounded bg-slate-950 border border-slate-800 hover:border-indigo-500/50 transition-colors">
-                                                            <div>
-                                                                <p className="text-sm font-medium text-slate-200">{seed.text}</p>
-                                                                <p className="text-[10px] text-slate-500">{seed.options.join(' / ')}</p>
+                                    {seedsLoading ? (
+                                        <div className="text-center p-8 text-slate-500 flex flex-col items-center gap-2">
+                                            <div className="animate-spin w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
+                                            Loading templates...
+                                        </div>
+                                    ) : seeds.length === 0 ? (
+                                        <div className="text-center p-8 text-slate-500">
+                                            No templates found.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-6">
+                                            {Object.entries(seedsByCategory).map(([category, items]) => (
+                                                <div key={category}>
+                                                    <h4 className="text-xs font-bold text-indigo-400 uppercase mb-2 sticky top-0 bg-slate-900 py-1">{category}</h4>
+                                                    <div className="space-y-2">
+                                                        {items.map(seed => (
+                                                            <div key={seed.id} className="group flex items-center justify-between p-2 rounded bg-slate-950 border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                                                                <div>
+                                                                    <p className="text-sm font-medium text-slate-200">{seed.text}</p>
+                                                                    <p className="text-[10px] text-slate-500">{seed.options.join(' / ')}</p>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setNewQuestionText(seed.text);
+                                                                        setNewQuestionOptions(seed.options);
+                                                                        setNewQuestionCategory(seed.category || 'Game');
+                                                                    }}
+                                                                    className="opacity-0 group-hover:opacity-100 px-2 py-1 bg-indigo-500/20 text-indigo-300 text-xs rounded hover:bg-indigo-500 hover:text-white transition-all"
+                                                                >
+                                                                    Use
+                                                                </button>
                                                             </div>
-                                                            <button
-                                                                onClick={() => {
-                                                                    setNewQuestionText(seed.text);
-                                                                    setNewQuestionOptions(seed.options);
-                                                                    setNewQuestionCategory(seed.category || 'Game');
-                                                                }}
-                                                                className="opacity-0 group-hover:opacity-100 px-2 py-1 bg-indigo-500/20 text-indigo-300 text-xs rounded hover:bg-indigo-500 hover:text-white transition-all"
-                                                            >
-                                                                Use
-                                                            </button>
-                                                        </div>
-                                                    ))}
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -268,7 +268,7 @@ export const dbService = {
     // --- Prop Seeds ---
     getPropSeeds: async (): Promise<PropSeed[]> => {
         try {
-            const snapshot = await getDocs(collection(db, 'prop_seeds'));
+            const snapshot = await getDocs(collection(db, 'prop_questions'));
             return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PropSeed));
         } catch (error) {
             console.error("Error fetching prop seeds:", error);
@@ -278,7 +278,7 @@ export const dbService = {
 
     createPropSeed: async (seed: Omit<PropSeed, 'id'>): Promise<void> => {
         try {
-            await addDoc(collection(db, 'prop_seeds'), seed);
+            await addDoc(collection(db, 'prop_questions'), seed);
         } catch (error) {
             console.error("Error creating prop seed:", error);
             throw error;
