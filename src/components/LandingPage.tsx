@@ -28,7 +28,7 @@ const BRAND = {
 };
 
 export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
-  const [activeTab, setActiveTab] = React.useState<'squares' | 'survivor' | 'pickem' | 'bracket'>('squares');
+  const [activeTab, setActiveTab] = React.useState<'squares' | 'props' | 'playoff' | 'bracket' | 'survivor' | 'pickem'>('squares');
 
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
@@ -75,8 +75,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           </div>
 
           <h1 className="text-4xl md:text-7xl font-black text-white tracking-tight mb-6 md:mb-8 leading-tight animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ fontFamily: "'Montserrat', sans-serif" }}>
-            Hosting your own Football Squares Pool <br />
-            <span style={{ color: BRAND.orange }}>has never been easier</span>
+            The Ultimate Platform for <br />
+            <span style={{ color: BRAND.orange }}>Squares, Props & Brackets</span>
           </h1>
 
           {/* Stat Cards */}
@@ -308,10 +308,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             {/* Tabs Navigation */}
             <div className="flex flex-wrap justify-center gap-4 mb-12">
               {[
-                { id: 'squares', label: 'Game Day Squares', icon: LayoutGrid },
-                { id: 'survivor', label: 'Survivor Pool', icon: Shield, badge: 'Coming Soon' },
-                { id: 'pickem', label: 'Pick\'em League', icon: CheckCircle2, badge: 'Coming Soon' },
-                { id: 'bracket', label: 'March Madness', icon: Trophy, badge: 'Coming Soon' }
+                { id: 'squares', label: 'Super Bowl Squares', icon: LayoutGrid },
+                { id: 'props', label: 'Prop Bets', icon: Zap, badge: 'New!' },
+                { id: 'playoff', label: 'Playoff Ranking', icon: Star, badge: 'New!' },
+                { id: 'bracket', label: 'Tournament Brackets', icon: Trophy, badge: 'Coming Soon' }
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -329,7 +329,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                   <tab.icon size={16} />
                   {tab.label}
                   {tab.badge && (
-                    <span className="absolute -top-2 -right-2 bg-slate-700 text-[10px] px-2 py-0.5 rounded-full text-slate-300 border border-slate-600">
+                    <span className={`absolute -top-2 -right-2 text-[10px] px-2 py-0.5 rounded-full text-white border border-white/20 shadow-sm ${tab.badge === 'New!' ? 'bg-emerald-500' : 'bg-slate-700'}`}>
                       {tab.badge}
                     </span>
                   )}
@@ -338,9 +338,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
 
             {/* Dynamic Content Area */}
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[400px]">
               {activeTab === 'squares' && (
-                <div className="space-y-16">
+                <div className="space-y-16 animate-in slide-in-from-right-4 duration-500">
                   {/* Intro */}
                   <div className="text-center max-w-3xl mx-auto">
                     <h3 className="text-2xl md:text-3xl font-bold text-white mb-4">Perfect for Every Week</h3>
@@ -402,6 +402,72 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                         </ul>
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'props' && (
+                <div className="space-y-16 animate-in slide-in-from-right-4 duration-500">
+                  <div className="text-center max-w-3xl mx-auto">
+                    <h3 className="text-2xl md:text-3xl font-bold text-white mb-4">Prop Bets & Side Hustles</h3>
+                    <p className="text-lg text-slate-300 leading-relaxed">
+                      Add a <strong className="text-white">Side Hustle</strong> to your main pool or run a standalone Prop Bet challenge. Create custom questions like "Who wins the coin toss?" or "Will there be a safety?" and let players buy cards.
+                    </p>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-8 items-center">
+                    <div className="space-y-6">
+                      <div className="flex gap-4">
+                        <div className="bg-fuchsia-500/20 p-3 rounded-lg text-fuchsia-400 h-fit"><Zap size={24} /></div>
+                        <div>
+                          <h4 className="text-xl font-bold text-white mb-2">Build Your Card</h4>
+                          <p className="text-slate-400">Choose from our library of 50+ pre-seeded questions or write your own custom props. Set point values and tie-breakers.</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="bg-blue-500/20 p-3 rounded-lg text-blue-400 h-fit"><CheckCircle2 size={24} /></div>
+                        <div>
+                          <h4 className="text-xl font-bold text-white mb-2">Live Grading</h4>
+                          <p className="text-slate-400">As the game happens, mark answers as correct. The leaderboard updates instantly so everyone knows where they stand.</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-2xl rotate-1 hover:rotate-0 transition-transform">
+                      <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                        <span className="text-xs font-bold uppercase text-slate-500">Sample Card</span>
+                        <span className="text-emerald-400 font-bold">Live Score: 850</span>
+                      </div>
+                      <div className="space-y-3 opacity-75">
+                        <div className="flex justify-between text-sm"><span className="text-white">Q1: Coin Toss?</span> <span className="text-slate-300 font-mono">HEADS</span></div>
+                        <div className="flex justify-between text-sm"><span className="text-white">Q2: 1st TD Type?</span> <span className="text-slate-300 font-mono">PASS</span></div>
+                        <div className="flex justify-between text-sm"><span className="text-white">Q3: Gatorade Color?</span> <span className="text-slate-300 font-mono">ORANGE</span></div>
+                        <div className="flex justify-between text-sm"><span className="text-white">Q4: MVP Position?</span> <span className="text-slate-300 font-mono">QB</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'playoff' && (
+                <div className="space-y-16 animate-in slide-in-from-right-4 duration-500">
+                  <div className="text-center max-w-3xl mx-auto">
+                    <h3 className="text-2xl md:text-3xl font-bold text-white mb-4">NFL Playoff Ranking Challenge</h3>
+                    <p className="text-lg text-slate-300 leading-relaxed">
+                      A strategic twist on the bracket. Participants rank all 14 playoff teams from 1 (Least Confident) to 14 (Most Confident). Every win earns points equal to the seed rank.
+                    </p>
+                  </div>
+
+                  <div className="grid md:grid-cols-3 gap-6">
+                    {[
+                      { title: "1. Rank The Teams", desc: "Drag and drop the 14 playoff teams. Put your Super Bowl favorite at #14 for maximum points." },
+                      { title: "2. Watch Them Win", desc: "If your #14 team wins a game, you get 14 points. If your #1 team wins, you get 1 point." },
+                      { title: "3. Bonus Multipliers", desc: "Points multiply each round! Wildcard (x1), Divisional (x2), Conference (x4), Super Bowl (x8)." }
+                    ].map((step, i) => (
+                      <div key={i} className="bg-slate-800/50 border border-slate-700 p-6 rounded-xl hover:border-amber-500/50 transition-colors">
+                        <h4 className="font-bold text-white mb-2">{step.title}</h4>
+                        <p className="text-sm text-slate-400 leading-relaxed">{step.desc}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -565,9 +631,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
               <div className="space-y-4">
                 {[
                   { label: 'NFL Squares', status: 'Live Now', active: true, badge: '/squares_badge_dark.png' },
-                  { label: 'College Football Squares', status: 'Live Now', active: true, badge: '/squares_badge_dark.png' },
-                  { label: 'March Madness Brackets', status: 'Live Now', active: true, badge: '/bracket_badge_dark.png' },
-                  { label: "NFL Pick'em", status: 'August 2026', active: false, badge: '/pickem_badge_dark.png' },
+                  { label: 'NFL Playoffs', status: 'Live Now', active: true, badge: '/bracket_badge_dark.png' },
+                  { label: 'Prop Bets', status: 'Live Now', active: true, badge: '/pickem_badge_dark.png' },
+                  { label: 'Bracket Pools', status: 'Coming Soon', active: false, badge: '/bracket_badge_dark.png' },
                   { label: 'Survivor Pools', status: 'August 2026', active: false, badge: '/survivor_badge_dark.png' },
                 ].map((item, i) => (
                   <div key={i} className={`flex items-center justify-between p-4 rounded-xl border ${item.active ? 'border-emerald-500/30' : 'opacity-60'}`} style={{ backgroundColor: item.active ? `${BRAND.emerald}15` : BRAND.navy, borderColor: item.active ? undefined : '#334155' }}>
