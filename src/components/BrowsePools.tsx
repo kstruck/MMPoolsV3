@@ -97,10 +97,15 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                     if (selectedLeague === 'college' && poolLeague !== 'college') return false;
                     if (selectedLeague === 'ncaa_bb') return false; // Squares aren't usually NCAA BB
                 }
-                if (p.type === 'PROPS') {
-                    // Props pools don't strictly have leagues but treating as NFL for now or All
-                    if (selectedLeague !== 'all' && selectedLeague !== 'nfl') return false;
-                }
+            }
+            if (p.type === 'PROPS') {
+                // Props pools don't strictly have leagues but treating as NFL for now or All
+                // If specifically filtering for props, show it.
+                if (selectedLeague === 'props') return true;
+                // If filtering for nfl, maybe show? For now let's strict check
+                if (selectedLeague !== 'all' && selectedLeague !== 'nfl') return false;
+            } else if (selectedLeague === 'props') {
+                return false; // Non-Props pools
             }
 
             return true;
@@ -174,6 +179,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     { id: 'all', label: 'All Sports', active: true },
                                     { id: 'nfl', label: 'NFL Football', active: true },
                                     { id: 'college', label: 'NCAA Football', active: true },
+                                    { id: 'props', label: 'Side Hustle', active: true },
                                     { id: 'ncaa_bb', label: 'NCAA Basketball', active: true },
                                     { id: 'nba', label: 'NBA', active: false },
                                 ].map((sport) => (

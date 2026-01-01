@@ -100,8 +100,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
             if (selectedLeague !== 'all') {
                 if (selectedLeague === 'brackets') {
                     if (!isBracket) return false;
+                } else if (selectedLeague === 'props') {
+                    if (p.type !== 'PROPS') return false;
                 } else {
-                    if (isBracket) return false;
+                    if (isBracket || p.type === 'PROPS') return false;
                     const poolLeague = (p as any).league || 'nfl';
                     const isCollege = poolLeague === 'college' || poolLeague === 'ncaa';
                     const isNfl = poolLeague === 'nfl';
@@ -223,6 +225,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         { id: 'nfl', label: 'NFL Football', active: true },
                                         { id: 'college', label: 'NCAA Football', active: true },
                                         { id: 'brackets', label: 'March Madness', active: true },
+                                        { id: 'props', label: 'Side Hustle', active: true },
                                         { id: 'nba', label: 'NBA', active: false },
                                         { id: 'ncaa_bb', label: 'NCAA Basketball', active: false },
                                     ].map((sport) => (

@@ -94,7 +94,7 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                 <label className="flex items-center justify-between cursor-pointer p-2 mb-2">
                                     <div>
                                         <span className="font-bold text-rose-400 block flex items-center gap-2">
-                                            <Trash2 size={14} /> Auto-Release Unpaid {isProps ? 'Entries' : 'Squares'}
+                                            <Trash2 size={14} /> {isProps ? 'Remove any unpaid entry' : 'Auto-Release Unpaid Squares'}
                                         </span>
                                         <span className="text-xs text-slate-500">Automatically remove {isProps ? 'entry' : 'reservation'} if not paid in time.</span>
                                     </div>
@@ -276,15 +276,15 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                                 <option value="PM" className="bg-slate-900 text-white">PM</option>
                                             </select>
                                         </div>
+                                        <span className="text-slate-400 text-xs mt-3 block">
+                                            <span className="font-bold text-emerald-400 flex items-center gap-1"><CheckCircle size={10} /> Grid will automatically lock {isProps ? '' : 'and numbers will be generated'} at this time.</span>
+                                        </span>
+                                        <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                            📍 Times shown in your local timezone: <span className="font-mono text-slate-400">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span> <br />
+                                            (Server Time: {new Date().toLocaleTimeString([], { timeZoneName: 'short' })})
+                                        </p>
                                     </div>
                                 </div>
-                                <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
-                                    <CheckCircle size={10} /> {isProps ? 'Pool will automatically lock at this time.' : 'Grid will automatically lock and numbers will be generated at this time.'}
-                                </p>
-                                <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
-                                    📍 Times shown in your local timezone: <span className="font-mono text-slate-400">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span> <br />
-                                    (Server Time: {new Date().toLocaleTimeString([], { timeZoneName: 'short' })})
-                                </p>
                             </div>
                         )}
                     </div>

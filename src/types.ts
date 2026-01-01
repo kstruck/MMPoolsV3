@@ -114,6 +114,14 @@ export interface PropsPool {
     paypal?: string;
     googlePay?: string;
   };
+  // New fields for wizard
+  collectPhone?: boolean;
+  collectAddress?: boolean;
+  collectReferral?: boolean;
+  collectNotes?: boolean;
+  emailConfirmation?: string;
+  notifyAdminFull?: boolean;
+  gridPassword?: string;
 }
 
 export interface Player {
