@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Trash2, Edit2, Check, Save, AlertTriangle, ChevronDown, ChevronUp, Search, Filter, X, Lightbulb } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, Save, ChevronDown, ChevronUp, Search, Filter, X, Lightbulb } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PropQuestion, PropsPool, PropCard, PropSeed } from '../../types';
 import { PropStats } from './PropStats';
@@ -555,8 +555,8 @@ const SeedLibrary: React.FC<{
                             key={cat}
                             onClick={() => setActiveCategory(cat)}
                             className={`px-3 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${activeCategory === cat
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
                                 }`}
                         >
                             {cat}
@@ -584,8 +584,8 @@ const SeedLibrary: React.FC<{
                                 <div
                                     key={seed.id}
                                     className={`p-4 rounded-xl border transition-all ${added
-                                            ? 'bg-slate-900/50 border-slate-800 opacity-60'
-                                            : 'bg-slate-900 border-slate-700 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-900/10'
+                                        ? 'bg-slate-900/50 border-slate-800 opacity-60'
+                                        : 'bg-slate-900 border-slate-700 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-900/10'
                                         }`}
                                 >
                                     <div className="flex justify-between items-start gap-3 mb-2">
@@ -606,8 +606,8 @@ const SeedLibrary: React.FC<{
                                             onClick={() => !added && onAdd(seed)}
                                             disabled={added}
                                             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${added
-                                                    ? 'bg-transparent text-slate-600 cursor-default'
-                                                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                                ? 'bg-transparent text-slate-600 cursor-default'
+                                                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                                                 }`}
                                         >
                                             {added ? 'In Pool' : <><Plus size={14} /> Add</>}
