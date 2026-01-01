@@ -439,11 +439,20 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                 </>
             )}
 
-            {/* Locked Message */}
+            {/* Locked / Max Reached Message */}
             {!showNewCardForm && !viewingCardId && activeCards.length > 0 && (
                 <div className="text-center p-6 text-slate-500">
-                    <Lock size={24} className="mx-auto mb-2" />
-                    <p>Picks locked. Good luck!</p>
+                    {effectiveIsLocked ? (
+                        <>
+                            <Lock size={24} className="mx-auto mb-2" />
+                            <p>Picks locked. Good luck!</p>
+                        </>
+                    ) : !canBuyMoreCards ? (
+                        <>
+                            <Trophy size={24} className="mx-auto mb-2 text-slate-600" />
+                            <p>Maximum entries reached ({maxCards}/{maxCards}).</p>
+                        </>
+                    ) : null}
                 </div>
             )}
 

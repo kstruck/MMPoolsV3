@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import type { PropsPool, PropCard } from '../../types';
 import { PropCardForm } from '../Props/PropCardForm'; // Reusing this for "My Cards"
-import { PropsManager } from '../Props/PropsManager';
+
 import { PropGradingDashboard } from '../Props/PropGradingDashboard';
 import { PropLeaderboard } from '../Props/PropLeaderboard';
 import { PropStats } from '../Props/PropStats';
 
 import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check } from 'lucide-react';
+import { PropsWizard as PropWizard } from '../PropsWizard/PropsWizard';
 import { dbService } from '../../services/dbService';
 
 interface PropsPoolDashboardProps {
@@ -31,11 +32,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
     }, [pool.id]);
 
     // Helper functions
-    const updatePoolConfig = async (updates: Partial<PropsPool>) => {
-        if (!pool.id) return;
-        // Cast to any to bypass strict type check for now if needed, but dbService handles Partial<Pool>
-        await dbService.updatePool(pool.id, updates as any);
-    };
+
 
     const showStats = pool.isLocked || isManager || isAdmin;
 
@@ -131,7 +128,13 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
 
                 {activeTab === 'leaderboard' && (
                     <div className="max-w-4xl mx-auto">
-                        <PropLeaderboard gameState={pool as any} currentUser={user} cards={allCards} />
+                        <PropLeaderboard
+                            gameState={pool as any}
+                            currentUser={user}
+                            cards={allCards}
+                            isManager={isManager}
+                            isAdmin={isAdmin}
+                        />
                     </div>
                 )}
 
@@ -143,12 +146,16 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
 
                 {activeTab === 'admin' && (
                     <div className="max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-xl p-6">
-                        <h2 className="text-2xl font-bold text-white mb-6">Pool Settings</h2>
-                        <PropsManager
-                            gameState={pool as any} // Compatible enough
-                            updateConfig={updatePoolConfig as any}
-                            isWizardMode={false}
-                            allCards={allCards}
+                        <PropWizard
+                            user={user}
+                            onCancel={() => setActiveTab('cards')} // Or handle otherwise
+                            onComplete={() => {
+                                // Refresh or notify? The wizard handles actual update.
+                                // Just force a reload or maybe we need to reload pool data?
+                                window.location.reload();
+                            }}
+                            initialData={pool as any}
+                            embedded={true}
                         />
                     </div>
                 )}

@@ -14,6 +14,8 @@ interface PropsWizardProps {
     user: any;
     onCancel: () => void;
     onComplete: (poolId: string) => void;
+    initialData?: PropsPool;
+    embedded?: boolean;
 }
 
 const STEPS = [
@@ -25,7 +27,7 @@ const STEPS = [
     { title: 'Final', icon: '🏁' },
 ];
 
-export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComplete }) => {
+export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComplete, initialData, embedded }) => {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-400">
@@ -34,7 +36,6 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                 <p>You must be signed in to create a pool.</p>
                 <div className="mt-6 flex gap-4">
                     <button onClick={onCancel} className="px-6 py-2 rounded-lg font-bold text-slate-300 hover:bg-slate-800 transition-colors">Cancel</button>
-                    {/* Parent should handle login modal open via Header or similar if we could callback, but for now just block */}
                 </div>
             </div>
         );
@@ -45,42 +46,47 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
     const [showQRCode, setShowQRCode] = useState(false); // For Final Step
 
     // Initial State Template
-    const [config, setConfig] = useState<Partial<PropsPool>>({
-        type: 'PROPS',
-        ownerId: user.uid,
-        name: '',
-        managerName: user.displayName || '',
-        contactEmail: user.email || '',
-        isPublic: true, // Default to true for visibility
-        urlSlug: '',
-        reminders: {
-            payment: { enabled: false, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false },
-            lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: Date.now() + 86400000 },
-            winner: { enabled: true, channels: ['email'], includeDigits: true, includeCharityImpact: true }
-        },
-        branding: {
-            backgroundColor: '#0f172a'
-        },
-        props: {
-            enabled: true,
-            cost: 10,
-            maxCards: 1,
-            questions: [],
-            payouts: [100] // Default winner take all
-        },
-        paymentHandles: {
-            venmo: '',
-            cashapp: '',
-            paypal: '',
-            googlePay: ''
-        },
-        paymentInstructions: '',
-        // Defaults for new fields
-        collectPhone: false,
-        collectAddress: false,
-        collectReferral: false,
-        emailConfirmation: 'No Email Confirmation',
-        notifyAdminFull: false
+    const [config, setConfig] = useState<Partial<PropsPool>>(() => {
+        if (initialData) {
+            return { ...initialData };
+        }
+        return {
+            type: 'PROPS',
+            ownerId: user.uid,
+            name: '',
+            managerName: user.displayName || '',
+            contactEmail: user.email || '',
+            isPublic: true, // Default to true for visibility
+            urlSlug: '',
+            reminders: {
+                payment: { enabled: false, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false },
+                lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: Date.now() + 86400000 },
+                winner: { enabled: true, channels: ['email'], includeDigits: true, includeCharityImpact: true }
+            },
+            branding: {
+                backgroundColor: '#0f172a'
+            },
+            props: {
+                enabled: true,
+                cost: 10,
+                maxCards: 1,
+                questions: [],
+                payouts: [100] // Default winner take all
+            },
+            paymentHandles: {
+                venmo: '',
+                cashapp: '',
+                paypal: '',
+                googlePay: ''
+            },
+            paymentInstructions: '',
+            // Defaults for new fields
+            collectPhone: false,
+            collectAddress: false,
+            collectReferral: false,
+            emailConfirmation: 'No Email Confirmation',
+            notifyAdminFull: false
+        };
     });
 
     const updateConfig = (updates: Partial<PropsPool>) => {
@@ -113,48 +119,50 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
         setError(null);
 
         try {
-            if (!config.name || !config.gameId) {
-                // Warning removed to allow manual entry without gameId if desired, 
-                // but for now gameId is technically required only if we assume auto-scoring.
-                // We'll trust the validation in WizardStepGame which disables Next without name/lockDate.
+            if (initialData && initialData.id) {
+                // UPDATE MODE
+                await dbService.updatePool(initialData.id, config as any);
+                onComplete(initialData.id);
+            } else {
+                // CREATE MODE
+                const payload: any = {
+                    ...config,
+                    createdAt: Date.now(),
+                    isLocked: false,
+                    status: 'active',
+                    ownerId: user.uid,
+                    type: 'PROPS',
+                    // Shims for backend validation (it expects Squares pool fields)
+                    costPerSquare: 0,
+                    maxSquaresPerPlayer: 0,
+                };
+
+                const newPoolId = await dbService.createPool(payload);
+
+                // Redirect to the new pool page
+                window.location.hash = `#pool/${payload.urlSlug || newPoolId}`;
+                onComplete(newPoolId);
             }
 
-            // Create Payload
-            const payload: any = {
-                ...config,
-                createdAt: Date.now(),
-                isLocked: false,
-                status: 'active',
-                ownerId: user.uid,
-                type: 'PROPS',
-                // Shims for backend validation (it expects Squares pool fields)
-                costPerSquare: 0,
-                maxSquaresPerPlayer: 0,
-            };
-
-            const newPoolId = await dbService.createPool(payload);
-
-            // Redirect to the new pool page
-            window.location.hash = `#pool/${payload.urlSlug || newPoolId}`;
-            onComplete(newPoolId); // Ensure parent knows (optional if we redirect)
-
         } catch (err: any) {
-            setError(err.message || 'Failed to create pool.');
+            setError(err.message || 'Failed to save pool.');
             setIsSubmitting(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 flex flex-col">
-            <Header
-                user={user}
-                isManager={user?.role === 'POOL_MANAGER' || user?.role === 'SUPER_ADMIN'}
-                onOpenAuth={() => { }}
-                onLogout={() => { }}
-                onCreatePool={() => { }} // No-op as we are already creating 
-            />
+        <div className={`min-h-screen bg-slate-950 flex flex-col ${embedded ? 'min-h-0 bg-transparent' : ''}`}>
+            {!embedded && (
+                <Header
+                    user={user}
+                    isManager={user?.role === 'POOL_MANAGER' || user?.role === 'SUPER_ADMIN'}
+                    onOpenAuth={() => { }}
+                    onLogout={() => { }}
+                    onCreatePool={() => { }}
+                />
+            )}
 
-            <main className="flex-grow p-4 md:p-8">
+            <main className={`flex-grow ${embedded ? 'p-0' : 'p-4 md:p-8'}`}>
                 <div className="max-w-4xl mx-auto">
                     {/* Wizard Navigation Header */}
                     <div className="flex items-center justify-between mb-8">
@@ -515,7 +523,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                         className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 flex items-center gap-2"
                                     >
                                         {isSubmitting ? <Loader className="animate-spin" /> : <Check />}
-                                        Create Pool
+                                        {initialData ? 'Update Pool' : 'Create Pool'}
                                     </button>
                                 </div>
                             </div>
@@ -523,7 +531,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                     </div>
                 </div>
             </main>
-            <Footer />
+            {!embedded && <Footer />}
         </div>
     );
 };

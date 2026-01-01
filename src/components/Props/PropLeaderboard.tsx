@@ -7,6 +7,8 @@ interface PropLeaderboardProps {
     gameState: GameState;
     currentUser: any;
     cards?: PropCard[];
+    isManager?: boolean;
+    isAdmin?: boolean;
 }
 
 interface LeaderboardEntry extends PropCard {
@@ -15,7 +17,7 @@ interface LeaderboardEntry extends PropCard {
     correctCount: number;
 }
 
-export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, currentUser, cards }) => {
+export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, currentUser, cards, isManager, isAdmin }) => {
     const questions = gameState.props?.questions || [];
     const totalPossiblePoints = questions.reduce((sum, q) => sum + (q.points || 1), 0);
 
@@ -130,7 +132,7 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                                         <tr>
                                             <td colSpan={6} className="bg-slate-950/50 p-0 shadow-inner">
                                                 <div className="p-6 border-b border-slate-800 animate-in fade-in zoom-in-95 duration-200">
-                                                    {!gameState.isLocked ? (
+                                                    {!gameState.isLocked && !isManager && !isAdmin ? (
                                                         <div className="text-center py-8 text-slate-500 italic flex flex-col items-center justify-center gap-2">
                                                             <div className="bg-slate-900 p-3 rounded-full mb-2">
                                                                 <span className="text-2xl">🔒</span>
@@ -148,8 +150,8 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
 
                                                                 return (
                                                                     <div key={q.id} className={`p-3 rounded-lg border flex justify-between items-start gap-3 ${isCorrect ? 'bg-emerald-500/10 border-emerald-500/30' :
-                                                                            isWrong ? 'bg-rose-500/5 border-rose-500/20' :
-                                                                                'bg-slate-900 border-slate-800'
+                                                                        isWrong ? 'bg-rose-500/5 border-rose-500/20' :
+                                                                            'bg-slate-900 border-slate-800'
                                                                         }`}>
                                                                         <div>
                                                                             <div className="text-xs text-slate-500 mb-1 line-clamp-1">{qIdx + 1}. {q.text}</div>
