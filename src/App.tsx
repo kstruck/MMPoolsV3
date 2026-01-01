@@ -963,11 +963,17 @@ const App: React.FC = () => {
 
     if ('type' in currentPool && currentPool.type === 'PROPS') {
       return (
-        <PropsPoolDashboard
-          pool={currentPool as PropsPool}
-          user={user}
-          onBack={() => window.location.hash = '#participant'}
-        />
+        <>
+          <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
+          <PropsPoolDashboard
+            pool={currentPool as PropsPool}
+            user={user}
+            onBack={() => window.location.hash = '#participant'}
+            initialTab="admin"
+            isManager={true}
+          />
+          <Footer />
+        </>
       );
     }
 

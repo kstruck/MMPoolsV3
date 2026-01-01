@@ -16,10 +16,11 @@ interface PropsPoolDashboardProps {
     isManager?: boolean;
     isAdmin?: boolean;
     onBack: () => void;
+    initialTab?: 'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading';
 }
 
-export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack }) => {
-    const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading'>('cards');
+export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack, initialTab = 'cards' }) => {
+    const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading'>(initialTab);
     const [allCards, setAllCards] = useState<PropCard[]>([]);
 
     // Subscribe to cards once at top level

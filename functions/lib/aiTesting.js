@@ -1,0 +1,174 @@
+"use strict";
+/**
+ * AI Testing Cloud Functions
+ * Backend functions that use Gemini AI for test scenario generation,
+ * result validation, and report generation
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = void 0;
+const functions = require("firebase-functions");
+const gemini_1 = require("./gemini");
+const generative_ai_1 = require("@google/generative-ai");
+// ===== SCENARIO GENERATION =====
+const SCENARIO_GENERATION_SCHEMA = {
+    type: generative_ai_1.SchemaType.OBJECT,
+    properties: {
+        scenarioName: { type: generative_ai_1.SchemaType.STRING },
+        description: { type: generative_ai_1.SchemaType.STRING },
+        poolConfig: { type: generative_ai_1.SchemaType.OBJECT },
+        testUsers: {
+            type: generative_ai_1.SchemaType.ARRAY,
+            items: {
+                type: generative_ai_1.SchemaType.OBJECT,
+                properties: {
+                    name: { type: generative_ai_1.SchemaType.STRING },
+                    strategy: { type: generative_ai_1.SchemaType.STRING },
+                    behavior: { type: generative_ai_1.SchemaType.STRING },
+                },
+            },
+        },
+        expectedOutcome: {
+            type: generative_ai_1.SchemaType.OBJECT,
+            properties: {
+                winner: { type: generative_ai_1.SchemaType.STRING },
+                topThree: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+                edgeCases: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+            },
+        },
+        validationChecks: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+    },
+    required: ["scenarioName", "description", "poolConfig", "testUsers", "expectedOutcome", "validationChecks"],
+};
+const buildScenarioPrompt = (poolType) => `
+You are a QA testing expert for a sports pool application.
+
+Your task is to generate detailed, realistic test scenarios based on user requests.
+
+Pool Type: ${poolType}
+
+Guidelines:
+1. Create realistic pool names (e.g., "Sarah's March Madness 2025" not "TEST_123")
+2. Generate diverse test users with varied strategies
+3. Define clear expected outcomes
+4. List specific validation checks
+
+Provide all configuration needed to run the test.
+`;
+exports.generateTestScenario = functions.https.onCall({ secrets: [gemini_1.geminiApiKey] }, async (request) => {
+    try {
+        const { poolType, userRequest } = request.data;
+        const systemPrompt = buildScenarioPrompt(poolType);
+        const facts = {
+            poolType,
+            userRequest,
+            timestamp: new Date().toISOString(),
+        };
+        const result = await (0, gemini_1.generateAIResponse)(systemPrompt, facts, SCENARIO_GENERATION_SCHEMA);
+        return Object.assign(Object.assign({}, result), { poolType });
+    }
+    catch (error) {
+        console.error("Error in generateTestScenario:", error);
+        throw new functions.https.HttpsError("internal", "Failed to generate test scenario");
+    }
+});
+// ===== RESULT VALIDATION =====
+const VALIDATION_SCHEMA = {
+    type: generative_ai_1.SchemaType.OBJECT,
+    properties: {
+        passed: { type: generative_ai_1.SchemaType.BOOLEAN },
+        confidence: { type: generative_ai_1.SchemaType.NUMBER },
+        findings: {
+            type: generative_ai_1.SchemaType.ARRAY,
+            items: {
+                type: generative_ai_1.SchemaType.OBJECT,
+                properties: {
+                    type: { type: generative_ai_1.SchemaType.STRING },
+                    message: { type: generative_ai_1.SchemaType.STRING },
+                    evidence: { type: generative_ai_1.SchemaType.STRING },
+                },
+            },
+        },
+        anomalies: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+        recommendations: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+    },
+    required: ["passed", "confidence", "findings", "anomalies", "recommendations"],
+};
+const buildValidationPrompt = (poolType) => `
+You are a QA expert analyzing test results for a ${poolType} pool.
+
+Your task is to validate test results against expected outcomes.
+
+Guidelines:
+1. Check if winners match expected logic
+2. Verify scores calculated correctly
+3. Ensure payouts distributed properly
+4. Check audit trail completeness
+5. Identify any anomalies or unexpected results
+6. Provide specific recommendations if issues found
+
+Be precise and cite evidence from the test results.
+`;
+exports.validateTestResults = functions.https.onCall({ secrets: [gemini_1.geminiApiKey] }, async (request) => {
+    try {
+        const { scenario, testResult } = request.data;
+        const systemPrompt = buildValidationPrompt(scenario.poolType);
+        const facts = {
+            scenario,
+            testResult,
+            timestamp: new Date().toISOString(),
+        };
+        const result = await (0, gemini_1.generateAIResponse)(systemPrompt, facts, VALIDATION_SCHEMA);
+        return result;
+    }
+    catch (error) {
+        console.error("Error in validateTestResults:", error);
+        throw new functions.https.HttpsError("internal", "Failed to validate test results");
+    }
+});
+// ===== REPORT GENERATION =====
+const REPORT_SCHEMA = {
+    type: generative_ai_1.SchemaType.OBJECT,
+    properties: {
+        executiveSummary: { type: generative_ai_1.SchemaType.STRING },
+        testCoverage: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+        keyFindings: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+        detailedResults: { type: generative_ai_1.SchemaType.STRING },
+        recommendations: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+        nextSteps: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+    },
+    required: ["executiveSummary", "testCoverage", "keyFindings", "detailedResults", "recommendations", "nextSteps"],
+};
+const buildReportPrompt = () => `
+You are a QA report writer creating comprehensive test reports.
+
+Your task is to create markdown-formatted reports with:
+1. Executive Summary (2-3 sentences)
+2. Test Coverage (what was tested)
+3. Key Findings (successes and issues)
+4. Detailed Results
+5. Recommendations (if any issues)
+6. Next Steps
+
+Use emojis for visual clarity (✅ ❌ ⚠️).
+Be concise but thorough.
+Provide actionable recommendations.
+`;
+exports.generateTestReport = functions.https.onCall({ secrets: [gemini_1.geminiApiKey] }, async (request) => {
+    try {
+        const { scenario, testResult, validation } = request.data;
+        const systemPrompt = buildReportPrompt();
+        const facts = {
+            scenario,
+            testResult,
+            validation,
+            timestamp: new Date().toISOString(),
+        };
+        const result = await (0, gemini_1.generateAIResponse)(systemPrompt, facts, REPORT_SCHEMA);
+        return result;
+    }
+    catch (error) {
+        console.error("Error in generateTestReport:", error);
+        throw new functions.https.HttpsError("internal", "Failed to generate test report");
+    }
+});
+//# sourceMappingURL=aiTesting.js.map

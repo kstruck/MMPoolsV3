@@ -105,10 +105,12 @@ exports.publishBracketPool = (0, https_1.onCall)(async (request) => {
         if (slugDoc.exists) {
             throw new https_1.HttpsError("already-exists", "Slug is already taken.");
         }
-        // Hash password if provided
+        // Hash password if provided (PBKDF2)
         let passwordHash = undefined;
         if (password) {
-            passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+            const salt = crypto.randomBytes(16).toString('hex');
+            const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+            passwordHash = `${salt}:${hash}`;
         }
         // Find Season Lock Time (Fetch from Tournament doc)
         const tournamentRef = db.collection("tournaments").doc(`mens-${poolData.seasonYear}`);
@@ -156,9 +158,20 @@ exports.joinBracketPool = (0, https_1.onCall)(async (request) => {
         if (!password) {
             throw new https_1.HttpsError("permission-denied", "Password required.");
         }
-        const providedHash = crypto.createHash('sha256').update(password).digest('hex');
-        if (providedHash !== poolData.passwordHash) {
-            throw new https_1.HttpsError("permission-denied", "Incorrect password.");
+        // Support legacy SHA-256 (if any) and new PBKDF2
+        if (poolData.passwordHash.includes(':')) {
+            const [salt, originalHash] = poolData.passwordHash.split(':');
+            const verifyHash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+            if (originalHash !== verifyHash) {
+                throw new https_1.HttpsError("permission-denied", "Incorrect password.");
+            }
+        }
+        else {
+            // Legacy SHA-256 fallback
+            const providedHash = crypto.createHash('sha256').update(password).digest('hex');
+            if (providedHash !== poolData.passwordHash) {
+                throw new https_1.HttpsError("permission-denied", "Incorrect password.");
+            }
         }
     }
     // Add to members subcollection (to track who has joined/viewing rights)
