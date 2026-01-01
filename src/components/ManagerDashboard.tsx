@@ -137,8 +137,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                 return bPrice - aPrice; // Highest first
             }
             if (sortBy === 'fill') {
-                const aFill = aIsBracket ? 0 : (a as GameState).squares.filter(s => s.owner).length;
-                const bFill = bIsBracket ? 0 : (b as GameState).squares.filter(s => s.owner).length;
+                const aFill = aIsBracket ? 0 : a.type === 'SQUARES' ? (a as GameState).squares?.filter(s => s.owner).length || 0 : 0;
+                const bFill = bIsBracket ? 0 : b.type === 'SQUARES' ? (b as GameState).squares?.filter(s => s.owner).length || 0 : 0;
                 return bFill - aFill; // Fullest first
             }
             return 0;
@@ -383,9 +383,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                             awayTeam = 'Bracket';
                                             cost = bp.settings.entryFee;
                                             isLocked = bp.status !== 'DRAFT' && bp.status !== 'PUBLISHED';
-                                        } else {
+                                        } else if (pool.type === 'SQUARES') {
                                             const sp = pool as GameState;
-                                            filled = sp.squares.filter(s => s.owner).length;
+                                            filled = sp.squares?.filter(s => s.owner).length || 0;
                                             pct = Math.round((filled / 100) * 100);
                                             homeTeam = sp.homeTeam;
                                             awayTeam = sp.awayTeam;
@@ -394,6 +394,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                             cost = sp.costPerSquare;
                                             isLocked = sp.isLocked;
                                             charityEnabled = !!sp.charity?.enabled;
+                                        } else {
+                                            // NFL_PLAYOFFS or PROPS
+                                            const pp = pool as any;
+                                            filled = pp.entryCount || 0;
+                                            pct = 0; // No percentage for these types
+                                            homeTeam = pp.name || 'Pool';
+                                            awayTeam = pool.type === 'NFL_PLAYOFFS' ? 'Playoffs' : 'Props';
+                                            cost = pp.settings?.entryFee || 0;
+                                            isLocked = pp.isLocked || false;
                                         }
 
                                         return (
