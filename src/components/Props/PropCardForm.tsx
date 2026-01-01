@@ -29,10 +29,6 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const [editingCardId, setEditingCardId] = useState<string | null>(null); // NEW: editing mode
     const [showNewCardForm, setShowNewCardForm] = useState(false);
 
-    // Guest State
-    const [guestName, setGuestName] = useState('');
-    const [guestEmail, setGuestEmail] = useState('');
-
     const activeCards = userCards || fetchedCards;
     const [isConfirming, setIsConfirming] = useState(false);
     const [liabilityAccepted, setLiabilityAccepted] = useState(false);
@@ -44,10 +40,10 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     // Subscribe to cards if not provided via props
     useEffect(() => {
         if (userCards) return;
-        if (!effectivePoolId || !currentUser?.id) return;
+        if (!effectivePoolId || !currentUser?.uid) return; // Use uid for subscription filter
 
         const unsub = dbService.subscribeToAllPropCards(effectivePoolId, (cards) => {
-            const myCards = cards.filter((c: any) => c.userId === currentUser.id);
+            const myCards = cards.filter((c: any) => c.userId === currentUser.uid);
             setFetchedCards(myCards);
 
             // Auto-show new card form if no cards yet
@@ -56,7 +52,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             }
         });
         return () => unsub();
-    }, [effectivePoolId, currentUser?.id]);
+    }, [effectivePoolId, currentUser?.uid]);
 
     const canBuyMoreCards = activeCards.length < maxCards;
     const viewingCard = viewingCardId ? activeCards.find(c => (c as any).id === viewingCardId) : null;
@@ -68,7 +64,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     }, [userCards]);
 
     const handleInitPurchase = () => {
-        // if (!currentUser) return; // Allow guests
+        if (!currentUser) return;
         setError(null);
 
         if (Object.keys(answers).length < questions.length) {
@@ -81,33 +77,19 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             return;
         }
 
-        if (!currentUser) {
-            if (!guestName.trim()) {
-                setError("Guest Name is required.");
-                return;
-            }
-            if (!guestEmail.trim() || !guestEmail.includes('@')) {
-                setError("Valid Guest Email is required.");
-                return;
-            }
-        }
-
         setLiabilityAccepted(false); // Reset checkbox
         setIsConfirming(true);
     };
 
     const handleFinalizePurchase = async () => {
-        // if (!currentUser) return; // Allow guests
+        if (!currentUser) return;
         setIsSubmitting(true);
         setError(null);
 
         try {
             const name = cardName.trim() || `Card #${activeCards.length + 1}`;
-            // If guest, use guest data
-            const finalUserName = currentUser ? (currentUser.name || currentUser.email) : guestName;
-            const finalEmail = currentUser ? undefined : guestEmail;
 
-            await dbService.purchasePropCard(effectivePoolId, answers, Number(tiebreaker), finalUserName, name, finalEmail);
+            await dbService.purchasePropCard(effectivePoolId, answers, Number(tiebreaker), currentUser.displayName || currentUser.email, name);
             // Reset form
 
             setAnswers({});
@@ -367,38 +349,20 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         />
                     </div>
 
-                    {/* Guest Fields (if not logged in) */}
+                    {/* Login Required (if not logged in) */}
                     {!currentUser && (
-                        <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700">
-                            <h4 className="text-white font-medium text-lg mb-2 flex items-center gap-2">
-                                Guest Info <span className="text-xs font-normal text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">Required</span>
-                            </h4>
-                            <div className="space-y-3">
-                                <div className="space-y-1">
-                                    <label className="text-xs text-slate-400 font-bold uppercase">Name</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Enter your name"
-                                        className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded-lg"
-                                        value={guestName}
-                                        onChange={e => setGuestName(e.target.value)}
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs text-slate-400 font-bold uppercase">Email</label>
-                                    <input
-                                        type="email"
-                                        placeholder="Enter your email (for verification)"
-                                        className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded-lg"
-                                        value={guestEmail}
-                                        onChange={e => setGuestEmail(e.target.value)}
-                                    />
-                                    <p className="text-[10px] text-slate-500">
-                                        We use this to verify your entry if you win. {` `}
-                                        <button onClick={() => window.location.hash = '#auth'} className="text-indigo-400 hover:text-white underline">Sign In</button> to track your history.
-                                    </p>
-                                </div>
-                            </div>
+                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 text-center">
+                            <Lock className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+                            <h3 className="text-xl font-bold text-white mb-2">Login Required</h3>
+                            <p className="text-slate-400 mb-6">
+                                You must be signed in to submit your picks for this pool.
+                            </p>
+                            <button
+                                onClick={() => window.location.hash = '#auth'}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-lg shadow-indigo-500/20"
+                            >
+                                Sign In / Register
+                            </button>
                         </div>
                     )}
 
@@ -468,7 +432,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         <div className="bg-slate-900 rounded-lg p-4 mb-4 space-y-3">
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-400">Player:</span>
-                                <span className="text-white font-bold">{currentUser ? (currentUser.name || currentUser.email) : `${guestName} (Guest)`}</span>
+                                <span className="text-white font-bold">{currentUser?.name || currentUser?.email || 'Unknown User'}</span>
                             </div>
                             <div className="border-t border-slate-700 pt-3 flex justify-between text-lg">
                                 <span className="text-slate-300 font-bold">Total Due:</span>
