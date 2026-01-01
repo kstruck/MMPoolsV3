@@ -224,6 +224,7 @@ export interface PropQuestion {
   points?: number; // Point value for correct answer (default: 1)
   type?: 'standard' | 'tiebreaker'; // Question type (default: 'standard')
   category?: string; // Optional category (e.g. "Q1", "Player", "Fun")
+  categories?: string[]; // Multiple categories support
 }
 
 export interface PropCard {
@@ -242,6 +243,7 @@ export interface PropSeed {
   text: string;
   options: string[];
   category?: string; // e.g. "Game", "Player", "Fun"
+  categories?: string[]; // Multiple categories support
   createdAt: number;
 }
 
