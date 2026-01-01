@@ -69,6 +69,7 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
  * Multipliers: Wild Card (10x), Divisional (12x), Conf (15x), SB (20x)
  */
 exports.calculatePlayoffScores = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c, _d, _e, _f;
     // Admin only? For now allow any auth for testing, or restrict.
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
@@ -86,11 +87,13 @@ exports.calculatePlayoffScores = (0, https_1.onCall)(async (request) => {
     const pool = poolDoc.data();
     // Scoring Logic
     // Access results: pool.results.WILD_CARD = ['KC', 'BUF']
+    // Use customized multipliers if available, otherwise fallback to defaults (Legacy support: 10, 12, 15, 20)
+    const settings = (_b = (_a = pool.settings) === null || _a === void 0 ? void 0 : _a.scoring) === null || _b === void 0 ? void 0 : _b.roundMultipliers;
     const MULTIPLIERS = {
-        'WILD_CARD': 10,
-        'DIVISIONAL': 12,
-        'CONF_CHAMP': 15,
-        'SUPER_BOWL': 20
+        'WILD_CARD': (_c = settings === null || settings === void 0 ? void 0 : settings.WILD_CARD) !== null && _c !== void 0 ? _c : 10,
+        'DIVISIONAL': (_d = settings === null || settings === void 0 ? void 0 : settings.DIVISIONAL) !== null && _d !== void 0 ? _d : 12,
+        'CONF_CHAMP': (_e = settings === null || settings === void 0 ? void 0 : settings.CONF_CHAMP) !== null && _e !== void 0 ? _e : 15,
+        'SUPER_BOWL': (_f = settings === null || settings === void 0 ? void 0 : settings.SUPER_BOWL) !== null && _f !== void 0 ? _f : 20
     };
     const winnersWC = pool.results.WILD_CARD || [];
     const winnersDiv = pool.results.DIVISIONAL || [];

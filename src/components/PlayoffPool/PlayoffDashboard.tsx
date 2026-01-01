@@ -130,9 +130,40 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                             <ul className="list-disc pl-5 space-y-2 text-slate-300">
                                 <li>Rank all 14 playoff teams from 14 (Strongest) to 1 (Weakest).</li>
                                 <li>Earn points equal to the assigned rank when a team wins.</li>
-                                <li>Points are multiplied in later rounds (10x, 12x, 15x, 20x).</li>
+                                <li>
+                                    Points are multiplied in each round:
+                                    <ul className="list-none grid grid-cols-2 gap-2 mt-2 font-mono text-sm text-emerald-400">
+                                        <li>Wild Card: {pool.settings?.scoring?.roundMultipliers?.WILD_CARD ?? 1}x</li>
+                                        <li>Divisional: {pool.settings?.scoring?.roundMultipliers?.DIVISIONAL ?? 2}x</li>
+                                        <li>Conference: {pool.settings?.scoring?.roundMultipliers?.CONF_CHAMP ?? 4}x</li>
+                                        <li>Super Bowl: {pool.settings?.scoring?.roundMultipliers?.SUPER_BOWL ?? 8}x</li>
+                                    </ul>
+                                </li>
                                 <li>Highest total score wins!</li>
                             </ul>
+
+                            {pool.settings?.payouts && (
+                                <>
+                                    <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payout Structure</h3>
+                                    <div className="grid gap-2 max-w-sm">
+                                        {pool.settings.payouts.places.map((p: any) => (
+                                            <div key={p.rank} className="flex justify-between p-3 bg-slate-950 rounded-lg">
+                                                <span className="font-bold text-slate-300">{p.rank === 1 ? '1st' : p.rank + 'th'} Place</span>
+                                                <span className="font-mono text-emerald-400">{p.percentage}%</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+
+                            {pool.settings?.paymentInstructions && (
+                                <>
+                                    <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payment Instructions</h3>
+                                    <div className="bg-slate-950 p-4 rounded-lg text-slate-300 whitespace-pre-wrap">
+                                        {pool.settings.paymentInstructions}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>

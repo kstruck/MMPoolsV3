@@ -30,9 +30,14 @@ export const createPool = onCall(async (request) => {
         const data = JSON.parse(JSON.stringify(rawData));
 
         // Validate inputs
-        // Validate inputs
-        if (!data.name || data.costPerSquare === undefined) {
-            throw new HttpsError('invalid-argument', 'Missing required fields (name, costPerSquare).');
+        if (!data.name) {
+            throw new HttpsError('invalid-argument', 'Missing required field: name');
+        }
+
+        const isSquaresPool = !data.type || data.type === 'SQUARES';
+
+        if (isSquaresPool && data.costPerSquare === undefined) {
+            throw new HttpsError('invalid-argument', 'Missing required field: costPerSquare');
         }
 
         const poolsRef = db.collection('pools');
@@ -45,7 +50,7 @@ export const createPool = onCall(async (request) => {
         // Prepare Pool Data
         const now = admin.firestore.Timestamp.now();
 
-        const newPool = {
+        const newPool: any = {
             ...data,
             id: poolId,
             createdByUid: uid,
@@ -53,18 +58,21 @@ export const createPool = onCall(async (request) => {
             createdAt: now,
             updatedAt: now,
             status: 'DRAFT',
-            squares: Array(100).fill(null).map((_, i) => ({ id: i, owner: null })),
             isLocked: false,
-            // Ensure scores structure is valid and sanitized
-            scores: {
+        };
+
+        // Initialize Squares-specific data
+        if (isSquaresPool) {
+            newPool.squares = Array(100).fill(null).map((_, i) => ({ id: i, owner: null }));
+            newPool.scores = {
                 current: null,
                 q1: null,
                 half: null,
                 q3: null,
                 final: null,
                 gameStatus: 'pre'
-            }
-        };
+            };
+        }
 
         // Explicitly remove undefined for safety (though JSON.parse above handles most)
         if (newPool.gameId === undefined) delete newPool.gameId;

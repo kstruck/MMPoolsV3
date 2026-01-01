@@ -105,11 +105,13 @@ export const calculatePlayoffScores = onCall(async (request) => {
     // Scoring Logic
     // Access results: pool.results.WILD_CARD = ['KC', 'BUF']
 
+    // Use customized multipliers if available, otherwise fallback to defaults (Legacy support: 10, 12, 15, 20)
+    const settings = pool.settings?.scoring?.roundMultipliers;
     const MULTIPLIERS = {
-        'WILD_CARD': 10,
-        'DIVISIONAL': 12,
-        'CONF_CHAMP': 15,
-        'SUPER_BOWL': 20
+        'WILD_CARD': settings?.WILD_CARD ?? 10,
+        'DIVISIONAL': settings?.DIVISIONAL ?? 12,
+        'CONF_CHAMP': settings?.CONF_CHAMP ?? 15,
+        'SUPER_BOWL': settings?.SUPER_BOWL ?? 20
     };
 
     const winnersWC = pool.results.WILD_CARD || [];

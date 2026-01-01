@@ -40,20 +40,29 @@ export interface PlayoffPool {
   name: string;
   ownerId: string;
   urlSlug?: string;
-  season: string; // "2024"
+  season: string;
   createdAt: number;
 
-  // Settings
-  entryFee: number;
-  payouts: PayoutConfig; // Could reuse existing or define custom
+  settings: {
+    entryFee: number;
+    paymentInstructions: string;
+    isListedPublic: boolean;
+    payouts: PayoutSettings;
+    scoring: {
+      roundMultipliers: {
+        WILD_CARD: number;
+        DIVISIONAL: number;
+        CONF_CHAMP: number;
+        SUPER_BOWL: number;
+      };
+    };
+  };
 
   // State
-  teams: PlayoffTeam[]; // All 14 teams
-  entries: Record<string, PlayoffEntry>; // userId -> Entry
-
-  // Scoring State
+  teams: PlayoffTeam[];
+  entries: Record<string, PlayoffEntry>;
   results: {
-    [key in PlayoffRound]?: string[]; // Array of winner teamIds
+    [key in PlayoffRound]?: string[];
   };
 
   isLocked: boolean;

@@ -408,13 +408,24 @@ export interface PlayoffPool {
     season: string;
     createdAt: number;
 
-    entryFee: number;
-    // Note: Using PayoutConfig from existing types or custom if needed
-    payouts: any;
+    settings: {
+        entryFee: number;
+        paymentInstructions: string;
+        isListedPublic: boolean;
+        payouts: PayoutSettings;
+        scoring: {
+            roundMultipliers: {
+                WILD_CARD: number;
+                DIVISIONAL: number;
+                CONF_CHAMP: number;
+                SUPER_BOWL: number;
+            };
+        };
+    };
 
+    // State
     teams: PlayoffTeam[];
     entries: Record<string, PlayoffEntry>;
-
     results: {
         [key in PlayoffRound]?: string[];
     };
