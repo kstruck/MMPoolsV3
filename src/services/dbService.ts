@@ -117,6 +117,11 @@ export const dbService = {
         await fn({ poolId, questionId, correctOptionIndex });
     },
 
+    updatePropCard: async (poolId: string, cardId: string, answers: Record<string, number>, tiebreakerVal: number, cardName?: string) => {
+        const fn = httpsCallable(functions, 'updatePropCard');
+        await fn({ poolId, cardId, answers, tiebreakerVal, cardName });
+    },
+
     getPropCards: async (poolId: string) => {
         const q = collection(db, 'pools', poolId, 'propCards');
         const snap = await getDocs(q);

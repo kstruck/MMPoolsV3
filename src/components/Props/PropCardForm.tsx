@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { GameState, PropCard } from '../../types';
 import { dbService } from '../../services/dbService';
-import { Check, Lock, Trophy, Plus, Eye } from 'lucide-react';
+import { Check, Lock, Trophy, Plus, Eye, Edit2, Save } from 'lucide-react';
 
 interface PropCardFormProps {
     gameState: GameState;
@@ -17,6 +17,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const [error, setError] = useState<string | null>(null);
     const [userCards, setUserCards] = useState<PropCard[]>([]);
     const [viewingCardId, setViewingCardId] = useState<string | null>(null);
+    const [editingCardId, setEditingCardId] = useState<string | null>(null); // NEW: editing mode
     const [showNewCardForm, setShowNewCardForm] = useState(false);
 
     const questions = gameState.props?.questions || [];
@@ -75,8 +76,53 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     };
 
     const handleSelect = (qId: string, optIdx: number) => {
-        if (viewingCardId) return; // Viewing existing card, can't edit
+        // Allow selection when creating new OR editing existing
+        if (viewingCardId && !editingCardId) return;
         setAnswers(prev => ({ ...prev, [qId]: optIdx }));
+    };
+
+    // Start editing an existing card
+    const handleStartEdit = (card: PropCard & { id: string }) => {
+        if (gameState.isLocked) return;
+        setEditingCardId(card.id);
+        setViewingCardId(null); // Ensure we are NOT in viewing mode, but in editing mode
+        setAnswers(card.answers || {});
+        setTiebreaker(card.tiebreakerVal?.toString() || '');
+        setCardName(card.cardName || '');
+        setShowNewCardForm(true); // Show the form for editing
+    };
+
+    // Save edits to existing card
+    const handleSaveEdit = async () => {
+        if (!editingCardId) return;
+        setIsSubmitting(true);
+        setError(null);
+
+        if (Object.keys(answers).length < questions.length) {
+            setError("Please answer all questions.");
+            setIsSubmitting(false);
+            return;
+        }
+
+        if (!tiebreaker) {
+            setError("Please enter a tiebreaker.");
+            setIsSubmitting(false);
+            return;
+        }
+
+        try {
+            await dbService.updatePropCard(gameState.id, editingCardId, answers, Number(tiebreaker), cardName || undefined);
+            // Reset edit state
+            setEditingCardId(null);
+            setViewingCardId(null);
+            setAnswers({});
+            setTiebreaker('');
+            setCardName('');
+        } catch (e: any) {
+            setError(e.message || "Failed to save changes.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     // Calculate score for a card
@@ -130,7 +176,21 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                             TB: {card.tiebreakerVal}
                                         </div>
                                     </div>
-                                    <Eye size={16} className={isViewing ? 'text-indigo-400' : 'text-slate-500'} />
+                                    <div className="flex items-center gap-2">
+                                        {!gameState.isLocked && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleStartEdit(card as any);
+                                                }}
+                                                className="p-2 text-indigo-400 hover:text-indigo-300 hover:bg-slate-800 rounded-full"
+                                                title="Edit Picks"
+                                            >
+                                                <Edit2 size={16} />
+                                            </button>
+                                        )}
+                                        <Eye size={16} className={isViewing ? 'text-indigo-400' : 'text-slate-500'} />
+                                    </div>
                                 </div>
                             );
                         })}
@@ -154,19 +214,31 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                     <p className="text-slate-300">
                         Score: <span className="text-white font-bold text-2xl mx-2">{getCardScore(viewingCard).score} / {getTotalPoints()} pts</span>
                     </p>
-                    <button
-                        onClick={() => setViewingCardId(null)}
-                        className="mt-2 text-xs text-indigo-400 hover:text-indigo-300"
-                    >
-                        Close View
-                    </button>
+                    <div className="flex justify-center gap-2 mt-2">
+                        {!gameState.isLocked && (
+                            <button
+                                onClick={() => handleStartEdit(viewingCard as any)}
+                                className="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/50 px-3 py-1 rounded-full flex items-center gap-1"
+                            >
+                                <Edit2 size={12} /> Edit Picks
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setViewingCardId(null)}
+                            className="text-xs text-slate-400 hover:text-slate-300 px-3 py-1"
+                        >
+                            Close View
+                        </button>
+                    </div>
                 </div>
             )}
 
             {/* New Card Form - Card Naming */}
             {showNewCardForm && !viewingCardId && (
-                <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl mb-6">
-                    <h3 className="text-emerald-400 font-bold text-lg mb-2">New Card</h3>
+                <div className={`p-4 rounded-xl mb-6 ${editingCardId ? 'bg-indigo-500/10 border border-indigo-500/30' : 'bg-emerald-500/10 border border-emerald-500/30'}`}>
+                    <h3 className={`${editingCardId ? 'text-indigo-400' : 'text-emerald-400'} font-bold text-lg mb-2`}>
+                        {editingCardId ? 'Edit Card' : 'New Card'}
+                    </h3>
                     <input
                         type="text"
                         placeholder={`Card name (e.g. "${currentUser?.name || 'My'}'s Lucky Pick")`}
@@ -254,20 +326,28 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                     )}
 
                     <button
-                        onClick={handleSubmit}
+                        onClick={editingCardId ? handleSaveEdit : handleSubmit}
                         disabled={isSubmitting || gameState.isLocked}
                         className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl text-lg shadow-lg shadow-indigo-500/25 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                        {isSubmitting ? 'Submitting...' : gameState.isLocked ? (
+                        {isSubmitting ? (editingCardId ? 'Saving...' : 'Submitting...') : gameState.isLocked ? (
                             <><Lock size={20} /> Picks Locked</>
+                        ) : editingCardId ? (
+                            <><Save size={20} /> Save Changes</>
                         ) : (
-                            <>Purchase Card (${cost})</>
+                            <><Plus size={20} /> Purchase Card (${cost})</>
                         )}
                     </button>
 
-                    {userCards.length > 0 && (
+                    {(userCards.length > 0 || editingCardId) && (
                         <button
-                            onClick={() => setShowNewCardForm(false)}
+                            onClick={() => {
+                                setShowNewCardForm(false);
+                                setEditingCardId(null);
+                                setAnswers({});
+                                setTiebreaker('');
+                                setCardName('');
+                            }}
                             className="w-full py-2 text-slate-400 hover:text-slate-300"
                         >
                             Cancel

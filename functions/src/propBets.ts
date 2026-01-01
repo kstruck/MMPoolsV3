@@ -130,3 +130,52 @@ export const gradeProp = onCall(async (request) => {
 
     return { success: true, updated: cardsSnap.size };
 });
+
+// 3. Update Prop Card (Edit answers before lock)
+export const updatePropCard = onCall(async (request) => {
+    // request.data = { poolId, cardId, answers, tiebreakerVal, cardName }
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'Must be logged in.');
+    }
+
+    const { poolId, cardId, answers, tiebreakerVal, cardName } = request.data;
+    const userId = request.auth.uid;
+    const db = admin.firestore();
+
+    if (!poolId || !cardId || !answers) {
+        throw new HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    // Check pool status
+    const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists) {
+        throw new HttpsError('not-found', 'Pool not found.');
+    }
+    const poolData = poolSnap.data() as GameState;
+
+    if (poolData.isLocked) {
+        throw new HttpsError('failed-precondition', 'Pool is locked. Cannot edit answers.');
+    }
+
+    // Verify card ownership
+    const cardRef = poolRef.collection('propCards').doc(cardId);
+    const cardSnap = await cardRef.get();
+    if (!cardSnap.exists) {
+        throw new HttpsError('not-found', 'Card not found.');
+    }
+    const cardData = cardSnap.data() as PropCard;
+    if (cardData.userId !== userId) {
+        throw new HttpsError('permission-denied', 'You can only edit your own cards.');
+    }
+
+    // Update the card
+    await cardRef.update({
+        answers,
+        tiebreakerVal: Number(tiebreakerVal) || cardData.tiebreakerVal,
+        cardName: cardName || cardData.cardName,
+        updatedAt: Date.now()
+    });
+
+    return { success: true };
+});

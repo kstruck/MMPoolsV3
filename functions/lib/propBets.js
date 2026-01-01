@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.gradeProp = exports.purchasePropCard = void 0;
+exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 // 1. Purchase Prop Card (Supports multiple cards per user)
@@ -103,5 +103,46 @@ exports.gradeProp = (0, https_1.onCall)(async (request) => {
     });
     await batch.commit();
     return { success: true, updated: cardsSnap.size };
+});
+// 3. Update Prop Card (Edit answers before lock)
+exports.updatePropCard = (0, https_1.onCall)(async (request) => {
+    // request.data = { poolId, cardId, answers, tiebreakerVal, cardName }
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
+    }
+    const { poolId, cardId, answers, tiebreakerVal, cardName } = request.data;
+    const userId = request.auth.uid;
+    const db = admin.firestore();
+    if (!poolId || !cardId || !answers) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing required fields.');
+    }
+    // Check pool status
+    const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists) {
+        throw new https_1.HttpsError('not-found', 'Pool not found.');
+    }
+    const poolData = poolSnap.data();
+    if (poolData.isLocked) {
+        throw new https_1.HttpsError('failed-precondition', 'Pool is locked. Cannot edit answers.');
+    }
+    // Verify card ownership
+    const cardRef = poolRef.collection('propCards').doc(cardId);
+    const cardSnap = await cardRef.get();
+    if (!cardSnap.exists) {
+        throw new https_1.HttpsError('not-found', 'Card not found.');
+    }
+    const cardData = cardSnap.data();
+    if (cardData.userId !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'You can only edit your own cards.');
+    }
+    // Update the card
+    await cardRef.update({
+        answers,
+        tiebreakerVal: Number(tiebreakerVal) || cardData.tiebreakerVal,
+        cardName: cardName || cardData.cardName,
+        updatedAt: Date.now()
+    });
+    return { success: true };
 });
 //# sourceMappingURL=propBets.js.map
