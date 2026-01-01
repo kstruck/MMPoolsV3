@@ -373,10 +373,14 @@ export const SuperAdmin: React.FC = () => {
             let sport = 'Other';
             if (isBracket) {
                 sport = 'March Madness';
+            } else if (p.type === 'NFL_PLAYOFFS') {
+                sport = 'NFL Playoffs';
             } else if (p.type === 'PROPS') {
                 sport = 'Props Pool';
-            } else {
+            } else if (p.type === 'SQUARES') {
                 sport = getLeagueDisplayName((p as GameState).league);
+            } else {
+                sport = getLeagueDisplayName((p as any).league);
             }
             if (sport !== sportFilter) matchesSport = false;
         }
@@ -430,10 +434,16 @@ export const SuperAdmin: React.FC = () => {
         let sport = 'Other';
         if (pool.type === 'BRACKET') {
             sport = 'March Madness';
+        } else if (pool.type === 'NFL_PLAYOFFS') {
+            sport = 'NFL Playoffs';
         } else if (pool.type === 'PROPS') {
             sport = 'Props Pool';
-        } else {
+        } else if (pool.type === 'SQUARES') {
+            // SQUARES type has league property
             sport = getLeagueDisplayName((pool as GameState).league);
+        } else {
+            // Fallback for any other types that might have league
+            sport = getLeagueDisplayName((pool as any).league);
         }
 
         if (!acc[sport]) acc[sport] = [];
