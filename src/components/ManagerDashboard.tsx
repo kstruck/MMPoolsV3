@@ -439,11 +439,17 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                         </div>
                                                         <div className="text-center">
                                                             <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                                                                {isBracket ? (
-                                                                    (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD'
-                                                                ) : (
-                                                                    (pool as GameState).scores.startTime ? new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD'
-                                                                )}
+                                                                {(() => {
+                                                                    if (pool.type === 'BRACKET') {
+                                                                        return (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD';
+                                                                    } else if (pool.type === 'NFL_PLAYOFFS') {
+                                                                        return (pool as any).lockDate ? new Date((pool as any).lockDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD';
+                                                                    } else if (pool.type === 'SQUARES' && (pool as GameState).scores?.startTime) {
+                                                                        return new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                                                                    } else {
+                                                                        return 'Date TBD';
+                                                                    }
+                                                                })()}
                                                             </span>
                                                         </div>
                                                     </div>
