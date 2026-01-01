@@ -1,564 +1,503 @@
-import React, { useState, useEffect } from 'react';
-import type { GameState, PropQuestion, PropSeed, PropCard } from '../../types';
-import { Plus, Trash2, Check, Download, Save, X, Edit2, Star, Zap, Users, Loader } from 'lucide-react';
-import { dbService } from '../../services/dbService';
+import { useState, useMemo } from 'react';
+import { Plus, Trash2, Edit2, Check, X, Save, AlertTriangle, ChevronDown, ChevronUp, Search, Filter, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
+import { dbService } from '../../lib/dbService';
+import { PropQuestion, PropsPool, PropCard, PropSeed } from '../../types';
+import { PropStats } from './PropStats';
 
 interface PropsManagerProps {
-    gameState: GameState;
-    updateGameState?: (updates: Partial<GameState>) => void; // Optional for wizard updates
-    isWizardMode?: boolean;
-    updateConfig: (updates: Partial<GameState>) => void;
+    gameState: PropsPool;
+    updateConfig?: (updates: Partial<PropsPool>) => void; // Optional if just managing live pool
+    allCards?: PropCard[];
 }
 
-export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateConfig, isWizardMode }) => {
-    const [newQuestionText, setNewQuestionText] = useState('');
-    const [options, setOptions] = useState<string[]>(['', '']);
-    const [points, setPoints] = useState(1);
+export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateConfig, allCards }) => {
+    // Local state for form management
+    const [questions, setQuestions] = useState<PropQuestion[]>(gameState.props.questions || []);
     const [editingId, setEditingId] = useState<string | null>(null);
 
-    // Seed State
-    const [seeds, setSeeds] = useState<PropSeed[]>([]);
-    const [showSeedPanel, setShowSeedPanel] = useState(false);
+    // Filter/Search State
+    const [questionSearch, setQuestionSearch] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState<string>('All');
+    const [seedSearch, setSeedSearch] = useState('');
 
-    useEffect(() => {
-        const unsub = dbService.subscribeToPropSeeds(setSeeds);
-        return () => unsub();
-    }, []);
 
-    // Prop Cards State (for admin management)
-    const [propCards, setPropCards] = useState<(PropCard & { id: string })[]>([]);
-    const [showManageCards, setShowManageCards] = useState(false);
+    // New Question Form
+    const [newQuestionText, setNewQuestionText] = useState('');
+    const [newQuestionOptions, setNewQuestionOptions] = useState<string[]>(['Over', 'Under']);
+    const [newQuestionPoints, setNewQuestionPoints] = useState(1);
+    const [newQuestionType, setNewQuestionType] = useState<'standard' | 'tiebreaker'>('standard');
+    const [newQuestionCategory, setNewQuestionCategory] = useState('Game');
 
-    useEffect(() => {
-        if (!gameState.id) return;
-        const unsub = dbService.subscribeToAllPropCards(gameState.id, (cards) => {
-            setPropCards(cards as any);
+    // Editing State
+    const [editForm, setEditForm] = useState<Partial<PropQuestion>>({});
+    const [showStats, setShowStats] = useState(false);
+
+    // --- Derived Data ---
+    const categories = useMemo(() => {
+        const cats = new Set<string>(['Game', 'Player', 'Fun']); // Defaults
+        questions.forEach(q => {
+            if (q.category) cats.add(q.category);
         });
-        return () => unsub();
-    }, [gameState.id]);
+        return Array.from(cats).sort();
+    }, [questions]);
 
-    const handleImportSeed = (seed: PropSeed) => {
-        setNewQuestionText(seed.text);
-        setOptions(seed.options.slice(0, 4)); // Max 4 options
-        setPoints(1);
-        setShowSeedPanel(false);
-    };
+    const filteredQuestions = useMemo(() => {
+        return questions.filter(q => {
+            const matchesSearch = q.text.toLowerCase().includes(questionSearch.toLowerCase());
+            const matchesCategory = selectedCategory === 'All' || q.category === selectedCategory;
+            return matchesSearch && matchesCategory;
+        });
+    }, [questions, questionSearch, selectedCategory]);
 
-    const questions = gameState.props?.questions || [];
-    const propsEnabled = gameState.props?.enabled || false;
-    const propCost = gameState.props?.cost || 5;
-    const maxCards = gameState.props?.maxCards || 1;
-    // Default to [100] if not set
-    const payouts = gameState.props?.payouts || [100];
+    const hasChanges = JSON.stringify(questions) !== JSON.stringify(gameState.props.questions);
 
-
-    const handleAddOption = () => {
-        if (options.length < 4) {
-            setOptions([...options, '']);
-        }
-    };
-
-    const handleRemoveOption = (idx: number) => {
-        if (options.length > 2) {
-            setOptions(options.filter((_, i) => i !== idx));
-        }
-    };
-
-    const handleOptionChange = (idx: number, value: string) => {
-        const newOptions = [...options];
-        newOptions[idx] = value;
-        setOptions(newOptions);
-    };
+    // --- Handlers ---
 
     const handleAddQuestion = () => {
-        const validOptions = options.filter(o => o.trim() !== '');
-        console.log('[PropsManager] handleAddQuestion called', { newQuestionText, validOptions, points });
+        if (!newQuestionText.trim()) return;
 
-        if (!newQuestionText || validOptions.length < 2) {
-            console.log('[PropsManager] Validation FAILED - question text or options missing');
-            return;
-        }
+        const newQ: PropQuestion = {
+            id: crypto.randomUUID(),
+            text: newQuestionText,
+            options: newQuestionOptions.filter(o => o.trim().length > 0),
+            points: newQuestionPoints,
+            type: newQuestionType,
+            category: newQuestionCategory
+        };
 
-        let updatedQuestions: PropQuestion[];
+        setQuestions([...questions, newQ]);
 
-        if (editingId) {
-            updatedQuestions = questions.map(q => q.id === editingId ? {
-                ...q,
-                text: newQuestionText,
-                options: validOptions,
-                points: points
-            } : q);
-        } else {
-            // Note: Don't include correctOption - Firestore rejects undefined values
-            const newQ: PropQuestion = {
-                id: crypto.randomUUID(),
-                text: newQuestionText,
-                options: validOptions,
-                points: points,
-                type: 'standard'
-            };
-            updatedQuestions = [...questions, newQ];
-        }
-
-        console.log('[PropsManager] Calling updateConfig with:', { props: { enabled: propsEnabled, cost: propCost, questions: updatedQuestions } });
-
-        updateConfig({
-            props: {
-                enabled: propsEnabled,
-                cost: propCost,
-                maxCards: maxCards,
-                questions: updatedQuestions
-            }
-        });
-
-        resetForm();
-    };
-
-    const resetForm = () => {
+        // Reset form
         setNewQuestionText('');
-        setOptions(['', '']);
-        setPoints(1);
-        setEditingId(null);
+        setNewQuestionOptions(['Over', 'Under']);
+        setNewQuestionPoints(1);
+        setNewQuestionType('standard');
     };
 
-    const handleEditClick = (q: PropQuestion) => {
-        setEditingId(q.id);
-        setNewQuestionText(q.text);
-        setOptions(q.options.length > 0 ? [...q.options] : ['', '']);
-        setPoints(q.points || 1);
-        setShowSeedPanel(false);
-    };
-
-    const handleRemoveQuestion = (id: string) => {
-        updateConfig({
-            props: {
-                enabled: propsEnabled,
-                cost: propCost,
-                maxCards: maxCards,
-                questions: questions.filter(q => q.id !== id)
-            }
-        });
-    };
-
-    const handleToggleEnabled = () => {
-        updateConfig({
-            props: {
-                enabled: !propsEnabled,
-                cost: propCost,
-                maxCards: maxCards,
-                questions
-            }
-        });
-    };
-
-    const handleCostChange = (val: number) => {
-        updateConfig({
-            props: {
-                enabled: propsEnabled,
-                cost: val,
-                maxCards: maxCards,
-                questions
-            }
-        });
-    };
-
-    const handleMaxCardsChange = (val: number) => {
-        updateConfig({
-            props: {
-                enabled: propsEnabled,
-                cost: propCost,
-                maxCards: Math.max(1, Math.min(10, val)),
-                questions
-            }
-        });
-    };
-
-    const handlePayoutChange = (idx: number, val: number) => {
-        const newPayouts = [...payouts];
-        newPayouts[idx] = val;
-        updateConfig({
-            props: {
-                enabled: propsEnabled,
-                cost: propCost,
-                maxCards,
-                payouts: newPayouts,
-                questions
-            }
-        });
-    };
-
-    const handleAddPayoutPlace = () => {
-        updateConfig({
-            props: {
-                enabled: propsEnabled,
-                cost: propCost,
-                maxCards,
-                payouts: [...payouts, 0],
-                questions
-            }
-        });
-    };
-
-    const handleRemovePayoutPlace = (idx: number) => {
-        const newPayouts = payouts.filter((_, i) => i !== idx);
-        updateConfig({
-            props: {
-                enabled: propsEnabled,
-                cost: propCost,
-                maxCards,
-                payouts: newPayouts,
-                questions
-            }
-        });
-    };
-
-
-    const handleGrade = async (qId: string, optionIdx: number) => {
-        await dbService.gradeProp(gameState.id, qId, optionIdx);
-    };
-
-    const [isSaving, setIsSaving] = useState(false);
     const handleSave = async () => {
-        setIsSaving(true);
-        try {
-            await updateConfig({
+        if (updateConfig) {
+            updateConfig({
                 props: {
-                    enabled: propsEnabled,
-                    cost: propCost,
-                    maxCards: maxCards,
-                    payouts: payouts,
+                    ...gameState.props,
                     questions: questions
                 }
             });
-            // Simulate delay or show toast if needed
-            await new Promise(r => setTimeout(r, 500));
-        } catch (error) {
-            console.error("Failed to save props settings", error);
-        } finally {
-            setIsSaving(false);
+        } else {
+            // Live save
+            await dbService.updatePool(gameState.id, {
+                props: {
+                    ...gameState.props,
+                    questions: questions
+                }
+            });
         }
     };
 
+    const handleDelete = (id: string) => {
+        if (confirm('Are you sure you want to delete this question?')) {
+            setQuestions(questions.filter(q => q.id !== id));
+        }
+    };
+
+    const startEditing = (q: PropQuestion) => {
+        setEditingId(q.id);
+        setEditForm({ ...q });
+    };
+
+    const saveEdit = () => {
+        setQuestions(questions.map(q => q.id === editingId ? { ...q, ...editForm } as PropQuestion : q));
+        setEditingId(null);
+        setEditForm({});
+    };
+
+    const cancelEdit = () => {
+        setEditingId(null);
+        setEditForm({});
+    };
+
+    const moveQuestion = (index: number, direction: 'up' | 'down') => {
+        const newQuestions = [...questions];
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+
+        if (newIndex >= 0 && newIndex < newQuestions.length) {
+            [newQuestions[index], newQuestions[newIndex]] = [newQuestions[newIndex], newQuestions[index]];
+            setQuestions(newQuestions);
+        }
+    };
+
+    // --- Seed Import Logic ---
+    const [seeds, setSeeds] = useState<PropSeed[]>([]);
+    const [seedsLoading, setSeedsLoading] = useState(false);
+
+    const loadSeeds = async () => {
+        if (seeds.length > 0) return; // Already loaded
+        setSeedsLoading(true);
+        const fetched = await dbService.getPropSeeds();
+        setSeeds(fetched);
+        setSeedsLoading(false);
+    };
+
+    const filteredSeeds = useMemo(() => {
+        return seeds.filter(s =>
+            s.text.toLowerCase().includes(seedSearch.toLowerCase()) ||
+            (s.category && s.category.toLowerCase().includes(seedSearch.toLowerCase()))
+        );
+    }, [seeds, seedSearch]);
+
+    // Group seeds by category for display
+    const seedsByCategory = useMemo(() => {
+        const grouped: Record<string, PropSeed[]> = {};
+        filteredSeeds.forEach(s => {
+            const cat = s.category || 'Uncategorized';
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(s);
+        });
+        return grouped;
+    }, [filteredSeeds]);
+
     return (
-        <div className="space-y-6">
-            {/* Header Toggle */}
-            <div className="flex items-center justify-between p-4 bg-slate-800 rounded-lg border border-slate-700">
+        <div className="space-y-8 pb-20">
+            {/* Header / Save Bar */}
+            <div className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800 p-4 -mx-4 sm:mx-0 sm:rounded-xl shadow-xl flex items-center justify-between">
                 <div>
-                    <h3 className="text-white font-bold">Enable Prop Bets</h3>
-                    <p className="text-slate-400 text-sm">Allow players to buy side-hustle cards.</p>
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Edit2 size={24} className="text-indigo-400" />
+                        Prop Questions
+                    </h2>
+                    <p className="text-slate-400 text-xs mt-1">
+                        {questions.length} questions configured • {questions.reduce((sum, q) => sum + (q.points || 1), 0)} total points
+                    </p>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <span className="text-slate-300 text-sm">Cost $</span>
-                        <input
-                            type="number"
-                            value={propCost}
-                            onChange={(e) => handleCostChange(Number(e.target.value))}
-                            className="w-16 bg-slate-900 border border-slate-700 text-white px-2 py-1 rounded text-center"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-slate-300 text-sm">Max Cards</span>
-                        <input
-                            type="number"
-                            min="1"
-                            max="10"
-                            value={maxCards}
-                            onChange={(e) => handleMaxCardsChange(Number(e.target.value))}
-                            className="w-16 bg-slate-900 border border-slate-700 text-white px-2 py-1 rounded text-center"
-                        />
-                    </div>
-                    <button
-                        onClick={handleToggleEnabled}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${propsEnabled ? 'bg-indigo-500' : 'bg-slate-600'}`}
-                    >
-                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${propsEnabled ? 'left-7' : 'left-1'}`} />
-                    </button>
+
+                <div className="flex items-center gap-3">
+                    {/* Stats Toggle (Only if cards exist) */}
+                    {allCards && allCards.length > 0 && (
+                        <button
+                            onClick={() => setShowStats(!showStats)}
+                            className={`px-3 py-1.5 rounded text-sm font-bold border transition-colors ${showStats ? 'bg-indigo-900/50 border-indigo-500 text-indigo-200' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                                }`}
+                        >
+                            {showStats ? 'Hide Stats' : 'View Stats'}
+                        </button>
+                    )}
+
+                    {!showStats && (
+                        <button
+                            onClick={handleSave}
+                            disabled={!hasChanges}
+                            className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all ${hasChanges
+                                ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 scale-105'
+                                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                }`}
+                        >
+                            <Save size={18} />
+                            {hasChanges ? 'Save Changes' : 'Saved'}
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {propsEnabled && (
-                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
-                    <h4 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
-                        <Zap size={16} className="text-amber-400" /> Payout Structure
-                    </h4>
-                    <p className="text-xs text-slate-500 mb-3">Define how the pot is split. Percentages must equal 100%.</p>
+            {/* Stats View */}
+            {showStats && allCards ? (
+                <div className="animate-in fade-in slide-in-from-top-4">
+                    <PropStats questions={gameState.props.questions} allCards={allCards} />
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Left Column: List & Reorder */}
+                    <div className="lg:col-span-2 space-y-6">
 
-                    <div className="space-y-2">
-                        {payouts.map((pct, idx) => (
-                            <div key={idx} className="flex items-center gap-3">
-                                <span className="text-slate-400 text-sm font-bold w-20">
-                                    {idx === 0 ? '1st Place' : idx === 1 ? '2nd Place' : idx === 2 ? '3rd Place' : `${idx + 1}th Place`}
-                                </span>
-                                <div className="relative flex-1">
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        value={pct}
-                                        onChange={(e) => handlePayoutChange(idx, Number(e.target.value))}
-                                        className="w-full bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded pr-8"
-                                    />
-                                    <span className="absolute right-3 top-2 text-slate-500">%</span>
-                                </div>
-                                {payouts.length > 1 && (
-                                    <button onClick={() => handleRemovePayoutPlace(idx)} className="text-rose-400 hover:text-rose-300">
-                                        <Trash2 size={16} />
-                                    </button>
-                                )}
+                        {/* Filters */}
+                        <div className="flex flex-wrap items-center gap-3 bg-slate-900 p-3 rounded-lg border border-slate-800">
+                            <div className="relative flex-1 min-w-[200px]">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                <input
+                                    type="text"
+                                    placeholder="Search questions..."
+                                    value={questionSearch}
+                                    onChange={(e) => setQuestionSearch(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded pl-9 pr-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                                />
                             </div>
-                        ))}
-                    </div>
+                            <div className="flex items-center gap-2">
+                                <Filter size={16} className="text-slate-500" />
+                                <select
+                                    value={selectedCategory}
+                                    onChange={(e) => setSelectedCategory(e.target.value)}
+                                    className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 cursor-pointer"
+                                >
+                                    <option value="All">All Categories</option>
+                                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                        </div>
 
-                    <div className="flex justify-between items-center mt-3">
-                        <button onClick={handleAddPayoutPlace} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1">
-                            <Plus size={12} /> Add Place
-                        </button>
-                        <div className={`text-sm font-bold ${payouts.reduce((a, b) => a + b, 0) === 100 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            Total: {payouts.reduce((a, b) => a + b, 0)}%
+                        {/* Questions List */}
+                        <div className="space-y-3">
+                            {filteredQuestions.length === 0 ? (
+                                <div className="text-center py-12 text-slate-500 bg-slate-900/50 rounded-xl border border-slate-800 border-dashed">
+                                    <p>No questions found matching your filters.</p>
+                                </div>
+                            ) : (
+                                filteredQuestions.map((q, index) => {
+                                    // Calculate actual index in the main array for reordering
+                                    const actualIndex = questions.findIndex(item => item.id === q.id);
+                                    const isEditing = editingId === q.id;
+
+                                    if (isEditing) {
+                                        return (
+                                            <div key={q.id} className="bg-slate-800 border-l-4 border-indigo-500 rounded-lg p-4 shadow-xl animate-in fade-in">
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label className="text-xs font-bold text-slate-400 uppercase">Question Text</label>
+                                                        <input
+                                                            type="text"
+                                                            value={editForm.text}
+                                                            onChange={(e) => setEditForm({ ...editForm, text: e.target.value })}
+                                                            className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-bold"
+                                                        />
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="text-xs font-bold text-slate-400 uppercase">Category</label>
+                                                            <input
+                                                                type="text"
+                                                                list="categories-edit"
+                                                                value={editForm.category || ''}
+                                                                onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                                                                className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"
+                                                            />
+                                                            <datalist id="categories-edit">
+                                                                {categories.map(c => <option key={c} value={c} />)}
+                                                            </datalist>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-xs font-bold text-slate-400 uppercase">Points</label>
+                                                            <input
+                                                                type="number"
+                                                                value={editForm.points}
+                                                                onChange={(e) => setEditForm({ ...editForm, points: parseInt(e.target.value) || 1 })}
+                                                                className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Options (Comma Separated)</label>
+                                                        <input
+                                                            type="text"
+                                                            value={editForm.options?.join(', ')}
+                                                            onChange={(e) => setEditForm({ ...editForm, options: e.target.value.split(',').map(s => s.trim()) })}
+                                                            className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"
+                                                        />
+                                                    </div>
+                                                    <div className="flex justify-end gap-3 pt-2">
+                                                        <button onClick={cancelEdit} className="px-4 py-2 rounded font-bold text-slate-400 hover:text-white">Cancel</button>
+                                                        <button onClick={saveEdit} className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-2"><Check size={16} /> Save</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div key={q.id} className="group bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg p-4 transition-all flex items-start gap-4">
+                                            {/* Drag Handles (Actually Up/Down Buttons) */}
+                                            {selectedCategory === 'All' && !questionSearch && (
+                                                <div className="flex flex-col gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button
+                                                        onClick={() => moveQuestion(actualIndex, 'up')}
+                                                        disabled={actualIndex === 0}
+                                                        className="p-1 text-slate-500 hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-slate-500"
+                                                    >
+                                                        <ChevronUp size={20} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => moveQuestion(actualIndex, 'down')}
+                                                        disabled={actualIndex === questions.length - 1}
+                                                        className="p-1 text-slate-500 hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-slate-500"
+                                                    >
+                                                        <ChevronDown size={20} />
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            <div className="flex-1">
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div>
+                                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-slate-800 text-slate-400 mb-1 border border-slate-700">
+                                                            {q.category || 'General'}
+                                                        </span>
+                                                        <h4 className="font-bold text-white text-lg">{q.text}</h4>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className="block font-bold text-indigo-400">{q.points} Pts</span>
+                                                        {q.type === 'tiebreaker' && <span className="text-[10px] text-amber-500 uppercase font-bold">Tiebreaker</span>}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-2">
+                                                    {q.options.map((opt, i) => (
+                                                        <span key={i} className="px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs text-slate-300">
+                                                            {opt}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => startEditing(q)} className="p-2 rounded bg-slate-800 text-blue-400 hover:bg-blue-900/30 transition-colors">
+                                                    <Edit2 size={16} />
+                                                </button>
+                                                <button onClick={() => handleDelete(q.id)} className="p-2 rounded bg-slate-800 text-rose-400 hover:bg-rose-900/30 transition-colors">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
                         </div>
                     </div>
-                </div>
-            )}
 
+                    {/* Right Column: Add New & Import */}
+                    <div className="space-y-6">
 
-            {propsEnabled && (
-                <div className="space-y-4">
-                    {/* Stats Bar */}
-                    <div className="flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-800">
-                        <div className="flex items-center gap-4">
-                            <div className="text-center">
-                                <div className="text-2xl font-bold text-white">{questions.length}</div>
-                                <div className="text-xs text-slate-500 uppercase">Questions</div>
-                            </div>
-                            <div className="text-center">
-                                <div className="text-2xl font-bold text-emerald-400">{questions.reduce((sum, q) => sum + (q.points || 1), 0)}</div>
-                                <div className="text-xs text-slate-500 uppercase">Total Pts</div>
-                            </div>
-                            {/* Save Button (Hidden in Wizard Mode) */}
-                            {!isWizardMode && (
-                                <div className="sticky bottom-4 z-10 flex justify-end">
+                        {/* Add New Panel */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 sticky top-24">
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                <Plus size={20} className="text-indigo-400" /> Add Custom Question
+                            </h3>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Question</label>
+                                    <input
+                                        type="text"
+                                        value={newQuestionText}
+                                        onChange={(e) => setNewQuestionText(e.target.value)}
+                                        placeholder="e.g. Total Passing Yards"
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Category</label>
+                                        <input
+                                            type="text"
+                                            list="categories-add"
+                                            value={newQuestionCategory}
+                                            onChange={(e) => setNewQuestionCategory(e.target.value)}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                        />
+                                        <datalist id="categories-add">
+                                            {categories.map(c => <option key={c} value={c} />)}
+                                        </datalist>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Points</label>
+                                        <input
+                                            type="number"
+                                            value={newQuestionPoints}
+                                            onChange={(e) => setNewQuestionPoints(parseInt(e.target.value) || 1)}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Options</label>
+                                    <div className="flex gap-2">
+                                        {newQuestionOptions.map((opt, i) => (
+                                            <div key={i} className="flex-1 relative">
+                                                <input
+                                                    type="text"
+                                                    value={opt}
+                                                    onChange={(e) => {
+                                                        const newOpts = [...newQuestionOptions];
+                                                        newOpts[i] = e.target.value;
+                                                        setNewQuestionOptions(newOpts);
+                                                    }}
+                                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-sm"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
                                     <button
-                                        onClick={handleSave}
-                                        disabled={isSaving}
-                                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-indigo-500/20 flex items-center gap-2 transition-all hover:scale-105"
+                                        onClick={() => setNewQuestionOptions([...newQuestionOptions, ''])}
+                                        className="text-[10px] text-indigo-400 font-bold mt-1 hover:underline"
                                     >
-                                        {isSaving ? <Loader className="animate-spin" /> : <Save size={20} />}
-                                        Save Changes
+                                        + Add Option
                                     </button>
                                 </div>
-                            )}
-                            <button
-                                onClick={() => setShowSeedPanel(!showSeedPanel)}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2"
-                            >
-                                <Download size={16} /> Import from Seeds
-                            </button>
+
+                                <button
+                                    onClick={handleAddQuestion}
+                                    disabled={!newQuestionText}
+                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg font-bold flex items-center justify-center gap-2 transition-all mt-2"
+                                >
+                                    <Plus size={18} /> Add to Pool
+                                </button>
+                            </div>
                         </div>
 
                         {/* Seed Import Panel */}
-                        {showSeedPanel && (
-                            <div className="bg-indigo-900/30 border border-indigo-500/30 rounded-lg p-4">
-                                <h4 className="text-indigo-300 font-bold mb-3 flex items-center gap-2">
-                                    <Zap size={16} /> Quick Import from Seed Library
-                                </h4>
-                                {seeds.length === 0 ? (
-                                    <p className="text-slate-400 text-sm">No seeds available. SuperAdmin can add seeds in the dashboard.</p>
-                                ) : (
-                                    <div className="grid gap-2 max-h-48 overflow-y-auto">
-                                        {seeds.map(seed => {
-                                            const isAdded = questions.some(q => q.text === seed.text);
-                                            return (
-                                                <button
-                                                    key={seed.id}
-                                                    onClick={() => !isAdded && handleImportSeed(seed)}
-                                                    disabled={isAdded}
-                                                    className={`w-full text-left p-3 rounded-lg flex justify-between items-center transition-colors ${isAdded
-                                                        ? 'bg-slate-900 border border-slate-800 opacity-50 cursor-not-allowed'
-                                                        : 'bg-slate-800 hover:bg-slate-700'
-                                                        }`}
-                                                >
-                                                    <span className={isAdded ? 'text-slate-500' : 'text-white'}>
-                                                        {seed.text} {isAdded && '(Added)'}
-                                                    </span>
-                                                    <span className="text-xs text-slate-500">{seed.options.length} options</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                            <button
+                                onClick={() => loadSeeds()}
+                                className="w-full flex items-center justify-between p-4 bg-slate-800 hover:bg-slate-700 transition-colors"
+                            >
+                                <span className="font-bold text-white flex items-center gap-2">
+                                    <AlertTriangle size={18} className="text-amber-400" /> Need Inspiration?
+                                </span>
+                                <ChevronDown size={20} className={`text-slate-400 transition-transform ${seeds.length > 0 ? 'rotate-180' : ''}`} />
+                            </button>
 
-                    {/* Add New Question Form */}
-                    <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
-                        <h4 className="text-sm font-bold text-slate-300 mb-3">{editingId ? 'Edit Prop' : 'Add New Prop'}</h4>
-                        <div className="grid gap-3">
-                            <input
-                                type="text"
-                                placeholder="Question (e.g. Who scores first?)"
-                                className="w-full bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded"
-                                value={newQuestionText}
-                                onChange={e => setNewQuestionText(e.target.value)}
-                            />
-
-                            {/* Dynamic Options */}
-                            <div className="space-y-2">
-                                {options.map((opt, idx) => (
-                                    <div key={idx} className="flex gap-2">
+                            {seeds.length > 0 && (
+                                <div className="p-4 border-t border-slate-800 max-h-[500px] overflow-y-auto">
+                                    <div className="mb-4">
                                         <input
                                             type="text"
-                                            placeholder={`Option ${String.fromCharCode(65 + idx)}`}
-                                            className="flex-1 bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded"
-                                            value={opt}
-                                            onChange={e => handleOptionChange(idx, e.target.value)}
+                                            placeholder="Search templates..."
+                                            value={seedSearch}
+                                            onChange={(e) => setSeedSearch(e.target.value)}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-white"
                                         />
-                                        {options.length > 2 && (
-                                            <button
-                                                onClick={() => handleRemoveOption(idx)}
-                                                className="px-3 text-rose-400 hover:text-rose-300"
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        )}
                                     </div>
-                                ))}
-                                {options.length < 4 && (
-                                    <button
-                                        onClick={handleAddOption}
-                                        className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
-                                    >
-                                        <Plus size={14} /> Add Option (max 4)
-                                    </button>
-                                )}
-                            </div>
 
-                            {/* Points Input */}
-                            <div className="flex items-center gap-3 bg-slate-800/50 p-3 rounded border border-slate-700">
-                                <Star size={16} className="text-amber-400" />
-                                <span className="text-slate-300 text-sm">Points if correct:</span>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="10"
-                                    value={points}
-                                    onChange={e => setPoints(Math.max(1, Math.min(10, Number(e.target.value))))}
-                                    className="w-16 bg-slate-900 border border-slate-600 text-white px-2 py-1 rounded text-center"
-                                />
-                            </div>
-                        </div>
+                                    {seedsLoading && <div className="text-center p-4 text-slate-500">Loading templates...</div>}
 
-                        <div className="flex gap-2 mt-4">
-                            {editingId && (
-                                <button
-                                    onClick={resetForm}
-                                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded flex items-center justify-center gap-2"
-                                >
-                                    <X size={16} /> Cancel
-                                </button>
-                            )}
-                            <button
-                                onClick={handleAddQuestion}
-                                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded flex items-center justify-center gap-2"
-                            >
-                                {editingId ? <Save size={16} /> : <Plus size={16} />}
-                                {editingId ? 'Update Prop' : 'Add Prop'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Question List */}
-                    {questions.length > 0 && (
-                        <div className="space-y-3">
-                            <h4 className="text-sm font-bold text-slate-400 uppercase">Your Questions ({questions.length})</h4>
-                            {questions.map((q, idx) => (
-                                <div key={q.id} className="bg-slate-800 p-4 rounded-lg flex flex-col gap-3">
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex items-start gap-3">
-                                            <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded text-sm font-bold">#{idx + 1}</span>
-                                            <div>
-                                                <span className="text-white font-medium">{q.text}</span>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="text-xs text-amber-400 flex items-center gap-1">
-                                                        <Star size={12} /> {q.points || 1} pts
-                                                    </span>
-                                                    <span className="text-xs text-slate-500">• {q.options.length} options</span>
+                                    <div className="space-y-6">
+                                        {Object.entries(seedsByCategory).map(([category, items]) => (
+                                            <div key={category}>
+                                                <h4 className="text-xs font-bold text-indigo-400 uppercase mb-2 sticky top-0 bg-slate-900 py-1">{category}</h4>
+                                                <div className="space-y-2">
+                                                    {items.map(seed => (
+                                                        <div key={seed.id} className="group flex items-center justify-between p-2 rounded bg-slate-950 border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                                                            <div>
+                                                                <p className="text-sm font-medium text-slate-200">{seed.text}</p>
+                                                                <p className="text-[10px] text-slate-500">{seed.options.join(' / ')}</p>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setNewQuestionText(seed.text);
+                                                                    setNewQuestionOptions(seed.options);
+                                                                    setNewQuestionCategory(seed.category || 'Game');
+                                                                }}
+                                                                className="opacity-0 group-hover:opacity-100 px-2 py-1 bg-indigo-500/20 text-indigo-300 text-xs rounded hover:bg-indigo-500 hover:text-white transition-all"
+                                                            >
+                                                                Use
+                                                            </button>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => handleEditClick(q)} className="text-indigo-400 hover:text-indigo-300">
-                                                <Edit2 size={16} />
-                                            </button>
-                                            <button onClick={() => handleRemoveQuestion(q.id)} className="text-rose-400 hover:text-rose-300">
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Grading UI - shows all options */}
-                                    <div className={`grid gap-2 mt-2 ${q.options.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
-                                        {q.options.map((opt, optIdx) => (
-                                            <button
-                                                key={optIdx}
-                                                onClick={() => handleGrade(q.id, optIdx)}
-                                                className={`px-3 py-2 text-sm rounded border flex items-center justify-between
-                                                    ${q.correctOption === optIdx
-                                                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
-                                                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'}
-                                                `}
-                                            >
-                                                <span className="truncate">{opt}</span>
-                                                {q.correctOption === optIdx && <Check size={14} className="flex-shrink-0 ml-1" />}
-                                            </button>
                                         ))}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Manage Entries (Admin) */}
-                    {propCards.length > 0 && (
-                        <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
-                            <div className="flex items-center justify-between mb-4">
-                                <h4 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                                    <Users size={16} /> Manage Entries ({propCards.length})
-                                </h4>
-                                <button
-                                    onClick={() => setShowManageCards(!showManageCards)}
-                                    className="text-xs text-indigo-400 hover:text-indigo-300"
-                                >
-                                    {showManageCards ? 'Hide' : 'Show'}
-                                </button>
-                            </div>
-                            {showManageCards && (
-                                <div className="space-y-2">
-                                    {propCards.map((card) => (
-                                        <div key={card.id} className="bg-slate-800 p-3 rounded-lg flex items-center justify-between">
-                                            <div>
-                                                <div className="text-white font-medium">{card.userName || card.userId}</div>
-                                                <div className="text-xs text-slate-500">
-                                                    Score: {card.score || 0} • Answers: {Object.keys(card.answers || {}).length} • TB: {card.tiebreakerVal || 'N/A'}
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={async () => {
-                                                    if (confirm(`Delete prop card for ${card.userName || card.userId}?`)) {
-                                                        await dbService.deletePropCard(gameState.id, card.id);
-                                                    }
-                                                }}
-                                                className="text-rose-400 hover:text-rose-300 p-2"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
                             )}
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
         </div>

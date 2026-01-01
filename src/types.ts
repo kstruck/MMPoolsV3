@@ -213,6 +213,7 @@ export interface PropQuestion {
   correctOption?: number; // 0, 1, 2, or 3
   points?: number; // Point value for correct answer (default: 1)
   type?: 'standard' | 'tiebreaker'; // Question type (default: 'standard')
+  category?: string; // Optional category (e.g. "Q1", "Player", "Fun")
 }
 
 export interface PropCard {

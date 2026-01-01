@@ -4,9 +4,9 @@ import { PropCardForm } from '../Props/PropCardForm'; // Reusing this for "My Ca
 import { PropsManager } from '../Props/PropsManager';
 import { PropGradingDashboard } from '../Props/PropGradingDashboard';
 import { PropLeaderboard } from '../Props/PropLeaderboard';
+import { PropStats } from '../Props/PropStats';
 
-// actually Leaderboard import was erroring.
-import { Share2, Grid3X3, Trophy, ChevronLeft, Shield } from 'lucide-react';
+import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 
 interface PropsPoolDashboardProps {
@@ -18,7 +18,17 @@ interface PropsPoolDashboardProps {
 }
 
 export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack }) => {
-    const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'admin' | 'grading'>('cards');
+    const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading'>('cards');
+    const [allCards, setAllCards] = useState<PropCard[]>([]);
+
+    // Subscribe to cards once at top level
+    useEffect(() => {
+        if (!pool.id) return;
+        const unsub = dbService.subscribeToAllPropCards(pool.id, (cards) => {
+            setAllCards(cards);
+        });
+        return () => unsub();
+    }, [pool.id]);
 
     // Helper functions
     const updatePoolConfig = async (updates: Partial<PropsPool>) => {
@@ -26,6 +36,8 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
         // Cast to any to bypass strict type check for now if needed, but dbService handles Partial<Pool>
         await dbService.updatePool(pool.id, updates as any);
     };
+
+    const showStats = pool.isLocked || isManager || isAdmin;
 
     return (
         <div className="min-h-screen bg-slate-950 text-white pb-20">
@@ -74,6 +86,16 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                     >
                         <Trophy size={16} /> Leaderboard
                     </button>
+
+                    {showStats && (
+                        <button
+                            onClick={() => setActiveTab('stats')}
+                            className={`pb-3 border-b-2 font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'stats' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}
+                        >
+                            <BarChart2 size={16} /> Stats
+                        </button>
+                    )}
+
                     {(isManager || isAdmin) && (
                         <>
                             <button
@@ -97,13 +119,25 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
             <main className="max-w-7xl mx-auto px-4 py-8">
                 {activeTab === 'cards' && (
                     <div className="max-w-3xl mx-auto">
-                        <PropCardFetcher poolId={pool.id} user={user} config={pool.props} isLocked={pool.isLocked} />
+                        <PropCardForm
+                            poolId={pool.id}
+                            config={pool.props}
+                            isLocked={pool.isLocked}
+                            currentUser={user}
+                            userCards={allCards.filter(c => c.userId === user.id)}
+                        />
                     </div>
                 )}
 
                 {activeTab === 'leaderboard' && (
                     <div className="max-w-4xl mx-auto">
-                        <PropLeaderboard gameState={pool as any} currentUser={user} />
+                        <PropLeaderboard gameState={pool as any} currentUser={user} cards={allCards} />
+                    </div>
+                )}
+
+                {activeTab === 'stats' && (
+                    <div className="max-w-4xl mx-auto">
+                        <PropStats questions={pool.props.questions} cards={allCards} />
                     </div>
                 )}
 
@@ -115,6 +149,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                             updateConfig={updatePoolConfig as any}
                             isWizardMode={false}
                             updateGameState={updatePoolConfig as any}
+                            allCards={allCards}
                         />
                     </div>
                 )}
@@ -126,30 +161,5 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                 )}
             </main>
         </div>
-    );
-};
-
-// Internal wrapper to handle fetching cards for the form
-import { Check } from 'lucide-react';
-
-const PropCardFetcher = ({ poolId, user, config, isLocked }: { poolId: string, user: any, config: PropsPool['props'], isLocked: boolean }) => {
-    const [cards, setCards] = useState<PropCard[]>([]);
-    useEffect(() => {
-        if (!user) return;
-        const unsub = dbService.subscribeToAllPropCards(poolId, (allCards) => {
-            const myCards = allCards.filter(c => c.userId === user.id);
-            setCards(myCards);
-        });
-        return () => unsub();
-    }, [poolId, user]);
-
-    return (
-        <PropCardForm
-            poolId={poolId}
-            config={config}
-            isLocked={isLocked}
-            currentUser={user}
-            userCards={cards}
-        />
     );
 };

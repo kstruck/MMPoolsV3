@@ -68,14 +68,17 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
             }
 
             // Create Payload
-            const payload: PropsPool = {
+            const payload: any = {
                 ...config,
                 createdAt: Date.now(),
                 isLocked: false,
                 status: 'active',
                 ownerId: user.uid,
-                type: 'PROPS'
-            } as PropsPool;
+                type: 'PROPS',
+                // Shims for backend validation (it expects Squares pool fields)
+                costPerSquare: 0,
+                maxSquaresPerPlayer: 0,
+            };
 
             const newPoolId = await dbService.createPool(payload);
             onComplete(newPoolId);
@@ -198,6 +201,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                     gameState={config as unknown as GameState}
                                     updateConfig={updateConfig as any}
                                     onNext={() => { }} // We handle submit separately
+                                    isProps={true}
                                 />
                                 <div className="flex justify-between pt-8 border-t border-slate-800 mt-8">
                                     <button onClick={handleBack} className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:bg-slate-800 transition-colors">Back</button>

@@ -1,49 +1,59 @@
-import React, { useEffect, useState } from 'react';
-import { dbService } from '../../services/dbService';
+import React, { useMemo, useState, useEffect } from 'react';
 import type { GameState, PropCard } from '../../types';
 import { Trophy, Medal } from 'lucide-react';
+import { dbService } from '../../services/dbService';
 
 interface PropLeaderboardProps {
     gameState: GameState;
     currentUser: any;
+    cards?: PropCard[];
 }
 
 interface LeaderboardEntry extends PropCard {
-    id: string;
+    id: string; // Ensure ID is present
     calculatedScore: number;
     correctCount: number;
 }
 
-export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, currentUser }) => {
-    const [cards, setCards] = useState<LeaderboardEntry[]>([]);
-
+export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, currentUser, cards }) => {
     const questions = gameState.props?.questions || [];
     const totalPossiblePoints = questions.reduce((sum, q) => sum + (q.points || 1), 0);
 
-    useEffect(() => {
-        const unsub = dbService.subscribeToAllPropCards(gameState.id, (data) => {
-            // Calculate scores from questions
-            const enriched: LeaderboardEntry[] = data.map((card: any) => {
-                let calculatedScore = 0;
-                let correctCount = 0;
-                questions.forEach(q => {
-                    if (q.correctOption !== undefined && card.answers?.[q.id] === q.correctOption) {
-                        calculatedScore += (q.points || 1);
-                        correctCount++;
-                    }
-                });
-                return { ...card, calculatedScore, correctCount };
-            });
+    // Internal state for fallback fetching
+    const [internalCards, setInternalCards] = useState<PropCard[]>([]);
 
-            // Sort by score DESC, then tiebreaker
-            const sorted = enriched.sort((a, b) => {
-                if (b.calculatedScore !== a.calculatedScore) return b.calculatedScore - a.calculatedScore;
-                return (a.tiebreakerVal || 0) - (b.tiebreakerVal || 0);
-            });
-            setCards(sorted);
+    useEffect(() => {
+        // Only fetch if cards prop is not provided
+        if (cards) return;
+
+        const unsub = dbService.subscribeToAllPropCards(gameState.id, (data) => {
+            setInternalCards(data);
         });
         return () => unsub();
-    }, [gameState.id, questions]);
+    }, [gameState.id, cards]);
+
+    const effectiveCards = cards || internalCards;
+
+    const sortedCards = useMemo(() => {
+        // Calculate scores from questions
+        const enriched: LeaderboardEntry[] = effectiveCards.map((card: any) => {
+            let calculatedScore = 0;
+            let correctCount = 0;
+            questions.forEach(q => {
+                if (q.correctOption !== undefined && card.answers?.[q.id] === q.correctOption) {
+                    calculatedScore += (q.points || 1);
+                    correctCount++;
+                }
+            });
+            return { ...card, calculatedScore, correctCount, id: card.id || card.userId };
+        });
+
+        // Sort by score DESC, then tiebreaker
+        return enriched.sort((a, b) => {
+            if (b.calculatedScore !== a.calculatedScore) return b.calculatedScore - a.calculatedScore;
+            return (a.tiebreakerVal || 0) - (b.tiebreakerVal || 0);
+        });
+    }, [effectiveCards, questions]);
 
     const getRankIcon = (index: number) => {
         if (index === 0) return <Trophy className="text-amber-400" size={20} />;
@@ -58,7 +68,7 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                 <h3 className="font-bold text-white flex items-center gap-2">
                     <Trophy size={18} className="text-indigo-400" /> Leaderboard
                 </h3>
-                <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">{cards.length} Entries</span>
+                <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">{sortedCards.length} Entries</span>
             </div>
 
             <div className="overflow-x-auto">
@@ -73,8 +83,8 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
-                        {cards.map((card, idx) => {
-                            const isMe = currentUser && card.userId === currentUser.uid;
+                        {sortedCards.map((card, idx) => {
+                            const isMe = currentUser && card.userId === currentUser.id;
                             return (
                                 <tr key={card.id || card.userId} className={`${isMe ? 'bg-indigo-500/10' : 'hover:bg-slate-800/50'} transition-colors`}>
                                     <td className="p-4 text-center flex justify-center">
@@ -100,7 +110,7 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                                 </tr>
                             );
                         })}
-                        {cards.length === 0 && (
+                        {sortedCards.length === 0 && (
                             <tr>
                                 <td colSpan={5} className="p-8 text-center text-slate-500">
                                     No players have joined yet. Be the first!

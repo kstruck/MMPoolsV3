@@ -6,9 +6,10 @@ interface WizardStepRemindersProps {
     gameState: GameState;
     updateConfig: (updates: Partial<GameState>) => void;
     onNext: () => void;
+    isProps?: boolean;
 }
 
-export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameState, updateConfig }) => {
+export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameState, updateConfig, isProps = false }) => {
 
     const defaultReminders = {
         payment: { enabled: false, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false },
@@ -25,6 +26,14 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
     // Helper to calculate estimated start time if available
     const estimatedStartTime = gameState.scores?.startTime ? new Date(gameState.scores.startTime) : null;
 
+    const charityConfig = gameState.charity || {
+        enabled: false,
+        name: '',
+        percentage: 10,
+        description: '',
+        url: ''
+    };
+
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
             {/* Payment Reminders */}
@@ -32,13 +41,13 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                     <Bell size={20} className="text-amber-400" /> Payment Reminders
                 </h3>
-                <p className="text-slate-400 text-sm mb-6">Automate follow-ups for unpaid squares.</p>
+                <p className="text-slate-400 text-sm mb-6">Automate follow-ups for unpaid {isProps ? 'entries' : 'squares'}.</p>
 
                 <div className="space-y-4">
                     <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
                         <div>
                             <span className="font-bold text-slate-200 block">Enable Auto-Reminders</span>
-                            <span className="text-xs text-slate-500">System checks every 15 mins for unpaid reservations.</span>
+                            <span className="text-xs text-slate-500">System checks every 15 mins for unpaid {isProps ? 'entries' : 'reservations'}.</span>
                         </div>
                         <input
                             type="checkbox"
@@ -85,9 +94,9 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                 <label className="flex items-center justify-between cursor-pointer p-2 mb-2">
                                     <div>
                                         <span className="font-bold text-rose-400 block flex items-center gap-2">
-                                            <Trash2 size={14} /> Auto-Release Unpaid Squares
+                                            <Trash2 size={14} /> Auto-Release Unpaid {isProps ? 'Entries' : 'Squares'}
                                         </span>
-                                        <span className="text-xs text-slate-500">Automatically remove reservation if not paid in time.</span>
+                                        <span className="text-xs text-slate-500">Automatically remove {isProps ? 'entry' : 'reservation'} if not paid in time.</span>
                                     </div>
                                     <input
                                         type="checkbox"
@@ -120,9 +129,9 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
             {/* Auto-Lock & Number Generation */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                    <Clock size={20} className="text-rose-400" /> Auto-Lock & Number Generation
+                    <Clock size={20} className="text-rose-400" /> {isProps ? 'Auto-Lock System' : 'Auto-Lock & Number Generation'}
                 </h3>
-                <p className="text-slate-400 text-sm mb-6">Automatically lock the grid and reveal numbers.</p>
+                <p className="text-slate-400 text-sm mb-6">Automatically lock the {isProps ? 'pool' : 'grid and reveal numbers'}.</p>
 
                 <div className="space-y-4">
                     <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-slate-900 rounded mb-2 border border-transparent hover:border-slate-700 transition-all">
@@ -262,7 +271,7 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                     </div>
                                 </div>
                                 <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
-                                    <CheckCircle size={10} /> Grid will automatically lock and numbers will be generated at this time.
+                                    <CheckCircle size={10} /> {isProps ? 'Pool will automatically lock at this time.' : 'Grid will automatically lock and numbers will be generated at this time.'}
                                 </p>
                                 <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
                                     📍 Times shown in your local timezone: <span className="font-mono text-slate-400">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span> <br />
@@ -279,7 +288,7 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                     <Sparkles size={20} className="text-emerald-400" /> Winner Announcements
                 </h3>
-                <p className="text-slate-400 text-sm mb-6">Instant alerts when a quarter closes.</p>
+                <p className="text-slate-400 text-sm mb-6">Instant alerts when a result is final.</p>
                 <div className="space-y-4">
                     <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
                         <div>
@@ -295,15 +304,18 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                     </label>
                     {safeReminders.winner.enabled && (
                         <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={safeReminders.winner.includeDigits}
-                                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, includeDigits: e.target.checked } } })}
-                                    className="w-5 h-5 rounded bg-slate-800 border-slate-600"
-                                />
-                                <span className="text-sm text-slate-300">Include Winning Digits</span>
-                            </label>
+                            {/* Hidden for Props */}
+                            {!isProps && (
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={safeReminders.winner.includeDigits}
+                                        onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, includeDigits: e.target.checked } } })}
+                                        className="w-5 h-5 rounded bg-slate-800 border-slate-600"
+                                    />
+                                    <span className="text-sm text-slate-300">Include Winning Digits</span>
+                                </label>
+                            )}
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                     type="checkbox"
@@ -317,6 +329,78 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                     )}
                 </div>
             </div>
+
+            {/* Charity / Fundraising Section (New) */}
+            {isProps && (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                        <Sparkles size={20} className="text-indigo-400" /> Charity / Fundraising
+                    </h3>
+                    <p className="text-slate-400 text-sm mb-6">Allocate a percentage of the pot to a cause.</p>
+
+                    <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors mb-4">
+                        <div>
+                            <span className="font-bold text-slate-200 block">Enable Fundraising</span>
+                            <span className="text-xs text-slate-500">Deduct a percentage from determining the payouts.</span>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={charityConfig.enabled}
+                            onChange={(e) => updateConfig({ charity: { ...charityConfig, enabled: e.target.checked } })}
+                            className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                        />
+                    </label>
+
+                    {charityConfig.enabled && (
+                        <div className="space-y-4 animate-in fade-in bg-slate-950 p-4 rounded-lg border border-slate-800">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Organization Name</label>
+                                <input
+                                    type="text"
+                                    value={charityConfig.name}
+                                    onChange={(e) => updateConfig({ charity: { ...charityConfig, name: e.target.value } })}
+                                    placeholder="e.g. Red Cross"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Percentage %</label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            value={charityConfig.percentage}
+                                            onChange={(e) => updateConfig({ charity: { ...charityConfig, percentage: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) } })}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500 pr-8"
+                                        />
+                                        <span className="absolute right-3 top-2 text-slate-500">%</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Link (Optional)</label>
+                                    <input
+                                        type="url"
+                                        value={charityConfig.url || ''}
+                                        onChange={(e) => updateConfig({ charity: { ...charityConfig, url: e.target.value } })}
+                                        placeholder="https://..."
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Description</label>
+                                <textarea
+                                    value={charityConfig.description || ''}
+                                    onChange={(e) => updateConfig({ charity: { ...charityConfig, description: e.target.value } })}
+                                    rows={2}
+                                    placeholder="Briefly describe the cause..."
+                                    className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
