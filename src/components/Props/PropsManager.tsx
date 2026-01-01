@@ -46,6 +46,9 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
     const propsEnabled = gameState.props?.enabled || false;
     const propCost = gameState.props?.cost || 5;
     const maxCards = gameState.props?.maxCards || 1;
+    // Default to [100] if not set
+    const payouts = gameState.props?.payouts || [100];
+
 
     const handleAddOption = () => {
         if (options.length < 4) {
@@ -168,6 +171,46 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
         });
     };
 
+    const handlePayoutChange = (idx: number, val: number) => {
+        const newPayouts = [...payouts];
+        newPayouts[idx] = val;
+        updateConfig({
+            props: {
+                enabled: propsEnabled,
+                cost: propCost,
+                maxCards,
+                payouts: newPayouts,
+                questions
+            }
+        });
+    };
+
+    const handleAddPayoutPlace = () => {
+        updateConfig({
+            props: {
+                enabled: propsEnabled,
+                cost: propCost,
+                maxCards,
+                payouts: [...payouts, 0],
+                questions
+            }
+        });
+    };
+
+    const handleRemovePayoutPlace = (idx: number) => {
+        const newPayouts = payouts.filter((_, i) => i !== idx);
+        updateConfig({
+            props: {
+                enabled: propsEnabled,
+                cost: propCost,
+                maxCards,
+                payouts: newPayouts,
+                questions
+            }
+        });
+    };
+
+
     const handleGrade = async (qId: string, optionIdx: number) => {
         await dbService.gradeProp(gameState.id, qId, optionIdx);
     };
@@ -211,6 +254,51 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
             </div>
 
             {propsEnabled && (
+                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
+                    <h4 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+                        <Zap size={16} className="text-amber-400" /> Payout Structure
+                    </h4>
+                    <p className="text-xs text-slate-500 mb-3">Define how the pot is split. Percentages must equal 100%.</p>
+
+                    <div className="space-y-2">
+                        {payouts.map((pct, idx) => (
+                            <div key={idx} className="flex items-center gap-3">
+                                <span className="text-slate-400 text-sm font-bold w-20">
+                                    {idx === 0 ? '1st Place' : idx === 1 ? '2nd Place' : idx === 2 ? '3rd Place' : `${idx + 1}th Place`}
+                                </span>
+                                <div className="relative flex-1">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        value={pct}
+                                        onChange={(e) => handlePayoutChange(idx, Number(e.target.value))}
+                                        className="w-full bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded pr-8"
+                                    />
+                                    <span className="absolute right-3 top-2 text-slate-500">%</span>
+                                </div>
+                                {payouts.length > 1 && (
+                                    <button onClick={() => handleRemovePayoutPlace(idx)} className="text-rose-400 hover:text-rose-300">
+                                        <Trash2 size={16} />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="flex justify-between items-center mt-3">
+                        <button onClick={handleAddPayoutPlace} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1">
+                            <Plus size={12} /> Add Place
+                        </button>
+                        <div className={`text-sm font-bold ${payouts.reduce((a, b) => a + b, 0) === 100 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            Total: {payouts.reduce((a, b) => a + b, 0)}%
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+            {propsEnabled && (
                 <div className="space-y-4">
                     {/* Stats Bar */}
                     <div className="flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-800">
@@ -242,16 +330,25 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                 <p className="text-slate-400 text-sm">No seeds available. SuperAdmin can add seeds in the dashboard.</p>
                             ) : (
                                 <div className="grid gap-2 max-h-48 overflow-y-auto">
-                                    {seeds.map(seed => (
-                                        <button
-                                            key={seed.id}
-                                            onClick={() => handleImportSeed(seed)}
-                                            className="w-full text-left p-3 bg-slate-800 hover:bg-slate-700 rounded-lg flex justify-between items-center"
-                                        >
-                                            <span className="text-white">{seed.text}</span>
-                                            <span className="text-xs text-slate-500">{seed.options.length} options</span>
-                                        </button>
-                                    ))}
+                                    {seeds.map(seed => {
+                                        const isAdded = questions.some(q => q.text === seed.text);
+                                        return (
+                                            <button
+                                                key={seed.id}
+                                                onClick={() => !isAdded && handleImportSeed(seed)}
+                                                disabled={isAdded}
+                                                className={`w-full text-left p-3 rounded-lg flex justify-between items-center transition-colors ${isAdded
+                                                        ? 'bg-slate-900 border border-slate-800 opacity-50 cursor-not-allowed'
+                                                        : 'bg-slate-800 hover:bg-slate-700'
+                                                    }`}
+                                            >
+                                                <span className={isAdded ? 'text-slate-500' : 'text-white'}>
+                                                    {seed.text} {isAdded && '(Added)'}
+                                                </span>
+                                                <span className="text-xs text-slate-500">{seed.options.length} options</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

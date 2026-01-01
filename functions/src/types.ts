@@ -195,6 +195,7 @@ export interface GameState {
         enabled: boolean;
         cost: number;
         maxCards?: number; // Max cards per user (default: 1)
+        payouts?: number[]; // Percentage split [1st, 2nd, 3rd...]
         questions: PropQuestion[];
     };
 }

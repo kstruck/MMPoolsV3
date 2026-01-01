@@ -46,7 +46,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   /* handleSlugChange removed in favor of inline DebouncedInput handler */
 
   const [wizardStep, setWizardStep] = useState(1);
-  const TOTAL_STEPS = 7;
+  const TOTAL_STEPS = 8;
 
   const [isFetchingScores, setIsFetchingScores] = useState(false);
   const [fetchStatus, setFetchStatus] = useState<{ type: 'success' | 'error' | 'neutral', msg: string } | null>(null);
@@ -81,6 +81,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
     fetchThemes();
   }, []);
+
+  // Prop Player Management
+  const [propCards, setPropCards] = useState<any[]>([]);
+  const [playerTab, setPlayerTab] = useState<'grid' | 'props'>('grid');
+
+  useEffect(() => {
+    if (activeTab === 'players' && gameState.id) {
+      const unsub = dbService.subscribeToAllPropCards(gameState.id, (cards) => {
+        setPropCards(cards);
+      });
+      return () => unsub();
+    }
+  }, [activeTab, gameState.id]);
+
 
   const updatePlayerDetails = (originalName: string, newDetails: { name: string, email: string, phone: string, notes: string }) => {
     const newSquares = gameState.squares.map(sq => {
@@ -368,6 +382,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       contact: squares[0].playerDetails
     }));
   };
+
+  const getPropPlayers = () => {
+    // Group cards by user
+    const players: Record<string, any[]> = {};
+    propCards.forEach(card => {
+      const uId = card.userId || 'unknown';
+      if (!players[uId]) players[uId] = [];
+      players[uId].push(card);
+    });
+
+    return Object.entries(players).map(([uid, cards]) => ({
+      uid,
+      name: cards[0].userName || 'Unknown User',
+      cards,
+      totalPaid: cards.filter(c => c.isPaid).length * (gameState.props?.cost || 0),
+      totalOwed: cards.filter(c => !c.isPaid).length * (gameState.props?.cost || 0),
+      email: cards[0].userEmail
+    }));
+  };
+
 
   const updatePlayerSquares = (ownerName: string, updates: Partial<Square>) => {
     const newSquares = gameState.squares.map(sq =>
@@ -1009,6 +1043,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const renderWizardStep5 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <PropsManager gameState={gameState} updateConfig={updateConfig} />
+      </div>
+    </div>
+  );
+
+  const renderWizardStep6 = () => (
+    <div className="space-y-6 animate-in slide-in-from-right duration-300">
       {/* Theme Selector */}
       {availableThemes.length > 0 && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -1160,9 +1202,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     </div>
   );
 
-  const renderWizardStep6 = () => renderWizardReminders();
+  const renderWizardStep7 = () => renderWizardReminders();
 
-  const renderWizardStep7 = () => (
+  const renderWizardStep8 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 className="text-xl font-bold text-white mb-2">Final Preferences</h3>
@@ -1321,9 +1363,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   { step: 2, label: '2. Basics' },
                   { step: 3, label: '3. Rules' },
                   { step: 4, label: '4. Payouts' },
-                  { step: 5, label: '5. Branding' },
-                  { step: 6, label: '6. Reminders' },
-                  { step: 7, label: '7. Finish' }
+                  { step: 5, label: '5. Side Hustle' },
+                  { step: 6, label: '6. Branding' },
+                  { step: 7, label: '7. Reminders' },
+                  { step: 8, label: '8. Finish' }
                 ].map(s => (
                   <button
                     key={s.step}
@@ -1346,6 +1389,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {wizardStep === 5 && renderWizardStep5()}
             {wizardStep === 6 && renderWizardStep6()}
             {wizardStep === 7 && renderWizardStep7()}
+            {wizardStep === 8 && renderWizardStep8()}
 
             <div className="flex justify-between pt-6 border-t border-slate-800">
               <button onClick={() => setWizardStep(Math.max(1, wizardStep - 1))} disabled={wizardStep === 1} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all"><ArrowLeft size={18} /> Previous</button>
@@ -1720,20 +1764,132 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             )}
 
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
-                <h3 className="font-bold text-white flex items-center gap-2"><Users size={18} className="text-indigo-400" /> Player List</h3>
+              <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-4">
+                  <h3 className="font-bold text-white flex items-center gap-2"><Users size={18} className="text-indigo-400" /> Player List</h3>
+                  {gameState.props?.enabled && (
+                    <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
+                      <button
+                        onClick={() => setPlayerTab('grid')}
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${playerTab === 'grid' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        Grid
+                      </button>
+                      <button
+                        onClick={() => setPlayerTab('props')}
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${playerTab === 'props' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        Side Hustle
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <button onClick={handleExportUsers} className="text-xs bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1"><Download size={12} /> Export CSV</button>
-                  <button onClick={() => { updateConfig({ squares: gameState.squares.map(s => s.owner ? { ...s, isPaid: true } : s) }); }} className="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded font-bold transition-colors">Mark All Paid</button>
+                  {playerTab === 'grid' && (
+                    <button onClick={() => { updateConfig({ squares: gameState.squares.map(s => s.owner ? { ...s, isPaid: true } : s) }); }} className="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded font-bold transition-colors">Mark All Paid</button>
+                  )}
                 </div>
               </div>
-              {getPlayers().length === 0 ? (
-                <div className="p-8 text-center text-slate-500">No players yet. Share the pool link!</div>
+
+              {playerTab === 'grid' ? (
+                getPlayers().length === 0 ? (
+                  <div className="p-8 text-center text-slate-500">No players yet. Share the pool link!</div>
+                ) : (
+                  <div className="divide-y divide-slate-800">
+                    {getPlayers().map((player) => (
+
+                      <div key={player.name} className="bg-slate-900 hover:bg-slate-800/50 transition-colors">
+                        <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.name ? null : player.name)}>
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
+                              <UserIcon size={20} className="text-slate-400" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-white text-sm">{player.name}</h4>
+                              <div className="flex gap-2 text-xs">
+                                {!!gameState.charity?.enabled && (
+                                  <div className="flex items-center gap-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
+                                    <div className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center">
+                                      <Heart size={16} className="text-rose-500" />
+                                    </div>
+                                    <div>
+                                      <div className="text-xs text-slate-500 font-bold uppercase">Charity</div>
+                                      <div className="text-sm font-bold text-white">{gameState.charity?.name || 'Not Set'}</div>
+                                    </div>
+                                  </div>
+                                )}
+                                <span className="text-slate-400">{player.squares.length} Squares</span>
+                                {player.totalOwed > 0 && <span className="text-rose-400 font-bold">Owes ${player.totalOwed}</span>}
+                                {player.totalOwed === 0 && <span className="text-emerald-400 font-bold">Paid in Full</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            {player.contact?.email && (
+                              <a href={`mailto:${player.contact.email}?subject=${encodeURIComponent(gameState.name)} Payment Reminder`} onClick={(e) => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Email Player"><Mail size={16} /></a>
+                            )}
+                            <button onClick={(e) => { e.stopPropagation(); setEditingPlayer({ originalName: player.name, name: player.name, email: player.contact?.email || '', phone: player.contact?.phone || '', notes: player.contact?.notes || '' }) }} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Edit Player"><Settings size={16} /></button>
+                            <div className={`transition-transform duration-200 ${expandedPlayer === player.name ? 'rotate-180' : ''}`}><ArrowRight size={16} className="text-slate-600 rotate-90" /></div>
+                          </div>
+                        </div>
+
+                        {expandedPlayer === player.name && (
+                          <div className="px-4 pb-4 pl-16 animate-in slide-in-from-top-2">
+                            <div className="bg-slate-950 rounded-lg p-4 border border-slate-800">
+                              {player.contact && (
+                                <div className="mb-4 text-xs text-slate-400 grid grid-cols-2 gap-2 pb-4 border-b border-slate-800">
+                                  {player.contact.email && <div><span className="font-bold block text-slate-500 uppercase">Email</span>{player.contact.email}</div>}
+                                  {player.contact.phone && <div><span className="font-bold block text-slate-500 uppercase">Phone</span>{player.contact.phone}</div>}
+                                  {player.contact.notes && <div className="col-span-2"><span className="font-bold block text-slate-500 uppercase">Notes</span>{player.contact.notes}</div>}
+                                </div>
+                              )}
+
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-xs font-bold text-slate-500 uppercase">Squares Owned</span>
+                                  <button onClick={() => updatePlayerSquares(player.name, { isPaid: true })} className="text-xs text-emerald-400 hover:text-emerald-300 font-bold">Mark All Paid</button>
+                                </div>
+                                {player.squares.map(sq => (
+                                  <div key={sq.id} className="flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-800">
+                                    <span className="text-sm font-mono text-slate-300">Square #{sq.id}</span>
+                                    <div className="flex items-center gap-3">
+                                      <button
+                                        onClick={() => updateSquare(sq.id, { isPaid: !sq.isPaid })}
+                                        className={`text-xs px-2 py-1 rounded font-bold border transition-colors ${sq.isPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}
+                                      >
+                                        {sq.isPaid ? 'PAID' : 'UNPAID'}
+                                      </button>
+                                      <button
+                                        onClick={() => { updateSquare(sq.id, { owner: null, playerDetails: undefined, isPaid: false }); }}
+                                        className="text-slate-600 hover:text-rose-500 transition-colors"
+                                        title="Release Square"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="mt-4 pt-4 border-t border-slate-800 flex justify-end">
+                                <button onClick={() => releasePlayer(player.name)} className="text-xs text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1"><Trash2 size={12} /> Remove Player & Release All Squares</button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
               ) : (
-                <div className="divide-y divide-slate-800">
-                  {getPlayers().map((player) => (
-                    <div key={player.name} className="bg-slate-900 hover:bg-slate-800/50 transition-colors">
-                      <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.name ? null : player.name)}>
+                // SIDE HUSTLE PLAYERS VIEW
+                getPropPlayers().length === 0 ? (
+                  <div className="p-8 text-center text-slate-500">No prop cards purchased yet.</div>
+                ) : (
+                  <div className="divide-y divide-slate-800">
+                    {getPropPlayers().map((player) => (
+                      <div key={player.uid} className="bg-slate-900 hover:bg-slate-800/50 transition-colors p-4 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
                             <UserIcon size={20} className="text-slate-400" />
@@ -1741,81 +1897,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <div>
                             <h4 className="font-bold text-white text-sm">{player.name}</h4>
                             <div className="flex gap-2 text-xs">
-                              {!!gameState.charity?.enabled && (
-                                <div className="flex items-center gap-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
-                                  <div className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center">
-                                    <Heart size={16} className="text-rose-500" />
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-slate-500 font-bold uppercase">Charity</div>
-                                    <div className="text-sm font-bold text-white">{gameState.charity?.name || 'Not Set'}</div>
-                                  </div>
-                                </div>
-                              )}
-                              <span className="text-slate-400">{player.squares.length} Squares</span>
+                              <span className="text-slate-400">{player.cards.length} Cards</span>
                               {player.totalOwed > 0 && <span className="text-rose-400 font-bold">Owes ${player.totalOwed}</span>}
                               {player.totalOwed === 0 && <span className="text-emerald-400 font-bold">Paid in Full</span>}
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                          {player.contact?.email && (
-                            <a href={`mailto:${player.contact.email}?subject=${encodeURIComponent(gameState.name)} Payment Reminder`} onClick={(e) => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Email Player"><Mail size={16} /></a>
-                          )}
-                          <button onClick={(e) => { e.stopPropagation(); setEditingPlayer({ originalName: player.name, name: player.name, email: player.contact?.email || '', phone: player.contact?.phone || '', notes: player.contact?.notes || '' }) }} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Edit Player"><Settings size={16} /></button>
-                          <div className={`transition-transform duration-200 ${expandedPlayer === player.name ? 'rotate-180' : ''}`}><ArrowRight size={16} className="text-slate-600 rotate-90" /></div>
+                        {/* Simplified actions/view for props */}
+                        <div className="text-xs text-slate-500">
+                          {player.email}
                         </div>
                       </div>
-
-                      {expandedPlayer === player.name && (
-                        <div className="px-4 pb-4 pl-16 animate-in slide-in-from-top-2">
-                          <div className="bg-slate-950 rounded-lg p-4 border border-slate-800">
-                            {player.contact && (
-                              <div className="mb-4 text-xs text-slate-400 grid grid-cols-2 gap-2 pb-4 border-b border-slate-800">
-                                {player.contact.email && <div><span className="font-bold block text-slate-500 uppercase">Email</span>{player.contact.email}</div>}
-                                {player.contact.phone && <div><span className="font-bold block text-slate-500 uppercase">Phone</span>{player.contact.phone}</div>}
-                                {player.contact.notes && <div className="col-span-2"><span className="font-bold block text-slate-500 uppercase">Notes</span>{player.contact.notes}</div>}
-                              </div>
-                            )}
-
-                            <div className="space-y-2">
-                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold text-slate-500 uppercase">Squares Owned</span>
-                                <button onClick={() => updatePlayerSquares(player.name, { isPaid: true })} className="text-xs text-emerald-400 hover:text-emerald-300 font-bold">Mark All Paid</button>
-                              </div>
-                              {player.squares.map(sq => (
-                                <div key={sq.id} className="flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-800">
-                                  <span className="text-sm font-mono text-slate-300">Square #{sq.id}</span>
-                                  <div className="flex items-center gap-3">
-                                    <button
-                                      onClick={() => updateSquare(sq.id, { isPaid: !sq.isPaid })}
-                                      className={`text-xs px-2 py-1 rounded font-bold border transition-colors ${sq.isPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}
-                                    >
-                                      {sq.isPaid ? 'PAID' : 'UNPAID'}
-                                    </button>
-                                    <button
-                                      onClick={() => { updateSquare(sq.id, { owner: null, playerDetails: undefined, isPaid: false }); }}
-                                      className="text-slate-600 hover:text-rose-500 transition-colors"
-                                      title="Release Square"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="mt-4 pt-4 border-t border-slate-800 flex justify-end">
-                              <button onClick={() => releasePlayer(player.name)} className="text-xs text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1"><Trash2 size={12} /> Remove Player & Release All Squares</button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )
               )}
             </div>
+
 
             {/* EDIT PLAYER MODAL */}
             {editingPlayer && (

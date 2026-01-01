@@ -1,12 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { GameState } from '../types';
-import { DollarSign, Users, TrendingUp, Award, Percent, Clock } from 'lucide-react';
+import { dbService } from '../services/dbService';
+import { DollarSign, Users, TrendingUp, Award, Percent, Clock, Zap } from 'lucide-react';
 
 interface PoolStatisticsProps {
     pool: GameState;
 }
 
 export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
+    // Props State
+    const [propCards, setPropCards] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (pool.id && pool.props?.enabled) {
+            const unsub = dbService.subscribeToAllPropCards(pool.id, (cards) => {
+                setPropCards(cards);
+            });
+            return () => unsub();
+        }
+    }, [pool.id, pool.props?.enabled]);
+
     // Calculate statistics
     const totalSquares = 100;
     const soldSquares = pool.squares.filter(s => s.owner).length;
@@ -43,6 +56,11 @@ export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
 
     const percentSold = ((soldSquares / totalSquares) * 100).toFixed(0);
     const percentPaid = soldSquares > 0 ? ((paidSquares / soldSquares) * 100).toFixed(0) : '0';
+
+    // Prop Stats
+    const propPot = propCards.length * (pool.props?.cost || 0);
+    const payoutAmounts = (pool.props?.payouts || [100]).map(pct => (pct / 100) * propPot);
+
 
     return (
         <div className="space-y-6">
@@ -154,6 +172,50 @@ export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
                     )}
                 </div>
             </div>
-        </div>
+
+            {/* Side Hustle Stats */}
+            {
+                pool.props?.enabled && (
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                            <Zap size={120} className="text-amber-400" />
+                        </div>
+                        <h3 className="text-white font-bold mb-4 flex items-center gap-2 relative z-10">
+                            <Zap size={16} className="text-amber-400" /> Side Hustle Stats
+                        </h3>
+
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+                            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+                                <div className="text-xs text-slate-500 uppercase font-bold mb-1">Total Pot</div>
+                                <div className="text-2xl font-bold text-emerald-400 font-mono">${propPot.toLocaleString()}</div>
+                                <div className="text-xs text-slate-500">${pool.props?.cost} per card</div>
+                            </div>
+                            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+                                <div className="text-xs text-slate-500 uppercase font-bold mb-1">Cards Sold</div>
+                                <div className="text-2xl font-bold text-indigo-400 font-mono">{propCards.length}</div>
+                                <div className="text-xs text-slate-500">
+                                    {pool.props?.maxCards && pool.props?.maxCards > 1 ? `Max ${pool.props.maxCards} per player` : '1 per player'}
+                                </div>
+                            </div>
+                            {/* Payouts Breakdown */}
+                            <div className="col-span-2 bg-slate-950 p-4 rounded-lg border border-slate-800">
+                                <div className="text-xs text-slate-500 uppercase font-bold mb-2">Projected Payouts</div>
+                                <div className="flex gap-6 overflow-x-auto pb-1">
+                                    {payoutAmounts.map((amt, idx) => (
+                                        <div key={idx} className="text-center min-w-[60px]">
+                                            <div className="text-sm font-bold text-white font-mono shadow-green-900">${amt.toLocaleString()}</div>
+                                            <div className="text-[10px] text-slate-500 mt-1 font-bold">
+                                                {idx === 0 ? '1st' : idx === 1 ? '2nd' : idx === 2 ? '3rd' : `${idx + 1}th`}
+                                                <span className="font-normal opacity-50 ml-1">({(pool.props?.payouts || [100])[idx]}%)</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 };
