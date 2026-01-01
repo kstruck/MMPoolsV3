@@ -5,8 +5,6 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase';
 import { WizardStepBranding } from '../admin/WizardStepBranding';
 import { WizardStepAdvanced } from '../admin/WizardStepAdvanced';
-import { Header } from '../Header';
-import { Footer } from '../Footer';
 
 interface BracketWizardProps {
     user: User;
@@ -292,8 +290,6 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100">
-            <Header user={user} onOpenAuth={() => { }} onLogout={() => { }} />
-
             <div className="max-w-4xl mx-auto p-6 py-12">
                 {/* Header */}
                 <div className="mb-8">
@@ -394,8 +390,6 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     )}
                 </div>
             </div>
-
-            <Footer />
         </div>
     );
 
