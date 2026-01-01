@@ -75,11 +75,16 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                     isClosed = bp.status === 'COMPLETED';
                     isLocked = bp.status === 'LOCKED' || bp.status === 'COMPLETED';
                     // isLive not really applicable or checked via dates
-                } else {
+                } else if (p.type === 'SQUARES') {
                     const sp = p as GameState;
-                    isClosed = sp.scores.gameStatus === 'post';
-                    isLive = sp.scores.gameStatus === 'in';
+                    isClosed = sp.scores?.gameStatus === 'post';
+                    isLive = sp.scores?.gameStatus === 'in';
                     isLocked = sp.isLocked;
+                } else {
+                    // NFL_PLAYOFFS, PROPS, or other types
+                    isClosed = false;
+                    isLive = false;
+                    isLocked = (p as any).isLocked || false;
                 }
 
                 if (filterStatus === 'open' && isLocked) return false;
@@ -256,8 +261,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                     {[
                                         { id: 'all', label: 'All Pools', count: pools.length },
                                         { id: 'open', label: 'Open for Entry', count: pools.filter(p => p.type === 'BRACKET' ? p.status === 'PUBLISHED' : !(p as GameState).isLocked).length },
-                                        { id: 'live', label: 'Live Now', count: pools.filter(p => p.type !== 'BRACKET' && (p as GameState).scores.gameStatus === 'in').length },
-                                        { id: 'final', label: 'Completed', count: pools.filter(p => p.type === 'BRACKET' ? p.status === 'COMPLETED' : (p as GameState).scores.gameStatus === 'post').length },
+                                        { id: 'live', label: 'Live Now', count: pools.filter(p => p.type === 'SQUARES' && (p as GameState).scores?.gameStatus === 'in').length },
+                                        { id: 'final', label: 'Completed', count: pools.filter(p => p.type === 'BRACKET' ? p.status === 'COMPLETED' : p.type === 'SQUARES' && (p as GameState).scores?.gameStatus === 'post').length },
                                     ].map((stat) => (
                                         <label key={stat.id} className="flex items-center justify-between cursor-pointer group p-2 rounded hover:bg-slate-800 transition-colors">
                                             <div className="flex items-center gap-3">
