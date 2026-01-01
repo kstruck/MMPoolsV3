@@ -8,7 +8,7 @@ if (!admin.apps.length) {
 export { lockPool } from "./poolParams";
 export { reserveSquare } from './squares';
 export { confirmPayment } from './confirmPayment';
-export { purchasePropCard, gradeProp } from './propBets';
+export { purchasePropCard, gradeProp, updatePropCard } from './propBets';
 export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdates";
 export { onWinnerUpdate, onAIRequest } from "./aiCommissioner";
 export { onUserCreated, syncAllUsers } from "./userSync";
