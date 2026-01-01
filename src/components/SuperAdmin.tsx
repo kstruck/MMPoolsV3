@@ -744,7 +744,7 @@ export const SuperAdmin: React.FC = () => {
                                                         filledPct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round(((bp.entryCount || 0) / max) * 100);
                                                     } else {
                                                         const sp = pool as GameState;
-                                                        filledPct = sp.squares.filter(s => s.owner).length;
+                                                        filledPct = sp.squares?.filter(s => s.owner).length || 0;
                                                     }
 
                                                     return (
