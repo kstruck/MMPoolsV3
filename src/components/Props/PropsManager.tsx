@@ -45,6 +45,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
     const questions = gameState.props?.questions || [];
     const propsEnabled = gameState.props?.enabled || false;
     const propCost = gameState.props?.cost || 5;
+    const maxCards = gameState.props?.maxCards || 1;
 
     const handleAddOption = () => {
         if (options.length < 4) {
@@ -100,6 +101,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
             props: {
                 enabled: propsEnabled,
                 cost: propCost,
+                maxCards: maxCards,
                 questions: updatedQuestions
             }
         });
@@ -127,6 +129,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
             props: {
                 enabled: propsEnabled,
                 cost: propCost,
+                maxCards: maxCards,
                 questions: questions.filter(q => q.id !== id)
             }
         });
@@ -137,6 +140,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
             props: {
                 enabled: !propsEnabled,
                 cost: propCost,
+                maxCards: maxCards,
                 questions
             }
         });
@@ -147,6 +151,18 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
             props: {
                 enabled: propsEnabled,
                 cost: val,
+                maxCards: maxCards,
+                questions
+            }
+        });
+    };
+
+    const handleMaxCardsChange = (val: number) => {
+        updateConfig({
+            props: {
+                enabled: propsEnabled,
+                cost: propCost,
+                maxCards: Math.max(1, Math.min(10, val)),
                 questions
             }
         });
@@ -162,16 +178,27 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
             <div className="flex items-center justify-between p-4 bg-slate-800 rounded-lg border border-slate-700">
                 <div>
                     <h3 className="text-white font-bold">Enable Prop Bets</h3>
-                    <p className="text-slate-400 text-sm">Allow players to buy a side-hustle card.</p>
+                    <p className="text-slate-400 text-sm">Allow players to buy side-hustle cards.</p>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
-                        <span className="text-slate-300">$</span>
+                        <span className="text-slate-300 text-sm">Cost $</span>
                         <input
                             type="number"
                             value={propCost}
                             onChange={(e) => handleCostChange(Number(e.target.value))}
-                            className="w-20 bg-slate-900 border border-slate-700 text-white px-2 py-1 rounded"
+                            className="w-16 bg-slate-900 border border-slate-700 text-white px-2 py-1 rounded text-center"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-slate-300 text-sm">Max Cards</span>
+                        <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={maxCards}
+                            onChange={(e) => handleMaxCardsChange(Number(e.target.value))}
+                            className="w-16 bg-slate-900 border border-slate-700 text-white px-2 py-1 rounded text-center"
                         />
                     </div>
                     <button

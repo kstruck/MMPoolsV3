@@ -2,14 +2,14 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from 'firebase-admin';
 import { PropCard, GameState } from './types';
 
-// 1. Purchase Prop Card
+// 1. Purchase Prop Card (Supports multiple cards per user)
 export const purchasePropCard = onCall(async (request) => {
-    // request.data = { poolId, answers: { qId: idx }, tiebreakerVal }
+    // request.data = { poolId, answers: { qId: idx }, tiebreakerVal, userName, cardName }
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'Must be logged in.');
     }
 
-    const { poolId, answers, tiebreakerVal, userName } = request.data;
+    const { poolId, answers, tiebreakerVal, userName, cardName } = request.data;
     const userId = request.auth.uid;
     const db = admin.firestore();
 
@@ -30,26 +30,33 @@ export const purchasePropCard = onCall(async (request) => {
         throw new HttpsError('failed-precondition', 'Pool is locked. No new entries allowed.');
     }
 
-    // Check if user already bought one
-    const cardRef = poolRef.collection('propCards').doc(userId);
-    const existing = await cardRef.get();
-    if (existing.exists) {
-        throw new HttpsError('already-exists', 'You have already purchased a card for this pool.');
+    // Get maxCards limit (default: 1)
+    const maxCards = poolData.props?.maxCards || 1;
+
+    // Count user's existing cards
+    const existingCards = await poolRef.collection('propCards')
+        .where('userId', '==', userId)
+        .get();
+
+    if (existingCards.size >= maxCards) {
+        throw new HttpsError('resource-exhausted', `You can only purchase ${maxCards} card(s) for this pool.`);
     }
 
-    // Create Card
+    // Create Card with auto-generated ID (supports multiple cards)
     const card: PropCard = {
         userId,
         userName: userName || 'Anonymous',
+        cardName: cardName || `Card #${existingCards.size + 1}`,
         purchasedAt: Date.now(),
         answers,
         score: 0,
         tiebreakerVal: Number(tiebreakerVal) || 0
     };
 
-    await cardRef.set(card);
+    // Use add() instead of doc(userId).set() to allow multiple cards
+    await poolRef.collection('propCards').add(card);
 
-    return { success: true };
+    return { success: true, cardCount: existingCards.size + 1 };
 });
 
 // 2. Grade Prop (Admin Only)

@@ -162,8 +162,10 @@ export interface PropQuestion {
 }
 
 export interface PropCard {
+  id?: string; // Firestore document ID
   userId: string;
   userName?: string;
+  cardName?: string; // User-given name for multiple cards (e.g. "Kevin's Card #1")
   purchasedAt: number;
   answers: Record<string, number>; // { questionId: optionIndex }
   score: number;
@@ -279,6 +281,7 @@ export interface GameState {
   props?: {
     enabled: boolean;
     cost: number;
+    maxCards: number; // Max cards per user (default: 1)
     questions: PropQuestion[];
   };
   lastBroadcastTime?: number; // Timestamp of last mass email

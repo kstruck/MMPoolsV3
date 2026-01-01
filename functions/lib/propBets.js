@@ -3,13 +3,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.gradeProp = exports.purchasePropCard = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
-// 1. Purchase Prop Card
+// 1. Purchase Prop Card (Supports multiple cards per user)
 exports.purchasePropCard = (0, https_1.onCall)(async (request) => {
-    // request.data = { poolId, answers: { qId: idx }, tiebreakerVal }
+    var _a;
+    // request.data = { poolId, answers: { qId: idx }, tiebreakerVal, userName, cardName }
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
     }
-    const { poolId, answers, tiebreakerVal, userName } = request.data;
+    const { poolId, answers, tiebreakerVal, userName, cardName } = request.data;
     const userId = request.auth.uid;
     const db = admin.firestore();
     if (!poolId || !answers) {
@@ -26,23 +27,28 @@ exports.purchasePropCard = (0, https_1.onCall)(async (request) => {
     if (poolData.isLocked) {
         throw new https_1.HttpsError('failed-precondition', 'Pool is locked. No new entries allowed.');
     }
-    // Check if user already bought one
-    const cardRef = poolRef.collection('propCards').doc(userId);
-    const existing = await cardRef.get();
-    if (existing.exists) {
-        throw new https_1.HttpsError('already-exists', 'You have already purchased a card for this pool.');
+    // Get maxCards limit (default: 1)
+    const maxCards = ((_a = poolData.props) === null || _a === void 0 ? void 0 : _a.maxCards) || 1;
+    // Count user's existing cards
+    const existingCards = await poolRef.collection('propCards')
+        .where('userId', '==', userId)
+        .get();
+    if (existingCards.size >= maxCards) {
+        throw new https_1.HttpsError('resource-exhausted', `You can only purchase ${maxCards} card(s) for this pool.`);
     }
-    // Create Card
+    // Create Card with auto-generated ID (supports multiple cards)
     const card = {
         userId,
         userName: userName || 'Anonymous',
+        cardName: cardName || `Card #${existingCards.size + 1}`,
         purchasedAt: Date.now(),
         answers,
         score: 0,
         tiebreakerVal: Number(tiebreakerVal) || 0
     };
-    await cardRef.set(card);
-    return { success: true };
+    // Use add() instead of doc(userId).set() to allow multiple cards
+    await poolRef.collection('propCards').add(card);
+    return { success: true, cardCount: existingCards.size + 1 };
 });
 // 2. Grade Prop (Admin Only)
 exports.gradeProp = (0, https_1.onCall)(async (request) => {

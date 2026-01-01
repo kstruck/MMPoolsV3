@@ -106,6 +106,7 @@ export interface PropQuestion {
 export interface PropCard {
     userId: string;
     userName?: string;
+    cardName?: string; // User-given name for multiple cards
     purchasedAt: number;
     answers: Record<string, number>; // { questionId: optionIndex }
     score: number;
@@ -193,6 +194,7 @@ export interface GameState {
     props?: {
         enabled: boolean;
         cost: number;
+        maxCards?: number; // Max cards per user (default: 1)
         questions: PropQuestion[];
     };
 }

@@ -107,9 +107,9 @@ export const dbService = {
     },
 
     // --- PROP BETS ---
-    purchasePropCard: async (poolId: string, answers: Record<string, number>, tiebreakerVal: number, userName: string) => {
+    purchasePropCard: async (poolId: string, answers: Record<string, number>, tiebreakerVal: number, userName: string, cardName?: string) => {
         const fn = httpsCallable(functions, 'purchasePropCard');
-        await fn({ poolId, answers, tiebreakerVal, userName });
+        await fn({ poolId, answers, tiebreakerVal, userName, cardName });
     },
 
     gradeProp: async (poolId: string, questionId: string, correctOptionIndex: number) => {
