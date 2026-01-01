@@ -24,3 +24,4 @@ export { onGameComplete } from "./postGameEmail";
 export { onAnnouncementCreated } from "./announcements";
 export { submitPlayoffPicks, calculatePlayoffScores } from "./playoffPools";
 export { joinWaitlist } from "./waitlist";
+export { generateTestScenario, validateTestResults, generateTestReport } from "./aiTesting";
