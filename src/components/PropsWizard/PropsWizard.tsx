@@ -4,7 +4,7 @@ import { WizardStepBranding } from '../WizardStepBranding';
 import { WizardStepReminders } from '../WizardStepReminders';
 import { PropsManager } from '../Props/PropsManager';
 import { dbService } from '../../services/dbService';
-import { Loader, ArrowLeft, Check, AlertTriangle, Mail, Lock, Users, QrCode } from 'lucide-react';
+import { Loader, ArrowLeft, Check, AlertTriangle, Mail, Lock, Users, QrCode, Plus, Trash2 } from 'lucide-react';
 import type { GameState, PropsPool } from '../../types';
 import { Header } from '../Header';
 import { Footer } from '../Footer';
@@ -330,6 +330,63 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                             onChange={(e) => updateConfig({ props: { ...config.props!, maxCards: Number(e.target.value) } })}
                                             className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 font-bold text-white focus:border-indigo-500 outline-none"
                                         />
+                                    </div>
+                                </div>
+
+                                {/* Payout Structure */}
+                                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                                    <h4 className="font-bold text-white mb-4 flex items-center justify-between">
+                                        <span>Payout Structure (Percentages)</span>
+                                        <span className={`text-sm ${(config.props?.payouts?.reduce((a, b) => a + b, 0) || 0) === 100 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                            Total: {config.props?.payouts?.reduce((a, b) => a + b, 0)}%
+                                        </span>
+                                    </h4>
+
+                                    <div className="space-y-3">
+                                        {config.props?.payouts?.map((p, idx) => (
+                                            <div key={idx} className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-400 text-sm">
+                                                    {idx + 1}
+                                                </div>
+                                                <div className="flex-grow relative">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        value={p}
+                                                        onChange={(e) => {
+                                                            const newPayouts = [...(config.props?.payouts || [])];
+                                                            newPayouts[idx] = Number(e.target.value);
+                                                            updateConfig({ props: { ...config.props!, payouts: newPayouts } });
+                                                        }}
+                                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white pr-8 focus:border-indigo-500 outline-none"
+                                                    />
+                                                    <span className="absolute right-3 top-2 text-slate-500">%</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        const newPayouts = config.props?.payouts?.filter((_, i) => i !== idx);
+                                                        updateConfig({ props: { ...config.props!, payouts: newPayouts } });
+                                                    }}
+                                                    className="p-2 text-slate-500 hover:text-rose-400 transition-colors"
+                                                    disabled={(config.props?.payouts?.length || 0) <= 1}
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        ))}
+
+                                        <button
+                                            onClick={() => {
+                                                const currentTotal = config.props?.payouts?.reduce((a, b) => a + b, 0) || 0;
+                                                if (currentTotal < 100) {
+                                                    updateConfig({ props: { ...config.props!, payouts: [...(config.props?.payouts || []), 100 - currentTotal] } });
+                                                }
+                                            }}
+                                            className="w-full py-2 border border-dashed border-slate-700 rounded-lg text-slate-400 hover:text-white hover:border-slate-500 transition-colors flex items-center justify-center gap-2 text-sm"
+                                        >
+                                            <Plus size={16} /> Add Place
+                                        </button>
                                     </div>
                                 </div>
 
