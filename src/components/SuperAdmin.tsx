@@ -778,11 +778,17 @@ export const SuperAdmin: React.FC = () => {
                                                             </td>
                                                             <td className="p-4 font-bold text-sm">{matchUp}</td>
                                                             <td className="p-4 text-xs text-slate-400 font-mono">
-                                                                {isBracket ? (
-                                                                    (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD'
-                                                                ) : (
-                                                                    (pool as GameState).scores.startTime ? new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD'
-                                                                )}
+                                                                {(() => {
+                                                                    if (pool.type === 'BRACKET') {
+                                                                        return (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD';
+                                                                    } else if (pool.type === 'NFL_PLAYOFFS') {
+                                                                        return (pool as any).lockDate ? new Date((pool as any).lockDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD';
+                                                                    } else if (pool.type === 'SQUARES' && (pool as GameState).scores?.startTime) {
+                                                                        return new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                                                                    } else {
+                                                                        return 'TBD';
+                                                                    }
+                                                                })()}
                                                             </td>
                                                             <td className="p-4 text-slate-400 text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
                                                             <td className="p-4">
