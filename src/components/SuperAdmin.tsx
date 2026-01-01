@@ -85,9 +85,12 @@ export const SuperAdmin: React.FC = () => {
 
 
     // --- Categories State ---
+    // --- Categories State ---
     const [seedCategories, setSeedCategories] = useState<string[]>(['Game']);
     const [seedCategoryFilter, setSeedCategoryFilter] = useState<string>('All');
-    const availableCategories = ['Game', 'Player', 'Offense', 'Defense', 'Yards', 'TD', 'FG', 'Fun'];
+    const [newCategoryName, setNewCategoryName] = useState('');
+
+    const availableCategories = settings?.propCategories || ['Game', 'Player', 'Offense', 'Defense', 'Yards', 'TD', 'FG', 'Fun'];
 
     const toggleCategory = (cat: string) => {
         if (seedCategories.includes(cat)) {
@@ -96,6 +99,27 @@ export const SuperAdmin: React.FC = () => {
             setSeedCategories([...seedCategories, cat]);
         }
     };
+
+    const handleAddCategory = () => {
+        if (!newCategoryName || !settings) return;
+        const currentCats = settings.propCategories || [];
+        if (currentCats.includes(newCategoryName)) return;
+
+        settingsService.update({
+            propCategories: [...currentCats, newCategoryName].sort()
+        });
+        setNewCategoryName('');
+    };
+
+    const handleRemoveCategory = (cat: string) => {
+        if (!settings || !confirm(`Delete category "${cat}"? This won't remove it from existing questions.`)) return;
+        const currentCats = settings.propCategories || [];
+        settingsService.update({
+            propCategories: currentCats.filter(c => c !== cat)
+        });
+    };
+
+
 
     const handleSaveSeed = async () => {
         if (!seedText || !seedOpt1 || !seedOpt2) return;
@@ -2043,6 +2067,41 @@ export const SuperAdmin: React.FC = () => {
             {
                 activeTab === 'props' && (
                     <div className="space-y-6">
+                        {/* Manage Categories Section */}
+                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                            <h3 className="text-xl font-bold mb-4">Manage Global Categories</h3>
+                            <div className="flex flex-wrap gap-2 mb-4">
+                                {availableCategories.map(cat => (
+                                    <div key={cat} className="flex items-center gap-1 bg-slate-700 text-slate-200 px-3 py-1 rounded-full text-sm font-bold border border-slate-600">
+                                        <span>{cat}</span>
+                                        <button
+                                            onClick={() => handleRemoveCategory(cat)}
+                                            className="hover:text-rose-400 p-0.5 rounded-full transition-colors"
+                                            title="Remove Category"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex gap-2">
+                                <input
+                                    className="bg-slate-900 border border-slate-600 p-2 rounded text-white text-sm"
+                                    placeholder="New Category Name"
+                                    value={newCategoryName}
+                                    onChange={e => setNewCategoryName(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+                                />
+                                <button
+                                    onClick={handleAddCategory}
+                                    disabled={!newCategoryName}
+                                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2"
+                                >
+                                    <Plus size={16} /> Add
+                                </button>
+                            </div>
+                        </div>
+
                         <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
                             <h3 className="text-xl font-bold mb-4">{editingSeed ? 'Edit Seed Question' : 'Add New Seed Question'}</h3>
                             <div className="grid gap-4 bg-slate-900/50 p-4 rounded-lg">

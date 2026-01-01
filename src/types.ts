@@ -660,6 +660,7 @@ export interface SystemSettings {
   enableBracketPools: boolean;
   maintenanceMode: boolean;
   currentSeason: number;
+  propCategories: string[]; // Dynamic categories for prop seeds
 }
 
 
