@@ -693,7 +693,9 @@ const App: React.FC = () => {
   };
 
   const quarterlyPayouts = useMemo(() => {
-    if (!currentPool || currentPool.type === 'BRACKET') return [];
+    // Only calculate for Squares pools (legacy undefined type or explicit SQUARES)
+    if (!currentPool || (currentPool.type && currentPool.type !== 'SQUARES')) return [];
+
     const squaresPool = currentPool as GameState;
     const periods = ['q1', 'half', 'q3', 'final'] as const;
     let accumulatedRollover = 0;
