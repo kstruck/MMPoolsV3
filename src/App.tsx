@@ -961,8 +961,8 @@ const App: React.FC = () => {
       );
     }
 
-    if (currentPool.type !== 'SQUARES' && (!currentPool.type)) {
-      return <div className="text-white p-20 text-center font-bold">Admin not yet supported for this pool type.</div>;
+    if (currentPool.type && currentPool.type !== 'SQUARES') {
+      return <div className="text-white p-20 text-center font-bold">Admin panel is only available for SQUARES pools. Use the appropriate admin interface for this pool type.</div>;
     }
 
     return (
