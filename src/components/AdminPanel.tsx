@@ -1841,7 +1841,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 <div className="mb-4 text-xs text-slate-400 grid grid-cols-2 gap-2 pb-4 border-b border-slate-800">
                                   {player.contact.email && <div><span className="font-bold block text-slate-500 uppercase">Email</span>{player.contact.email}</div>}
                                   {player.contact.phone && <div><span className="font-bold block text-slate-500 uppercase">Phone</span>{player.contact.phone}</div>}
-                                  {player.contact.notes && <div className="col-span-2"><span className="font-bold block text-slate-500 uppercase">Notes</span>{player.contact.notes}</div>}
+                                  {player.contact.notes && player.contact.notes !== 'Test' && player.contact.notes !== 'test' && <div className="col-span-2"><span className="font-bold block text-slate-500 uppercase">Notes</span>{player.contact.notes}</div>}
                                 </div>
                               )}
 
