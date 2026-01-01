@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { GameState, PropCard } from '../../types';
 import { dbService } from '../../services/dbService';
-import { Check, Lock, Trophy, Plus, Eye, Edit2, Save } from 'lucide-react';
+import { Check, Lock, Trophy, Plus, Eye, Edit2, Save, Loader } from 'lucide-react';
 
 interface PropCardFormProps {
     gameState: GameState;
@@ -19,6 +19,8 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const [viewingCardId, setViewingCardId] = useState<string | null>(null);
     const [editingCardId, setEditingCardId] = useState<string | null>(null); // NEW: editing mode
     const [showNewCardForm, setShowNewCardForm] = useState(false);
+    const [isConfirming, setIsConfirming] = useState(false);
+    const [liabilityAccepted, setLiabilityAccepted] = useState(false);
 
     const questions = gameState.props?.questions || [];
     const cost = gameState.props?.cost || 5;
@@ -43,22 +45,28 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const canBuyMoreCards = userCards.length < maxCards;
     const viewingCard = viewingCardId ? userCards.find(c => (c as any).id === viewingCardId) : null;
 
-    const handleSubmit = async () => {
+    const handleInitPurchase = () => {
         if (!currentUser) return;
-        setIsSubmitting(true);
         setError(null);
 
         if (Object.keys(answers).length < questions.length) {
             setError("Please answer all questions.");
-            setIsSubmitting(false);
             return;
         }
 
         if (!tiebreaker) {
             setError("Please enter a tiebreaker.");
-            setIsSubmitting(false);
             return;
         }
+
+        setLiabilityAccepted(false); // Reset checkbox
+        setIsConfirming(true);
+    };
+
+    const handleFinalizePurchase = async () => {
+        if (!currentUser) return;
+        setIsSubmitting(true);
+        setError(null);
 
         try {
             const name = cardName.trim() || `Card #${userCards.length + 1}`;
@@ -68,8 +76,10 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             setTiebreaker('');
             setCardName('');
             setShowNewCardForm(false);
+            setIsConfirming(false);
         } catch (e: any) {
             setError(e.message || "Failed to submit card.");
+            setIsConfirming(false); // Close modal on error to show error message
         } finally {
             setIsSubmitting(false);
         }
@@ -326,7 +336,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                     )}
 
                     <button
-                        onClick={editingCardId ? handleSaveEdit : handleSubmit}
+                        onClick={editingCardId ? handleSaveEdit : handleInitPurchase}
                         disabled={isSubmitting || gameState.isLocked}
                         className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl text-lg shadow-lg shadow-indigo-500/25 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
@@ -363,6 +373,65 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                     <p>Picks locked. Good luck!</p>
                 </div>
             )}
+
+            {/* Confirmation Modal */}
+            {isConfirming && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full">
+                        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                            {isSubmitting ? <Loader className="animate-spin text-emerald-400" /> : <Check className="text-emerald-400" />}
+                            Confirm Prop Card Submission
+                        </h3>
+
+                        <div className="bg-slate-900 rounded-lg p-4 mb-4 space-y-3">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-400">Player:</span>
+                                <span className="text-white font-bold">{currentUser?.name || currentUser?.email}</span>
+                            </div>
+                            <div className="border-t border-slate-700 pt-3 flex justify-between text-lg">
+                                <span className="text-slate-300 font-bold">Total Due:</span>
+                                <span className="text-emerald-400 font-mono font-bold">${cost}</span>
+                            </div>
+                        </div>
+
+                        {/* LIABILITY DISCLAIMER */}
+                        <div className="mb-6">
+                            <label className="flex items-start gap-3 cursor-pointer group">
+                                <div className="relative flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={liabilityAccepted}
+                                        onChange={(e) => setLiabilityAccepted(e.target.checked)}
+                                        className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-slate-500 bg-slate-900 transition-all checked:border-emerald-500 checked:bg-emerald-500 hover:border-emerald-400"
+                                    />
+                                    <Check size={14} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
+                                </div>
+                                <p className="text-xs text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
+                                    By checking this box and selecting Purchase Prop Card, I acknowledge and agree that MarchMeleePools does not administer, hold, or distribute prizes. Any prizes are provided solely by the Pool Manager/Organizer. Any questions, disputes, or claims related to prizes or pool outcomes must be resolved directly between the user and the Pool Manager/Organizer.
+                                </p>
+                            </label>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setIsConfirming(false)}
+                                disabled={isSubmitting}
+                                className="flex-1 py-3 text-slate-400 hover:bg-slate-700 rounded-lg font-bold transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleFinalizePurchase}
+                                disabled={!liabilityAccepted || isSubmitting}
+                                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg font-bold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all"
+                            >
+                                {isSubmitting ? 'Submitting...' : 'Submit Prop Card'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };
