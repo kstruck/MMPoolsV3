@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
+import { TestingDashboard } from './TestingDashboard';
 import type { GameState, Pool, User, SystemSettings, PropSeed } from '../types';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot } from 'lucide-react';
 
 
 export const SuperAdmin: React.FC = () => {
@@ -14,7 +15,7 @@ export const SuperAdmin: React.FC = () => {
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
 
     // UI State
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
@@ -541,6 +542,16 @@ export const SuperAdmin: React.FC = () => {
                             <p className="text-sm text-slate-400">registered accounts</p>
                         </button>
 
+                        <button onClick={() => setActiveTab('testing')} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg text-left hover:border-purple-500 transition-colors">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="p-3 bg-purple-500/20 rounded-lg">
+                                    <Bot size={24} className="text-purple-400" />
+                                </div>
+                                <div className="px-3 py-1 bg-purple-500/20 rounded-full text-xs font-bold text-purple-400">New</div>
+                            </div>
+                            <div className="text-2xl font-black text-white mb-1">AI Testing</div>
+                            <p className="text-sm text-slate-400">Generate & Validate Tests</p>
+                        </button>
                         <button onClick={() => setActiveTab('system')} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg text-left hover:border-amber-500 transition-colors">
                             <div className="flex justify-between items-start mb-4">
                                 <div className="p-3 bg-amber-500/20 rounded-lg text-amber-400"><Activity size={24} /></div>
@@ -1414,6 +1425,9 @@ export const SuperAdmin: React.FC = () => {
                     </div>
                 </div>
             )}
+
+
+            {activeTab === 'testing' && <TestingDashboard />}
 
             {activeTab === 'system' && (
                 <div className="space-y-6">
