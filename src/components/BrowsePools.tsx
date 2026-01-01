@@ -54,7 +54,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                 let cost = 0;
                 if (isBracket) cost = (p as any).settings?.entryFee || 0;
                 else if (isSquares) cost = (p as GameState).costPerSquare || 0;
-                else if (isPlayoff) cost = (p as PlayoffPool).entryFee || 0;
+                else if (isPlayoff) cost = (p as PlayoffPool).settings?.entryFee || 0;
 
                 if (filterPrice === 'low' && cost >= 20) return false;
                 if (filterPrice === 'mid' && (cost < 20 || cost > 50)) return false;
@@ -268,7 +268,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     pct = 50; // Arbitrary for now
                                     homeTeam = 'NFL';
                                     awayTeam = 'Playoffs';
-                                    cost = pp.entryFee;
+                                    cost = pp.settings?.entryFee || 0;
                                     isLocked = pp.isLocked;
                                 } else if (pool.type === 'PROPS') {
                                     const pp = pool as PropsPool;

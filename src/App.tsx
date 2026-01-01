@@ -1119,11 +1119,13 @@ const App: React.FC = () => {
           onCreatePool={handleCreatePool}
         />
         <div className="flex-grow">
-          <PlayoffWizard
-            user={user}
-            onCancel={() => window.location.hash = '#'}
-            onComplete={(newId) => window.location.hash = `#pool/${newId}`}
-          />
+          {user && (
+            <PlayoffWizard
+              user={user}
+              onCancel={() => window.location.hash = '#'}
+              onComplete={(newId) => window.location.hash = `#pool/${newId}`}
+            />
+          )}
         </div>
         <Footer />
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
