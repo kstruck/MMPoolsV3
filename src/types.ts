@@ -546,6 +546,42 @@ export interface BracketPool {
   seasonYear: number;
   gender: 'mens' | 'womens';
 
+  // NEW: Manager Contact Info
+  managerName?: string;
+  contactEmail?: string;
+  venmo?: string;
+  googlePay?: string;
+  cashapp?: string;
+  paypal?: string;
+
+  // NEW: Branding Customization
+  branding?: {
+    logo?: string; // Firebase Storage URL
+    bgColor?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
+  };
+
+  // NEW: Reminder & Notification Settings
+  reminders?: {
+    auto24h?: boolean; // Send reminder 24h before lock
+    auto1h?: boolean; // Send reminder 1h before lock
+    autoLock?: boolean; // Auto-lock at tournament start
+    announceWinner?: boolean; // Auto-announce winner when complete
+    recipientFilter?: 'all' | 'unpaid' | 'noentry'; // Who gets reminders
+  };
+
+  // NEW: Access Control & Data Collection
+  accessControl?: {
+    password?: string; // Pool password (separate from passwordHash for editing)
+    requireEmail?: boolean;
+    requirePhone?: boolean;
+    customFields?: { label: string; required: boolean }[];
+  };
+
+  // NEW: QR Code for sharing
+  qrCode?: string; // Data URI or Firebase Storage URL
+
   // Counts for easy display
   participantCount?: number;
   entryCount?: number;
