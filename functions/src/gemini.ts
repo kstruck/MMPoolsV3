@@ -27,16 +27,12 @@ const OUTPUT_SCHEMA = {
     required: ["headline", "summaryBullets", "explanationSteps", "confidence"],
 };
 
-// TODO: For Production, use: firebase functions:secrets:set GEMINI_API_KEY
-// For Development/Quick Start, we are hardcoding it below.
-
 export const generateAIResponse = async (
     systemInstruction: string,
     facts: any,
     jsonSchema: any = OUTPUT_SCHEMA
 ): Promise<any> => {
     const apiKey = geminiApiKey.value();
-    // const apiKey = "AIzaSyDSWcKMjOaxlZPeXcSYni3MSNmAyeznV-w";
 
     if (!apiKey) {
         throw new Error("GEMINI_API_KEY is not set.");
