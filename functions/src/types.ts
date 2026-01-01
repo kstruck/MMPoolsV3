@@ -373,8 +373,8 @@ export interface Team {
 }
 
 // --- Core Pool Types
-export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS';
-export type Pool = GameState | BracketPool | PlayoffPool;
+export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
+export type Pool = GameState | BracketPool | PlayoffPool | PropsPool;
 
 // --- NFL Playoff Pool Types ---
 
@@ -421,6 +421,46 @@ export interface PlayoffPool {
 
     isLocked: boolean;
     lockDate?: number;
+}
+
+export interface PropsPool {
+    id: string;
+    type: 'PROPS';
+    name: string;
+    ownerId: string;
+    createdAt: number;
+
+    // Custom Branding
+    theme: string;
+    branding?: {
+        logoUrl?: string;
+        backgroundColor?: string;
+    };
+
+    // Game Info
+    gameId?: string;
+    homeTeam?: string;
+    awayTeam?: string;
+    seasonType?: '1' | '2' | '3';
+    week?: number;
+    date?: number;
+
+    // Configuration
+    props: {
+        enabled: true;
+        cost: number;
+        maxCards: number;
+        payouts?: number[];
+        questions: PropQuestion[];
+    };
+
+    // State
+    isLocked: boolean;
+    lockDate?: number;
+    status?: 'active' | 'archived';
+
+    // Reminders
+    reminders?: ReminderSettings;
 }
 
 // --- BRACKET POOL TYPES ---

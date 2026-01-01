@@ -8,8 +8,8 @@ export interface FirestoreTimestamp {
 
 // Core Pool Types
 // Core Pool Types
-export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS';
-export type Pool = GameState | BracketPool | PlayoffPool;
+export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
+export type Pool = GameState | BracketPool | PlayoffPool | PropsPool;
 
 // --- NFL Playoff Pool Types ---
 
@@ -58,6 +58,60 @@ export interface PlayoffPool {
 
   isLocked: boolean;
   lockDate?: number;
+}
+
+export interface PropsPool {
+  id: string;
+  type: 'PROPS';
+  name: string;
+  ownerId: string;
+  createdAt: number;
+
+  // Custom Branding
+  theme: string;
+  branding?: {
+    logoUrl?: string;
+    backgroundColor?: string;
+  };
+
+  // Game Info
+  gameId?: string; // Optional if tied to a specific game
+  homeTeam?: string;
+  awayTeam?: string;
+  seasonType?: '1' | '2' | '3';
+  week?: number;
+  date?: number; // Game start time (lock time)
+
+  // Configuration
+  props: {
+    enabled: true; // Always true for this type
+    cost: number;
+    maxCards: number;
+    payouts?: number[];
+    questions: PropQuestion[];
+  };
+
+  // State
+  isLocked: boolean;
+  lockDate?: number;
+  status?: 'active' | 'archived';
+  isPublic?: boolean;
+  entryCount?: number;
+
+  // Reminders
+  reminders?: ReminderSettings;
+
+  // Common Meta
+  urlSlug?: string;
+  contactEmail?: string;
+  managerName?: string;
+  paymentInstructions?: string;
+  paymentHandles?: {
+    venmo?: string;
+    cashapp?: string;
+    paypal?: string;
+    googlePay?: string;
+  };
 }
 
 export interface Player {

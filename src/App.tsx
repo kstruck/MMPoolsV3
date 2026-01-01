@@ -8,9 +8,11 @@ import { CreatePoolSelection } from './components/CreatePoolSelection';
 import { BracketPoolDashboard } from './components/BracketPoolDashboard/BracketPoolDashboard';
 import { PlayoffWizard } from './components/PlayoffPool/PlayoffWizard';
 import { PlayoffDashboard } from './components/PlayoffPool/PlayoffDashboard';
+import { PropsWizard } from './components/PropsWizard/PropsWizard';
+import { PropsPoolDashboard } from './components/PropsPoolDashboard/PropsPoolDashboard';
 
 import { createNewPool, getTeamLogo, PERIOD_LABELS } from './constants';
-import type { GameState, Scores, PlayerDetails, User, Pool, PlayoffPool } from './types';
+import type { GameState, Scores, PlayerDetails, User, Pool, PlayoffPool, PropsPool } from './types';
 import { calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
@@ -226,6 +228,8 @@ const App: React.FC = () => {
     if (hash.startsWith('#create-pool')) return { view: 'create-pool', id: null };
     if (hash.startsWith('#bracket-wizard')) return { view: 'bracket-wizard', id: null };
     if (hash.startsWith('#playoff-wizard')) return { view: 'playoff-wizard', id: null };
+    if (hash.startsWith('#playoff-wizard')) return { view: 'playoff-wizard', id: null };
+    if (hash.startsWith('#props-wizard')) return { view: 'props-wizard', id: null };
     return { view: 'home', id: null };
   }, [hash]);
 
@@ -264,12 +268,30 @@ const App: React.FC = () => {
     if (route.id) {
       return pools.find(p => {
         if (p.id === route.id) return true;
-        const slug = p.type === 'BRACKET' ? p.slug : p.urlSlug;
+        const slug = p.type === 'BRACKET' ? p.slug : (p as any).urlSlug || (p as any).id;
         return slug && slug.toLowerCase() === route.id.toLowerCase();
       }) || null;
     }
     return null;
   }, [pools, singlePool, route.id]);
+
+  const isCurrentPoolManager = useMemo(() => {
+    if (!user || !currentPool) return false;
+    return currentPool.ownerId === user.id || user.role === 'SUPER_ADMIN';
+  }, [user, currentPool]);
+
+  // Keep isAdmin here if not defined elsewhere. 
+  // If defined elsewhere, we should use that. 
+  // Grep will tell us. For now, assuming we keep it but ensure no conflict.
+  // Actually, let's remove isAdmin from here if it is defined later. 
+  // But purely based on lint "Cannot find name isAdmin" from BEFORE, it likely wasn't defined.
+  // We'll keep it but rename to isSuperAdmin to be safe? 
+  // No, the prop is isAdmin.
+
+  // Let's just fix the variable name for now.
+  const isSuperAdmin = useMemo(() => {
+    return user?.role === 'SUPER_ADMIN';
+  }, [user]);
 
   // State for Password Gate
   const [enteredPassword, setEnteredPassword] = useState('');
@@ -399,9 +421,7 @@ const App: React.FC = () => {
     // But let's try a direct update. Note: Firestore map updates work with dot notation "scores.current"
     // However, dbService.updatePool expects Partial<GameState>.
     // To properly update nested scores in Firestore, we should use dot notation keys in updatePool impl,
-    // For now, let's just do a full pool object read-modify-write if needed or use dbService helper.
-    // Simplest: pass 'scores' object fully merged if possible, or update implementation of dbService.
-    // For this step, let's keep it simple:
+    // For now, let's keep it simple:
     if (!currentPool || currentPool.type === 'BRACKET') return;
     // Just force update assuming squares pool context
     await dbService.updatePool(id, { scores: { ...(currentPool as GameState).scores, ...scoreUpdates } as Scores });
@@ -522,7 +542,7 @@ const App: React.FC = () => {
 
   const handleClaimSquares = async (ids: number[], name: string, details: PlayerDetails, guestKey?: string): Promise<{ success: boolean; message?: string }> => {
     if (!currentPool) return { success: false };
-    if (currentPool.type === 'BRACKET' || currentPool.type === 'NFL_PLAYOFFS') return { success: false, message: "Use correct pool function" };
+    if (currentPool.type === 'BRACKET' || currentPool.type === 'NFL_PLAYOFFS' || currentPool.type === 'PROPS') return { success: false, message: "Use correct pool function" };
 
     const squaresPool = currentPool as GameState;
     const normalizedName = name.trim();
@@ -530,7 +550,7 @@ const App: React.FC = () => {
 
     // Limits check is now redundant (enforced by server), but good for UX feedback
     const currentOwned = squaresPool.squares.filter(s => s.owner && s.owner.toLowerCase() === normalizedName.toLowerCase()).length;
-    const limit = Number(currentPool.maxSquaresPerPlayer) || 10;
+    const limit = Number(squaresPool.maxSquaresPerPlayer) || 10;
     if (currentOwned + ids.length > limit && currentPool.ownerId !== user?.id) return { success: false, message: `Limit exceeded. Max ${limit}.` };
 
     try {
@@ -555,11 +575,11 @@ const App: React.FC = () => {
 
 
     console.log('[App] Processing Square Claim. Config:', {
-      emailSetting: currentPool.emailConfirmation,
+      emailSetting: squaresPool.emailConfirmation,
       userEmail: details.email
     });
 
-    if ((currentPool.emailConfirmation === 'Email Confirmation' || currentPool.emailConfirmation === 'true') && details.email) {
+    if ((squaresPool.emailConfirmation === 'Email Confirmation' || squaresPool.emailConfirmation === 'true') && details.email) {
       console.log('[App] Email condition met. Importing service...');
       const ownerId = (currentPool as any).ownerId || (currentPool as any).managerUid;
       import('./services/emailService').then(({ emailService }) => {
@@ -1049,6 +1069,7 @@ const App: React.FC = () => {
         onSelectSquares={handleSquaresPoolCreate}
         onSelectBracket={() => { window.location.hash = '#bracket-wizard'; }}
         onSelectPlayoff={() => { window.location.hash = '#playoff-wizard'; }}
+        onSelectProps={() => { window.location.hash = '#props-wizard'; }}
         onOpenAuth={() => setShowAuthModal(true)}
         onLogout={authService.logout}
         onCreatePool={handleCreatePool}
@@ -1078,6 +1099,26 @@ const App: React.FC = () => {
         user={user}
         onCancel={() => window.location.hash = '#'}
         onComplete={(newId) => window.location.hash = `#pool/${newId}`}
+      />
+    );
+  }
+
+  if (route.view === 'props-wizard') {
+    return (
+      <PropsWizard
+        user={user}
+        onCancel={() => window.location.hash = '#'}
+        onComplete={(newId: string) => { window.location.hash = `#pool/${newId}`; }}
+      />
+    );
+  }
+
+  if (route.view === 'props-wizard') {
+    return (
+      <PropsWizard
+        user={user}
+        onCancel={() => window.location.hash = '#'}
+        onComplete={(newId: string) => { window.location.hash = `#pool/${newId}`; }}
       />
     );
   }
@@ -1155,6 +1196,18 @@ const App: React.FC = () => {
             navigator.clipboard.writeText(window.location.href);
             alert("Link copied!");
           }}
+        />
+      );
+    }
+
+    if (currentPool.type === 'PROPS') {
+      return (
+        <PropsPoolDashboard
+          pool={currentPool as PropsPool}
+          user={user}
+          isManager={isCurrentPoolManager}
+          isAdmin={isSuperAdmin}
+          onBack={() => { window.location.hash = ''; }}
         />
       );
     }
@@ -1313,8 +1366,8 @@ const App: React.FC = () => {
                           );
                         })()}
                       </div>
-                      <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{currentPool.contactEmail || 'Admin'}</p></div>
-                      <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Cost Per Square:</h3><p className="text-white font-medium text-sm">${currentPool.costPerSquare}</p></div>
+                      <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{squaresPool.contactEmail || 'Admin'}</p></div>
+                      <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Cost Per Square:</h3><p className="text-white font-medium text-sm">${squaresPool.costPerSquare}</p></div>
                     </div>
                   )}
 
@@ -1329,7 +1382,7 @@ const App: React.FC = () => {
                         />
                       </div>
 
-                      <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {currentPool.maxSquaresPerPlayer} squares per player</p></div>
+                      <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {squaresPool.maxSquaresPerPlayer || 'N/A'} squares per player</p></div>
 
                       {/* NEW: Score Change Rule Explanation */}
                       {squaresPool.ruleVariations.scoreChangePayout && (
@@ -1358,7 +1411,7 @@ const App: React.FC = () => {
                         <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Active Rules:</h3>
                         <div className="flex flex-col gap-2 items-start">
                           <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left">
-                            {currentPool.ruleVariations.quarterlyRollover ? (
+                            {squaresPool.ruleVariations.quarterlyRollover ? (
                               <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
                                 <Zap size={12} className="fill-emerald-400" /> Rollover Active
                               </div>
@@ -1368,7 +1421,7 @@ const App: React.FC = () => {
                             <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
                           </button>
 
-                          {currentPool.ruleVariations.reverseWinners && (
+                          {squaresPool.ruleVariations.reverseWinners && (
                             <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1">
                               <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
                                 <Zap size={12} className="fill-indigo-400" /> Reverse Winners Active
@@ -1392,21 +1445,21 @@ const App: React.FC = () => {
 
                   {statusTab === 'payment' && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300 w-full">
-                      {(currentPool.paymentHandles?.venmo || currentPool.paymentHandles?.googlePay) ? (
+                      {(squaresPool.paymentHandles?.venmo || squaresPool.paymentHandles?.googlePay) ? (
                         <div>
                           <h3 className="text-slate-500 font-bold uppercase text-xs mb-2">Payment Options:</h3>
                           <div className="flex flex-col gap-2">
-                            {currentPool.paymentHandles?.venmo && (
-                              <a href={`https://venmo.com/u/${currentPool.paymentHandles.venmo.replace('@', '')}`} target="_blank" rel="noreferrer" className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center transition-colors w-full">
-                                Venmo: {currentPool.paymentHandles.venmo} <ExternalLink size={14} />
+                            {squaresPool.paymentHandles?.venmo && (
+                              <a href={`https://venmo.com/u/${squaresPool.paymentHandles.venmo.replace('@', '')}`} target="_blank" rel="noreferrer" className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center transition-colors w-full">
+                                Venmo: {squaresPool.paymentHandles.venmo} <ExternalLink size={14} />
                               </a>
                             )}
-                            {currentPool.paymentHandles?.googlePay && (
+                            {squaresPool.paymentHandles?.googlePay && (
                               <div className="bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center w-full">
-                                <span className="text-slate-400 text-xs uppercase mr-1">GPay:</span> {currentPool.paymentHandles.googlePay}
+                                <span className="text-slate-400 text-xs uppercase mr-1">GPay:</span> {squaresPool.paymentHandles.googlePay}
                                 <button
                                   onClick={() => {
-                                    navigator.clipboard.writeText(currentPool.paymentHandles?.googlePay || '');
+                                    navigator.clipboard.writeText(squaresPool.paymentHandles?.googlePay || '');
                                     setGPayCopied(true);
                                     setTimeout(() => setGPayCopied(false), 2000);
                                   }}
@@ -1450,7 +1503,18 @@ const App: React.FC = () => {
                     </div>
                     <h2 className="text-2xl font-black text-rose-400 mb-1 leading-tight">{squaresPool.charity.name}</h2>
                     <div className="mt-3">
-                      <span className="text-xs text-slate-500 uppercase font-bold block mb-1">Donation Amount</span>
+                      <span className="text-xs text-slate-500 uppercase font-bold">
+                        {squaresPool.charity.url && (
+                          <a
+                            href={squaresPool.charity.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-rose-400 hover:text-white font-bold text-xs flex items-center gap-1 mt-2 transition-colors"
+                          >
+                            Learn More <ArrowRight size={12} />
+                          </a>
+                        )}
+                      </span>
                       <span className="text-2xl font-mono font-bold text-white">
                         ${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (squaresPool.charity.percentage / 100)))).toLocaleString()}
                       </span>
@@ -1482,16 +1546,16 @@ const App: React.FC = () => {
                       <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
                         <span className="text-slate-400">Total Pot</span>
                         <span className="text-white font-mono font-bold">
-                          ${(currentPool.squares.filter((s: any) => s.owner).length * currentPool.costPerSquare).toLocaleString()}
+                          ${(squaresPool.squares.filter((s: any) => s.owner).length * squaresPool.costPerSquare).toLocaleString()}
                         </span>
                       </div>
 
                       {/* Charity Deduction Line */}
-                      {currentPool.charity?.enabled && (
+                      {squaresPool.charity?.enabled && (
                         <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
-                          <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({currentPool.charity.percentage}%)</span>
+                          <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({squaresPool.charity.percentage}%)</span>
                           <span className="font-mono font-bold">
-                            -${(Math.floor((currentPool.squares.filter((s: any) => s.owner).length * currentPool.costPerSquare * (currentPool.charity.percentage / 100)))).toLocaleString()}
+                            -${(Math.floor((squaresPool.squares.filter((s: any) => s.owner).length * squaresPool.costPerSquare * (squaresPool.charity.percentage / 100)))).toLocaleString()}
                           </span>
                         </div>
                       )}
@@ -1500,7 +1564,7 @@ const App: React.FC = () => {
                       <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
                         <span className="text-white font-bold">Net Prize Pool</span>
                         <span className="text-emerald-400 font-mono font-bold text-lg">
-                          ${(Math.floor((currentPool.squares.filter((s: any) => s.owner).length * currentPool.costPerSquare * (1 - (currentPool.charity?.enabled ? currentPool.charity.percentage / 100 : 0))))).toLocaleString()}
+                          ${(Math.floor((squaresPool.squares.filter((s: any) => s.owner).length * squaresPool.costPerSquare * (1 - (squaresPool.charity?.enabled ? squaresPool.charity.percentage / 100 : 0))))).toLocaleString()}
                         </span>
                       </div>
 
@@ -1849,18 +1913,18 @@ const App: React.FC = () => {
                 </h3>
 
                 <div className="space-y-4">
-                  <div className={`p-4 rounded-lg border ${currentPool.ruleVariations.quarterlyRollover ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-950 border-slate-800'}`}>
-                    <h4 className={`font-bold text-sm mb-1 ${currentPool.ruleVariations.quarterlyRollover ? 'text-emerald-400' : 'text-slate-300'}`}>
-                      {currentPool.ruleVariations.quarterlyRollover ? '✅ Quarterly Rollover is ON' : 'Standard Rules (No Rollover)'}
+                  <div className={`p-4 rounded-lg border ${(currentPool as GameState).ruleVariations.quarterlyRollover ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-950 border-slate-800'}`}>
+                    <h4 className={`font-bold text-sm mb-1 ${(currentPool as GameState).ruleVariations.quarterlyRollover ? 'text-emerald-400' : 'text-slate-300'}`}>
+                      {(currentPool as GameState).ruleVariations.quarterlyRollover ? '✅ Quarterly Rollover is ON' : 'Standard Rules (No Rollover)'}
                     </h4>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      {currentPool.ruleVariations.quarterlyRollover
+                      {(currentPool as GameState).ruleVariations.quarterlyRollover
                         ? "If a winning square is empty for Q1, Half, or Q3, the prize money automatically rolls over to the next quarter's pot. This creates bigger jackpots for later winners!"
                         : "If a winning square is empty, the prize is typically kept by the house or split among other winners (see Manager instructions)."}
                     </p>
                   </div>
 
-                  {currentPool.ruleVariations.reverseWinners && (
+                  {(currentPool as GameState).ruleVariations.reverseWinners && (
                     <div className="p-4 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
                       <h4 className="font-bold text-sm text-indigo-400 mb-1">🔄 Reverse Winners is ON</h4>
                       <p className="text-xs text-slate-400 leading-relaxed">
@@ -1872,12 +1936,12 @@ const App: React.FC = () => {
                   <div className="p-4 rounded-lg bg-slate-950 border border-slate-800">
                     <h4 className="font-bold text-sm text-slate-300 mb-1">Final Prize Strategy</h4>
                     <div className="flex items-center gap-2 mb-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-slate-800 text-slate-400'}`}>
-                        {currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'Random Draw' : 'Last Winner'}
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${(currentPool as GameState).ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                        {(currentPool as GameState).ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'Random Draw' : 'Last Winner'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      {currentPool.ruleVariations.unclaimedFinalPrizeStrategy === 'random'
+                      {(currentPool as GameState).ruleVariations.unclaimedFinalPrizeStrategy === 'random'
                         ? "If the final square is empty, the Commissioner will activate the site's 'Randomizer' function to determine a winner. The system will randomly select a winner from all occupied squares."
                         : "If the final square is empty, the prize reverts to the most recent previous winner (e.g. 3rd Quarter)."}
                     </p>

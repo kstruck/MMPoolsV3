@@ -1,38 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import type { GameState, PropCard } from '../../types';
+import type { GameState, PropCard, PropsPool } from '../../types';
 import { dbService } from '../../services/dbService';
 import { Check, Lock, Trophy, Plus, Eye, Edit2, Save, Loader } from 'lucide-react';
 
 interface PropCardFormProps {
-    gameState: GameState;
+    gameState?: GameState;
     currentUser: any;
-    userCard?: PropCard | null; // Legacy single card (deprecated)
+    userCard?: PropCard | null;
+    poolId?: string;
+    config?: PropsPool['props'];
+    isLocked?: boolean;
+    userCards?: PropCard[];
 }
 
-export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUser }) => {
+export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUser, poolId, config, isLocked, userCards }) => {
+    const effectivePoolId = poolId || gameState?.id;
+    const effectiveConfig = config || gameState?.props;
+    const effectiveIsLocked = isLocked ?? gameState?.isLocked ?? false;
+
+    if (!effectivePoolId || !effectiveConfig) return null;
     const [answers, setAnswers] = useState<Record<string, number>>({});
     const [tiebreaker, setTiebreaker] = useState('');
     const [cardName, setCardName] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [userCards, setUserCards] = useState<PropCard[]>([]);
+    const [fetchedCards, setFetchedCards] = useState<PropCard[]>([]);
     const [viewingCardId, setViewingCardId] = useState<string | null>(null);
     const [editingCardId, setEditingCardId] = useState<string | null>(null); // NEW: editing mode
     const [showNewCardForm, setShowNewCardForm] = useState(false);
+    const activeCards = userCards || fetchedCards;
     const [isConfirming, setIsConfirming] = useState(false);
     const [liabilityAccepted, setLiabilityAccepted] = useState(false);
 
-    const questions = gameState.props?.questions || [];
-    const cost = gameState.props?.cost || 5;
-    const maxCards = gameState.props?.maxCards || 1;
+    const questions = effectiveConfig?.questions || [];
+    const cost = effectiveConfig?.cost || 5;
+    const maxCards = effectiveConfig?.maxCards || 1;
 
-    // Subscribe to user's cards
+    // Subscribe to cards if not provided via props
     useEffect(() => {
-        if (!gameState.id || !currentUser?.uid) return;
+        if (userCards) return;
+        if (!effectivePoolId || !currentUser?.id) return;
 
-        const unsub = dbService.subscribeToAllPropCards(gameState.id, (cards) => {
-            const myCards = cards.filter((c: any) => c.userId === currentUser.uid);
-            setUserCards(myCards);
+        const unsub = dbService.subscribeToAllPropCards(effectivePoolId, (cards) => {
+            const myCards = cards.filter((c: any) => c.userId === currentUser.id);
+            setFetchedCards(myCards);
 
             // Auto-show new card form if no cards yet
             if (myCards.length === 0) {
@@ -40,10 +51,16 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             }
         });
         return () => unsub();
-    }, [gameState.id, currentUser?.uid]);
+    }, [effectivePoolId, currentUser?.id]);
 
-    const canBuyMoreCards = userCards.length < maxCards;
-    const viewingCard = viewingCardId ? userCards.find(c => (c as any).id === viewingCardId) : null;
+    const canBuyMoreCards = activeCards.length < maxCards;
+    const viewingCard = viewingCardId ? activeCards.find(c => (c as any).id === viewingCardId) : null;
+
+    useEffect(() => {
+        if (userCards && userCards.length === 0) {
+            setShowNewCardForm(true);
+        }
+    }, [userCards]);
 
     const handleInitPurchase = () => {
         if (!currentUser) return;
@@ -69,8 +86,8 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
         setError(null);
 
         try {
-            const name = cardName.trim() || `Card #${userCards.length + 1}`;
-            await dbService.purchasePropCard(gameState.id, answers, Number(tiebreaker), currentUser.name || currentUser.email, name);
+            const name = cardName.trim() || `Card #${activeCards.length + 1}`;
+            await dbService.purchasePropCard(effectivePoolId, answers, Number(tiebreaker), currentUser.name || currentUser.email, name);
             // Reset form
             setAnswers({});
             setTiebreaker('');
@@ -93,7 +110,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
 
     // Start editing an existing card
     const handleStartEdit = (card: PropCard & { id: string }) => {
-        if (gameState.isLocked) return;
+        if (effectiveIsLocked) return;
         setEditingCardId(card.id);
         setViewingCardId(null); // Ensure we are NOT in viewing mode, but in editing mode
         setAnswers(card.answers || {});
@@ -121,7 +138,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
         }
 
         try {
-            await dbService.updatePropCard(gameState.id, editingCardId, answers, Number(tiebreaker), cardName || undefined);
+            await dbService.updatePropCard(effectivePoolId, editingCardId, answers, Number(tiebreaker), cardName || undefined);
             // Reset edit state
             setEditingCardId(null);
             setViewingCardId(null);
@@ -162,13 +179,13 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             </div>
 
             {/* Existing Cards */}
-            {userCards.length > 0 && (
+            {activeCards.length > 0 && (
                 <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 mb-4">
                     <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-                        <Trophy size={16} className="text-amber-400" /> Your Cards ({userCards.length}/{maxCards})
+                        <Trophy size={16} className="text-amber-400" /> Your Cards ({activeCards.length}/{maxCards})
                     </h3>
                     <div className="space-y-2">
-                        {userCards.map((card, idx) => {
+                        {activeCards.map((card, idx) => {
                             const { score, correctCount } = getCardScore(card);
                             const isViewing = (card as any).id === viewingCardId;
                             return (
@@ -187,7 +204,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {!gameState.isLocked && (
+                                        {!effectiveIsLocked && (
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -225,7 +242,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         Score: <span className="text-white font-bold text-2xl mx-2">{getCardScore(viewingCard).score} / {getTotalPoints()} pts</span>
                     </p>
                     <div className="flex justify-center gap-2 mt-2">
-                        {!gameState.isLocked && (
+                        {!effectiveIsLocked && (
                             <button
                                 onClick={() => handleStartEdit(viewingCard as any)}
                                 className="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/50 px-3 py-1 rounded-full flex items-center gap-1"
@@ -337,10 +354,10 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
 
                     <button
                         onClick={editingCardId ? handleSaveEdit : handleInitPurchase}
-                        disabled={isSubmitting || gameState.isLocked}
+                        disabled={isSubmitting || effectiveIsLocked}
                         className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl text-lg shadow-lg shadow-indigo-500/25 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                        {isSubmitting ? (editingCardId ? 'Saving...' : 'Submitting...') : gameState.isLocked ? (
+                        {isSubmitting ? (editingCardId ? 'Saving...' : 'Submitting...') : effectiveIsLocked ? (
                             <><Lock size={20} /> Picks Locked</>
                         ) : editingCardId ? (
                             <><Save size={20} /> Save Changes</>
@@ -349,7 +366,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         )}
                     </button>
 
-                    {(userCards.length > 0 || editingCardId) && (
+                    {(activeCards.length > 0 || editingCardId) && (
                         <button
                             onClick={() => {
                                 setShowNewCardForm(false);
@@ -367,7 +384,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             )}
 
             {/* Locked Message */}
-            {!showNewCardForm && !viewingCardId && userCards.length > 0 && (
+            {!showNewCardForm && !viewingCardId && activeCards.length > 0 && (
                 <div className="text-center p-6 text-slate-500">
                     <Lock size={24} className="mx-auto mb-2" />
                     <p>Picks locked. Good luck!</p>

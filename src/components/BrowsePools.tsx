@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Search, Trophy, Heart, DollarSign, Activity, Lock, Unlock } from 'lucide-react';
-import type { GameState, User, BracketPool, Pool, PlayoffPool } from '../types';
+import type { GameState, User, BracketPool, Pool, PlayoffPool, PropsPool, Square } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
@@ -27,10 +27,11 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
             // Common fields
             const name = p.name || '';
             const isBracket = p.type === 'BRACKET';
+            const isProps = p.type === 'PROPS';
             const isSquares = !p.type || p.type === 'SQUARES';
             const isPlayoff = p.type === 'NFL_PLAYOFFS';
 
-            const isPublic = isBracket ? (p as BracketPool).isListedPublic : (isPlayoff ? true : (p as GameState).isPublic); // Start Playoff as public for now
+            const isPublic = isBracket ? (p as BracketPool).isListedPublic : (isPlayoff ? true : (isProps ? (p as PropsPool).isPublic : (p as GameState).isPublic));
 
             if (!isPublic) return false;
 
@@ -93,8 +94,12 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                 if (isSquares) {
                     const poolLeague = (p as GameState).league || 'nfl';
                     if (selectedLeague === 'nfl' && poolLeague !== 'nfl') return false;
-                    if (selectedLeague === 'college' && (poolLeague !== 'college' && poolLeague !== 'ncaa')) return false;
+                    if (selectedLeague === 'college' && poolLeague !== 'college') return false;
                     if (selectedLeague === 'ncaa_bb') return false; // Squares aren't usually NCAA BB
+                }
+                if (p.type === 'PROPS') {
+                    // Props pools don't strictly have leagues but treating as NFL for now or All
+                    if (selectedLeague !== 'all' && selectedLeague !== 'nfl') return false;
                 }
             }
 
@@ -243,14 +248,13 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                 let charityEnabled = false;
 
                                 if (isBracket) {
-                                    const bp = pool as any; // BracketPool
+                                    const bp = pool as BracketPool;
                                     filled = bp.entryCount || 0;
                                     const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal; // Mock 100 if unlimited for progress
                                     pct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round((filled / max) * 100);
                                     homeTeam = 'Tournament';
                                     awayTeam = 'Bracket';
                                     cost = bp.settings.entryFee;
-                                    isLocked = bp.status !== 'DRAFT' && bp.status !== 'PUBLISHED';
                                     isLocked = bp.status !== 'DRAFT' && bp.status !== 'PUBLISHED';
                                 } else if (pool.type === 'NFL_PLAYOFFS') {
                                     const pp = pool as PlayoffPool;
@@ -260,15 +264,25 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     awayTeam = 'Playoffs';
                                     cost = pp.entryFee;
                                     isLocked = pp.isLocked;
+                                } else if (pool.type === 'PROPS') {
+                                    const pp = pool as PropsPool;
+                                    filled = pp.entryCount || 0;
+                                    pct = 20; // Arbitrary
+                                    homeTeam = 'Props';
+                                    awayTeam = 'Pool';
+                                    cost = pp.props?.cost || 0;
+                                    isLocked = !!pp.isLocked; // Need to ensure it exists
+                                    charityEnabled = false;
                                 } else {
+                                    // Fallback or squares if type is undefined (legacy)
                                     const sp = pool as GameState;
-                                    filled = sp.squares.filter(s => s.owner).length;
+                                    filled = sp.squares?.filter((s: Square) => s.owner).length || 0;
                                     pct = Math.round((filled / 100) * 100);
-                                    homeTeam = sp.homeTeam;
-                                    awayTeam = sp.awayTeam;
-                                    homeLogo = sp.homeTeamLogo || getTeamLogo(sp.homeTeam);
-                                    awayLogo = sp.awayTeamLogo || getTeamLogo(sp.awayTeam);
-                                    cost = sp.costPerSquare;
+                                    homeTeam = sp.homeTeam || 'Home';
+                                    awayTeam = sp.awayTeam || 'Away';
+                                    homeLogo = sp.homeTeamLogo || getTeamLogo(sp.homeTeam || '');
+                                    awayLogo = sp.awayTeamLogo || getTeamLogo(sp.awayTeam || '');
+                                    cost = sp.costPerSquare || 0;
                                     isLocked = sp.isLocked;
                                     charityEnabled = !!sp.charity?.enabled;
                                 }

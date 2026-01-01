@@ -9,6 +9,7 @@ interface CreatePoolSelectionProps {
     onSelectSquares: () => void;
     onSelectBracket: () => void;
     onSelectPlayoff: () => void;
+    onSelectProps: () => void;
     user: User | null;
     isManager: boolean;
     onOpenAuth: () => void;
@@ -24,7 +25,8 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
     isManager,
     onOpenAuth,
     onLogout,
-    onCreatePool
+    onCreatePool,
+    onSelectProps
 }) => {
     // const [settings, setSettings] = useState<SystemSettings | null>(null);
 
@@ -99,45 +101,64 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                 <Lock size={32} className="text-slate-600" />
                             )}
                         </div>
-                        <h3 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
-                            March Madness
-                            {!isBracketEnabled && <span className="text-xs bg-slate-700 text-slate-400 px-2 py-1 rounded uppercase tracking-wider">Coming Soon</span>}
-                        </h3>
-                        <p className="text-slate-400 mb-6 min-h-[48px]">64-Team Bracket Challenge. Points per round. Live standings & leaderboard.</p>
+                        <h3 className="text-2xl font-bold text-white mb-2">Bracket Challenge</h3>
+                        <p className="text-slate-400 mb-6">Traditional 64-team bracket. Pick winners for every round. Features automated scoring and multiple scoring systems.</p>
                         <ul className="text-sm text-slate-500 space-y-2 mb-8">
                             <li className="flex items-center gap-2">✓ Live bracket updates</li>
                             <li className="flex items-center gap-2">✓ Round-by-round scoring</li>
                             <li className="flex items-center gap-2">✓ Mobile-friendly tree</li>
                         </ul>
 
-                        {isBracketEnabled ? (
-                            <span className="inline-flex items-center gap-2 text-orange-400 font-bold group-hover:translate-x-1 transition-transform">
-                                Create Bracket Pool <ArrowRight size={16} />
-                            </span>
-                        ) : (
-                            <span className="inline-flex items-center gap-2 text-slate-600 font-bold">
-                                Locked <Lock size={14} />
-                            </span>
-                        )}
+                        <span className="inline-flex items-center gap-2 text-orange-400 font-bold group-hover:translate-x-1 transition-transform">
+                            Create Bracket Pool <ArrowRight size={16} />
+                        </span>
                     </button>
 
                     {/* NFL PLAYOFFS OPTION */}
                     <button
                         onClick={onSelectPlayoff}
-                        className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-emerald-500 rounded-2xl p-8 text-left transition-all hover:-translate-y-1 shadow-xl md:col-span-2 lg:col-span-1"
+                        className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-orange-500 rounded-2xl p-8 text-left transition-all hover:-translate-y-1 shadow-xl md:col-span-2 lg:col-span-1"
                     >
-                        <div className="absolute top-4 right-4 bg-emerald-500/20 p-3 rounded-xl group-hover:bg-emerald-500 transition-colors">
-                            <Trophy size={32} className="text-emerald-400 group-hover:text-white" />
+                        <div className="absolute top-4 right-4 bg-orange-500/20 p-3 rounded-xl group-hover:bg-orange-500 transition-colors">
+                            <Trophy size={32} className="text-orange-400 group-hover:text-white" />
                         </div>
-                        <h3 className="text-2xl font-bold text-white mb-2">NFL Playoff Rank'em</h3>
-                        <p className="text-slate-400 mb-6 min-h-[48px]">Rank the 14 Playoff Teams from strongest to weakest. Earn points as they win.</p>
+                        <h3 className="text-2xl font-bold text-white mb-2">Playoff Challenge</h3>
+                        <p className="text-slate-400 mb-6">Rank all 14 playoff teams from 14 down to 1. Points accumulate as teams advance. Simple and exciting.</p>
                         <ul className="text-sm text-slate-500 space-y-2 mb-8">
-                            <li className="flex items-center gap-2">✓ Progressive scoring (10x, 12x, 15x, 20x)</li>
+                            <li className="flex items-center gap-2">✓ Progressive scoring</li>
                             <li className="flex items-center gap-2">✓ Drag & Drop Rankings</li>
                             <li className="flex items-center gap-2">✓ Strategic multipliers</li>
                         </ul>
-                        <span className="inline-flex items-center gap-2 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
+                        <span className="inline-flex items-center gap-2 text-orange-400 font-bold group-hover:translate-x-1 transition-transform">
                             Create Playoff Pool <ArrowRight size={16} />
+                        </span>
+                    </button>
+
+                    {/* SPLITTER FOR PROPS */}
+                    <div className="col-span-1 md:col-span-2 flex items-center justify-center my-4">
+                        <div className="h-[1px] bg-slate-800 flex-grow max-w-[100px]" />
+                        <span className="text-slate-500 text-xs font-bold uppercase px-4 tracking-wider">or try something new</span>
+                        <div className="h-[1px] bg-slate-800 flex-grow max-w-[100px]" />
+                    </div>
+
+                    {/* PROPS / SIDE HUSTLE OPTION */}
+                    <button
+                        onClick={onSelectProps}
+                        className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-emerald-500 rounded-2xl p-8 text-left transition-all hover:-translate-y-1 shadow-xl col-span-1 md:col-span-2"
+                    >
+                        <div className="absolute top-4 right-4 bg-emerald-500/20 p-3 rounded-xl group-hover:bg-emerald-500 transition-colors">
+                            <Grid3X3 size={32} className="text-emerald-400 group-hover:text-white" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Side Hustle (Props Only)</h3>
+                        <p className="text-slate-400 mb-6">Host a standalone Props game without the grid. Players answer questions like "Who will score first?" or "Total field goals?". Perfect for casual groups.</p>
+                        <ul className="text-sm text-slate-500 space-y-2 mb-8 grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <li className="flex items-center gap-2">✓ Fully customizable questions</li>
+                            <li className="flex items-center gap-2">✓ Automated scoring</li>
+                            <li className="flex items-center gap-2">✓ Custom points per question</li>
+                            <li className="flex items-center gap-2">✓ Real-time leaderboard</li>
+                        </ul>
+                        <span className="inline-flex items-center gap-2 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
+                            Create Props Pool <ArrowRight size={16} />
                         </span>
                     </button>
                 </div>

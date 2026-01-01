@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import type { GameState, PropQuestion, PropSeed, PropCard } from '../../types';
-import { Plus, Trash2, Check, Download, Save, X, Edit2, Star, Zap, Users } from 'lucide-react';
+import { Plus, Trash2, Check, Download, Save, X, Edit2, Star, Zap, Users, Loader } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 
 interface PropsManagerProps {
     gameState: GameState;
+    updateGameState?: (updates: Partial<GameState>) => void; // Optional for wizard updates
+    isWizardMode?: boolean;
     updateConfig: (updates: Partial<GameState>) => void;
 }
 
-export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateConfig }) => {
+export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateConfig, isWizardMode }) => {
     const [newQuestionText, setNewQuestionText] = useState('');
     const [options, setOptions] = useState<string[]>(['', '']);
     const [points, setPoints] = useState(1);
@@ -215,6 +217,28 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
         await dbService.gradeProp(gameState.id, qId, optionIdx);
     };
 
+    const [isSaving, setIsSaving] = useState(false);
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await updateConfig({
+                props: {
+                    enabled: propsEnabled,
+                    cost: propCost,
+                    maxCards: maxCards,
+                    payouts: payouts,
+                    questions: questions
+                }
+            });
+            // Simulate delay or show toast if needed
+            await new Promise(r => setTimeout(r, 500));
+        } catch (error) {
+            console.error("Failed to save props settings", error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header Toggle */}
@@ -311,48 +335,61 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                 <div className="text-2xl font-bold text-emerald-400">{questions.reduce((sum, q) => sum + (q.points || 1), 0)}</div>
                                 <div className="text-xs text-slate-500 uppercase">Total Pts</div>
                             </div>
-                        </div>
-                        <button
-                            onClick={() => setShowSeedPanel(!showSeedPanel)}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2"
-                        >
-                            <Download size={16} /> Import from Seeds
-                        </button>
-                    </div>
-
-                    {/* Seed Import Panel */}
-                    {showSeedPanel && (
-                        <div className="bg-indigo-900/30 border border-indigo-500/30 rounded-lg p-4">
-                            <h4 className="text-indigo-300 font-bold mb-3 flex items-center gap-2">
-                                <Zap size={16} /> Quick Import from Seed Library
-                            </h4>
-                            {seeds.length === 0 ? (
-                                <p className="text-slate-400 text-sm">No seeds available. SuperAdmin can add seeds in the dashboard.</p>
-                            ) : (
-                                <div className="grid gap-2 max-h-48 overflow-y-auto">
-                                    {seeds.map(seed => {
-                                        const isAdded = questions.some(q => q.text === seed.text);
-                                        return (
-                                            <button
-                                                key={seed.id}
-                                                onClick={() => !isAdded && handleImportSeed(seed)}
-                                                disabled={isAdded}
-                                                className={`w-full text-left p-3 rounded-lg flex justify-between items-center transition-colors ${isAdded
-                                                        ? 'bg-slate-900 border border-slate-800 opacity-50 cursor-not-allowed'
-                                                        : 'bg-slate-800 hover:bg-slate-700'
-                                                    }`}
-                                            >
-                                                <span className={isAdded ? 'text-slate-500' : 'text-white'}>
-                                                    {seed.text} {isAdded && '(Added)'}
-                                                </span>
-                                                <span className="text-xs text-slate-500">{seed.options.length} options</span>
-                                            </button>
-                                        );
-                                    })}
+                            {/* Save Button (Hidden in Wizard Mode) */}
+                            {!isWizardMode && (
+                                <div className="sticky bottom-4 z-10 flex justify-end">
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={isSaving}
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-indigo-500/20 flex items-center gap-2 transition-all hover:scale-105"
+                                    >
+                                        {isSaving ? <Loader className="animate-spin" /> : <Save size={20} />}
+                                        Save Changes
+                                    </button>
                                 </div>
                             )}
+                            <button
+                                onClick={() => setShowSeedPanel(!showSeedPanel)}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2"
+                            >
+                                <Download size={16} /> Import from Seeds
+                            </button>
                         </div>
-                    )}
+
+                        {/* Seed Import Panel */}
+                        {showSeedPanel && (
+                            <div className="bg-indigo-900/30 border border-indigo-500/30 rounded-lg p-4">
+                                <h4 className="text-indigo-300 font-bold mb-3 flex items-center gap-2">
+                                    <Zap size={16} /> Quick Import from Seed Library
+                                </h4>
+                                {seeds.length === 0 ? (
+                                    <p className="text-slate-400 text-sm">No seeds available. SuperAdmin can add seeds in the dashboard.</p>
+                                ) : (
+                                    <div className="grid gap-2 max-h-48 overflow-y-auto">
+                                        {seeds.map(seed => {
+                                            const isAdded = questions.some(q => q.text === seed.text);
+                                            return (
+                                                <button
+                                                    key={seed.id}
+                                                    onClick={() => !isAdded && handleImportSeed(seed)}
+                                                    disabled={isAdded}
+                                                    className={`w-full text-left p-3 rounded-lg flex justify-between items-center transition-colors ${isAdded
+                                                        ? 'bg-slate-900 border border-slate-800 opacity-50 cursor-not-allowed'
+                                                        : 'bg-slate-800 hover:bg-slate-700'
+                                                        }`}
+                                                >
+                                                    <span className={isAdded ? 'text-slate-500' : 'text-white'}>
+                                                        {seed.text} {isAdded && '(Added)'}
+                                                    </span>
+                                                    <span className="text-xs text-slate-500">{seed.options.length} options</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Add New Question Form */}
                     <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">

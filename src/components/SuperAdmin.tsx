@@ -332,8 +332,10 @@ export const SuperAdmin: React.FC = () => {
             let sport = 'Other';
             if (isBracket) {
                 sport = 'March Madness';
+            } else if (p.type === 'PROPS') {
+                sport = 'Props Pool';
             } else {
-                sport = getLeagueDisplayName(p.league);
+                sport = getLeagueDisplayName((p as GameState).league);
             }
             if (sport !== sportFilter) matchesSport = false;
         }
@@ -387,8 +389,10 @@ export const SuperAdmin: React.FC = () => {
         let sport = 'Other';
         if (pool.type === 'BRACKET') {
             sport = 'March Madness';
+        } else if (pool.type === 'PROPS') {
+            sport = 'Props Pool';
         } else {
-            sport = getLeagueDisplayName(pool.league);
+            sport = getLeagueDisplayName((pool as GameState).league);
         }
 
         if (!acc[sport]) acc[sport] = [];
@@ -581,7 +585,7 @@ export const SuperAdmin: React.FC = () => {
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                             <button
                                 onClick={() => setSportFilter('ALL')}
-                                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${sportFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                className={`px - 4 py - 2 rounded - full text - xs font - bold whitespace - nowrap transition - colors ${sportFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'} `}
                             >
                                 ALL SPORTS
                             </button>
@@ -589,7 +593,7 @@ export const SuperAdmin: React.FC = () => {
                                 <button
                                     key={sport}
                                     onClick={() => setSportFilter(sport)}
-                                    className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${sportFilter === sport ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                    className={`px - 4 py - 2 rounded - full text - xs font - bold whitespace - nowrap transition - colors ${sportFilter === sport ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'} `}
                                 >
                                     {sport.toUpperCase()}
                                 </button>
@@ -611,9 +615,10 @@ export const SuperAdmin: React.FC = () => {
                                     <button
                                         key={status.id}
                                         onClick={() => setStatusFilter(status.id as any)}
-                                        className={`px-3 py-1 rounded text-xs font-bold transition-colors ${statusFilter === status.id
+                                        className={`px - 3 py - 1 rounded text - xs font - bold transition - colors ${statusFilter === status.id
                                             ? status.id === 'live' ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white'
-                                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
+                                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                                            } `}
                                     >
                                         {status.label}
                                     </button>
@@ -632,9 +637,10 @@ export const SuperAdmin: React.FC = () => {
                                     <button
                                         key={price.id}
                                         onClick={() => setPriceFilter(price.id as any)}
-                                        className={`px-3 py-1 rounded text-xs font-bold transition-colors ${priceFilter === price.id
+                                        className={`px - 3 py - 1 rounded text - xs font - bold transition - colors ${priceFilter === price.id
                                             ? 'bg-emerald-500 text-white'
-                                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
+                                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                                            } `}
                                     >
                                         {price.label}
                                     </button>
@@ -646,9 +652,9 @@ export const SuperAdmin: React.FC = () => {
                                 <span className="text-xs font-bold text-slate-500 uppercase">Charity Only:</span>
                                 <button
                                     onClick={() => setCharityFilter(!charityFilter)}
-                                    className={`w-10 h-5 rounded-full relative transition-colors ${charityFilter ? 'bg-rose-500' : 'bg-slate-700'}`}
+                                    className={`w - 10 h - 5 rounded - full relative transition - colors ${charityFilter ? 'bg-rose-500' : 'bg-slate-700'} `}
                                 >
-                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${charityFilter ? 'left-6' : 'left-1'}`} />
+                                    <div className={`absolute top - 1 w - 3 h - 3 bg - white rounded - full transition - all ${charityFilter ? 'left-6' : 'left-1'} `} />
                                 </button>
                             </label>
                         </div>
@@ -1022,7 +1028,7 @@ export const SuperAdmin: React.FC = () => {
                         {themes.map((theme) => (
                             <div
                                 key={theme.id}
-                                className={`bg-slate-800 rounded-xl border overflow-hidden transition-all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'}`}
+                                className={`bg - slate - 800 rounded - xl border overflow - hidden transition - all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'} `}
                             >
                                 {/* Preview */}
                                 <div
@@ -1092,7 +1098,7 @@ export const SuperAdmin: React.FC = () => {
                                             onClick={async () => {
                                                 await dbService.saveTheme({ ...theme, isActive: !theme.isActive });
                                             }}
-                                            className={`text-xs px-3 py-1.5 rounded font-bold border ${theme.isActive ? 'border-slate-600 text-slate-400 hover:bg-slate-700' : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20'}`}
+                                            className={`text - xs px - 3 py - 1.5 rounded font - bold border ${theme.isActive ? 'border-slate-600 text-slate-400 hover:bg-slate-700' : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20'} `}
                                         >
                                             {theme.isActive ? 'Deactivate' : 'Activate'}
                                         </button>
@@ -1524,15 +1530,15 @@ export const SuperAdmin: React.FC = () => {
                                         <tr><td colSpan={4} className="p-8 text-center text-slate-500">No logs found matching filters</td></tr>
                                     ) : (
                                         filteredLogs.map((log, i) => (
-                                            <tr key={i} className={`log-row hover:bg-slate-700/20 font-mono text-xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''}`}>
+                                            <tr key={i} className={`log - row hover: bg - slate - 700 / 20 font - mono text - xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''} `}>
                                                 <td className="p-3 text-slate-400 whitespace-nowrap">
                                                     {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : new Date(log.timestamp).toLocaleString()}
                                                 </td>
                                                 <td className="p-3">
-                                                    <span className={`px-2 py-0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                    <span className={`px - 2 py - 0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
                                                         log.status === 'partial' ? 'bg-amber-500/10 text-amber-400' :
                                                             'bg-rose-500/10 text-rose-400'
-                                                        }`}>
+                                                        } `}>
                                                         {log.status?.toUpperCase() || 'UNKNOWN'}
                                                     </span>
                                                 </td>
@@ -2007,89 +2013,94 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                )}
+                )
+            }
 
-            {showSimDashboard && (
-                <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />
-            )}
+            {
+                showSimDashboard && (
+                    <SimulationDashboard pools={pools} onClose={() => setShowSimDashboard(false)} />
+                )
+            }
 
             {/* ============ PROPS TAB ============ */}
-            {activeTab === 'props' && (
-                <div className="space-y-6">
-                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                        <h3 className="text-xl font-bold mb-4">{editingSeed ? 'Edit Seed Question' : 'Add New Seed Question'}</h3>
-                        <div className="grid gap-4 bg-slate-900/50 p-4 rounded-lg">
-                            <input
-                                className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
-                                placeholder="Question Text (e.g. Who wins the coin toss?)"
-                                value={seedText}
-                                onChange={e => setSeedText(e.target.value)}
-                            />
-                            <div className="grid grid-cols-2 gap-4">
+            {
+                activeTab === 'props' && (
+                    <div className="space-y-6">
+                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                            <h3 className="text-xl font-bold mb-4">{editingSeed ? 'Edit Seed Question' : 'Add New Seed Question'}</h3>
+                            <div className="grid gap-4 bg-slate-900/50 p-4 rounded-lg">
                                 <input
                                     className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
-                                    placeholder="Option 1 (e.g. Heads)"
-                                    value={seedOpt1}
-                                    onChange={e => setSeedOpt1(e.target.value)}
+                                    placeholder="Question Text (e.g. Who wins the coin toss?)"
+                                    value={seedText}
+                                    onChange={e => setSeedText(e.target.value)}
                                 />
-                                <input
-                                    className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
-                                    placeholder="Option 2 (e.g. Tails)"
-                                    value={seedOpt2}
-                                    onChange={e => setSeedOpt2(e.target.value)}
-                                />
-                            </div>
-                            <div className="flex justify-end gap-2">
-                                {editingSeed && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <input
+                                        className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
+                                        placeholder="Option 1 (e.g. Heads)"
+                                        value={seedOpt1}
+                                        onChange={e => setSeedOpt1(e.target.value)}
+                                    />
+                                    <input
+                                        className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
+                                        placeholder="Option 2 (e.g. Tails)"
+                                        value={seedOpt2}
+                                        onChange={e => setSeedOpt2(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                    {editingSeed && (
+                                        <button
+                                            onClick={() => { setEditingSeed(null); setSeedText(''); setSeedOpt1(''); setSeedOpt2(''); }}
+                                            className="px-4 py-2 text-slate-400 hover:text-white"
+                                        >
+                                            Cancel
+                                        </button>
+                                    )}
                                     <button
-                                        onClick={() => { setEditingSeed(null); setSeedText(''); setSeedOpt1(''); setSeedOpt2(''); }}
-                                        className="px-4 py-2 text-slate-400 hover:text-white"
+                                        onClick={handleSaveSeed}
+                                        disabled={!seedText || !seedOpt1 || !seedOpt2}
+                                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold"
                                     >
-                                        Cancel
+                                        {editingSeed ? 'Update Seed' : 'Add Seed'}
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                            <div className="p-4 border-b border-slate-700 bg-slate-900/50">
+                                <h3 className="font-bold">Seed Library ({propSeeds.length})</h3>
+                            </div>
+                            <div className="divide-y divide-slate-700">
+                                {propSeeds.map(seed => (
+                                    <div key={seed.id} className="p-4 hover:bg-slate-700/20 flex justify-between items-center group">
+                                        <div>
+                                            <p className="font-medium text-white">{seed.text}</p>
+                                            <p className="text-sm text-slate-400">{seed.options.join(' vs ')}</p>
+                                        </div>
+                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => handleEditSeed(seed)} className="text-indigo-400 hover:text-indigo-300 p-2 bg-slate-800 rounded">
+                                                <Settings size={16} />
+                                            </button>
+                                            <button onClick={() => handleDeleteSeed(seed.id)} className="text-rose-400 hover:text-rose-300 p-2 bg-slate-800 rounded">
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {propSeeds.length === 0 && (
+                                    <div className="p-8 text-center text-slate-500">
+                                        No seed questions yet. Add one above.
+                                    </div>
                                 )}
-                                <button
-                                    onClick={handleSaveSeed}
-                                    disabled={!seedText || !seedOpt1 || !seedOpt2}
-                                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold"
-                                >
-                                    {editingSeed ? 'Update Seed' : 'Add Seed'}
-                                </button>
                             </div>
                         </div>
                     </div>
+                )
+            }
 
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                        <div className="p-4 border-b border-slate-700 bg-slate-900/50">
-                            <h3 className="font-bold">Seed Library ({propSeeds.length})</h3>
-                        </div>
-                        <div className="divide-y divide-slate-700">
-                            {propSeeds.map(seed => (
-                                <div key={seed.id} className="p-4 hover:bg-slate-700/20 flex justify-between items-center group">
-                                    <div>
-                                        <p className="font-medium text-white">{seed.text}</p>
-                                        <p className="text-sm text-slate-400">{seed.options.join(' vs ')}</p>
-                                    </div>
-                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => handleEditSeed(seed)} className="text-indigo-400 hover:text-indigo-300 p-2 bg-slate-800 rounded">
-                                            <Settings size={16} />
-                                        </button>
-                                        <button onClick={() => handleDeleteSeed(seed.id)} className="text-rose-400 hover:text-rose-300 p-2 bg-slate-800 rounded">
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                            {propSeeds.length === 0 && (
-                                <div className="p-8 text-center text-slate-500">
-                                    No seed questions yet. Add one above.
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-        </div>
+        </div >
     );
 };

@@ -17,7 +17,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
 export { db };
-import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed } from "../types";
+import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard } from "../types";
 
 /** Global statistics tracked across all pools */
 export interface GlobalStats {
@@ -132,6 +132,25 @@ export const dbService = {
         const docRef = doc(db, 'pools', poolId, 'propCards', userId);
         return onSnapshot(docRef, (doc) => {
             callback(doc.exists() ? doc.data() : null);
+        });
+    },
+
+    subscribeToPropCards: (poolId: string, callback: (cards: PropCard[]) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'propCards'));
+        return onSnapshot(q, (snapshot) => {
+            const cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PropCard));
+            callback(cards);
+        });
+    },
+
+    subscribeToUserPropCards: (poolId: string, userId: string, callback: (cards: PropCard[]) => void) => {
+        const q = query(
+            collection(db, 'pools', poolId, 'propCards'),
+            where('userId', '==', userId)
+        );
+        return onSnapshot(q, (snapshot) => {
+            const cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PropCard));
+            callback(cards);
         });
     },
 

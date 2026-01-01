@@ -118,7 +118,7 @@ export const gradeProp = onCall(async (request) => {
         updatedQuestions.forEach((q: any) => {
             if (q.correctOption !== undefined && q.correctOption !== null) {
                 if (card.answers[q.id] === q.correctOption) {
-                    score++;
+                    score += (q.points || 1);
                 }
             }
         });
