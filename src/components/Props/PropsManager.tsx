@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react';
-import { Plus, Trash2, Edit2, Check, X, Save, AlertTriangle, ChevronDown, ChevronUp, Search, Filter, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
-import { dbService } from '../../lib/dbService';
-import { PropQuestion, PropsPool, PropCard, PropSeed } from '../../types';
+import { Plus, Trash2, Edit2, Check, Save, AlertTriangle, ChevronDown, ChevronUp, Search, Filter } from 'lucide-react';
+import { dbService } from '../../services/dbService';
+import type { PropQuestion, PropsPool, PropCard, PropSeed } from '../../types';
 import { PropStats } from './PropStats';
 
 interface PropsManagerProps {
     gameState: PropsPool;
     updateConfig?: (updates: Partial<PropsPool>) => void; // Optional if just managing live pool
     allCards?: PropCard[];
+    isWizardMode?: boolean;
 }
 
 export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateConfig, allCards }) => {
@@ -200,7 +201,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
             {/* Stats View */}
             {showStats && allCards ? (
                 <div className="animate-in fade-in slide-in-from-top-4">
-                    <PropStats questions={gameState.props.questions} allCards={allCards} />
+                    <PropStats questions={gameState.props.questions} cards={allCards} />
                 </div>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -239,7 +240,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                     <p>No questions found matching your filters.</p>
                                 </div>
                             ) : (
-                                filteredQuestions.map((q, index) => {
+                                filteredQuestions.map((q) => {
                                     // Calculate actual index in the main array for reordering
                                     const actualIndex = questions.findIndex(item => item.id === q.id);
                                     const isEditing = editingId === q.id;

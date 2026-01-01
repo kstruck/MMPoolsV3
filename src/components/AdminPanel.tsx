@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
-import type { PoolTheme, GameState, Scores, Square } from '../types';
+import type { PoolTheme, GameState, PropsPool, Scores, Square } from '../types';
 import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User as UserIcon, Shield, Heart, Bell, Clock, Download, Globe, QrCode, TrendingUp } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { GoogleGenAI } from '@google/genai';
@@ -1044,7 +1044,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const renderWizardStep5 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <PropsManager gameState={gameState} updateConfig={updateConfig} />
+        {(gameState as any).type === 'PROPS' && (
+          <PropsManager gameState={gameState as unknown as PropsPool} updateConfig={updateConfig as any} />
+        )}
       </div>
     </div>
   );
@@ -1643,7 +1645,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {activeTab === 'props' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <PropsManager gameState={gameState} updateConfig={updateConfig} />
+              {(gameState as any).type === 'PROPS' && (
+                <PropsManager gameState={gameState as unknown as PropsPool} updateConfig={updateConfig as any} />
+              )}
             </div>
           </div>
         )}

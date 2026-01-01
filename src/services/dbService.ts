@@ -12,7 +12,8 @@ import {
     Timestamp,
     orderBy,
     limit,
-    arrayUnion
+    arrayUnion,
+    addDoc
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
@@ -260,6 +261,26 @@ export const dbService = {
             return result.data as { claimCode: string; claimId: string };
         } catch (error) {
             console.error("Error creating claim code:", error);
+            throw error;
+        }
+    },
+
+    // --- Prop Seeds ---
+    getPropSeeds: async (): Promise<PropSeed[]> => {
+        try {
+            const snapshot = await getDocs(collection(db, 'prop_seeds'));
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PropSeed));
+        } catch (error) {
+            console.error("Error fetching prop seeds:", error);
+            return [];
+        }
+    },
+
+    createPropSeed: async (seed: Omit<PropSeed, 'id'>): Promise<void> => {
+        try {
+            await addDoc(collection(db, 'prop_seeds'), seed);
+        } catch (error) {
+            console.error("Error creating prop seed:", error);
             throw error;
         }
     },

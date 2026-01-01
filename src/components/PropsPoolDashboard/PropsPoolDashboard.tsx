@@ -148,7 +148,6 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                             gameState={pool as any} // Compatible enough
                             updateConfig={updatePoolConfig as any}
                             isWizardMode={false}
-                            updateGameState={updatePoolConfig as any}
                             allCards={allCards}
                         />
                     </div>

@@ -180,9 +180,8 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                 <hr className="border-slate-800 my-6" />
 
                                 <PropsManager
-                                    gameState={config as unknown as GameState}
+                                    gameState={config as unknown as PropsPool}
                                     updateConfig={updateConfig as any}
-                                    updateGameState={updateConfig as any}
                                     isWizardMode={true}
                                 />
 
