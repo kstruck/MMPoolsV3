@@ -29,7 +29,8 @@ exports.createPool = (0, https_1.onCall)(async (request) => {
         const rawData = request.data || {};
         const data = JSON.parse(JSON.stringify(rawData));
         // Validate inputs
-        if (!data.name || !data.costPerSquare) {
+        // Validate inputs
+        if (!data.name || data.costPerSquare === undefined) {
             throw new https_1.HttpsError('invalid-argument', 'Missing required fields (name, costPerSquare).');
         }
         const poolsRef = db.collection('pools');

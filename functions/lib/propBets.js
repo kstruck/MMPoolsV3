@@ -95,7 +95,7 @@ exports.gradeProp = (0, https_1.onCall)(async (request) => {
         updatedQuestions.forEach((q) => {
             if (q.correctOption !== undefined && q.correctOption !== null) {
                 if (card.answers[q.id] === q.correctOption) {
-                    score++;
+                    score += (q.points || 1);
                 }
             }
         });

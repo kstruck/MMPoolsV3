@@ -30,7 +30,8 @@ export const createPool = onCall(async (request) => {
         const data = JSON.parse(JSON.stringify(rawData));
 
         // Validate inputs
-        if (!data.name || !data.costPerSquare) {
+        // Validate inputs
+        if (!data.name || data.costPerSquare === undefined) {
             throw new HttpsError('invalid-argument', 'Missing required fields (name, costPerSquare).');
         }
 
