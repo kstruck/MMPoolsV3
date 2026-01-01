@@ -24,7 +24,7 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
     };
 
     // Helper to calculate estimated start time if available
-    const estimatedStartTime = gameState.scores?.startTime ? new Date(gameState.scores.startTime) : null;
+    const estimatedStartTime = gameState.gameTime ? new Date(gameState.gameTime) : gameState.scores?.startTime ? new Date(gameState.scores.startTime) : null;
 
     const charityConfig = gameState.charity || {
         enabled: false,
@@ -163,6 +163,11 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                         defaultTime.setMinutes(defaultTime.getMinutes() + 60);
                                     }
                                     updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: defaultTime.getTime() } } });
+                                    updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: defaultTime.getTime() } } });
+                                } else if (val === '0') {
+                                    if (estimatedStartTime) {
+                                        updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: estimatedStartTime.getTime() } } });
+                                    }
                                 } else {
                                     const offsetMins = parseInt(val);
                                     if (estimatedStartTime) {
@@ -176,15 +181,18 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                     estimatedStartTime && Math.abs(safeReminders.lock.lockAt - (estimatedStartTime.getTime() - 3600000)) < 10000 ? '60' :
                                         estimatedStartTime && Math.abs(safeReminders.lock.lockAt - (estimatedStartTime.getTime() - 1800000)) < 10000 ? '30' :
                                             estimatedStartTime && Math.abs(safeReminders.lock.lockAt - (estimatedStartTime.getTime() - 900000)) < 10000 ? '15' :
-                                                estimatedStartTime && Math.abs(safeReminders.lock.lockAt - (estimatedStartTime.getTime() - 300000)) < 10000 ? '5' :
-                                                    'custom'
+                                                estimatedStartTime && Math.abs(safeReminders.lock.lockAt - (estimatedStartTime.getTime() - 900000)) < 10000 ? '15' :
+                                                    estimatedStartTime && Math.abs(safeReminders.lock.lockAt - (estimatedStartTime.getTime() - 300000)) < 10000 ? '5' :
+                                                        estimatedStartTime && Math.abs(safeReminders.lock.lockAt - estimatedStartTime.getTime()) < 10000 ? '0' :
+                                                            'custom'
                             }
                         >
                             <option value="manual">Manual (I will click 'Lock')</option>
-                            <option value="60" disabled={!estimatedStartTime}>1 Hour Before Kickoff</option>
-                            <option value="30" disabled={!estimatedStartTime}>30 Minutes Before Kickoff</option>
-                            <option value="15" disabled={!estimatedStartTime}>15 Minutes Before Kickoff</option>
+                            <option value="0" disabled={!estimatedStartTime} className="font-bold">Kickoff (Game Start)</option>
                             <option value="5" disabled={!estimatedStartTime}>5 Minutes Before Kickoff</option>
+                            <option value="15" disabled={!estimatedStartTime}>15 Minutes Before Kickoff</option>
+                            <option value="30" disabled={!estimatedStartTime}>30 Minutes Before Kickoff</option>
+                            <option value="60" disabled={!estimatedStartTime}>1 Hour Before Kickoff</option>
                             <option value="custom">Custom Date & Time...</option>
                         </select>
 

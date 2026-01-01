@@ -97,6 +97,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
             awayTeamLogo: away.logo,
             lockDate: gameDate.getTime(), // Common field for Props
             date: gameDate.getTime(), // Common field
+            gameTime: gameDate.getTime(), // Explicitly set gameTime
             league: (gameState as any).league || 'nfl'
         } as any);
 

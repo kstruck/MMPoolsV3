@@ -53,7 +53,25 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
         setConfig(prev => ({ ...prev, ...updates }));
     };
 
-    const handleNext = () => setStep(s => Math.min(s + 1, STEPS.length - 1));
+    const handleNext = () => {
+        // Auto-set default lock time when moving from Game Selection
+        if (step === 0 && config.gameTime) {
+            // Check if we haven't already customized it (hacky but safer defaults)
+            // Or just enforce "Kickoff" as default initial
+            setConfig(prev => ({
+                ...prev,
+                reminders: {
+                    ...prev.reminders!,
+                    lock: {
+                        ...prev.reminders!.lock,
+                        enabled: true,
+                        lockAt: config.gameTime
+                    }
+                }
+            }));
+        }
+        setStep(s => Math.min(s + 1, STEPS.length - 1));
+    };
     const handleBack = () => setStep(s => Math.max(s - 1, 0));
 
     const handleSubmit = async () => {

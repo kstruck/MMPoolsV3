@@ -81,6 +81,7 @@ export interface PropsPool {
   seasonType?: '1' | '2' | '3';
   week?: number;
   date?: number; // Game start time (lock time)
+  gameTime?: number;
 
   // Configuration
   props: {
@@ -88,6 +89,7 @@ export interface PropsPool {
     cost: number;
     maxCards: number;
     payouts?: number[];
+    gameTime?: number;
     questions: PropQuestion[];
   };
 
@@ -262,6 +264,7 @@ export interface GameState {
   homeTeamLogo?: string; // API provided logo
   awayTeamLogo?: string; // API provided logo
   gameId?: string; // ESPN Game ID for automated tracking
+  gameTime?: number;
   seasonType?: '1' | '2' | '3'; // 1=Preseason, 2=Regular, 3=Postseason
   week?: number; // 1-18 for regular, 1-5 for postseason (5 = Super Bowl)
 
