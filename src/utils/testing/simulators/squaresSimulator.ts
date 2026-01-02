@@ -63,7 +63,7 @@ export async function runScenario(
         // 2. SCENARIO EXECUTION
         switch (scenario) {
             case 'basic-100':
-                await runBasic100Scenario(poolId!, addStep);
+                await runBasic100Scenario(poolId!, addStep, settings);
                 break;
             case 'partial-fill':
                 await runPartialFillScenario(poolId!, addStep);
@@ -84,7 +84,8 @@ export async function runScenario(
 
 async function runBasic100Scenario(
     poolId: string,
-    addStep: (step: string, status: 'success' | 'failed' | 'skipped', message: string, data?: any) => void
+    addStep: (step: string, status: 'success' | 'failed' | 'skipped', message: string, data?: any) => void,
+    settings?: Record<string, any>
 ) {
     // A. Generate/Simulate Users
     addStep('Setup Users', 'success', 'Generating 10 test users');
@@ -130,23 +131,42 @@ async function runBasic100Scenario(
     // Verification: We could fetch the pool to confirm, but if no error thrown, we assume success.
 
     // D. Simulate Game
-    addStep('Simulate Game', 'success', 'Simulating random game scores...');
+    addStep('Simulate Game', 'success', 'Simulating game scores...');
 
-    // Q1
-    await simulatePoolGame(poolId, { q1Home: 7, q1Away: 3 });
-    await delay(1000); // Give FS time to propagate
+    const customLogic = settings?._fullScenario;
+    const scoreAction = customLogic?.userActions?.find((a: any) => a.action === 'Record Game Scores');
 
-    // Q2 / Half
-    await simulatePoolGame(poolId, { q2Home: 14, q2Away: 10 });
-    await delay(1000);
+    if (scoreAction && Array.isArray(scoreAction.scores)) {
+        addStep('Simulate Game', 'success', 'Using AI-generated custom score scenario');
 
-    // Q3
-    await simulatePoolGame(poolId, { q3Home: 21, q3Away: 17 });
-    await delay(1000);
+        // Map AI score format (array) to Simulator format (flat object)
+        const mappedScores: any = {};
+        for (const s of scoreAction.scores) {
+            if (s.quarter.includes('1st')) { mappedScores.q1Home = s.teamAScore; mappedScores.q1Away = s.teamBScore; }
+            if (s.quarter.includes('2nd') || s.quarter.includes('Halftime')) { mappedScores.q2Home = s.teamAScore; mappedScores.q2Away = s.teamBScore; }
+            if (s.quarter.includes('3rd')) { mappedScores.q3Home = s.teamAScore; mappedScores.q3Away = s.teamBScore; }
+            if (s.quarter.includes('Final')) { mappedScores.finalHome = s.teamAScore; mappedScores.finalAway = s.teamBScore; }
+        }
 
-    // Final
-    await simulatePoolGame(poolId, { finalHome: 28, finalAway: 24 });
-    addStep('Simulate Game', 'success', 'Game simulation complete. Final Score: 28-24');
+        // Run updates sequentially
+        if (mappedScores.q1Home !== undefined) { await simulatePoolGame(poolId, { q1Home: mappedScores.q1Home, q1Away: mappedScores.q1Away }); await delay(1000); }
+        if (mappedScores.q2Home !== undefined) { await simulatePoolGame(poolId, { q2Home: mappedScores.q2Home, q2Away: mappedScores.q2Away }); await delay(1000); }
+        if (mappedScores.q3Home !== undefined) { await simulatePoolGame(poolId, { q3Home: mappedScores.q3Home, q3Away: mappedScores.q3Away }); await delay(1000); }
+        if (mappedScores.finalHome !== undefined) { await simulatePoolGame(poolId, { finalHome: mappedScores.finalHome, finalAway: mappedScores.finalAway }); }
+
+        addStep('Simulate Game', 'success', `Custom game simulation complete. Final: ${mappedScores.finalHome}-${mappedScores.finalAway}`);
+    } else {
+        // Default Random Simulation
+        addStep('Simulate Game', 'success', 'Simulating random game scores (Default)...');
+        await simulatePoolGame(poolId, { q1Home: 7, q1Away: 3 });
+        await delay(1000);
+        await simulatePoolGame(poolId, { q2Home: 14, q2Away: 10 });
+        await delay(1000);
+        await simulatePoolGame(poolId, { q3Home: 21, q3Away: 17 });
+        await delay(1000);
+        await simulatePoolGame(poolId, { finalHome: 28, finalAway: 24 });
+        addStep('Simulate Game', 'success', 'Game simulation complete. Final Score: 28-24');
+    }
 
     // E. Verify Winners (Minimal check)
     // In a real verification, we'd fetch the pool and check `winners` array.

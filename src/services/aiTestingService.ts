@@ -180,7 +180,10 @@ export async function runAIEnhancedTest(
         poolType,
         scenario: scenario.scenarioName,
         mode,
-        settings: scenario.poolConfig
+        settings: {
+            ...scenario.poolConfig,
+            _fullScenario: scenario // Pass full scenario for simulator access
+        }
     });
 
     // 3. Validate results with AI
