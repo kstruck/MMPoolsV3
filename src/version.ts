@@ -1,1 +1,1 @@
-export const BUILD_TIMESTAMP = '2026-01-02-SIM-FIX-V3';
+export const BUILD_TIMESTAMP = '2026-01-02-SIM-V4-LOGS';
