@@ -130,10 +130,7 @@ async function runBasic100Scenario(
     }
 
     // B. Reserve Squares
-    addStep('Reserve Squares', 'success', 'Starting reservoir of 100 squares...');
-
-    // B. Reserve Squares
-    addStep('Reserve Squares', 'success', 'Starting reservoir of 100 squares...');
+    addStep('Reserve Squares', 'success', 'Starting square reservation process...');
 
     // 1. Identify Targeted Squares from User Strategies
     // Format: "targeting squares like (7,3)" -> wants square 73 (Home 7, Away 3) assuming fixed axis 0-9.
@@ -207,16 +204,7 @@ async function runBasic100Scenario(
         }
     }
 
-    // Perform Reservations
-    await Promise.all(assignments.map(a =>
-        dbService.reserveSquare(poolId, a.sqId, {
-            email: a.user.email,
-            name: a.user.name
-        }, undefined, a.user.name)
-    ));
-
-    // Using `assignments` loop instead of chunk loop
-    // Chunking for concurrency
+    // Perform Reservations in chunks to avoid rate limits
     const chunkSz = 20;
     for (let i = 0; i < assignments.length; i += chunkSz) {
         const chunk = assignments.slice(i, i + chunkSz);
@@ -236,24 +224,25 @@ async function runBasic100Scenario(
 
     // OVERRIDE: Force Fixed Axis Numbers (0-9) to match our Targeted Square logic
     // We must do this because lockPool generates random numbers.
+    // NOTE: This may fail due to Firestore security rules. If so, test runs with random axis (and will likely fail winner validation).
     const fixedAxis = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    addStep('Lock Pool', 'success', 'Overriding axis numbers with fixed 0-9 sequence for deterministic testing');
 
-    await dbService.updatePool(poolId, {
-        axisNumbers: { home: fixedAxis, away: fixedAxis },
-        // Also ensure quarterlyNumbers rely on this if rotation is set, but rotation breaks targeting.
-        // If rotation is ON (numberSets=4), we should probably disable it or force all quarters to 0-9?
-        // Let's assume numberSets=1 for now as per basic scenario, 
-        // OR force all quarterly sets to 0-9 if they exist.
-        // Actually, dbService.lockPool might have set quarterlyNumbers if numberSets=4.
-        // Let's overwrite them too just in case.
-        quarterlyNumbers: {
-            q1: { home: fixedAxis, away: fixedAxis },
-            q2: { home: fixedAxis, away: fixedAxis },
-            q3: { home: fixedAxis, away: fixedAxis },
-            q4: { home: fixedAxis, away: fixedAxis }
-        }
-    });
+    try {
+        await dbService.updatePool(poolId, {
+            axisNumbers: { home: fixedAxis, away: fixedAxis },
+            quarterlyNumbers: {
+                q1: { home: fixedAxis, away: fixedAxis },
+                q2: { home: fixedAxis, away: fixedAxis },
+                q3: { home: fixedAxis, away: fixedAxis },
+                q4: { home: fixedAxis, away: fixedAxis }
+            }
+        });
+        addStep('Lock Pool', 'success', 'Axis numbers overridden to fixed 0-9 sequence for deterministic testing');
+    } catch (axisError: any) {
+        // Log warning but continue - test may fail validation but won't crash
+        addStep('Lock Pool', 'skipped', `Could not override axis numbers (${axisError.message}). Test will use random axis - winner validation may fail.`);
+        console.warn('[Simulator] Axis override failed:', axisError);
+    }
     // Verification: We could fetch the pool to confirm, but if no error thrown, we assume success.
 
     // D. Simulate Game
