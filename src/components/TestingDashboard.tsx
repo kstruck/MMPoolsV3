@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     Bot, Play, CheckCircle, AlertTriangle,
-    Terminal, RefreshCw, ChevronRight, Activity, Bug, FileText
+    Terminal, RefreshCw, ChevronRight, Activity, Bug, FileText, X
 } from 'lucide-react';
 import { TEST_SCENARIOS, type PoolType, type TestResult } from '../utils/testing/testingOrchestrator';
 import {
@@ -25,6 +25,7 @@ export const TestingDashboard: React.FC = () => {
     const [currentResult, setCurrentResult] = useState<TestResult | null>(null);
     const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
     const [report, setReport] = useState<TestReport | null>(null);
+    const [showFullReport, setShowFullReport] = useState(false);
 
     // Suggested Prompts
     const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -304,7 +305,7 @@ export const TestingDashboard: React.FC = () => {
                                     </ReactMarkdown>
                                     <button
                                         className="mt-4 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-white transition-colors"
-                                        onClick={() => {/* Open full report modal */ }}
+                                        onClick={() => setShowFullReport(true)}
                                     >
                                         View Full Report
                                     </button>
@@ -335,6 +336,49 @@ export const TestingDashboard: React.FC = () => {
             </div>
 
             {activeTab === 'OVERVIEW' ? renderOverview() : renderPoolTest()}
+
+            {/* Full Report Modal */}
+            {report && (
+                <ReportModal
+                    isOpen={showFullReport}
+                    onClose={() => setShowFullReport(false)}
+                    report={report}
+                />
+            )}
+        </div>
+    );
+};
+
+// Simple internal Modal Component to avoid state mess in main component
+const ReportModal = ({ isOpen, onClose, report }: { isOpen: boolean; onClose: () => void; report: any }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div className="bg-slate-800 w-full max-w-4xl max-h-[90vh] rounded-2xl border border-slate-700 shadow-2xl flex flex-col">
+                <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50 rounded-t-2xl">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <FileText className="w-6 h-6 text-purple-400" />
+                        Full AI Analysis
+                    </h3>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-full transition-colors">
+                        <X className="w-5 h-5 text-slate-400" />
+                    </button>
+                </div>
+                <div className="p-6 overflow-y-auto flex-1 text-slate-300 prose prose-invert max-w-none">
+                    <ReactMarkdown>{report.detailedResults || "No details provided."}</ReactMarkdown>
+
+                    <hr className="border-slate-700 my-6" />
+                    <h4 className="text-white font-bold mb-2">Technical Data</h4>
+                    <pre className="bg-black p-4 rounded-lg text-xs font-mono text-green-400 overflow-x-auto">
+                        {JSON.stringify(report, null, 2)}
+                    </pre>
+                </div>
+                <div className="p-6 border-t border-slate-700 bg-slate-900/30 rounded-b-2xl flex justify-end">
+                    <button onClick={onClose} className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors">
+                        Close
+                    </button>
+                </div>
+            </div>
         </div>
     );
 };

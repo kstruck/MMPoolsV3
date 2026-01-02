@@ -219,25 +219,41 @@ class TestOrchestrator {
         try {
             // Import the appropriate simulator
             let simulator;
+            let safeScenarioId = config.scenario;
+
             switch (config.poolType) {
                 case 'SQUARES':
                     simulator = await import('./simulators/squaresSimulator');
+                    // If scenario is not a known preset ID, default to basic-100 but keep settings
+                    if (!['basic-100', 'partial-fill', 'reverse-scores', 'every-score-wins', 'tie-scenario', 'charity-pool'].includes(config.scenario)) {
+                        safeScenarioId = 'basic-100';
+                        log('info', `Using 'basic-100' logic for custom scenario: ${config.scenario}`);
+                    }
                     break;
                 case 'BRACKET':
                     simulator = await import('./simulators/bracketSimulator');
+                    if (!['perfect-bracket', 'classic-scoring', 'espn-scoring', 'tiebreaker', 'incomplete-bracket'].includes(config.scenario)) {
+                        safeScenarioId = 'perfect-bracket';
+                    }
                     break;
                 case 'NFL_PLAYOFFS':
                     simulator = await import('./simulators/playoffSimulator');
+                    if (!['standard-playoffs', 'aggressive-multipliers', 'perfect-ranking', 'tiebreaker'].includes(config.scenario)) {
+                        safeScenarioId = 'standard-playoffs';
+                    }
                     break;
                 case 'PROPS':
                     simulator = await import('./simulators/propsSimulator');
+                    if (!['standard-props', 'perfect-score', 'exact-tie'].includes(config.scenario)) {
+                        safeScenarioId = 'standard-props';
+                    }
                     break;
                 default:
                     throw new Error(`Unknown pool type: ${config.poolType}`);
             }
 
-            // Run the simulator
-            const simulatorResult = await simulator.runScenario(config.scenario, config.mode, config.settings);
+            // Run the simulator with the SAFE ID
+            const simulatorResult = await simulator.runScenario(safeScenarioId, config.mode, config.settings);
 
             result.poolId = simulatorResult.poolId;
             result.steps = simulatorResult.steps || [];
