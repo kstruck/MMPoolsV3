@@ -129,15 +129,17 @@ function assertWinnerExists(assertion: TestAssertion, winners: any[]): Assertion
 function assertTotalPayout(assertion: TestAssertion, winners: any[]): AssertionResult {
     const actual = winners.reduce((sum, w) => sum + (w.amount || 0), 0);
     const expected = assertion.expected as number;
-    const passed = actual === expected;
+    // Use tolerance for floating-point comparison (within $0.01)
+    const tolerance = 0.01;
+    const passed = Math.abs(actual - expected) < tolerance;
 
     return {
         assertion,
         passed,
         actual,
         message: passed
-            ? `✅ ${assertion.message} ($${actual})`
-            : `❌ ${assertion.message} - Expected $${expected}, got $${actual}`
+            ? `✅ ${assertion.message} ($${actual.toFixed(2)})`
+            : `❌ ${assertion.message} - Expected $${expected}, got $${actual.toFixed(2)}`
     };
 }
 
