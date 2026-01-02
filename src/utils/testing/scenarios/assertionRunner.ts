@@ -72,6 +72,13 @@ function runSingleAssertion(
             return assertPropWinner(assertion, pool);
         case 'propTopScore':
             return assertPropTopScore(assertion, pool);
+        // Bracket-specific assertions
+        case 'bracketEntryCount':
+            return assertBracketEntryCount(assertion, pool);
+        case 'bracketWinner':
+            return assertBracketWinner(assertion, pool);
+        case 'bracketTopScore':
+            return assertBracketTopScore(assertion, pool);
         default:
             return {
                 assertion,
@@ -204,6 +211,58 @@ function assertPropWinner(assertion: TestAssertion, pool: any): AssertionResult 
 function assertPropTopScore(assertion: TestAssertion, pool: any): AssertionResult {
     const cards = pool?._propCards || [];
     const topScore = cards.reduce((max: number, c: any) => Math.max(max, c.score || 0), 0);
+    const expected = assertion.expected as number;
+    const passed = topScore === expected;
+
+    return {
+        assertion,
+        passed,
+        actual: topScore,
+        message: passed
+            ? `✅ ${assertion.message} (${topScore} points)`
+            : `❌ ${assertion.message} - Expected ${expected}, got ${topScore}`
+    };
+}
+
+// === BRACKET-SPECIFIC ASSERTIONS ===
+
+function assertBracketEntryCount(assertion: TestAssertion, pool: any): AssertionResult {
+    const actual = pool?._bracketEntries?.length || pool?.entryCount || 0;
+    const expected = assertion.expected as number;
+    const passed = actual === expected;
+
+    return {
+        assertion,
+        passed,
+        actual,
+        message: passed
+            ? `✅ ${assertion.message} (${actual} entries)`
+            : `❌ ${assertion.message} - Expected ${expected}, got ${actual}`
+    };
+}
+
+function assertBracketWinner(assertion: TestAssertion, pool: any): AssertionResult {
+    const entries = pool?._bracketEntries || [];
+    // Sort by score descending, then by tiebreaker
+    const sorted = [...entries].sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+    const winner = sorted[0];
+    const actual = winner?.name || 'No winner';
+    const expected = assertion.expected as string;
+    const passed = actual === expected;
+
+    return {
+        assertion,
+        passed,
+        actual,
+        message: passed
+            ? `✅ ${assertion.message} - Winner: ${actual}`
+            : `❌ ${assertion.message} - Expected "${expected}", got "${actual}"`
+    };
+}
+
+function assertBracketTopScore(assertion: TestAssertion, pool: any): AssertionResult {
+    const entries = pool?._bracketEntries || [];
+    const topScore = entries.reduce((max: number, e: any) => Math.max(max, e.score || 0), 0);
     const expected = assertion.expected as number;
     const passed = topScore === expected;
 

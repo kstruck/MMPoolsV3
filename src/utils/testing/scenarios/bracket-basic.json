@@ -1,0 +1,93 @@
+{
+    "id": "bracket-basic",
+    "name": "Bracket Basic Test",
+    "description": "Tests bracket entry submission, scoring, and ranking calculation",
+    "poolType": "BRACKET",
+    "poolConfig": {
+        "name": "Test Bracket Pool",
+        "type": "BRACKET",
+        "seasonYear": 2025,
+        "gender": "mens"
+    },
+    "testEntries": [
+        {
+            "userName": "Alice",
+            "picks": {
+                "slot-g1": "team1",
+                "slot-g2": "team4",
+                "slot-g3": "team1"
+            },
+            "tiebreakerPrediction": 145
+        },
+        {
+            "userName": "Bob",
+            "picks": {
+                "slot-g1": "team2",
+                "slot-g2": "team4",
+                "slot-g3": "team4"
+            },
+            "tiebreakerPrediction": 140
+        },
+        {
+            "userName": "Carol",
+            "picks": {
+                "slot-g1": "team1",
+                "slot-g2": "team3",
+                "slot-g3": "team1"
+            },
+            "tiebreakerPrediction": 150
+        }
+    ],
+    "tournamentResults": [
+        {
+            "gameId": "g1",
+            "homeTeamId": "team1",
+            "awayTeamId": "team2",
+            "homeScore": 70,
+            "awayScore": 65,
+            "winnerId": "team1",
+            "round": 1
+        },
+        {
+            "gameId": "g2",
+            "homeTeamId": "team3",
+            "awayTeamId": "team4",
+            "homeScore": 68,
+            "awayScore": 72,
+            "winnerId": "team4",
+            "round": 1
+        },
+        {
+            "gameId": "g3",
+            "homeTeamId": "team1",
+            "awayTeamId": "team4",
+            "homeScore": 75,
+            "awayScore": 70,
+            "winnerId": "team1",
+            "round": 2
+        }
+    ],
+    "assertions": [
+        {
+            "type": "bracketEntryCount",
+            "expected": 3,
+            "message": "Should have 3 bracket entries"
+        },
+        {
+            "type": "bracketWinner",
+            "expected": "Alice's Bracket",
+            "message": "Alice should win with best score (10+10+20=40 pts - all correct)"
+        },
+        {
+            "type": "bracketTopScore",
+            "expected": 40,
+            "message": "Top score should be 40 points (R1:10 + R1:10 + R2:20)"
+        },
+        {
+            "type": "poolStatus",
+            "expected": "COMPLETED",
+            "field": "status",
+            "message": "Pool should be in COMPLETED status"
+        }
+    ]
+}

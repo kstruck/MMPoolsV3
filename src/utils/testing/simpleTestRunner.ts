@@ -55,6 +55,17 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             };
             const { runScenario: runPropsScenario } = await import('./simulators/propsSimulator');
             result = await runPropsScenario('props-basic', 'actual', propsSettings);
+        } else if (poolType === 'BRACKET') {
+            // Route to bracket simulator
+            const bracketSettings = {
+                ...scenario.poolConfig,
+                _fullScenario: {
+                    testEntries: (scenario as any).testEntries,
+                    tournamentResults: (scenario as any).tournamentResults
+                }
+            };
+            const { runScenario: runBracketScenario } = await import('./simulators/bracketSimulator');
+            result = await runBracketScenario('bracket-basic', 'actual', bracketSettings);
         } else {
             // SQUARES (default)
             const settings = {
@@ -93,6 +104,10 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             // For props, fetch prop cards and attach to pool object
             const propCards = await dbService.getPropCards(result.poolId);
             pool._propCards = propCards;
+        } else if (poolType === 'BRACKET') {
+            // For brackets, fetch entries and attach to pool object
+            const bracketEntries = await dbService.getBracketEntries(result.poolId);
+            pool._bracketEntries = bracketEntries;
         } else {
             // SQUARES - get winners
             winners = await dbService.getWinners(result.poolId);

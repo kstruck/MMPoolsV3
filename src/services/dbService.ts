@@ -134,6 +134,12 @@ export const dbService = {
         return snap.docs.map(d => d.data());
     },
 
+    getBracketEntries: async (poolId: string) => {
+        const q = collection(db, 'pools', poolId, 'entries');
+        const snap = await getDocs(q);
+        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    },
+
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: any | null) => void) => {
         const docRef = doc(db, 'pools', poolId, 'propCards', userId);
         return onSnapshot(docRef, (doc) => {

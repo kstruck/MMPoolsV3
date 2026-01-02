@@ -5,12 +5,14 @@ import basicQuarters from './basic-quarters.json';
 import everyScoreWins from './every-score-wins.json';
 import partialFill from './partial-fill.json';
 import propsBasic from './props-basic.json';
+import bracketBasic from './bracket-basic.json';
 
 export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
 
 export interface TestAssertion {
     type: 'winnerCount' | 'winnerCountAtLeast' | 'winnerExists' | 'totalPayout' | 'poolStatus'
-    | 'propCardCount' | 'propWinner' | 'propTopScore';
+    | 'propCardCount' | 'propWinner' | 'propTopScore'
+    | 'bracketEntryCount' | 'bracketWinner' | 'bracketTopScore';
     expected?: number | string | boolean;
     period?: string;
     digits?: [number, number];
@@ -63,6 +65,7 @@ export const SCENARIOS: Record<string, TestScenario> = {
     'every-score-wins': everyScoreWins as unknown as TestScenario,
     'partial-fill': partialFill as unknown as TestScenario,
     'props-basic': propsBasic as unknown as TestScenario,
+    'bracket-basic': bracketBasic as unknown as TestScenario,
 };
 
 export const SCENARIO_LIST = Object.values(SCENARIOS);
