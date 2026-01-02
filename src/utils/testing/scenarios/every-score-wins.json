@@ -1,0 +1,92 @@
+{
+    "id": "every-score-wins",
+    "name": "Every Score Wins Test",
+    "description": "Tests the scoreChangePayout rule where every score change creates a winner",
+    "poolConfig": {
+        "name": "Test Pool - Every Score Wins",
+        "type": "SQUARES",
+        "costPerSquare": 10,
+        "maxPlayers": 10,
+        "ruleVariations": {
+            "scoreChangePayout": true,
+            "scoreChangePayoutStrategy": "equal_split"
+        }
+    },
+    "testUsers": [
+        {
+            "name": "Player1",
+            "strategy": "random"
+        },
+        {
+            "name": "Player2",
+            "strategy": "random"
+        },
+        {
+            "name": "Player3",
+            "strategy": "random"
+        },
+        {
+            "name": "Player4",
+            "strategy": "random"
+        }
+    ],
+    "scoreUpdates": [
+        {
+            "period": "Q1",
+            "homeScore": 7,
+            "awayScore": 0
+        },
+        {
+            "period": "Q1",
+            "homeScore": 7,
+            "awayScore": 3
+        },
+        {
+            "period": "Q2",
+            "homeScore": 14,
+            "awayScore": 3
+        },
+        {
+            "period": "Q2",
+            "homeScore": 14,
+            "awayScore": 10
+        },
+        {
+            "period": "Q3",
+            "homeScore": 21,
+            "awayScore": 10
+        },
+        {
+            "period": "Q3",
+            "homeScore": 21,
+            "awayScore": 17
+        },
+        {
+            "period": "Q4",
+            "homeScore": 28,
+            "awayScore": 17
+        },
+        {
+            "period": "Q4",
+            "homeScore": 28,
+            "awayScore": 24
+        }
+    ],
+    "assertions": [
+        {
+            "type": "winnerCountAtLeast",
+            "expected": 4,
+            "message": "Should have at least 4 Event winners from score changes"
+        },
+        {
+            "type": "totalPayout",
+            "expected": 1000,
+            "message": "Total payout should equal $1000"
+        },
+        {
+            "type": "poolStatus",
+            "expected": "post",
+            "message": "Pool should be in post-game status"
+        }
+    ]
+}

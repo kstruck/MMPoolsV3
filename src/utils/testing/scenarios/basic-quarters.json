@@ -1,0 +1,104 @@
+{
+    "id": "basic-quarters",
+    "name": "Basic Quarters Test",
+    "description": "Verifies Q1, Q2, Q3, and Final winners are correctly identified",
+    "poolConfig": {
+        "name": "Test Pool - Basic Quarters",
+        "type": "SQUARES",
+        "costPerSquare": 10,
+        "maxPlayers": 10
+    },
+    "testUsers": [
+        {
+            "name": "Alice",
+            "strategy": "targeting (7,3) for Q1"
+        },
+        {
+            "name": "Bob",
+            "strategy": "targeting (4,0) for Q2"
+        },
+        {
+            "name": "Charlie",
+            "strategy": "targeting (1,7) for Q3"
+        },
+        {
+            "name": "Diana",
+            "strategy": "targeting (8,4) for Final"
+        }
+    ],
+    "scoreUpdates": [
+        {
+            "period": "Q1",
+            "homeScore": 7,
+            "awayScore": 3
+        },
+        {
+            "period": "Q2",
+            "homeScore": 14,
+            "awayScore": 10
+        },
+        {
+            "period": "Q3",
+            "homeScore": 21,
+            "awayScore": 17
+        },
+        {
+            "period": "Q4",
+            "homeScore": 28,
+            "awayScore": 24
+        }
+    ],
+    "assertions": [
+        {
+            "type": "winnerCount",
+            "expected": 4,
+            "message": "Should have 4 winners (Q1, Q2, Q3, Final)"
+        },
+        {
+            "type": "winnerExists",
+            "period": "q1",
+            "digits": [
+                7,
+                3
+            ],
+            "message": "Q1 winner should be square (7,3)"
+        },
+        {
+            "type": "winnerExists",
+            "period": "half",
+            "digits": [
+                4,
+                0
+            ],
+            "message": "Q2 winner should be square (4,0)"
+        },
+        {
+            "type": "winnerExists",
+            "period": "q3",
+            "digits": [
+                1,
+                7
+            ],
+            "message": "Q3 winner should be square (1,7)"
+        },
+        {
+            "type": "winnerExists",
+            "period": "final",
+            "digits": [
+                8,
+                4
+            ],
+            "message": "Final winner should be square (8,4)"
+        },
+        {
+            "type": "totalPayout",
+            "expected": 1000,
+            "message": "Total payout should equal $1000"
+        },
+        {
+            "type": "poolStatus",
+            "expected": "post",
+            "message": "Pool should be in post-game status"
+        }
+    ]
+}

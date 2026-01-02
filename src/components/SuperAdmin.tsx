@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
-import { TestingDashboard } from './TestingDashboard';
+import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import type { GameState, Pool, User, SystemSettings, PropSeed } from '../types';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot } from 'lucide-react';
 
@@ -1427,7 +1427,7 @@ export const SuperAdmin: React.FC = () => {
             )}
 
 
-            {activeTab === 'testing' && <TestingDashboard />}
+            {activeTab === 'testing' && <SimpleTestingDashboard />}
 
             {activeTab === 'system' && (
                 <div className="space-y-6">

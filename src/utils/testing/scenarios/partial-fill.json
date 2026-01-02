@@ -1,0 +1,73 @@
+{
+    "id": "partial-fill",
+    "name": "Partial Fill Test",
+    "description": "Tests a pool where only 50 squares are sold (50% fill rate)",
+    "poolConfig": {
+        "name": "Test Pool - Partial Fill",
+        "type": "SQUARES",
+        "costPerSquare": 10,
+        "maxPlayers": 5
+    },
+    "squareCount": 50,
+    "testUsers": [
+        {
+            "name": "Player1",
+            "strategy": "targeting (7,3)"
+        },
+        {
+            "name": "Player2",
+            "strategy": "targeting (4,0)"
+        },
+        {
+            "name": "Player3",
+            "strategy": "random"
+        },
+        {
+            "name": "Player4",
+            "strategy": "random"
+        },
+        {
+            "name": "Player5",
+            "strategy": "random"
+        }
+    ],
+    "scoreUpdates": [
+        {
+            "period": "Q1",
+            "homeScore": 7,
+            "awayScore": 3
+        },
+        {
+            "period": "Q2",
+            "homeScore": 14,
+            "awayScore": 10
+        },
+        {
+            "period": "Q3",
+            "homeScore": 21,
+            "awayScore": 17
+        },
+        {
+            "period": "Q4",
+            "homeScore": 28,
+            "awayScore": 24
+        }
+    ],
+    "assertions": [
+        {
+            "type": "winnerCount",
+            "expected": 4,
+            "message": "Should have 4 winners (Q1, Q2, Q3, Final)"
+        },
+        {
+            "type": "totalPayout",
+            "expected": 500,
+            "message": "Total payout should equal $500 (50 squares x $10)"
+        },
+        {
+            "type": "poolStatus",
+            "expected": "post",
+            "message": "Pool should be in post-game status"
+        }
+    ]
+}
