@@ -65,6 +65,13 @@ function runSingleAssertion(
             return assertTotalPayout(assertion, winners);
         case 'poolStatus':
             return assertPoolStatus(assertion, pool);
+        // Props-specific assertions
+        case 'propCardCount':
+            return assertPropCardCount(assertion, pool);
+        case 'propWinner':
+            return assertPropWinner(assertion, pool);
+        case 'propTopScore':
+            return assertPropTopScore(assertion, pool);
         default:
             return {
                 assertion,
@@ -155,5 +162,57 @@ function assertPoolStatus(assertion: TestAssertion, pool: any): AssertionResult 
         message: passed
             ? `✅ ${assertion.message} (${actual})`
             : `❌ ${assertion.message} - Expected "${expected}", got "${actual}"`
+    };
+}
+
+// === PROPS-SPECIFIC ASSERTIONS ===
+
+function assertPropCardCount(assertion: TestAssertion, pool: any): AssertionResult {
+    const actual = pool?._propCards?.length || pool?.entryCount || 0;
+    const expected = assertion.expected as number;
+    const passed = actual === expected;
+
+    return {
+        assertion,
+        passed,
+        actual,
+        message: passed
+            ? `✅ ${assertion.message} (${actual} cards)`
+            : `❌ ${assertion.message} - Expected ${expected}, got ${actual}`
+    };
+}
+
+function assertPropWinner(assertion: TestAssertion, pool: any): AssertionResult {
+    const cards = pool?._propCards || [];
+    // Sort by score descending
+    const sorted = [...cards].sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+    const winner = sorted[0];
+    const actual = winner?.userName || 'No winner';
+    const expected = assertion.expected as string;
+    const passed = actual === expected;
+
+    return {
+        assertion,
+        passed,
+        actual,
+        message: passed
+            ? `✅ ${assertion.message} - Winner: ${actual}`
+            : `❌ ${assertion.message} - Expected "${expected}", got "${actual}"`
+    };
+}
+
+function assertPropTopScore(assertion: TestAssertion, pool: any): AssertionResult {
+    const cards = pool?._propCards || [];
+    const topScore = cards.reduce((max: number, c: any) => Math.max(max, c.score || 0), 0);
+    const expected = assertion.expected as number;
+    const passed = topScore === expected;
+
+    return {
+        assertion,
+        passed,
+        actual: topScore,
+        message: passed
+            ? `✅ ${assertion.message} (${topScore} points)`
+            : `❌ ${assertion.message} - Expected ${expected}, got ${topScore}`
     };
 }

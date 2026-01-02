@@ -1,0 +1,124 @@
+{
+    "id": "props-basic",
+    "name": "Props Basic Test",
+    "description": "Tests prop card purchase, question grading, and score calculation",
+    "poolType": "PROPS",
+    "poolConfig": {
+        "name": "Test Props Pool",
+        "type": "PROPS",
+        "cost": 10,
+        "maxCards": 3
+    },
+    "questions": [
+        {
+            "id": "q1",
+            "text": "Who will score the first touchdown?",
+            "options": [
+                "Team A",
+                "Team B",
+                "No TD in 1st Quarter"
+            ],
+            "points": 2
+        },
+        {
+            "id": "q2",
+            "text": "Will there be a safety?",
+            "options": [
+                "Yes",
+                "No"
+            ],
+            "points": 1
+        },
+        {
+            "id": "q3",
+            "text": "Total points over/under 45?",
+            "options": [
+                "Over",
+                "Under"
+            ],
+            "points": 1
+        },
+        {
+            "id": "q4",
+            "text": "Longest field goal made?",
+            "options": [
+                "Under 40 yards",
+                "40-49 yards",
+                "50+ yards",
+                "No FG made"
+            ],
+            "points": 2
+        }
+    ],
+    "testEntries": [
+        {
+            "userName": "Alice",
+            "answers": {
+                "q1": 0,
+                "q2": 1,
+                "q3": 0,
+                "q4": 2
+            },
+            "tiebreakerVal": 48
+        },
+        {
+            "userName": "Bob",
+            "answers": {
+                "q1": 0,
+                "q2": 0,
+                "q3": 1,
+                "q4": 1
+            },
+            "tiebreakerVal": 42
+        },
+        {
+            "userName": "Carol",
+            "answers": {
+                "q1": 1,
+                "q2": 1,
+                "q3": 0,
+                "q4": 0
+            },
+            "tiebreakerVal": 51
+        },
+        {
+            "userName": "Dave",
+            "answers": {
+                "q1": 0,
+                "q2": 1,
+                "q3": 0,
+                "q4": 1
+            },
+            "tiebreakerVal": 45
+        }
+    ],
+    "grading": {
+        "q1": 0,
+        "q2": 1,
+        "q3": 0,
+        "q4": 1
+    },
+    "assertions": [
+        {
+            "type": "propCardCount",
+            "expected": 4,
+            "message": "Should have 4 prop cards submitted"
+        },
+        {
+            "type": "propWinner",
+            "expected": "Dave",
+            "message": "Dave should win with 5 points (all correct)"
+        },
+        {
+            "type": "propTopScore",
+            "expected": 5,
+            "message": "Top score should be 5 points (2+1+1+1)"
+        },
+        {
+            "type": "poolStatus",
+            "expected": true,
+            "field": "isLocked",
+            "message": "Pool should be locked after grading"
+        }
+    ]
+}

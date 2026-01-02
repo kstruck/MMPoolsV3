@@ -40,22 +40,38 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
     }
 
     try {
-        // Run simulation with pre-defined scenario
-        const settings = {
-            ...scenario.poolConfig,
-            _fullScenario: {
-                testUsers: scenario.testUsers,
-                squareCount: (scenario as any).squareCount || 100, // Support partial fill
-                actions: scenario.scoreUpdates.map(u => ({
-                    actionType: 'SCORE_UPDATE',
-                    period: u.period,
-                    homeScore: u.homeScore,
-                    awayScore: u.awayScore
-                }))
-            }
-        };
+        const poolType = scenario.poolType || 'SQUARES';
+        let result: { poolId?: string; steps: any[] };
 
-        const result = await runScenario('basic-100', 'actual', settings);
+        if (poolType === 'PROPS') {
+            // Route to props simulator
+            const propsSettings = {
+                ...scenario.poolConfig,
+                _fullScenario: {
+                    questions: (scenario as any).questions,
+                    testEntries: (scenario as any).testEntries,
+                    grading: (scenario as any).grading
+                }
+            };
+            const { runScenario: runPropsScenario } = await import('./simulators/propsSimulator');
+            result = await runPropsScenario('props-basic', 'actual', propsSettings);
+        } else {
+            // SQUARES (default)
+            const settings = {
+                ...scenario.poolConfig,
+                _fullScenario: {
+                    testUsers: scenario.testUsers,
+                    squareCount: (scenario as any).squareCount || 100,
+                    actions: (scenario.scoreUpdates || []).map(u => ({
+                        actionType: 'SCORE_UPDATE',
+                        period: u.period,
+                        homeScore: u.homeScore,
+                        awayScore: u.awayScore
+                    }))
+                }
+            };
+            result = await runScenario('basic-100', 'actual', settings);
+        }
 
         if (!result.poolId) {
             return {
@@ -70,8 +86,17 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
         }
 
         // Fetch final data for validation
-        const pool = await dbService.getPoolById(result.poolId);
-        const winners = await dbService.getWinners(result.poolId);
+        const pool: any = await dbService.getPoolById(result.poolId);
+        let winners: any[] = [];
+
+        if (poolType === 'PROPS') {
+            // For props, fetch prop cards and attach to pool object
+            const propCards = await dbService.getPropCards(result.poolId);
+            pool._propCards = propCards;
+        } else {
+            // SQUARES - get winners
+            winners = await dbService.getWinners(result.poolId);
+        }
 
         // Run assertions
         const validation = runAssertions(scenario, winners, pool);
