@@ -132,33 +132,100 @@ async function runBasic100Scenario(
     // B. Reserve Squares
     addStep('Reserve Squares', 'success', 'Starting reservoir of 100 squares...');
 
-    // Create an array of 0-99
-    const squareIds = Array.from({ length: 100 }, (_, i) => i);
+    // B. Reserve Squares
+    addStep('Reserve Squares', 'success', 'Starting reservoir of 100 squares...');
 
-    // Shuffle squares for randomness
-    for (let i = squareIds.length - 1; i > 0; i--) {
+    // 1. Identify Targeted Squares from User Strategies
+    // Format: "targeting squares like (7,3)" -> wants square 73 (Home 7, Away 3) assuming fixed axis 0-9.
+    const reservedSquares: Record<number, any> = {};
+
+    testUsers.forEach(u => {
+        if (u.strategy) {
+            const matches = u.strategy.matchAll(/\((\d),(\d)\)/g);
+            for (const match of matches) {
+                const home = parseInt(match[1]);
+                const away = parseInt(match[2]);
+                // Assuming Home=Col (top), Away=Row (left) OR vice versa. 
+                // Standard convention often varies. Let's assume Row=Away, Col=Home.
+                // If Axis are 0..9 fixed:
+                // Square 73 = Row 7, Col 3.
+                // Let's assume (Home, Away) means (Col, Row)??
+                // Report says: Winner (Home 7, Away 3).
+                // If Home is Top Axis (Cols) and Away is Left Axis (Rows).
+                // Then (7,3) -> Col 7, Row 3.
+                // Square Index = Row * 10 + Col = 3 * 10 + 7 = 37.
+                // Wait, typically square grid is 10x10.
+                // Let's stick to Home=Col, Away=Row.
+                // So (7,3) -> Col 7, Row 3 -> Index 37.
+                // BUT, user might mean (Row, Col). 
+                // Let's assign BOTH 37 and 73 to be safe if possible, or just 37.
+                // Let's assume (Home, Away) -> (Col, Row) because usually Home is Top.
+                const sqIndex = away * 10 + home;
+                if (!reservedSquares[sqIndex]) {
+                    reservedSquares[sqIndex] = u;
+                }
+            }
+        }
+    });
+
+    // 2. Create pool of remaining squares
+    const allSquareIds = Array.from({ length: 100 }, (_, i) => i);
+    const availableSquares = allSquareIds.filter(id => !reservedSquares[id]);
+
+    // Shuffle remaining
+    for (let i = availableSquares.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [squareIds[i], squareIds[j]] = [squareIds[j], squareIds[i]];
+        [availableSquares[i], availableSquares[j]] = [availableSquares[j], availableSquares[i]];
     }
 
-    // Assign 10 squares to each user
-    const chunkSize = 10;
-    let processed = 0;
+    // 3. Assign Squares
+    // First, fulfill reserved requests
+    const assignments: { user: any, sqId: number }[] = [];
+
+    // Add explicitly reserved
+    Object.keys(reservedSquares).forEach(k => {
+        const sqId = parseInt(k);
+        assignments.push({ user: reservedSquares[sqId], sqId });
+    });
+
+    // Then fill the rest
+    // We need to ensure every user gets ~10 squares (or whatever count).
+    // The previous logic assigned chunks.
+
+    // Let's just iterate users and fill their quota.
+    const squaresPerUser = 10;
 
     for (const user of testUsers) {
-        const mySquares = squareIds.slice(processed, processed + chunkSize);
+        // Count how many they already have
+        const currentCount = assignments.filter(a => a.user === user).length;
+        let needed = squaresPerUser - currentCount;
 
-        // Reserve sequentially (awaiting to avoid rate limits/race conditions, or batching)
-        // Cloud functions can handle parallel, but let's be safe with strict concurrency control.
-        await Promise.all(mySquares.map(sqId =>
-            dbService.reserveSquare(poolId, sqId, {
-                email: user.email,
-                name: user.name
-            }, undefined, user.name)
+        while (needed > 0 && availableSquares.length > 0) {
+            const nextSq = availableSquares.pop()!;
+            assignments.push({ user, sqId: nextSq });
+            needed--;
+        }
+    }
+
+    // Perform Reservations
+    await Promise.all(assignments.map(a =>
+        dbService.reserveSquare(poolId, a.sqId, {
+            email: a.user.email,
+            name: a.user.name
+        }, undefined, a.user.name)
+    ));
+
+    // Using `assignments` loop instead of chunk loop
+    // Chunking for concurrency
+    const chunkSz = 20;
+    for (let i = 0; i < assignments.length; i += chunkSz) {
+        const chunk = assignments.slice(i, i + chunkSz);
+        await Promise.all(chunk.map(a =>
+            dbService.reserveSquare(poolId, a.sqId, {
+                email: a.user.email,
+                name: a.user.name
+            }, undefined, a.user.name)
         ));
-
-        processed += chunkSize;
-        // log('info', `Reserved ${chunkSize} squares for ${user.name}`);
     }
 
     addStep('Reserve Squares', 'success', 'Successfully reserved 100 squares');
@@ -166,6 +233,27 @@ async function runBasic100Scenario(
     // C. Lock Pool (Generates Numbers)
     addStep('Lock Pool', 'success', 'Locking pool and generating axis numbers');
     await dbService.lockPool(poolId);
+
+    // OVERRIDE: Force Fixed Axis Numbers (0-9) to match our Targeted Square logic
+    // We must do this because lockPool generates random numbers.
+    const fixedAxis = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    addStep('Lock Pool', 'success', 'Overriding axis numbers with fixed 0-9 sequence for deterministic testing');
+
+    await dbService.updatePool(poolId, {
+        axisNumbers: { home: fixedAxis, away: fixedAxis },
+        // Also ensure quarterlyNumbers rely on this if rotation is set, but rotation breaks targeting.
+        // If rotation is ON (numberSets=4), we should probably disable it or force all quarters to 0-9?
+        // Let's assume numberSets=1 for now as per basic scenario, 
+        // OR force all quarterly sets to 0-9 if they exist.
+        // Actually, dbService.lockPool might have set quarterlyNumbers if numberSets=4.
+        // Let's overwrite them too just in case.
+        quarterlyNumbers: {
+            q1: { home: fixedAxis, away: fixedAxis },
+            q2: { home: fixedAxis, away: fixedAxis },
+            q3: { home: fixedAxis, away: fixedAxis },
+            q4: { home: fixedAxis, away: fixedAxis }
+        }
+    });
     // Verification: We could fetch the pool to confirm, but if no error thrown, we assume success.
 
     // D. Simulate Game
