@@ -234,7 +234,7 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
  * Core logic to update a single pool based on new scores.
  */
 const processGameUpdate = async (transaction, doc, espnScores, actor, overrides) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
     const db = admin.firestore();
     const freshPool = Object.assign(Object.assign({}, doc.data()), overrides);
     if (!espnScores)
@@ -260,15 +260,23 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     const isHalfFinal = (period >= 3) || (state === "post");
     const isQ3Final = (period >= 4) || (state === "post");
     const isGameFinal = (state === "post");
+    // PRE-READ: For "Every Score Wins" pools going final, we need to read winners BEFORE any writes
+    // This prevents read-after-write transaction errors
+    let preReadEventWinners = null;
+    if (isGameFinal && ((_a = freshPool.ruleVariations) === null || _a === void 0 ? void 0 : _a.scoreChangePayout)) {
+        const winnersRef = db.collection('pools').doc(doc.id).collection('winners');
+        const winnersSnap = await transaction.get(winnersRef);
+        preReadEventWinners = winnersSnap.docs.filter(d => d.data().period === 'Event');
+    }
     // Prepare New Scores Object
     const newScores = Object.assign(Object.assign({}, freshPool.scores), { current: espnScores.current, gameStatus: state, period: period, clock: espnScores.clock, startTime: espnScores.startTime || freshPool.scores.startTime });
-    if (isQ1Final && !((_a = freshPool.scores) === null || _a === void 0 ? void 0 : _a.q1))
+    if (isQ1Final && !((_b = freshPool.scores) === null || _b === void 0 ? void 0 : _b.q1))
         newScores.q1 = espnScores.q1;
-    if (isHalfFinal && !((_b = freshPool.scores) === null || _b === void 0 ? void 0 : _b.half))
+    if (isHalfFinal && !((_c = freshPool.scores) === null || _c === void 0 ? void 0 : _c.half))
         newScores.half = espnScores.half;
-    if (isQ3Final && !((_c = freshPool.scores) === null || _c === void 0 ? void 0 : _c.q3))
+    if (isQ3Final && !((_d = freshPool.scores) === null || _d === void 0 ? void 0 : _d.q3))
         newScores.q3 = espnScores.q3;
-    if (isGameFinal && !((_d = freshPool.scores) === null || _d === void 0 ? void 0 : _d.final)) {
+    if (isGameFinal && !((_e = freshPool.scores) === null || _e === void 0 ? void 0 : _e.final)) {
         newScores.final = (freshPool.includeOvertime && espnScores.apiTotal !== undefined)
             ? espnScores.apiTotal
             : (espnScores.final || espnScores.current);
@@ -287,7 +295,7 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
         shouldUpdate = true;
     }
     // Live Score Update Logging & Decomposed Events
-    const freshCurrent = ((_e = freshPool.scores) === null || _e === void 0 ? void 0 : _e.current) || { home: 0, away: 0 };
+    const freshCurrent = ((_f = freshPool.scores) === null || _f === void 0 ? void 0 : _f.current) || { home: 0, away: 0 };
     const newCurrent = espnScores.current || { home: 0, away: 0 };
     // Calculate Deltas
     const deltaHome = newCurrent.home - freshCurrent.home;
@@ -297,7 +305,7 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
         // Prepare list of sequential score states to process
         // Each entry is { home: number, away: number, type: 'TD' | 'XP' | 'FG' | 'SAFETY' | 'OTHER' }
         const steps = [];
-        const combine = ((_f = freshPool.ruleVariations) === null || _f === void 0 ? void 0 : _f.combineTDandXP) === true;
+        const combine = ((_g = freshPool.ruleVariations) === null || _g === void 0 ? void 0 : _g.combineTDandXP) === true;
         // Helper function to decompose scoring for a single team
         const decomposeScoring = (delta, scoringTeam, currentHome, currentAway) => {
             const result = [];
@@ -400,7 +408,7 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
         const dedupeChecks = [];
         for (const step of steps) {
             dedupeChecks.push(`SCORE_STEP:${doc.id}:${step.home}:${step.away}`);
-            if ((_g = freshPool.ruleVariations) === null || _g === void 0 ? void 0 : _g.scoreChangePayout) {
+            if ((_h = freshPool.ruleVariations) === null || _h === void 0 ? void 0 : _h.scoreChangePayout) {
                 dedupeChecks.push(`WINNER_EVENT:${doc.id}:${step.home}:${step.away}`);
             }
         }
@@ -441,7 +449,7 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
             transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
             shouldUpdate = true;
             // 3. Handle "Score Change Payouts"
-            if ((_h = freshPool.ruleVariations) === null || _h === void 0 ? void 0 : _h.scoreChangePayout) {
+            if ((_j = freshPool.ruleVariations) === null || _j === void 0 ? void 0 : _j.scoreChangePayout) {
                 const winnerKey = `WINNER_EVENT:${doc.id}:${step.home}:${step.away}`;
                 if (existingDedupes.has(winnerKey))
                     continue;
@@ -526,17 +534,17 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
                 transactionUpdates.axisNumbers = qNums.q1;
         }
     }
-    const q1H = (_j = newScores.q1) === null || _j === void 0 ? void 0 : _j.home;
-    const q1A = (_k = newScores.q1) === null || _k === void 0 ? void 0 : _k.away;
-    const halfH = (_l = newScores.half) === null || _l === void 0 ? void 0 : _l.home;
-    const halfA = (_m = newScores.half) === null || _m === void 0 ? void 0 : _m.away;
-    const q3H = (_o = newScores.q3) === null || _o === void 0 ? void 0 : _o.home;
-    const q3A = (_p = newScores.q3) === null || _p === void 0 ? void 0 : _p.away;
-    const finalH = (_q = newScores.final) === null || _q === void 0 ? void 0 : _q.home;
-    const finalA = (_r = newScores.final) === null || _r === void 0 ? void 0 : _r.away;
+    const q1H = (_k = newScores.q1) === null || _k === void 0 ? void 0 : _k.home;
+    const q1A = (_l = newScores.q1) === null || _l === void 0 ? void 0 : _l.away;
+    const halfH = (_m = newScores.half) === null || _m === void 0 ? void 0 : _m.home;
+    const halfA = (_o = newScores.half) === null || _o === void 0 ? void 0 : _o.away;
+    const q3H = (_p = newScores.q3) === null || _p === void 0 ? void 0 : _p.home;
+    const q3A = (_q = newScores.q3) === null || _q === void 0 ? void 0 : _q.away;
+    const finalH = (_r = newScores.final) === null || _r === void 0 ? void 0 : _r.home;
+    const finalA = (_s = newScores.final) === null || _s === void 0 ? void 0 : _s.away;
     // Fix: Only process winners if we JUST finalized it (it wasn't in freshPool)
     // This prevents re-running winner logic on every sync
-    if (isQ1Final && q1H !== undefined && !((_s = freshPool.scores) === null || _s === void 0 ? void 0 : _s.q1)) {
+    if (isQ1Final && q1H !== undefined && !((_t = freshPool.scores) === null || _t === void 0 ? void 0 : _t.q1)) {
         await (0, audit_1.writeAuditEvent)({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q1 Finalized: ${q1H}-${q1A}`, severity: 'INFO',
             actor: actor, payload: { period: 1, score: { home: q1H, away: q1A } }
@@ -544,21 +552,21 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
         }, transaction);
         await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A, true);
     }
-    if (isHalfFinal && halfH !== undefined && !((_t = freshPool.scores) === null || _t === void 0 ? void 0 : _t.half)) {
+    if (isHalfFinal && halfH !== undefined && !((_u = freshPool.scores) === null || _u === void 0 ? void 0 : _u.half)) {
         await (0, audit_1.writeAuditEvent)({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Halftime Finalized: ${halfH}-${halfA}`, severity: 'INFO',
             actor: actor, payload: { period: 2, score: { home: halfH, away: halfA } }
         }, transaction);
         await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA, true);
     }
-    if (isQ3Final && q3H !== undefined && !((_u = freshPool.scores) === null || _u === void 0 ? void 0 : _u.q3)) {
+    if (isQ3Final && q3H !== undefined && !((_v = freshPool.scores) === null || _v === void 0 ? void 0 : _v.q3)) {
         await (0, audit_1.writeAuditEvent)({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q3 Finalized: ${q3H}-${q3A}`, severity: 'INFO',
             actor: actor, payload: { period: 3, score: { home: q3H, away: q3A } }
         }, transaction);
         await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A, true);
     }
-    if (isGameFinal && finalH !== undefined && !((_v = freshPool.scores) === null || _v === void 0 ? void 0 : _v.final)) {
+    if (isGameFinal && finalH !== undefined && !((_w = freshPool.scores) === null || _w === void 0 ? void 0 : _w.final)) {
         await (0, audit_1.writeAuditEvent)({
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Game Finalized: ${finalH}-${finalA}`, severity: 'INFO',
             actor: actor, payload: { period: 4, score: { home: finalH, away: finalA } }
@@ -572,12 +580,13 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     }
     // --- EVERY SCORE PAYS FINALIZATION ---
     // If the game just went final, we need to calculate the actual $ amount for each event based on the total pot logic
-    if (isGameFinal && ((_w = freshPool.ruleVariations) === null || _w === void 0 ? void 0 : _w.scoreChangePayout)) {
-        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor);
+    if (isGameFinal && ((_x = freshPool.ruleVariations) === null || _x === void 0 ? void 0 : _x.scoreChangePayout) && preReadEventWinners) {
+        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, preReadEventWinners);
     }
 };
 // Helper to calculate and backfill amounts for all score events when game is over
-const finalizeEventPayouts = async (transaction, db, poolId, pool, actor) => {
+// IMPORTANT: eventWinners must be PRE-READ before any writes to avoid transaction errors
+const finalizeEventPayouts = async (transaction, db, poolId, pool, actor, eventWinners) => {
     var _a, _b;
     // 1. Calculate Pot Logic
     const soldSquares = pool.squares ? pool.squares.filter((s) => s.owner).length : 0;
@@ -593,14 +602,7 @@ const finalizeEventPayouts = async (transaction, db, poolId, pool, actor) => {
         const remainingPct = 100 - weights.final - weights.halftime;
         scoreChangePot = (totalPot * remainingPct) / 100;
     }
-    // 2. Query ALL Event Winners from Subcollection (more reliable than scoreEvents array)
-    const winnersRef = db.collection('pools').doc(poolId).collection('winners');
-    const winnersSnap = await transaction.get(winnersRef);
-    // Filter to only 'Event' period winners (exclude q1, half, q3, final)
-    const eventWinners = winnersSnap.docs.filter(doc => {
-        const data = doc.data();
-        return data.period === 'Event';
-    });
+    // NOTE: eventWinners is now pre-read (passed in) to avoid read-after-write errors
     // 3. Calculate Amount Per Event
     const eventCount = eventWinners.length;
     const amountPerEvent = eventCount > 0 ? (scoreChangePot / eventCount) : 0;
@@ -866,7 +868,15 @@ exports.fixPoolScores = (0, https_1.onCall)({
             }
             // Run as Transaction
             await db.runTransaction(async (t) => {
-                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+                // PRE-READ: For "Every Score Wins" pools going final, pre-read winners before any writes
+                let preReadEventWinners = [];
+                if (isGameFinal && ((_a = pool.ruleVariations) === null || _a === void 0 ? void 0 : _a.scoreChangePayout)) {
+                    const winnersRef = db.collection('pools').doc(doc.id).collection('winners');
+                    const winnersSnap = await t.get(winnersRef);
+                    preReadEventWinners = winnersSnap.docs.filter(d => d.data().period === 'Event');
+                }
+                // Now safe to do writes
                 t.update(doc.ref, updates);
                 // Construct effective pool
                 const effectivePool = Object.assign(Object.assign({}, pool), { scores: Object.assign(Object.assign({}, pool.scores), {
@@ -875,16 +885,16 @@ exports.fixPoolScores = (0, https_1.onCall)({
                         q3: isQ3Final ? espnScores.q3 : pool.scores.q3,
                         final: isGameFinal ? (pool.includeOvertime ? espnScores.apiTotal : espnScores.final) : pool.scores.final
                     }) });
-                const q1H = (_a = effectivePool.scores.q1) === null || _a === void 0 ? void 0 : _a.home;
-                const q1A = (_b = effectivePool.scores.q1) === null || _b === void 0 ? void 0 : _b.away;
-                const halfH = (_c = effectivePool.scores.half) === null || _c === void 0 ? void 0 : _c.home;
-                const halfA = (_d = effectivePool.scores.half) === null || _d === void 0 ? void 0 : _d.away;
-                const q3H = (_e = effectivePool.scores.q3) === null || _e === void 0 ? void 0 : _e.home;
-                const q3A = (_f = effectivePool.scores.q3) === null || _f === void 0 ? void 0 : _f.away;
-                const finalH = (_g = effectivePool.scores.final) === null || _g === void 0 ? void 0 : _g.home;
-                const finalA = (_h = effectivePool.scores.final) === null || _h === void 0 ? void 0 : _h.away;
+                const q1H = (_b = effectivePool.scores.q1) === null || _b === void 0 ? void 0 : _b.home;
+                const q1A = (_c = effectivePool.scores.q1) === null || _c === void 0 ? void 0 : _c.away;
+                const halfH = (_d = effectivePool.scores.half) === null || _d === void 0 ? void 0 : _d.home;
+                const halfA = (_e = effectivePool.scores.half) === null || _e === void 0 ? void 0 : _e.away;
+                const q3H = (_f = effectivePool.scores.q3) === null || _f === void 0 ? void 0 : _f.home;
+                const q3A = (_g = effectivePool.scores.q3) === null || _g === void 0 ? void 0 : _g.away;
+                const finalH = (_h = effectivePool.scores.final) === null || _h === void 0 ? void 0 : _h.home;
+                const finalA = (_j = effectivePool.scores.final) === null || _j === void 0 ? void 0 : _j.away;
                 // SKIP QUARTER WINNERS IF "EQUAL SPLIT" IS ACTIVE
-                const isEqualSplit = ((_j = pool.ruleVariations) === null || _j === void 0 ? void 0 : _j.scoreChangePayout) && ((_k = pool.ruleVariations) === null || _k === void 0 ? void 0 : _k.scoreChangePayoutStrategy) === 'equal_split';
+                const isEqualSplit = ((_k = pool.ruleVariations) === null || _k === void 0 ? void 0 : _k.scoreChangePayout) && ((_l = pool.ruleVariations) === null || _l === void 0 ? void 0 : _l.scoreChangePayoutStrategy) === 'equal_split';
                 if (!isEqualSplit) {
                     if (isQ1Final && q1H !== undefined)
                         await processWinners(t, db, doc.id, effectivePool, 'q1', q1H, q1A);
@@ -897,7 +907,7 @@ exports.fixPoolScores = (0, https_1.onCall)({
                 }
                 // BACKFILL LOGIC
                 let currentScoreEvents = pool.scoreEvents || [];
-                if ((_l = pool.ruleVariations) === null || _l === void 0 ? void 0 : _l.scoreChangePayout) {
+                if ((_m = pool.ruleVariations) === null || _m === void 0 ? void 0 : _m.scoreChangePayout) {
                     const existingEvents = [...currentScoreEvents];
                     existingEvents.sort((a, b) => a.timestamp - b.timestamp);
                     const lastRecorded = existingEvents.length > 0 ? existingEvents[existingEvents.length - 1] : { home: 0, away: 0 };
@@ -952,7 +962,7 @@ exports.fixPoolScores = (0, https_1.onCall)({
                     for (const ev of existingEvents) {
                         const deltaHome = ev.home - lastScore.home;
                         const deltaAway = ev.away - lastScore.away;
-                        const combine = ((_m = pool.ruleVariations) === null || _m === void 0 ? void 0 : _m.combineTDandXP) === true;
+                        const combine = ((_o = pool.ruleVariations) === null || _o === void 0 ? void 0 : _o.combineTDandXP) === true;
                         if (!combine && deltaHome === 7 && deltaAway === 0) {
                             const tdScore = { home: lastScore.home + 6, away: lastScore.away };
                             const missingEvent = {
@@ -1002,9 +1012,9 @@ exports.fixPoolScores = (0, https_1.onCall)({
                         currentScoreEvents = newEventHistory; // For finalization
                         t.update(doc.ref, { scoreEvents: newEventHistory });
                     }
-                    if (isGameFinal) {
+                    if (isGameFinal && preReadEventWinners.length > 0) {
                         const poolForPayouts = Object.assign(Object.assign({}, effectivePool), { scoreEvents: currentScoreEvents });
-                        await finalizeEventPayouts(t, db, doc.id, poolForPayouts, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' });
+                        await finalizeEventPayouts(t, db, doc.id, poolForPayouts, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' }, preReadEventWinners);
                     }
                 }
                 await (0, audit_1.writeAuditEvent)({

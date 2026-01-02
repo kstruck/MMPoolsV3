@@ -318,6 +318,15 @@ const processGameUpdate = async (
     const isQ3Final = (period >= 4) || (state === "post");
     const isGameFinal = (state === "post");
 
+    // PRE-READ: For "Every Score Wins" pools going final, we need to read winners BEFORE any writes
+    // This prevents read-after-write transaction errors
+    let preReadEventWinners: admin.firestore.QueryDocumentSnapshot[] | null = null;
+    if (isGameFinal && freshPool.ruleVariations?.scoreChangePayout) {
+        const winnersRef = db.collection('pools').doc(doc.id).collection('winners');
+        const winnersSnap = await transaction.get(winnersRef);
+        preReadEventWinners = winnersSnap.docs.filter(d => d.data().period === 'Event');
+    }
+
     // Prepare New Scores Object
     const newScores: any = {
         ...freshPool.scores,
@@ -669,18 +678,20 @@ const processGameUpdate = async (
 
     // --- EVERY SCORE PAYS FINALIZATION ---
     // If the game just went final, we need to calculate the actual $ amount for each event based on the total pot logic
-    if (isGameFinal && freshPool.ruleVariations?.scoreChangePayout) {
-        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor);
+    if (isGameFinal && freshPool.ruleVariations?.scoreChangePayout && preReadEventWinners) {
+        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, preReadEventWinners);
     }
 };
 
 // Helper to calculate and backfill amounts for all score events when game is over
+// IMPORTANT: eventWinners must be PRE-READ before any writes to avoid transaction errors
 const finalizeEventPayouts = async (
     transaction: admin.firestore.Transaction,
     db: admin.firestore.Firestore,
     poolId: string,
     pool: GameState,
-    actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string }
+    actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string },
+    eventWinners: admin.firestore.QueryDocumentSnapshot[]
 ) => {
     // 1. Calculate Pot Logic
     const soldSquares = pool.squares ? pool.squares.filter((s: any) => s.owner).length : 0;
@@ -698,15 +709,7 @@ const finalizeEventPayouts = async (
         scoreChangePot = (totalPot * remainingPct) / 100;
     }
 
-    // 2. Query ALL Event Winners from Subcollection (more reliable than scoreEvents array)
-    const winnersRef = db.collection('pools').doc(poolId).collection('winners');
-    const winnersSnap = await transaction.get(winnersRef);
-
-    // Filter to only 'Event' period winners (exclude q1, half, q3, final)
-    const eventWinners = winnersSnap.docs.filter(doc => {
-        const data = doc.data();
-        return data.period === 'Event';
-    });
+    // NOTE: eventWinners is now pre-read (passed in) to avoid read-after-write errors
 
     // 3. Calculate Amount Per Event
     const eventCount = eventWinners.length;
@@ -1001,6 +1004,15 @@ export const fixPoolScores = onCall({
 
             // Run as Transaction
             await db.runTransaction(async (t) => {
+                // PRE-READ: For "Every Score Wins" pools going final, pre-read winners before any writes
+                let preReadEventWinners: admin.firestore.QueryDocumentSnapshot[] = [];
+                if (isGameFinal && pool.ruleVariations?.scoreChangePayout) {
+                    const winnersRef = db.collection('pools').doc(doc.id).collection('winners');
+                    const winnersSnap = await t.get(winnersRef);
+                    preReadEventWinners = winnersSnap.docs.filter(d => d.data().period === 'Event');
+                }
+
+                // Now safe to do writes
                 t.update(doc.ref, updates);
 
                 // Construct effective pool
@@ -1151,9 +1163,9 @@ export const fixPoolScores = onCall({
                         t.update(doc.ref, { scoreEvents: newEventHistory });
                     }
 
-                    if (isGameFinal) {
+                    if (isGameFinal && preReadEventWinners.length > 0) {
                         const poolForPayouts = { ...effectivePool, scoreEvents: currentScoreEvents };
-                        await finalizeEventPayouts(t, db, doc.id, poolForPayouts, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' });
+                        await finalizeEventPayouts(t, db, doc.id, poolForPayouts, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' }, preReadEventWinners);
                     }
                 }
 
