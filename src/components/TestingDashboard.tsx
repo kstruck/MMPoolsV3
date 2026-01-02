@@ -217,7 +217,7 @@ export const TestingDashboard: React.FC = () => {
                                     <p>Orchestrating test with AI...</p>
                                 </div>
                             )}
-                            )}
+
                             {(currentResult?.steps || []).map((step, i) => (
                                 <div key={i} className="flex gap-2">
                                     <span className={step.status === 'success' ? 'text-green-500' : 'text-red-500'}>
