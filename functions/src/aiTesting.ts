@@ -4,13 +4,14 @@
  * result validation, and report generation
  */
 
-import * as functions from "firebase-functions";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { geminiApiKey, generateAIResponse } from "./gemini";
 import { SchemaType } from "@google/generative-ai";
 
 // ===== SCENARIO GENERATION =====
 
 const SCENARIO_GENERATION_SCHEMA = {
+
     type: SchemaType.OBJECT,
     properties: {
         scenarioName: { type: SchemaType.STRING },
@@ -91,8 +92,8 @@ IMPORTANT: To simulate specific game outcomes, you MUST populate the 'actions' a
 Example: { "actionType": "SCORE_UPDATE", "period": "Q1", "homeScore": 7, "awayScore": 0, "description": "Home TD" }
 `;
 
-export const generateTestScenario = functions.https.onCall(
-    { secrets: [geminiApiKey] },
+export const generateTestScenario = onCall(
+    { secrets: [geminiApiKey], timeoutSeconds: 300, memory: "1GiB" },
     async (request) => {
         try {
             const { poolType, userRequest } = request.data;
@@ -116,7 +117,7 @@ export const generateTestScenario = functions.https.onCall(
             };
         } catch (error) {
             console.error("Error in generateTestScenario:", error);
-            throw new functions.https.HttpsError("internal", "Failed to generate test scenario");
+            throw new HttpsError("internal", "Failed to generate test scenario");
         }
     });
 
@@ -138,8 +139,8 @@ Guidelines:
 Be precise and cite evidence from the test results.
 `;
 
-export const validateTestResults = functions.https.onCall(
-    { secrets: [geminiApiKey] },
+export const validateTestResults = onCall(
+    { secrets: [geminiApiKey], timeoutSeconds: 300, memory: "1GiB" },
     async (request) => {
         try {
             const { scenario, testResult } = request.data;
@@ -163,7 +164,7 @@ export const validateTestResults = functions.https.onCall(
             return result;
         } catch (error) {
             console.error("Error in validateTestResults:", error);
-            throw new functions.https.HttpsError("internal", "Failed to validate test results");
+            throw new HttpsError("internal", "Failed to validate test results");
         }
     });
 
@@ -185,8 +186,8 @@ Be concise but thorough.
 Provide actionable recommendations.
 `;
 
-export const generateTestReport = functions.https.onCall(
-    { secrets: [geminiApiKey] },
+export const generateTestReport = onCall(
+    { secrets: [geminiApiKey], timeoutSeconds: 300, memory: "1GiB" },
     async (request) => {
         try {
             const { scenario, testResult, validation } = request.data;
@@ -210,6 +211,6 @@ export const generateTestReport = functions.https.onCall(
             return result;
         } catch (error) {
             console.error("Error in generateTestReport:", error);
-            throw new functions.https.HttpsError("internal", "Failed to generate test report");
+            throw new HttpsError("internal", "Failed to generate test report");
         }
     });
