@@ -878,6 +878,9 @@ export const simulateGameUpdate = onCall({
     const db = admin.firestore();
     const poolRef = db.collection('pools').doc(poolId);
 
+    // Track if we generated axis numbers (for audit logging AFTER transaction)
+    let generatedAxis: { home: number[], away: number[] } | null = null;
+
     try {
         await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(poolRef);
@@ -891,16 +894,7 @@ export const simulateGameUpdate = onCall({
                 console.log(`[Sim] Generating missing Axis Numbers for pool ${poolId}`);
                 transaction.update(poolRef, { axisNumbers: newAxis });
                 overrides.axisNumbers = newAxis;
-
-                await writeAuditEvent({
-                    poolId: doc.id,
-                    type: 'DIGITS_GENERATED',
-                    message: `Axis Numbers Auto-Generated for Simulation`,
-                    severity: 'INFO',
-                    actor: { uid: request.auth?.uid || 'admin', role: 'ADMIN', label: 'Sim Auto-Gen' },
-                    payload: { axis: newAxis }
-                    // Dedupe skipped to prevent Read-After-Write error
-                }, transaction);
+                generatedAxis = newAxis; // Track for post-transaction audit
             }
 
             await processGameUpdate(
@@ -911,6 +905,18 @@ export const simulateGameUpdate = onCall({
                 overrides
             );
         });
+
+        // Audit event OUTSIDE transaction to avoid read-after-write errors
+        if (generatedAxis) {
+            await writeAuditEvent({
+                poolId,
+                type: 'DIGITS_GENERATED',
+                message: `Axis Numbers Auto-Generated for Simulation`,
+                severity: 'INFO',
+                actor: { uid: request.auth?.uid || 'admin', role: 'ADMIN', label: 'Sim Auto-Gen' },
+                payload: { axis: generatedAxis }
+            });
+        }
 
         return { success: true, message: 'Simulation Applied' };
     } catch (error: any) {

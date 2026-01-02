@@ -744,6 +744,7 @@ exports.simulateGameUpdate = (0, https_1.onCall)({
     timeoutSeconds: 60,
     memory: "256MiB"
 }, async (request) => {
+    var _a;
     // Relaxed Auth for Dev/Test - Ensure user is at least authenticated
     if (!request.auth) {
         throw new https_1.HttpsError('permission-denied', 'Authentication required');
@@ -754,9 +755,11 @@ exports.simulateGameUpdate = (0, https_1.onCall)({
     }
     const db = admin.firestore();
     const poolRef = db.collection('pools').doc(poolId);
+    // Track if we generated axis numbers (for audit logging AFTER transaction)
+    let generatedAxis = null;
     try {
         await db.runTransaction(async (transaction) => {
-            var _a, _b;
+            var _a;
             const doc = await transaction.get(poolRef);
             if (!doc.exists)
                 throw new https_1.HttpsError('not-found', 'Pool not found');
@@ -768,18 +771,21 @@ exports.simulateGameUpdate = (0, https_1.onCall)({
                 console.log(`[Sim] Generating missing Axis Numbers for pool ${poolId}`);
                 transaction.update(poolRef, { axisNumbers: newAxis });
                 overrides.axisNumbers = newAxis;
-                await (0, audit_1.writeAuditEvent)({
-                    poolId: doc.id,
-                    type: 'DIGITS_GENERATED',
-                    message: `Axis Numbers Auto-Generated for Simulation`,
-                    severity: 'INFO',
-                    actor: { uid: ((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) || 'admin', role: 'ADMIN', label: 'Sim Auto-Gen' },
-                    payload: { axis: newAxis }
-                    // Dedupe skipped to prevent Read-After-Write error
-                }, transaction);
+                generatedAxis = newAxis; // Track for post-transaction audit
             }
-            await processGameUpdate(transaction, doc, scores, { uid: ((_b = request.auth) === null || _b === void 0 ? void 0 : _b.uid) || 'admin', role: 'ADMIN', label: 'Simulation' }, overrides);
+            await processGameUpdate(transaction, doc, scores, { uid: ((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) || 'admin', role: 'ADMIN', label: 'Simulation' }, overrides);
         });
+        // Audit event OUTSIDE transaction to avoid read-after-write errors
+        if (generatedAxis) {
+            await (0, audit_1.writeAuditEvent)({
+                poolId,
+                type: 'DIGITS_GENERATED',
+                message: `Axis Numbers Auto-Generated for Simulation`,
+                severity: 'INFO',
+                actor: { uid: ((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) || 'admin', role: 'ADMIN', label: 'Sim Auto-Gen' },
+                payload: { axis: generatedAxis }
+            });
+        }
         return { success: true, message: 'Simulation Applied' };
     }
     catch (error) {
