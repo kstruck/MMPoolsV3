@@ -53,6 +53,20 @@ const SCENARIO_GENERATION_SCHEMA = {
             },
             required: ["winner", "topThree", "edgeCases"]
         },
+        actions: {
+            type: SchemaType.ARRAY,
+            items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    actionType: { type: SchemaType.STRING, description: "Use 'SCORE_UPDATE' for score changes" },
+                    period: { type: SchemaType.STRING, description: "Q1, Q2, Q3, FINAL" },
+                    homeScore: { type: SchemaType.NUMBER },
+                    awayScore: { type: SchemaType.NUMBER },
+                    description: { type: SchemaType.STRING }
+                },
+                required: ["actionType", "period", "homeScore", "awayScore"]
+            }
+        },
         validationChecks: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
     },
     required: ["scenarioName", "description", "poolConfig", "testUsers", "expectedOutcome", "validationChecks"],
@@ -72,6 +86,9 @@ Guidelines:
 4. List specific validation checks
 
 Provide all configuration needed to run the test.
+
+IMPORTANT: To simulate specific game outcomes, you MUST populate the 'actions' array with 'SCORE_UPDATE' events.
+Example: { "actionType": "SCORE_UPDATE", "period": "Q1", "homeScore": 7, "awayScore": 0, "description": "Home TD" }
 `;
 
 export const generateTestScenario = functions.https.onCall(
