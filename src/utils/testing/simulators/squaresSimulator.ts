@@ -327,7 +327,8 @@ async function runBasic100Scenario(
         const finalPool = await dbService.getPoolById(poolId);
         const winners = await dbService.getWinners(poolId);
 
-        addStep('Verification', 'success', `Validation Data: Found ${winners.length} winner records.`);
+        const winnerDetails = winners.map((w: any) => w.description || w.prizeLabel || w.id).join(', ');
+        addStep('Verification', 'success', `Validation Data: Found ${winners.length} winner records: [${winnerDetails}]`);
 
         return {
             poolId,
