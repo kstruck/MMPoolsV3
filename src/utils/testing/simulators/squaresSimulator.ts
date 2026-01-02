@@ -324,6 +324,10 @@ async function runBasic100Scenario(
         addStep('Verification', 'success', `Winner Details: [${winnerDetails}]`);
         addStep('Verification', 'success', `Total Payout Distributed: $${totalPayout}`);
         addStep('Verification', 'success', `Final Pool Status: ${finalPool?.scores?.gameStatus || 'UNKNOWN'}`);
+        addStep('Verification', 'success', `Pool Config: numberSets=${finalPool?.numberSets || 1}`);
+        if (finalPool?.quarterlyNumbers) {
+            addStep('Verification', 'success', `Quarterly Numbers Present: ${Object.keys(finalPool.quarterlyNumbers).join(', ')}`);
+        }
 
         return {
             poolId,
