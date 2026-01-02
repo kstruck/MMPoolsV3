@@ -166,18 +166,21 @@ async function runBasic100Scenario(
                 currentHome = update.homeScore;
                 currentAway = update.awayScore;
                 payload.period = 1;
+                payload.q1 = { home: update.homeScore, away: update.awayScore };
             } else if (update.period === 'Q2' || update.period === 'Q2_HALFTIME') {
                 payload.q2Home = update.homeScore;
                 payload.q2Away = update.awayScore;
                 currentHome = update.homeScore;
                 currentAway = update.awayScore;
                 payload.period = 2;
+                payload.half = { home: update.homeScore, away: update.awayScore };
             } else if (update.period === 'Q3') {
                 payload.q3Home = update.homeScore;
                 payload.q3Away = update.awayScore;
                 currentHome = update.homeScore;
                 currentAway = update.awayScore;
                 payload.period = 3;
+                payload.q3 = { home: update.homeScore, away: update.awayScore };
             } else if (update.period === 'FINAL' || update.period === 'GAME_END') {
                 payload.finalHome = update.homeScore;
                 payload.finalAway = update.awayScore;
@@ -185,6 +188,7 @@ async function runBasic100Scenario(
                 currentHome = update.homeScore;
                 currentAway = update.awayScore;
                 payload.period = 4;
+                payload.final = { home: update.homeScore, away: update.awayScore };
             }
 
             payload.current = { home: currentHome, away: currentAway };
@@ -207,32 +211,32 @@ async function runBasic100Scenario(
 
         // Run updates sequentially with gameStatus
         if (mappedScores.q1Home !== undefined) {
-            await simulatePoolGame(poolId, { q1Home: mappedScores.q1Home, q1Away: mappedScores.q1Away, current: { home: mappedScores.q1Home, away: mappedScores.q1Away }, period: 1, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
+            await simulatePoolGame(poolId, { q1Home: mappedScores.q1Home, q1Away: mappedScores.q1Away, current: { home: mappedScores.q1Home, away: mappedScores.q1Away }, q1: { home: mappedScores.q1Home, away: mappedScores.q1Away }, period: 1, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
             await delay(1000);
         }
         if (mappedScores.q2Home !== undefined) {
-            await simulatePoolGame(poolId, { q2Home: mappedScores.q2Home, q2Away: mappedScores.q2Away, current: { home: mappedScores.q2Home, away: mappedScores.q2Away }, period: 2, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
+            await simulatePoolGame(poolId, { q2Home: mappedScores.q2Home, q2Away: mappedScores.q2Away, current: { home: mappedScores.q2Home, away: mappedScores.q2Away }, half: { home: mappedScores.q2Home, away: mappedScores.q2Away }, period: 2, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
             await delay(1000);
         }
         if (mappedScores.q3Home !== undefined) {
-            await simulatePoolGame(poolId, { q3Home: mappedScores.q3Home, q3Away: mappedScores.q3Away, current: { home: mappedScores.q3Home, away: mappedScores.q3Away }, period: 3, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
+            await simulatePoolGame(poolId, { q3Home: mappedScores.q3Home, q3Away: mappedScores.q3Away, current: { home: mappedScores.q3Home, away: mappedScores.q3Away }, q3: { home: mappedScores.q3Home, away: mappedScores.q3Away }, period: 3, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
             await delay(1000);
         }
         if (mappedScores.finalHome !== undefined) {
-            await simulatePoolGame(poolId, { finalHome: mappedScores.finalHome, finalAway: mappedScores.finalAway, current: { home: mappedScores.finalHome, away: mappedScores.finalAway }, period: 4, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'FINAL' });
+            await simulatePoolGame(poolId, { finalHome: mappedScores.finalHome, finalAway: mappedScores.finalAway, current: { home: mappedScores.finalHome, away: mappedScores.finalAway }, final: { home: mappedScores.finalHome, away: mappedScores.finalAway }, period: 4, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'FINAL' });
         }
 
         addStep('Simulate Game', 'success', `Custom game simulation complete. Final: ${mappedScores.finalHome}-${mappedScores.finalAway}`);
     } else {
         // Default Random Simulation
         addStep('Simulate Game', 'success', 'Simulating random game scores (Default)...');
-        await simulatePoolGame(poolId, { q1Home: 7, q1Away: 3, current: { home: 7, away: 3 }, period: 1, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
+        await simulatePoolGame(poolId, { q1Home: 7, q1Away: 3, current: { home: 7, away: 3 }, q1: { home: 7, away: 3 }, period: 1, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
         await delay(1000);
-        await simulatePoolGame(poolId, { q2Home: 14, q2Away: 10, current: { home: 14, away: 10 }, period: 2, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
+        await simulatePoolGame(poolId, { q2Home: 14, q2Away: 10, current: { home: 14, away: 10 }, half: { home: 14, away: 10 }, period: 2, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
         await delay(1000);
-        await simulatePoolGame(poolId, { q3Home: 21, q3Away: 17, current: { home: 21, away: 17 }, period: 3, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
+        await simulatePoolGame(poolId, { q3Home: 21, q3Away: 17, current: { home: 21, away: 17 }, q3: { home: 21, away: 17 }, period: 3, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'IN_PROGRESS' });
         await delay(1000);
-        await simulatePoolGame(poolId, { finalHome: 28, finalAway: 24, current: { home: 28, away: 24 }, period: 4, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'FINAL' });
+        await simulatePoolGame(poolId, { finalHome: 28, finalAway: 24, current: { home: 28, away: 24 }, final: { home: 28, away: 24 }, period: 4, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'FINAL' });
         addStep('Simulate Game', 'success', 'Game simulation complete. Final Score: 28-24');
     }
 
