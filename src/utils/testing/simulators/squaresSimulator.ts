@@ -208,6 +208,29 @@ async function runBasic100Scenario(
                 if (half) payload.half = { home: half.homeScore, away: half.awayScore };
                 const q3 = scoreUpdates.find((u: any) => u.period === 'Q3');
                 if (q3) payload.q3 = { home: q3.homeScore, away: q3.awayScore };
+            } else if (update.period === 'Q4') {
+                // Handle Q4 explicit updates (same as FINAL usually, but keep game IN_PROGRESS if wanted, or treat as FINAL)
+                // Assuming Q4 means "End of Q4" which is effectively FINAL/regulation.
+                payload.finalHome = update.homeScore;
+                payload.finalAway = update.awayScore;
+                payload.period = 4;
+                currentHome = update.homeScore;
+                currentAway = update.awayScore;
+                payload.final = { home: update.homeScore, away: update.awayScore };
+                // Carry over previous
+                const q1 = scoreUpdates.find((u: any) => u.period === 'Q1');
+                if (q1) payload.q1 = { home: q1.homeScore, away: q1.awayScore };
+                const half = scoreUpdates.find((u: any) => u.period === 'Q2' || u.period === 'Q2_HALFTIME');
+                if (half) payload.half = { home: half.homeScore, away: half.awayScore };
+                const q3 = scoreUpdates.find((u: any) => u.period === 'Q3');
+                if (q3) payload.q3 = { home: q3.homeScore, away: q3.awayScore };
+            } else {
+                // Fallback for unknown periods (e.g. "OT", "Overtime", or typos)
+                addStep('Simulate Game', 'success', `Unknown period "${update.period}" encountered. Defaulting to Period 4.`);
+                payload.period = 4;
+                // We should probably set current score at least
+                currentHome = update.homeScore;
+                currentAway = update.awayScore;
             }
 
             payload.current = { home: currentHome, away: currentAway };
