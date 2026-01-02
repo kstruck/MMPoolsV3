@@ -69,13 +69,14 @@ export const generateAIResponse = async (
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
         model: selectedModelName,
-        // responseSchema: schema // DISABLED: Using text generation for reliability
         generationConfig: {
             temperature: 0.2,
+            responseMimeType: "application/json",
+            responseSchema: jsonSchema || undefined,
         },
         systemInstruction: {
             role: "system",
-            parts: [{ text: systemInstruction + "\n\nIMPORTANT: You must return PURE JSON. Do not include markdown formatting like ```json ... ```. Just the raw JSON object." }]
+            parts: [{ text: systemInstruction + "\n\nIMPORTANT: You must return valid PURE JSON matching the provided schema." }]
         }
     });
 
