@@ -54,6 +54,10 @@ export interface TestResult {
         failed: number;
         skipped: number;
     };
+    // Extended data for AI Validation
+    finalPoolData?: any;
+    winners?: any[];
+    finalStatus?: string;
 }
 
 // ===== SCENARIO DEFINITIONS =====
@@ -258,6 +262,11 @@ class TestOrchestrator {
             result.poolId = simulatorResult.poolId;
             result.steps = simulatorResult.steps || [];
             result.status = 'success';
+
+            // Capture extended data if available
+            if (simulatorResult.finalPoolData) result.finalPoolData = simulatorResult.finalPoolData;
+            if (simulatorResult.winners) result.winners = simulatorResult.winners;
+            if (simulatorResult.finalStatus) result.finalStatus = simulatorResult.finalStatus;
             log('success', 'Test completed successfully!');
 
         } catch (error: any) {

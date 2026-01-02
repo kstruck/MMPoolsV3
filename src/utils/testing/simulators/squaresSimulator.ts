@@ -12,6 +12,10 @@ import { simulatePoolGame } from '../../simulationUtils';
 export interface SimulatorResult {
     poolId?: string;
     steps: TestStepResult[];
+    finalPoolData?: any;
+    winners?: any[];
+    finalStatus?: string;
+    error?: string;
 }
 
 export async function runScenario(
