@@ -6,7 +6,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = void 0;
-const functions = require("firebase-functions");
+const https_1 = require("firebase-functions/v2/https");
 const gemini_1 = require("./gemini");
 const generative_ai_1 = require("@google/generative-ai");
 // ===== SCENARIO GENERATION =====
@@ -89,7 +89,7 @@ Provide all configuration needed to run the test.
 IMPORTANT: To simulate specific game outcomes, you MUST populate the 'actions' array with 'SCORE_UPDATE' events.
 Example: { "actionType": "SCORE_UPDATE", "period": "Q1", "homeScore": 7, "awayScore": 0, "description": "Home TD" }
 `;
-exports.generateTestScenario = functions.https.onCall({ secrets: [gemini_1.geminiApiKey] }, async (request) => {
+exports.generateTestScenario = (0, https_1.onCall)({ secrets: [gemini_1.geminiApiKey], timeoutSeconds: 300, memory: "1GiB" }, async (request) => {
     try {
         const { poolType, userRequest } = request.data;
         const systemPrompt = buildScenarioPrompt(poolType);
@@ -103,7 +103,7 @@ exports.generateTestScenario = functions.https.onCall({ secrets: [gemini_1.gemin
     }
     catch (error) {
         console.error("Error in generateTestScenario:", error);
-        throw new functions.https.HttpsError("internal", "Failed to generate test scenario");
+        throw new https_1.HttpsError("internal", "Failed to generate test scenario");
     }
 });
 // ===== RESULT VALIDATION =====
@@ -122,7 +122,7 @@ Guidelines:
 
 Be precise and cite evidence from the test results.
 `;
-exports.validateTestResults = functions.https.onCall({ secrets: [gemini_1.geminiApiKey] }, async (request) => {
+exports.validateTestResults = (0, https_1.onCall)({ secrets: [gemini_1.geminiApiKey], timeoutSeconds: 300, memory: "1GiB" }, async (request) => {
     try {
         const { scenario, testResult } = request.data;
         const systemPrompt = buildValidationPrompt(scenario.poolType);
@@ -139,7 +139,7 @@ exports.validateTestResults = functions.https.onCall({ secrets: [gemini_1.gemini
     }
     catch (error) {
         console.error("Error in validateTestResults:", error);
-        throw new functions.https.HttpsError("internal", "Failed to validate test results");
+        throw new https_1.HttpsError("internal", "Failed to validate test results");
     }
 });
 // ===== REPORT GENERATION =====
@@ -158,7 +158,7 @@ Use emojis for visual clarity (✅ ❌ ⚠️).
 Be concise but thorough.
 Provide actionable recommendations.
 `;
-exports.generateTestReport = functions.https.onCall({ secrets: [gemini_1.geminiApiKey] }, async (request) => {
+exports.generateTestReport = (0, https_1.onCall)({ secrets: [gemini_1.geminiApiKey], timeoutSeconds: 300, memory: "1GiB" }, async (request) => {
     try {
         const { scenario, testResult, validation } = request.data;
         const systemPrompt = buildReportPrompt();
@@ -175,7 +175,7 @@ exports.generateTestReport = functions.https.onCall({ secrets: [gemini_1.geminiA
     }
     catch (error) {
         console.error("Error in generateTestReport:", error);
-        throw new functions.https.HttpsError("internal", "Failed to generate test report");
+        throw new https_1.HttpsError("internal", "Failed to generate test report");
     }
 });
 //# sourceMappingURL=aiTesting.js.map

@@ -92,8 +92,42 @@ async function runBasic100Scenario(
     settings?: Record<string, any>
 ) {
     // A. Generate/Simulate Users
-    addStep('Setup Users', 'success', 'Generating 10 test users');
-    const testUsers = generateTestUsers(10); // 10 users taking 10 squares each
+    addStep('Setup Users', 'success', 'Generating/Registering test users');
+
+    // Check if scenario manual test users are provided
+    // customLogic is already defined downstream (in verify), but we need it here.
+    // Let's use the one passed in settings or define a scoped one safely.
+    // Actually, let's just use settings?._fullScenario directly to avoid redeclare issues later if I can't see the whole file scope easily.
+    const scenarioData = settings?._fullScenario;
+    const scenarioUsers = scenarioData?.testUsers;
+
+    let testUsers: any[] = [];
+
+    if (scenarioUsers && Array.isArray(scenarioUsers) && scenarioUsers.length > 0) {
+        addStep('Setup Users', 'success', `Using ${scenarioUsers.length} named users from scenario.`);
+        // Map to expected format { name, email, ... }
+        testUsers = scenarioUsers.map((u: any, idx: number) => ({
+            name: u.name,
+            email: `testuser_${idx}_${Date.now()}@example.com`,
+            strategy: u.strategy
+        }));
+        // If less than 10, maybe fill? For now just use provided.
+        // Actually basic-100 logic relies on 10 users * 10 squares = 100.
+        // If scenario provides 5 users, we might need to fill the rest if we want full grid.
+        // But let's assume valid scenario for now or just fill.
+        if (testUsers.length < 10) {
+            const needed = 10 - testUsers.length;
+            addStep('Setup Users', 'success', `Filling remaining ${needed} slots with generic test users.`);
+            // generateTestUsers only takes count. We'll append generic users.
+            const fillers = generateTestUsers(needed);
+            // Rename fillers to avoid name collision if possible, but basic is fine.
+            fillers.forEach((f, i) => f.name = `${f.name} (Fill ${i + 1})`);
+            testUsers = [...testUsers, ...fillers];
+        }
+    } else {
+        addStep('Setup Users', 'success', 'Generating 10 generic test users');
+        testUsers = generateTestUsers(10);
+    }
 
     // B. Reserve Squares
     addStep('Reserve Squares', 'success', 'Starting reservoir of 100 squares...');
@@ -137,9 +171,10 @@ async function runBasic100Scenario(
     // D. Simulate Game
     addStep('Simulate Game', 'success', 'Simulating game scores...');
 
-    const customLogic = settings?._fullScenario;
+    // Use scenarioData from above if available, else settings?._fullScenario
+    const simLogic = scenarioData || settings?._fullScenario;
     // Support both old 'userActions' and new 'actions' formats
-    const actions = customLogic?.actions || customLogic?.userActions || [];
+    const actions = simLogic?.actions || simLogic?.userActions || [];
 
     // Check for NEW format (Multiple SCORE_UPDATE actions)
     const scoreUpdates = actions.filter((a: any) => a.actionType === 'SCORE_UPDATE');
@@ -317,7 +352,9 @@ async function runBasic100Scenario(
         const finalPool = await dbService.getPoolById(poolId);
         const winners = await dbService.getWinners(poolId);
 
-        const winnerDetails = winners.map((w: any) => `${w.period}: ${w.owner} ($${w.amount})`).join(', ');
+        const winnerDetails = winners.map((w: any) =>
+            `${w.period}: ${w.owner} [${w.homeDigit}-${w.awayDigit}] (Sq#${w.squareId}) - $${w.amount}`
+        ).join(' | ');
         const totalPayout = winners.reduce((sum: number, w: any) => sum + (w.amount || 0), 0);
 
         addStep('Verification', 'success', `Validation Data: Found ${winners.length} winner records.`);
