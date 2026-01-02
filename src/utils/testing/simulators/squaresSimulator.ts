@@ -186,18 +186,17 @@ async function runBasic100Scenario(
     });
 
     // Then fill the rest
-    // We need to ensure every user gets ~10 squares (or whatever count).
-    // The previous logic assigned chunks.
-
-    // Let's just iterate users and fill their quota.
-    const squaresPerUser = 10;
+    // Get target square count from scenario (default 100 for full grid)
+    const targetSquareCount = scenarioData?.squareCount || 100;
+    const squaresPerUser = Math.ceil(targetSquareCount / testUsers.length);
 
     for (const user of testUsers) {
         // Count how many they already have
         const currentCount = assignments.filter(a => a.user === user).length;
         let needed = squaresPerUser - currentCount;
 
-        while (needed > 0 && availableSquares.length > 0) {
+        // Stop if we've hit the target total
+        while (needed > 0 && availableSquares.length > 0 && assignments.length < targetSquareCount) {
             const nextSq = availableSquares.pop()!;
             assignments.push({ user, sqId: nextSq });
             needed--;
@@ -216,7 +215,7 @@ async function runBasic100Scenario(
         ));
     }
 
-    addStep('Reserve Squares', 'success', 'Successfully reserved 100 squares');
+    addStep('Reserve Squares', 'success', `Successfully reserved ${assignments.length} squares`);
 
     // C. Lock Pool (Generates Numbers)
     // Use forceAxis=true to enable deterministic testing with fixed 0-9 axis

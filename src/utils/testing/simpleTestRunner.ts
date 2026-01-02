@@ -45,6 +45,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             ...scenario.poolConfig,
             _fullScenario: {
                 testUsers: scenario.testUsers,
+                squareCount: (scenario as any).squareCount || 100, // Support partial fill
                 actions: scenario.scoreUpdates.map(u => ({
                     actionType: 'SCORE_UPDATE',
                     period: u.period,
