@@ -319,12 +319,16 @@ async function runBasic100Scenario(
     }
 
     // E. Verify Winners and Capture Final State
+    await delay(4000); // Wait for Cloud Function triggers to process winners
     addStep('Verification', 'success', 'Fetching final pool state for validation...');
 
     // Attempt to fetch the final pool state to return to the AI Validator
     try {
         const finalPool = await dbService.getPoolById(poolId);
         const winners = await dbService.getWinners(poolId);
+
+        addStep('Verification', 'success', `Validation Data: Found ${winners.length} winner records.`);
+
         return {
             poolId,
             simulationComplete: true,
