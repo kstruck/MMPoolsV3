@@ -328,8 +328,13 @@ async function runBasic100Scenario(
         const finalPool = await dbService.getPoolById(poolId);
         const winners = await dbService.getWinners(poolId);
 
-        const winnerDetails = winners.map((w: any) => w.description || w.prizeLabel || w.id).join(', ');
-        addStep('Verification', 'success', `Validation Data: Found ${winners.length} winner records: [${winnerDetails}]`);
+        const winnerDetails = winners.map((w: any) => `${w.period}: ${w.owner} ($${w.amount})`).join(', ');
+        const totalPayout = winners.reduce((sum: number, w: any) => sum + (w.amount || 0), 0);
+
+        addStep('Verification', 'success', `Validation Data: Found ${winners.length} winner records.`);
+        addStep('Verification', 'success', `Winner Details: [${winnerDetails}]`);
+        addStep('Verification', 'success', `Total Payout Distributed: $${totalPayout}`);
+        addStep('Verification', 'success', `Final Pool Status: ${finalPool?.scores?.gameStatus || 'UNKNOWN'}`);
 
         return {
             poolId,
