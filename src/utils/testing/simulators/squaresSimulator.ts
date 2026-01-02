@@ -148,22 +148,33 @@ async function runBasic100Scenario(
 
         for (const update of scoreUpdates) {
             const payload: any = { gameStatus: 'IN_PROGRESS' };
+            let currentHome = 0;
+            let currentAway = 0;
 
             if (update.period === 'Q1') {
                 payload.q1Home = update.homeScore;
                 payload.q1Away = update.awayScore;
+                currentHome = update.homeScore;
+                currentAway = update.awayScore;
             } else if (update.period === 'Q2' || update.period === 'Q2_HALFTIME') {
                 payload.q2Home = update.homeScore;
                 payload.q2Away = update.awayScore;
+                currentHome = update.homeScore;
+                currentAway = update.awayScore;
             } else if (update.period === 'Q3') {
                 payload.q3Home = update.homeScore;
                 payload.q3Away = update.awayScore;
+                currentHome = update.homeScore;
+                currentAway = update.awayScore;
             } else if (update.period === 'FINAL' || update.period === 'GAME_END') {
                 payload.finalHome = update.homeScore;
                 payload.finalAway = update.awayScore;
                 payload.gameStatus = 'FINAL';
+                currentHome = update.homeScore;
+                currentAway = update.awayScore;
             }
 
+            payload.current = { home: currentHome, away: currentAway };
             await simulatePoolGame(poolId, payload);
             await delay(1000);
         }
@@ -182,22 +193,33 @@ async function runBasic100Scenario(
         }
 
         // Run updates sequentially with gameStatus
-        if (mappedScores.q1Home !== undefined) { await simulatePoolGame(poolId, { q1Home: mappedScores.q1Home, q1Away: mappedScores.q1Away, gameStatus: 'IN_PROGRESS' }); await delay(1000); }
-        if (mappedScores.q2Home !== undefined) { await simulatePoolGame(poolId, { q2Home: mappedScores.q2Home, q2Away: mappedScores.q2Away, gameStatus: 'IN_PROGRESS' }); await delay(1000); }
-        if (mappedScores.q3Home !== undefined) { await simulatePoolGame(poolId, { q3Home: mappedScores.q3Home, q3Away: mappedScores.q3Away, gameStatus: 'IN_PROGRESS' }); await delay(1000); }
-        if (mappedScores.finalHome !== undefined) { await simulatePoolGame(poolId, { finalHome: mappedScores.finalHome, finalAway: mappedScores.finalAway, gameStatus: 'FINAL' }); }
+        if (mappedScores.q1Home !== undefined) {
+            await simulatePoolGame(poolId, { q1Home: mappedScores.q1Home, q1Away: mappedScores.q1Away, current: { home: mappedScores.q1Home, away: mappedScores.q1Away }, gameStatus: 'IN_PROGRESS' });
+            await delay(1000);
+        }
+        if (mappedScores.q2Home !== undefined) {
+            await simulatePoolGame(poolId, { q2Home: mappedScores.q2Home, q2Away: mappedScores.q2Away, current: { home: mappedScores.q2Home, away: mappedScores.q2Away }, gameStatus: 'IN_PROGRESS' });
+            await delay(1000);
+        }
+        if (mappedScores.q3Home !== undefined) {
+            await simulatePoolGame(poolId, { q3Home: mappedScores.q3Home, q3Away: mappedScores.q3Away, current: { home: mappedScores.q3Home, away: mappedScores.q3Away }, gameStatus: 'IN_PROGRESS' });
+            await delay(1000);
+        }
+        if (mappedScores.finalHome !== undefined) {
+            await simulatePoolGame(poolId, { finalHome: mappedScores.finalHome, finalAway: mappedScores.finalAway, current: { home: mappedScores.finalHome, away: mappedScores.finalAway }, gameStatus: 'FINAL' });
+        }
 
         addStep('Simulate Game', 'success', `Custom game simulation complete. Final: ${mappedScores.finalHome}-${mappedScores.finalAway}`);
     } else {
         // Default Random Simulation
         addStep('Simulate Game', 'success', 'Simulating random game scores (Default)...');
-        await simulatePoolGame(poolId, { q1Home: 7, q1Away: 3, gameStatus: 'IN_PROGRESS' });
+        await simulatePoolGame(poolId, { q1Home: 7, q1Away: 3, current: { home: 7, away: 3 }, gameStatus: 'IN_PROGRESS' });
         await delay(1000);
-        await simulatePoolGame(poolId, { q2Home: 14, q2Away: 10, gameStatus: 'IN_PROGRESS' });
+        await simulatePoolGame(poolId, { q2Home: 14, q2Away: 10, current: { home: 14, away: 10 }, gameStatus: 'IN_PROGRESS' });
         await delay(1000);
-        await simulatePoolGame(poolId, { q3Home: 21, q3Away: 17, gameStatus: 'IN_PROGRESS' });
+        await simulatePoolGame(poolId, { q3Home: 21, q3Away: 17, current: { home: 21, away: 17 }, gameStatus: 'IN_PROGRESS' });
         await delay(1000);
-        await simulatePoolGame(poolId, { finalHome: 28, finalAway: 24, gameStatus: 'FINAL' });
+        await simulatePoolGame(poolId, { finalHome: 28, finalAway: 24, current: { home: 28, away: 24 }, gameStatus: 'FINAL' });
         addStep('Simulate Game', 'success', 'Game simulation complete. Final Score: 28-24');
     }
 
