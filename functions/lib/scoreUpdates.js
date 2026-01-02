@@ -275,6 +275,11 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     }
     let transactionUpdates = {};
     let shouldUpdate = false;
+    // Include axisNumbers override if passed (e.g., from simulation auto-generation)
+    if (overrides === null || overrides === void 0 ? void 0 : overrides.axisNumbers) {
+        transactionUpdates.axisNumbers = overrides.axisNumbers;
+        shouldUpdate = true;
+    }
     const currentScoresStr = JSON.stringify(freshPool.scores);
     const newScoresStr = JSON.stringify(newScores);
     if (currentScoresStr !== newScoresStr) {
@@ -763,13 +768,16 @@ exports.simulateGameUpdate = (0, https_1.onCall)({
             const doc = await transaction.get(poolRef);
             if (!doc.exists)
                 throw new https_1.HttpsError('not-found', 'Pool not found');
-            // Ensure Axis Numbers Exist during Simulation
+            // Ensure Axis Numbers Exist during Simulation 
+            // IMPORTANT: Do NOT call transaction.update here - it would cause read-after-write
+            // since processGameUpdate does transaction.getAll() for deduping.
+            // Instead, pass the axis as an override and processGameUpdate will include it
+            // in its final poolRef update.
             let overrides = {};
             const poolData = doc.data();
             if (!poolData.axisNumbers) {
                 const newAxis = generateAxisNumbers();
                 console.log(`[Sim] Generating missing Axis Numbers for pool ${poolId}`);
-                transaction.update(poolRef, { axisNumbers: newAxis });
                 overrides.axisNumbers = newAxis;
                 generatedAxis = newAxis; // Track for post-transaction audit
             }
