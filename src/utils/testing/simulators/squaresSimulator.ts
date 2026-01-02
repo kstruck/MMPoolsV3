@@ -214,6 +214,7 @@ async function runBasic100Scenario(
                 payload.finalHome = update.homeScore;
                 payload.finalAway = update.awayScore;
                 payload.period = 4;
+                payload.gameStatus = 'post';
                 currentHome = update.homeScore;
                 currentAway = update.awayScore;
                 payload.final = { home: update.homeScore, away: update.awayScore };
@@ -285,7 +286,7 @@ async function runBasic100Scenario(
                 q1: mappedScores.q1Home !== undefined ? { home: mappedScores.q1Home, away: mappedScores.q1Away } : undefined,
                 half: mappedScores.q2Home !== undefined ? { home: mappedScores.q2Home, away: mappedScores.q2Away } : undefined,
                 q3: mappedScores.q3Home !== undefined ? { home: mappedScores.q3Home, away: mappedScores.q3Away } : undefined,
-                period: 4, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'FINAL'
+                period: 4, clock: '0:00', startTime: new Date().toISOString(), gameStatus: 'post'
             });
         }
 
