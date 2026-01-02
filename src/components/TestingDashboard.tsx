@@ -165,7 +165,7 @@ export const TestingDashboard: React.FC = () => {
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                    {(suggestions || []).map((s, i) => (
+                    {(Array.isArray(suggestions) ? suggestions : []).map((s, i) => (
                         <button
                             key={i}
                             onClick={() => setAiPrompt(s)}
@@ -218,7 +218,7 @@ export const TestingDashboard: React.FC = () => {
                                 </div>
                             )}
 
-                            {(currentResult?.steps || []).map((step, i) => (
+                            {(Array.isArray(currentResult?.steps) ? currentResult.steps : []).map((step, i) => (
                                 <div key={i} className="flex gap-2">
                                     <span className={step.status === 'success' ? 'text-green-500' : 'text-red-500'}>
                                         {step.status === 'success' ? '✓' : '✗'}
@@ -262,7 +262,7 @@ export const TestingDashboard: React.FC = () => {
                                         </div>
 
                                         <div className="space-y-2">
-                                            {(validationResult.findings || []).map((f, i) => (
+                                            {(Array.isArray(validationResult.findings) ? validationResult.findings : []).map((f, i) => (
                                                 <div key={i} className={`p-3 rounded-lg text-sm border ${f.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-300' :
                                                     f.type === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-300' :
                                                         'bg-amber-500/10 border-amber-500/30 text-amber-300'
@@ -300,7 +300,7 @@ export const TestingDashboard: React.FC = () => {
                                 </div>
                                 <div className="p-4 text-slate-300 text-sm prose prose-invert max-w-none">
                                     <ReactMarkdown>
-                                        {`### ${report.executiveSummary || 'Report Generated'}\n\n**Key Findings**\n${(report.keyFindings || []).map(k => `- ${k}`).join('\n')}`}
+                                        {`### ${report.executiveSummary || 'Report Generated'}\n\n**Key Findings**\n${(Array.isArray(report.keyFindings) ? report.keyFindings : []).map(k => `- ${k}`).join('\n')}`}
                                     </ReactMarkdown>
                                     <button
                                         className="mt-4 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-white transition-colors"
