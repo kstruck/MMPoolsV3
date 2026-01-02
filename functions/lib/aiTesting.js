@@ -15,7 +15,23 @@ const SCENARIO_GENERATION_SCHEMA = {
     properties: {
         scenarioName: { type: generative_ai_1.SchemaType.STRING },
         description: { type: generative_ai_1.SchemaType.STRING },
-        poolConfig: { type: generative_ai_1.SchemaType.OBJECT },
+        poolConfig: {
+            type: generative_ai_1.SchemaType.OBJECT,
+            properties: {
+                name: { type: generative_ai_1.SchemaType.STRING },
+                type: { type: generative_ai_1.SchemaType.STRING },
+                props: {
+                    type: generative_ai_1.SchemaType.OBJECT,
+                    properties: {
+                        costPerCard: { type: generative_ai_1.SchemaType.NUMBER },
+                        isLocked: { type: generative_ai_1.SchemaType.BOOLEAN }
+                    },
+                    required: ["costPerCard", "isLocked"]
+                },
+                maxPlayers: { type: generative_ai_1.SchemaType.NUMBER }
+            },
+            required: ["name", "type", "props", "maxPlayers"]
+        },
         testUsers: {
             type: generative_ai_1.SchemaType.ARRAY,
             items: {
@@ -25,6 +41,7 @@ const SCENARIO_GENERATION_SCHEMA = {
                     strategy: { type: generative_ai_1.SchemaType.STRING },
                     behavior: { type: generative_ai_1.SchemaType.STRING },
                 },
+                required: ["name", "strategy", "behavior"]
             },
         },
         expectedOutcome: {
@@ -34,6 +51,7 @@ const SCENARIO_GENERATION_SCHEMA = {
                 topThree: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
                 edgeCases: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
             },
+            required: ["winner", "topThree", "edgeCases"]
         },
         validationChecks: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
     },
@@ -72,27 +90,6 @@ exports.generateTestScenario = functions.https.onCall({ secrets: [gemini_1.gemin
     }
 });
 // ===== RESULT VALIDATION =====
-const VALIDATION_SCHEMA = {
-    type: generative_ai_1.SchemaType.OBJECT,
-    properties: {
-        passed: { type: generative_ai_1.SchemaType.BOOLEAN },
-        confidence: { type: generative_ai_1.SchemaType.NUMBER },
-        findings: {
-            type: generative_ai_1.SchemaType.ARRAY,
-            items: {
-                type: generative_ai_1.SchemaType.OBJECT,
-                properties: {
-                    type: { type: generative_ai_1.SchemaType.STRING },
-                    message: { type: generative_ai_1.SchemaType.STRING },
-                    evidence: { type: generative_ai_1.SchemaType.STRING },
-                },
-            },
-        },
-        anomalies: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
-        recommendations: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
-    },
-    required: ["passed", "confidence", "findings", "anomalies", "recommendations"],
-};
 const buildValidationPrompt = (poolType) => `
 You are a QA expert analyzing test results for a ${poolType} pool.
 
@@ -117,7 +114,10 @@ exports.validateTestResults = functions.https.onCall({ secrets: [gemini_1.gemini
             testResult,
             timestamp: new Date().toISOString(),
         };
-        const result = await (0, gemini_1.generateAIResponse)(systemPrompt, facts, VALIDATION_SCHEMA);
+        // Force text-based generation for robustness
+        const textPrompt = systemPrompt + "\n\nRETURN ONLY RAW JSON. NO MARKDOWN. NOCODE BLOCKS.";
+        const result = await (0, gemini_1.generateAIResponse)(textPrompt, facts, null // Pass null to bypass schema generation
+        );
         return result;
     }
     catch (error) {
@@ -126,18 +126,6 @@ exports.validateTestResults = functions.https.onCall({ secrets: [gemini_1.gemini
     }
 });
 // ===== REPORT GENERATION =====
-const REPORT_SCHEMA = {
-    type: generative_ai_1.SchemaType.OBJECT,
-    properties: {
-        executiveSummary: { type: generative_ai_1.SchemaType.STRING },
-        testCoverage: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
-        keyFindings: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
-        detailedResults: { type: generative_ai_1.SchemaType.STRING },
-        recommendations: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
-        nextSteps: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
-    },
-    required: ["executiveSummary", "testCoverage", "keyFindings", "detailedResults", "recommendations", "nextSteps"],
-};
 const buildReportPrompt = () => `
 You are a QA report writer creating comprehensive test reports.
 
@@ -163,7 +151,9 @@ exports.generateTestReport = functions.https.onCall({ secrets: [gemini_1.geminiA
             validation,
             timestamp: new Date().toISOString(),
         };
-        const result = await (0, gemini_1.generateAIResponse)(systemPrompt, facts, REPORT_SCHEMA);
+        // Force text-based generation
+        const textPrompt = systemPrompt + "\n\nRETURN ONLY RAW JSON. NO MARKDOWN. NOCODE BLOCKS.";
+        const result = await (0, gemini_1.generateAIResponse)(textPrompt, facts, null);
         return result;
     }
     catch (error) {

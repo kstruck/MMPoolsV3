@@ -90,7 +90,7 @@ export async function generateTestScenario(
         );
 
         const result = await generateScenario({ poolType, userRequest });
-        return result.data;
+        return parseResult(result.data);
     } catch (error) {
         console.error('Error generating test scenario:', error);
         throw new Error('Failed to generate test scenario with AI');
@@ -111,7 +111,7 @@ export async function validateTestResults(
         );
 
         const result = await validateResults({ scenario, testResult });
-        return result.data;
+        return parseResult(result.data);
     } catch (error) {
         console.error('Error validating test results:', error);
         throw new Error('Failed to validate test results with AI');
@@ -121,6 +121,20 @@ export async function validateTestResults(
 /**
  * Generate Test Report using AI
  */
+const parseResult = (data: any) => {
+    if (typeof data === 'string') {
+        try {
+            // Remove markdown code blocks if present
+            const clean = data.replace(/```json/g, '').replace(/```/g, '').trim();
+            return JSON.parse(clean);
+        } catch (e) {
+            console.error("Failed to parse AI response:", e);
+            return data;
+        }
+    }
+    return data;
+};
+
 export async function generateTestReport(
     scenario: TestScenario,
     testResult: TestResult,
@@ -133,7 +147,7 @@ export async function generateTestReport(
         );
 
         const result = await generateReport({ scenario, testResult, validation });
-        return result.data;
+        return parseResult(result.data);
     } catch (error) {
         console.error('Error generating test report:', error);
         throw new Error('Failed to generate test report with AI');

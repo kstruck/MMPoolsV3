@@ -15,7 +15,23 @@ const SCENARIO_GENERATION_SCHEMA = {
     properties: {
         scenarioName: { type: SchemaType.STRING },
         description: { type: SchemaType.STRING },
-        poolConfig: { type: SchemaType.OBJECT },
+        poolConfig: {
+            type: SchemaType.OBJECT,
+            properties: {
+                name: { type: SchemaType.STRING },
+                type: { type: SchemaType.STRING },
+                props: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        costPerCard: { type: SchemaType.NUMBER },
+                        isLocked: { type: SchemaType.BOOLEAN }
+                    },
+                    required: ["costPerCard", "isLocked"]
+                },
+                maxPlayers: { type: SchemaType.NUMBER }
+            },
+            required: ["name", "type", "props", "maxPlayers"]
+        },
         testUsers: {
             type: SchemaType.ARRAY,
             items: {
@@ -25,6 +41,7 @@ const SCENARIO_GENERATION_SCHEMA = {
                     strategy: { type: SchemaType.STRING },
                     behavior: { type: SchemaType.STRING },
                 },
+                required: ["name", "strategy", "behavior"]
             },
         },
         expectedOutcome: {
@@ -34,6 +51,7 @@ const SCENARIO_GENERATION_SCHEMA = {
                 topThree: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
                 edgeCases: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
             },
+            required: ["winner", "topThree", "edgeCases"]
         },
         validationChecks: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
     },
@@ -87,28 +105,6 @@ export const generateTestScenario = functions.https.onCall(
 
 // ===== RESULT VALIDATION =====
 
-const VALIDATION_SCHEMA = {
-    type: SchemaType.OBJECT,
-    properties: {
-        passed: { type: SchemaType.BOOLEAN },
-        confidence: { type: SchemaType.NUMBER },
-        findings: {
-            type: SchemaType.ARRAY,
-            items: {
-                type: SchemaType.OBJECT,
-                properties: {
-                    type: { type: SchemaType.STRING },
-                    message: { type: SchemaType.STRING },
-                    evidence: { type: SchemaType.STRING },
-                },
-            },
-        },
-        anomalies: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-        recommendations: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-    },
-    required: ["passed", "confidence", "findings", "anomalies", "recommendations"],
-};
-
 const buildValidationPrompt = (poolType: string): string => `
 You are a QA expert analyzing test results for a ${poolType} pool.
 
@@ -138,10 +134,13 @@ export const validateTestResults = functions.https.onCall(
                 timestamp: new Date().toISOString(),
             };
 
+            // Force text-based generation for robustness
+            const textPrompt = systemPrompt + "\n\nRETURN ONLY RAW JSON. NO MARKDOWN. NOCODE BLOCKS.";
+
             const result = await generateAIResponse(
-                systemPrompt,
+                textPrompt,
                 facts,
-                VALIDATION_SCHEMA
+                null // Pass null to bypass schema generation
             );
 
             return result;
@@ -152,19 +151,6 @@ export const validateTestResults = functions.https.onCall(
     });
 
 // ===== REPORT GENERATION =====
-
-const REPORT_SCHEMA = {
-    type: SchemaType.OBJECT,
-    properties: {
-        executiveSummary: { type: SchemaType.STRING },
-        testCoverage: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-        keyFindings: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-        detailedResults: { type: SchemaType.STRING },
-        recommendations: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-        nextSteps: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-    },
-    required: ["executiveSummary", "testCoverage", "keyFindings", "detailedResults", "recommendations", "nextSteps"],
-};
 
 const buildReportPrompt = (): string => `
 You are a QA report writer creating comprehensive test reports.
@@ -196,10 +182,12 @@ export const generateTestReport = functions.https.onCall(
                 timestamp: new Date().toISOString(),
             };
 
+            // Force text-based generation
+            const textPrompt = systemPrompt + "\n\nRETURN ONLY RAW JSON. NO MARKDOWN. NOCODE BLOCKS.";
             const result = await generateAIResponse(
-                systemPrompt,
+                textPrompt,
                 facts,
-                REPORT_SCHEMA
+                null
             );
 
             return result;

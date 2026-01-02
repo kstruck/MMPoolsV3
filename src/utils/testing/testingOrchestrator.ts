@@ -240,7 +240,7 @@ class TestOrchestrator {
             const simulatorResult = await simulator.runScenario(config.scenario, config.mode, config.settings);
 
             result.poolId = simulatorResult.poolId;
-            result.steps = simulatorResult.steps;
+            result.steps = simulatorResult.steps || [];
             result.status = 'success';
             log('success', 'Test completed successfully!');
 

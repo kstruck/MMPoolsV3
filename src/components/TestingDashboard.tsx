@@ -96,7 +96,7 @@ export const TestingDashboard: React.FC = () => {
                                 <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-white" />
                             </div>
                             <div className="text-xs text-slate-400">
-                                {TEST_SCENARIOS[type as PoolType].length} Preset Scenarios
+                                {(TEST_SCENARIOS[type as PoolType] || []).length} Preset Scenarios
                             </div>
                         </button>
                     ))}
@@ -146,8 +146,8 @@ export const TestingDashboard: React.FC = () => {
                         onClick={handleRunTest}
                         disabled={isRunning || !aiPrompt.trim()}
                         className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all ${isRunning
-                                ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
                             }`}
                     >
                         {isRunning ? (
@@ -164,9 +164,8 @@ export const TestingDashboard: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Suggestions */}
                 <div className="mt-4 flex flex-wrap gap-2">
-                    {suggestions.map((s, i) => (
+                    {(suggestions || []).map((s, i) => (
                         <button
                             key={i}
                             onClick={() => setAiPrompt(s)}
@@ -185,7 +184,7 @@ export const TestingDashboard: React.FC = () => {
                                 <Bot className="w-3 h-3 text-indigo-400" />
                                 Generated Scenario: {currentScenario.scenarioName}
                             </h4>
-                            <span className="text-xs text-slate-400">{currentScenario.testUsers.length} Users • {currentScenario.poolType}</span>
+                            <span className="text-xs text-slate-400">{(currentScenario.testUsers || []).length} Users • {currentScenario.poolType}</span>
                         </div>
                         <p className="text-xs text-slate-400 italic mb-3">"{currentScenario.description}"</p>
                         <div className="bg-black p-3 rounded border border-slate-800 font-mono text-xs text-green-400 overflow-x-auto">
@@ -218,7 +217,8 @@ export const TestingDashboard: React.FC = () => {
                                     <p>Orchestrating test with AI...</p>
                                 </div>
                             )}
-                            {currentResult?.steps.map((step, i) => (
+                            )}
+                            {(currentResult?.steps || []).map((step, i) => (
                                 <div key={i} className="flex gap-2">
                                     <span className={step.status === 'success' ? 'text-green-500' : 'text-red-500'}>
                                         {step.status === 'success' ? '✓' : '✗'}
@@ -262,10 +262,10 @@ export const TestingDashboard: React.FC = () => {
                                         </div>
 
                                         <div className="space-y-2">
-                                            {validationResult.findings.map((f, i) => (
+                                            {(validationResult.findings || []).map((f, i) => (
                                                 <div key={i} className={`p-3 rounded-lg text-sm border ${f.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-300' :
-                                                        f.type === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-300' :
-                                                            'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                                    f.type === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-300' :
+                                                        'bg-amber-500/10 border-amber-500/30 text-amber-300'
                                                     }`}>
                                                     <div className="font-bold mb-1 flex items-center gap-2">
                                                         {f.type === 'success' && <CheckCircle className="w-3 h-3" />}
@@ -300,7 +300,7 @@ export const TestingDashboard: React.FC = () => {
                                 </div>
                                 <div className="p-4 text-slate-300 text-sm prose prose-invert max-w-none">
                                     <ReactMarkdown>
-                                        {`### ${report.executiveSummary}\n\n**Key Findings**\n${report.keyFindings.map(k => `- ${k}`).join('\n')}`}
+                                        {`### ${report.executiveSummary || 'Report Generated'}\n\n**Key Findings**\n${(report.keyFindings || []).map(k => `- ${k}`).join('\n')}`}
                                     </ReactMarkdown>
                                     <button
                                         className="mt-4 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-white transition-colors"
@@ -325,8 +325,8 @@ export const TestingDashboard: React.FC = () => {
                         key={tab}
                         onClick={() => setActiveTab(tab as any)}
                         className={`px-4 py-2 rounded-lg font-bold text-sm whitespace-nowrap transition-all ${activeTab === tab
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white border border-slate-700'
+                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white border border-slate-700'
                             }`}
                     >
                         {tab.replace('_', ' ')}
