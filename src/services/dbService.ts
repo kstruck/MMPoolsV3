@@ -2,6 +2,7 @@ import {
     collection,
     doc,
     setDoc,
+    getDoc,
     getDocs,
     updateDoc,
     deleteDoc,
@@ -31,6 +32,10 @@ export interface GlobalStats {
 
 export const dbService = {
     // --- POOLS ---
+    async getPoolById(poolId: string): Promise<GameState | null> {
+        const d = await getDoc(doc(db, "pools", poolId));
+        return d.exists() ? (d.data() as GameState) : null;
+    },
     onGlobalStatsUpdate: (callback: (stats: GlobalStats | null) => void, onError?: (error: Error) => void) => {
         return onSnapshot(doc(db, 'stats', 'global'), (doc) => {
             callback(doc.exists() ? doc.data() as GlobalStats : null);

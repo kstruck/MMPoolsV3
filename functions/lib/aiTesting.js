@@ -53,6 +53,20 @@ const SCENARIO_GENERATION_SCHEMA = {
             },
             required: ["winner", "topThree", "edgeCases"]
         },
+        actions: {
+            type: generative_ai_1.SchemaType.ARRAY,
+            items: {
+                type: generative_ai_1.SchemaType.OBJECT,
+                properties: {
+                    actionType: { type: generative_ai_1.SchemaType.STRING, description: "Use 'SCORE_UPDATE' for score changes" },
+                    period: { type: generative_ai_1.SchemaType.STRING, description: "Q1, Q2, Q3, FINAL" },
+                    homeScore: { type: generative_ai_1.SchemaType.NUMBER },
+                    awayScore: { type: generative_ai_1.SchemaType.NUMBER },
+                    description: { type: generative_ai_1.SchemaType.STRING }
+                },
+                required: ["actionType", "period", "homeScore", "awayScore"]
+            }
+        },
         validationChecks: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
     },
     required: ["scenarioName", "description", "poolConfig", "testUsers", "expectedOutcome", "validationChecks"],
@@ -71,6 +85,9 @@ Guidelines:
 4. List specific validation checks
 
 Provide all configuration needed to run the test.
+
+IMPORTANT: To simulate specific game outcomes, you MUST populate the 'actions' array with 'SCORE_UPDATE' events.
+Example: { "actionType": "SCORE_UPDATE", "period": "Q1", "homeScore": 7, "awayScore": 0, "description": "Home TD" }
 `;
 exports.generateTestScenario = functions.https.onCall({ secrets: [gemini_1.geminiApiKey] }, async (request) => {
     try {

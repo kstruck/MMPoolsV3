@@ -291,10 +291,27 @@ async function runBasic100Scenario(
         addStep('Simulate Game', 'success', 'Game simulation complete. Final Score: 28-24');
     }
 
-    // E. Verify Winners (Minimal check)
-    // In a real verification, we'd fetch the pool and check `winners` array.
-    // implementing minimal verification now.
-    addStep('Verification', 'success', 'Simulation run complete. Check Audit Logs for winner details.');
+    // E. Verify Winners and Capture Final State
+    addStep('Verification', 'success', 'Fetching final pool state for validation...');
+
+    // Attempt to fetch the final pool state to return to the AI Validator
+    try {
+        const finalPool = await dbService.getPoolById(poolId);
+        return {
+            poolId,
+            simulationComplete: true,
+            finalStatus: 'FINAL',
+            finalPoolData: finalPool
+        };
+    } catch (e) {
+        addStep('Verification', 'failed', 'Could not fetch final pool state for validation.', e);
+        return {
+            poolId,
+            simulationComplete: true,
+            finalStatus: 'FINAL',
+            error: 'Could not fetch final data'
+        };
+    }
 }
 
 async function runPartialFillScenario(
