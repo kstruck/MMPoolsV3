@@ -257,7 +257,7 @@ class TestOrchestrator {
             }
 
             // Run the simulator with the SAFE ID
-            const simulatorResult = await simulator.runScenario(safeScenarioId, config.mode, config.settings);
+            const simulatorResult: any = await simulator.runScenario(safeScenarioId, config.mode, config.settings);
 
             result.poolId = simulatorResult.poolId;
             result.steps = simulatorResult.steps || [];
