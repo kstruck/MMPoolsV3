@@ -297,11 +297,13 @@ async function runBasic100Scenario(
     // Attempt to fetch the final pool state to return to the AI Validator
     try {
         const finalPool = await dbService.getPoolById(poolId);
+        const winners = await dbService.getWinners(poolId);
         return {
             poolId,
             simulationComplete: true,
             finalStatus: 'FINAL',
-            finalPoolData: finalPool
+            finalPoolData: finalPool,
+            winners: winners
         };
     } catch (e) {
         addStep('Verification', 'failed', 'Could not fetch final pool state for validation.', e);

@@ -369,6 +369,13 @@ export const dbService = {
         });
     },
 
+    // Fetch Winners Once (Promise-based)
+    getWinners: async (poolId: string): Promise<Winner[]> => {
+        const q = query(collection(db, "pools", poolId, "winners"));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as Winner);
+    },
+
     // Update winner paid status
     // Update winner paid status (via Cloud Function)
     updateWinnerPaidStatus: async (poolId: string, winnerId: string, _isPaid: boolean, _paidByUid?: string) => {
