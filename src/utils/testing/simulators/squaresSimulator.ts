@@ -134,37 +134,70 @@ async function runBasic100Scenario(
     addStep('Simulate Game', 'success', 'Simulating game scores...');
 
     const customLogic = settings?._fullScenario;
-    const scoreAction = customLogic?.userActions?.find((a: any) => a.action === 'Record Game Scores');
+    // Support both old 'userActions' and new 'actions' formats
+    const actions = customLogic?.actions || customLogic?.userActions || [];
 
-    if (scoreAction && Array.isArray(scoreAction.scores)) {
-        addStep('Simulate Game', 'success', 'Using AI-generated custom score scenario');
+    // Check for NEW format (Multiple SCORE_UPDATE actions)
+    const scoreUpdates = actions.filter((a: any) => a.actionType === 'SCORE_UPDATE');
+
+    // Check for OLD format (Single Record Game Scores action)
+    const oldScoreAction = actions.find((a: any) => a.action === 'Record Game Scores');
+
+    if (scoreUpdates.length > 0) {
+        addStep('Simulate Game', 'success', `Using AI-generated SCORE_UPDATE actions (${scoreUpdates.length} updates)`);
+
+        for (const update of scoreUpdates) {
+            const payload: any = { gameStatus: 'IN_PROGRESS' };
+
+            if (update.period === 'Q1') {
+                payload.q1Home = update.homeScore;
+                payload.q1Away = update.awayScore;
+            } else if (update.period === 'Q2' || update.period === 'Q2_HALFTIME') {
+                payload.q2Home = update.homeScore;
+                payload.q2Away = update.awayScore;
+            } else if (update.period === 'Q3') {
+                payload.q3Home = update.homeScore;
+                payload.q3Away = update.awayScore;
+            } else if (update.period === 'FINAL' || update.period === 'GAME_END') {
+                payload.finalHome = update.homeScore;
+                payload.finalAway = update.awayScore;
+                payload.gameStatus = 'FINAL';
+            }
+
+            await simulatePoolGame(poolId, payload);
+            await delay(1000);
+        }
+        addStep('Simulate Game', 'success', 'Custom score updates applied successfully.');
+
+    } else if (oldScoreAction && Array.isArray(oldScoreAction.scores)) {
+        addStep('Simulate Game', 'success', 'Using Legacy AI-generated custom score scenario');
 
         // Map AI score format (array) to Simulator format (flat object)
         const mappedScores: any = {};
-        for (const s of scoreAction.scores) {
+        for (const s of oldScoreAction.scores) {
             if (s.quarter.includes('1st')) { mappedScores.q1Home = s.teamAScore; mappedScores.q1Away = s.teamBScore; }
             if (s.quarter.includes('2nd') || s.quarter.includes('Halftime')) { mappedScores.q2Home = s.teamAScore; mappedScores.q2Away = s.teamBScore; }
             if (s.quarter.includes('3rd')) { mappedScores.q3Home = s.teamAScore; mappedScores.q3Away = s.teamBScore; }
             if (s.quarter.includes('Final')) { mappedScores.finalHome = s.teamAScore; mappedScores.finalAway = s.teamBScore; }
         }
 
-        // Run updates sequentially
-        if (mappedScores.q1Home !== undefined) { await simulatePoolGame(poolId, { q1Home: mappedScores.q1Home, q1Away: mappedScores.q1Away }); await delay(1000); }
-        if (mappedScores.q2Home !== undefined) { await simulatePoolGame(poolId, { q2Home: mappedScores.q2Home, q2Away: mappedScores.q2Away }); await delay(1000); }
-        if (mappedScores.q3Home !== undefined) { await simulatePoolGame(poolId, { q3Home: mappedScores.q3Home, q3Away: mappedScores.q3Away }); await delay(1000); }
-        if (mappedScores.finalHome !== undefined) { await simulatePoolGame(poolId, { finalHome: mappedScores.finalHome, finalAway: mappedScores.finalAway }); }
+        // Run updates sequentially with gameStatus
+        if (mappedScores.q1Home !== undefined) { await simulatePoolGame(poolId, { q1Home: mappedScores.q1Home, q1Away: mappedScores.q1Away, gameStatus: 'IN_PROGRESS' }); await delay(1000); }
+        if (mappedScores.q2Home !== undefined) { await simulatePoolGame(poolId, { q2Home: mappedScores.q2Home, q2Away: mappedScores.q2Away, gameStatus: 'IN_PROGRESS' }); await delay(1000); }
+        if (mappedScores.q3Home !== undefined) { await simulatePoolGame(poolId, { q3Home: mappedScores.q3Home, q3Away: mappedScores.q3Away, gameStatus: 'IN_PROGRESS' }); await delay(1000); }
+        if (mappedScores.finalHome !== undefined) { await simulatePoolGame(poolId, { finalHome: mappedScores.finalHome, finalAway: mappedScores.finalAway, gameStatus: 'FINAL' }); }
 
         addStep('Simulate Game', 'success', `Custom game simulation complete. Final: ${mappedScores.finalHome}-${mappedScores.finalAway}`);
     } else {
         // Default Random Simulation
         addStep('Simulate Game', 'success', 'Simulating random game scores (Default)...');
-        await simulatePoolGame(poolId, { q1Home: 7, q1Away: 3 });
+        await simulatePoolGame(poolId, { q1Home: 7, q1Away: 3, gameStatus: 'IN_PROGRESS' });
         await delay(1000);
-        await simulatePoolGame(poolId, { q2Home: 14, q2Away: 10 });
+        await simulatePoolGame(poolId, { q2Home: 14, q2Away: 10, gameStatus: 'IN_PROGRESS' });
         await delay(1000);
-        await simulatePoolGame(poolId, { q3Home: 21, q3Away: 17 });
+        await simulatePoolGame(poolId, { q3Home: 21, q3Away: 17, gameStatus: 'IN_PROGRESS' });
         await delay(1000);
-        await simulatePoolGame(poolId, { finalHome: 28, finalAway: 24 });
+        await simulatePoolGame(poolId, { finalHome: 28, finalAway: 24, gameStatus: 'FINAL' });
         addStep('Simulate Game', 'success', 'Game simulation complete. Final Score: 28-24');
     }
 
