@@ -16,7 +16,7 @@ export const lockPool = onCall(async (request) => {
         );
     }
 
-    const { poolId } = request.data;
+    const { poolId, forceAxis } = request.data;
     if (!poolId) {
         throw new HttpsError("invalid-argument", "Pool ID is required.");
     }
@@ -34,21 +34,32 @@ export const lockPool = onCall(async (request) => {
     // 2. Permission Check - Owner or Super Admin
     assertPoolOwnerOrSuperAdmin(poolData, request.auth.uid, request.auth.token.role);
 
-    // 3. Generate Random Digits (Secure Server-Side RNG)
-    const generateDigits = () => {
-        const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-        // Fisher-Yates Shuffle
-        for (let i = nums.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [nums[i], nums[j]] = [nums[j], nums[i]];
-        }
-        return nums;
-    };
+    // 3. Generate Digits (Random or Fixed for Testing)
+    let axisNumbers;
 
-    const axisNumbers = {
-        home: generateDigits(),
-        away: generateDigits(),
-    };
+    if (forceAxis === true) {
+        // Deterministic mode for testing - use fixed 0-9 sequence
+        console.log(`[lockPool] Using FIXED axis numbers for pool ${poolId} (testing mode)`);
+        axisNumbers = {
+            home: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            away: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        };
+    } else {
+        // Production mode - random shuffle
+        const generateDigits = () => {
+            const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+            // Fisher-Yates Shuffle
+            for (let i = nums.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [nums[i], nums[j]] = [nums[j], nums[i]];
+            }
+            return nums;
+        };
+        axisNumbers = {
+            home: generateDigits(),
+            away: generateDigits(),
+        };
+    }
 
     let updates: any = {
         isLocked: true,

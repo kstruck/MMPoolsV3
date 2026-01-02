@@ -11,7 +11,7 @@ exports.lockPool = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "User must be logged in to lock a pool.");
     }
-    const { poolId } = request.data;
+    const { poolId, forceAxis } = request.data;
     if (!poolId) {
         throw new https_1.HttpsError("invalid-argument", "Pool ID is required.");
     }
@@ -23,20 +23,32 @@ exports.lockPool = (0, https_1.onCall)(async (request) => {
     const poolData = poolSnap.data();
     // 2. Permission Check - Owner or Super Admin
     (0, poolOps_1.assertPoolOwnerOrSuperAdmin)(poolData, request.auth.uid, request.auth.token.role);
-    // 3. Generate Random Digits (Secure Server-Side RNG)
-    const generateDigits = () => {
-        const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-        // Fisher-Yates Shuffle
-        for (let i = nums.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [nums[i], nums[j]] = [nums[j], nums[i]];
-        }
-        return nums;
-    };
-    const axisNumbers = {
-        home: generateDigits(),
-        away: generateDigits(),
-    };
+    // 3. Generate Digits (Random or Fixed for Testing)
+    let axisNumbers;
+    if (forceAxis === true) {
+        // Deterministic mode for testing - use fixed 0-9 sequence
+        console.log(`[lockPool] Using FIXED axis numbers for pool ${poolId} (testing mode)`);
+        axisNumbers = {
+            home: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            away: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        };
+    }
+    else {
+        // Production mode - random shuffle
+        const generateDigits = () => {
+            const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+            // Fisher-Yates Shuffle
+            for (let i = nums.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [nums[i], nums[j]] = [nums[j], nums[i]];
+            }
+            return nums;
+        };
+        axisNumbers = {
+            home: generateDigits(),
+            away: generateDigits(),
+        };
+    }
     let updates = {
         isLocked: true,
         lockGrid: true, // Legacy support

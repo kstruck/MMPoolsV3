@@ -219,31 +219,9 @@ async function runBasic100Scenario(
     addStep('Reserve Squares', 'success', 'Successfully reserved 100 squares');
 
     // C. Lock Pool (Generates Numbers)
-    addStep('Lock Pool', 'success', 'Locking pool and generating axis numbers');
-    await dbService.lockPool(poolId);
-
-    // OVERRIDE: Force Fixed Axis Numbers (0-9) to match our Targeted Square logic
-    // We must do this because lockPool generates random numbers.
-    // NOTE: This may fail due to Firestore security rules. If so, test runs with random axis (and will likely fail winner validation).
-    const fixedAxis = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-
-    try {
-        await dbService.updatePool(poolId, {
-            axisNumbers: { home: fixedAxis, away: fixedAxis },
-            quarterlyNumbers: {
-                q1: { home: fixedAxis, away: fixedAxis },
-                q2: { home: fixedAxis, away: fixedAxis },
-                q3: { home: fixedAxis, away: fixedAxis },
-                q4: { home: fixedAxis, away: fixedAxis }
-            }
-        });
-        addStep('Lock Pool', 'success', 'Axis numbers overridden to fixed 0-9 sequence for deterministic testing');
-    } catch (axisError: any) {
-        // Log warning but continue - test may fail validation but won't crash
-        addStep('Lock Pool', 'skipped', `Could not override axis numbers (${axisError.message}). Test will use random axis - winner validation may fail.`);
-        console.warn('[Simulator] Axis override failed:', axisError);
-    }
-    // Verification: We could fetch the pool to confirm, but if no error thrown, we assume success.
+    // Use forceAxis=true to enable deterministic testing with fixed 0-9 axis
+    addStep('Lock Pool', 'success', 'Locking pool with FIXED axis numbers (0-9) for deterministic testing');
+    await dbService.lockPool(poolId, true); // forceAxis=true for testing
 
     // D. Simulate Game
     addStep('Simulate Game', 'success', 'Simulating game scores...');

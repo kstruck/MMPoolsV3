@@ -228,10 +228,10 @@ export const dbService = {
         }
     },
 
-    lockPool: async (poolId: string): Promise<void> => {
+    lockPool: async (poolId: string, forceAxis: boolean = false): Promise<void> => {
         try {
             const lockPoolFn = httpsCallable(functions, 'lockPool');
-            await lockPoolFn({ poolId });
+            await lockPoolFn({ poolId, forceAxis });
         } catch (error) {
             console.error("Error calling lockPool function:", error);
             throw error;
