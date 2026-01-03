@@ -1,0 +1,114 @@
+{
+    "id": "playoff-basic",
+    "name": "Playoff Basic Test",
+    "description": "Tests playoff entry submission, round scoring, and ranking calculation",
+    "poolType": "NFL_PLAYOFFS",
+    "poolConfig": {
+        "name": "Test Playoff Pool",
+        "type": "NFL_PLAYOFFS",
+        "season": "2025"
+    },
+    "testEntries": [
+        {
+            "userName": "Alice",
+            "rankings": {
+                "KC": 1,
+                "SF": 2,
+                "BUF": 3,
+                "DAL": 4,
+                "BAL": 5,
+                "DET": 6,
+                "HOU": 7,
+                "TB": 8,
+                "CLE": 9,
+                "PHI": 10,
+                "MIA": 11,
+                "LAR": 12,
+                "PIT": 13,
+                "GB": 14
+            },
+            "tiebreaker": 48
+        },
+        {
+            "userName": "Bob",
+            "rankings": {
+                "SF": 1,
+                "KC": 2,
+                "DAL": 3,
+                "BUF": 4,
+                "DET": 5,
+                "BAL": 6,
+                "TB": 7,
+                "HOU": 8,
+                "PHI": 9,
+                "CLE": 10,
+                "LAR": 11,
+                "MIA": 12,
+                "GB": 13,
+                "PIT": 14
+            },
+            "tiebreaker": 52
+        },
+        {
+            "userName": "Carol",
+            "rankings": {
+                "BUF": 1,
+                "DET": 2,
+                "SF": 3,
+                "KC": 4,
+                "DAL": 5,
+                "BAL": 6,
+                "HOU": 7,
+                "TB": 8,
+                "CLE": 9,
+                "PHI": 10,
+                "MIA": 11,
+                "LAR": 12,
+                "PIT": 13,
+                "GB": 14
+            },
+            "tiebreaker": 45
+        }
+    ],
+    "roundResults": {
+        "WILD_CARD": [
+            "KC",
+            "BUF",
+            "BAL",
+            "HOU",
+            "SF",
+            "DET"
+        ],
+        "DIVISIONAL": [
+            "KC",
+            "BAL",
+            "SF",
+            "DET"
+        ],
+        "CONF_CHAMP": [
+            "KC",
+            "SF"
+        ],
+        "SUPER_BOWL": [
+            "KC"
+        ]
+    },
+    "assertions": [
+        {
+            "type": "playoffEntryCount",
+            "expected": 3,
+            "message": "Should have 3 playoff entries"
+        },
+        {
+            "type": "playoffWinner",
+            "expected": "Alice",
+            "message": "Alice should win (ranked KC #1 - the Super Bowl winner)"
+        },
+        {
+            "type": "poolStatus",
+            "expected": true,
+            "field": "isLocked",
+            "message": "Pool should be locked after playoffs"
+        }
+    ]
+}

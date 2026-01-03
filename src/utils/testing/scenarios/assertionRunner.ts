@@ -79,6 +79,11 @@ function runSingleAssertion(
             return assertBracketWinner(assertion, pool);
         case 'bracketTopScore':
             return assertBracketTopScore(assertion, pool);
+        // Playoff-specific assertions
+        case 'playoffEntryCount':
+            return assertPlayoffEntryCount(assertion, pool);
+        case 'playoffWinner':
+            return assertPlayoffWinner(assertion, pool);
         default:
             return {
                 assertion,
@@ -273,5 +278,41 @@ function assertBracketTopScore(assertion: TestAssertion, pool: any): AssertionRe
         message: passed
             ? `✅ ${assertion.message} (${topScore} points)`
             : `❌ ${assertion.message} - Expected ${expected}, got ${topScore}`
+    };
+}
+
+// === PLAYOFF-SPECIFIC ASSERTIONS ===
+
+function assertPlayoffEntryCount(assertion: TestAssertion, pool: any): AssertionResult {
+    const entries = pool?.entries ? Object.keys(pool.entries).length : 0;
+    const expected = assertion.expected as number;
+    const passed = entries === expected;
+
+    return {
+        assertion,
+        passed,
+        actual: entries,
+        message: passed
+            ? `✅ ${assertion.message} (${entries} entries)`
+            : `❌ ${assertion.message} - Expected ${expected}, got ${entries}`
+    };
+}
+
+function assertPlayoffWinner(assertion: TestAssertion, pool: any): AssertionResult {
+    const entries = Object.values(pool?.entries || {}) as any[];
+    // Sort by totalScore descending
+    const sorted = [...entries].sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+    const winner = sorted[0];
+    const actual = winner?.userName || 'No winner';
+    const expected = assertion.expected as string;
+    const passed = actual === expected;
+
+    return {
+        assertion,
+        passed,
+        actual,
+        message: passed
+            ? `✅ ${assertion.message} - Winner: ${actual}`
+            : `❌ ${assertion.message} - Expected "${expected}", got "${actual}"`
     };
 }

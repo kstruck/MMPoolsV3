@@ -66,6 +66,17 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             };
             const { runScenario: runBracketScenario } = await import('./simulators/bracketSimulator');
             result = await runBracketScenario('bracket-basic', 'actual', bracketSettings);
+        } else if (poolType === 'NFL_PLAYOFFS') {
+            // Route to playoff simulator
+            const playoffSettings = {
+                ...scenario.poolConfig,
+                _fullScenario: {
+                    testEntries: (scenario as any).testEntries,
+                    roundResults: (scenario as any).roundResults
+                }
+            };
+            const { runScenario: runPlayoffScenario } = await import('./simulators/playoffSimulator');
+            result = await runPlayoffScenario('playoff-basic', 'actual', playoffSettings);
         } else {
             // SQUARES (default)
             const settings = {
