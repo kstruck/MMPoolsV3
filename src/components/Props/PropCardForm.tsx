@@ -11,9 +11,10 @@ interface PropCardFormProps {
     config?: PropsPool['props'];
     isLocked?: boolean;
     userCards?: PropCard[];
+    onOpenAuth?: () => void;
 }
 
-export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUser, poolId, config, isLocked, userCards }) => {
+export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUser, poolId, config, isLocked, userCards, onOpenAuth }) => {
     const effectivePoolId = poolId || gameState?.id;
     const effectiveConfig = config || gameState?.props;
     const effectiveIsLocked = isLocked ?? gameState?.isLocked ?? false;
@@ -358,7 +359,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                 You must be signed in to submit your picks for this pool.
                             </p>
                             <button
-                                onClick={() => window.location.hash = '#auth'}
+                                onClick={() => onOpenAuth?.()}
                                 className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-lg shadow-indigo-500/20"
                             >
                                 Sign In / Register

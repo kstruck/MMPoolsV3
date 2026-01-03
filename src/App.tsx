@@ -971,6 +971,7 @@ const App: React.FC = () => {
             onBack={() => window.location.hash = '#participant'}
             initialTab="admin"
             isManager={true}
+            onOpenAuth={() => setShowAuthModal(true)}
           />
           <Footer />
         </>
@@ -1276,6 +1277,7 @@ const App: React.FC = () => {
               isManager={isCurrentPoolManager}
               isAdmin={isSuperAdmin}
               onBack={() => { window.location.hash = ''; }}
+              onOpenAuth={() => setShowAuthModal(true)}
             />
           </div>
           <Footer />

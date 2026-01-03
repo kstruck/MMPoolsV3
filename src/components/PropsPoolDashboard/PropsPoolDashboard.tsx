@@ -18,9 +18,10 @@ interface PropsPoolDashboardProps {
     isAdmin?: boolean;
     onBack: () => void;
     initialTab?: 'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading';
+    onOpenAuth?: () => void;
 }
 
-export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack, initialTab = 'cards' }) => {
+export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack, initialTab = 'cards', onOpenAuth }) => {
     const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading'>(initialTab);
     const [allCards, setAllCards] = useState<PropCard[]>([]);
     const [showShareModal, setShowShareModal] = useState(false);
@@ -127,7 +128,8 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                             config={pool.props}
                             isLocked={pool.isLocked}
                             currentUser={user}
-                            userCards={allCards.filter(c => c.userId === user.id)}
+                            userCards={allCards.filter(c => c.userId === user?.id)}
+                            onOpenAuth={onOpenAuth}
                         />
                     </div>
                 )}
