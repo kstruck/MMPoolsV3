@@ -28,7 +28,8 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const [fetchedCards, setFetchedCards] = useState<PropCard[]>([]);
     const [viewingCardId, setViewingCardId] = useState<string | null>(null);
     const [editingCardId, setEditingCardId] = useState<string | null>(null); // NEW: editing mode
-    const [showNewCardForm, setShowNewCardForm] = useState(false);
+    // Auto-show new card form when no userCards provided (will hide once cards are fetched)
+    const [showNewCardForm, setShowNewCardForm] = useState(!userCards || userCards.length === 0);
 
     const activeCards = userCards || fetchedCards;
     const [isConfirming, setIsConfirming] = useState(false);
