@@ -811,7 +811,7 @@ export const SuperAdmin: React.FC = () => {
                                                                 </div>
                                                             </td>
                                                             <td className="p-4 flex gap-2">
-                                                                <a href={`#admin / ${pool.id} `} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</a>
+                                                                <a href={`#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</a>
                                                                 {!isBracket && (
                                                                     <button onClick={() => handleRunSim(pool as GameState)} className="text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 px-2 py-1 rounded">Sim</button>
                                                                 )}
