@@ -7,7 +7,7 @@
         "name": "Test Props Pool",
         "type": "PROPS",
         "cost": 10,
-        "maxCards": 3
+        "maxCards": 10
     },
     "questions": [
         {

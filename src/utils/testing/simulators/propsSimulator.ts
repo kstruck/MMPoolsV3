@@ -57,6 +57,8 @@ export async function runScenario(
             { id: 'q2', text: 'Default Question 2?', options: ['Yes', 'No'], points: 1 }
         ];
 
+        const poolConfig = scenarioData?.poolConfig || {};
+
         const poolData: any = {
             type: 'PROPS',
             name: poolName,
@@ -66,8 +68,8 @@ export async function runScenario(
             isPublic: false,
             props: {
                 enabled: true,
-                cost: settings?.cost || 10,
-                maxCards: settings?.maxCards || 3,
+                cost: poolConfig.cost || settings?.cost || 10,
+                maxCards: poolConfig.maxCards || settings?.maxCards || 10,  // Default to 10 for tests
                 questions: questions
             },
             entryCount: 0,
