@@ -159,17 +159,25 @@ export async function runScenario(
         for (const [userId, entry] of Object.entries(pool.entries || {})) {
             let score = 0;
 
+            // Scoring: Use inverse rank (rank 1 = 14 points, rank 14 = 1 point)
+            // This way, ranking teams higher (lower rank number) gives MORE points when they win
+            const getPoints = (rank: number) => (15 - rank);
+
             for (const teamId of (results.WILD_CARD || [])) {
-                score += (entry.rankings[teamId] || 0) * MULTIPLIERS.WILD_CARD;
+                const rank = entry.rankings[teamId] || 14; // Default to lowest
+                score += getPoints(rank) * MULTIPLIERS.WILD_CARD;
             }
             for (const teamId of (results.DIVISIONAL || [])) {
-                score += (entry.rankings[teamId] || 0) * MULTIPLIERS.DIVISIONAL;
+                const rank = entry.rankings[teamId] || 14;
+                score += getPoints(rank) * MULTIPLIERS.DIVISIONAL;
             }
             for (const teamId of (results.CONF_CHAMP || [])) {
-                score += (entry.rankings[teamId] || 0) * MULTIPLIERS.CONF_CHAMP;
+                const rank = entry.rankings[teamId] || 14;
+                score += getPoints(rank) * MULTIPLIERS.CONF_CHAMP;
             }
             for (const teamId of (results.SUPER_BOWL || [])) {
-                score += (entry.rankings[teamId] || 0) * MULTIPLIERS.SUPER_BOWL;
+                const rank = entry.rankings[teamId] || 14;
+                score += getPoints(rank) * MULTIPLIERS.SUPER_BOWL;
             }
 
             updatedEntries[userId] = { ...entry, totalScore: score };
