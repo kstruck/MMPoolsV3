@@ -33,6 +33,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       const isMultiSetLocal = gameState.numberSets === 4;
       if (!isMultiSetLocal) return;
 
+      // Guard: scores object may not exist for non-SQUARES pools (e.g., PROPS)
+      if (!gameState.scores) return;
+
       const period = gameState.scores.period || 1;
       const status = gameState.scores.gameStatus;
 
@@ -45,7 +48,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       else if (period === 3) setActiveSet('q3');
       else if (period === 2) setActiveSet('q2');
       else setActiveSet('q1');
-   }, [gameState.scores.period, gameState.scores.gameStatus, gameState.numberSets]);
+   }, [gameState.scores?.period, gameState.scores?.gameStatus, gameState.numberSets]);
 
    // --- Guest Key Init ---
    useEffect(() => {

@@ -337,7 +337,7 @@ const App: React.FC = () => {
 
     // Fetch if gameId exists OR (homeTeam AND awayTeam exist for fuzzy match)
     const canFetch = squaresPool.gameId || (squaresPool.homeTeam && squaresPool.awayTeam);
-    if (!canFetch || squaresPool.manualScoreOverride || squaresPool.scores.gameStatus === 'post') {
+    if (!canFetch || squaresPool.manualScoreOverride || squaresPool.scores?.gameStatus === 'post') {
       setSyncStatus('idle');
       return;
     }
@@ -748,7 +748,7 @@ const App: React.FC = () => {
         const aD = getLastDigit(away);
         // Standard Winner
         // Only calculate if scores exist (game started)
-        if (squaresPool.scores.gameStatus === 'in' || squaresPool.scores.gameStatus === 'post' || isFinal) {
+        if (squaresPool.scores?.gameStatus === 'in' || squaresPool.scores?.gameStatus === 'post' || isFinal) {
           const row = squaresPool.axisNumbers.away.indexOf(aD);
           const col = squaresPool.axisNumbers.home.indexOf(hD);
           if (row !== -1 && col !== -1) {
@@ -1428,8 +1428,8 @@ const App: React.FC = () => {
                               <div><p className="text-emerald-400 font-bold text-sm leading-none">Open</p><p className="text-slate-500 text-[10px]">Grid is available to choose squares</p></div>
                             </div>
                           );
-                          const status = squaresPool.scores.gameStatus;
-                          const isFinal = status === 'post' || !!squaresPool.scores.final;
+                          const status = squaresPool.scores?.gameStatus;
+                          const isFinal = status === 'post' || !!squaresPool.scores?.final;
                           const isLive = status === 'in';
                           if (isFinal) return (
                             <div className="flex items-center gap-2">
