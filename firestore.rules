@@ -96,8 +96,14 @@ service cloud.firestore {
       match /propCards/{userId} {
         // Read: Owner (Admin), The User themselves, or SuperAdmin
         allow read: if request.auth != null;
-        // Write: Only via Cloud Function 'purchasePropCard'
-        allow write: if false;
+        // Write: Only via Cloud Function 'purchasePropCard' normally, but allow SuperAdmin for tests/edits
+        allow write: if isSuperAdmin();
+      }
+
+      // BRACKET/PLAYOFF ENTRIES
+      match /entries/{entryId} {
+        allow read: if request.auth != null;
+        allow write: if isSuperAdmin();
       }
     }
     
