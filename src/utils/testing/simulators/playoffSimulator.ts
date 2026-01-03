@@ -1,7 +1,8 @@
 // NFL PLAYOFFS Pool Test Simulator
 // Creates a playoff pool, adds entries with team rankings, scores them, and verifies results
 
-import { getFirestore, doc, collection, addDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { dbService } from '../../../services/dbService';
 import type { PlayoffPool, PlayoffEntry, PlayoffTeam } from '../../../types';
 
 export interface PlayoffTestResult {
@@ -50,7 +51,7 @@ export async function runScenario(
     try {
         const db = getFirestore();
 
-        // === A. CREATE PLAYOFF POOL ===
+        // === A. CREATE PLAYOFF POOL via Cloud Function ===
         const poolName = settings?.name || `Playoff Test - ${new Date().toISOString().slice(11, 23)}`;
         addStep('Create Pool', 'success', `Creating playoff pool: ${poolName}`);
 
@@ -73,11 +74,10 @@ export async function runScenario(
         ];
 
         const now = Date.now();
-        const poolData: Partial<PlayoffPool> = {
+        const poolData: any = {
             type: 'NFL_PLAYOFFS',
             league: 'NFL',
             name: poolName,
-            ownerId: 'test-admin',
             season: settings?.season || '2025',
             createdAt: now,
             isLocked: true, // Already locked
@@ -98,14 +98,17 @@ export async function runScenario(
                         SUPER_BOWL: 20
                     }
                 }
-            }
+            },
+            // Required shims for createPool validation
+            costPerSquare: 0,
+            maxSquaresPerPlayer: 0
         };
 
-        const poolRef = await addDoc(collection(db, 'pools'), poolData);
-        poolId = poolRef.id;
+        // Use Cloud Function via dbService
+        poolId = await dbService.createPool(poolData);
         addStep('Create Pool', 'success', `Pool created with ID: ${poolId}`);
 
-        // === B. ADD TEST ENTRIES ===
+        // === B. ADD TEST ENTRIES (rankings stored in pool.entries map) ===
         const testEntries = scenarioData.testEntries || [
             { userName: 'Alice', rankings: { KC: 1, SF: 2, BUF: 3, DAL: 4, BAL: 5, DET: 6, HOU: 7, TB: 8, CLE: 9, PHI: 10, MIA: 11, LAR: 12, PIT: 13, GB: 14 }, tiebreaker: 48 },
             { userName: 'Bob', rankings: { SF: 1, KC: 2, DAL: 3, BUF: 4, DET: 5, BAL: 6, TB: 7, HOU: 8, PHI: 9, CLE: 10, LAR: 11, MIA: 12, GB: 13, PIT: 14 }, tiebreaker: 52 },
@@ -128,7 +131,12 @@ export async function runScenario(
                 };
             }
 
-            await updateDoc(doc(db, 'pools', poolId), { entries });
+            // Update pool with entries (SuperAdmin can update pool)
+            try {
+                await dbService.updatePool(poolId, { entries } as any);
+            } catch (e) {
+                await updateDoc(doc(db, 'pools', poolId), { entries });
+            }
             addStep('Add Entries', 'success', `Successfully added ${testEntries.length} playoff entries`);
         }
 
@@ -167,7 +175,11 @@ export async function runScenario(
             updatedEntries[userId] = { ...entry, totalScore: score };
         }
 
-        await updateDoc(doc(db, 'pools', poolId), { entries: updatedEntries });
+        try {
+            await dbService.updatePool(poolId, { entries: updatedEntries } as any);
+        } catch (e) {
+            await updateDoc(doc(db, 'pools', poolId), { entries: updatedEntries });
+        }
         addStep('Calculate Scores', 'success', 'Scores calculated and updated');
 
         // === D. VERIFY RESULTS ===
