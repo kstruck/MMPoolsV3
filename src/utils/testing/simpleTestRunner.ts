@@ -48,6 +48,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             const propsSettings = {
                 ...scenario.poolConfig,
                 _fullScenario: {
+                    poolConfig: (scenario as any).poolConfig,
                     questions: (scenario as any).questions,
                     testEntries: (scenario as any).testEntries,
                     grading: (scenario as any).grading
@@ -60,6 +61,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             const bracketSettings = {
                 ...scenario.poolConfig,
                 _fullScenario: {
+                    poolConfig: (scenario as any).poolConfig,
                     testEntries: (scenario as any).testEntries,
                     tournamentResults: (scenario as any).tournamentResults
                 }
@@ -71,6 +73,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             const playoffSettings = {
                 ...scenario.poolConfig,
                 _fullScenario: {
+                    poolConfig: (scenario as any).poolConfig,
                     testEntries: (scenario as any).testEntries,
                     roundResults: (scenario as any).roundResults
                 }

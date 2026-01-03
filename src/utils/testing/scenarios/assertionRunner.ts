@@ -163,7 +163,16 @@ function assertTotalPayout(assertion: TestAssertion, winners: any[]): AssertionR
 }
 
 function assertPoolStatus(assertion: TestAssertion, pool: any): AssertionResult {
-    const actual = pool?.scores?.gameStatus;
+    // Check specific field if provided (e.g., isLocked), otherwise check scores.gameStatus
+    const field = (assertion as any).field;
+    let actual: any;
+
+    if (field) {
+        actual = pool?.[field];
+    } else {
+        actual = pool?.scores?.gameStatus;
+    }
+
     const expected = assertion.expected;
     const passed = actual === expected;
 
