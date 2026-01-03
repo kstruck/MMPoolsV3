@@ -45,7 +45,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
         // if (userCards) return; // REMOVED: Always fetch to get global stats
         if (!effectivePoolId || !currentUser?.uid) return; // Use uid for subscription filter
 
-        const unsub = dbService.subscribeToAllPropCards(effectivePoolId, (cards) => {
+        const unsub = dbService.subscribeToPropCards(effectivePoolId, (cards) => {
             setAllPoolCards(cards); // Store all cards for stats
 
             if (!userCards) {

@@ -5,6 +5,9 @@ import { PropCardForm } from '../Props/PropCardForm'; // Reusing this for "My Ca
 import { PropGradingDashboard } from '../Props/PropGradingDashboard';
 import { PropLeaderboard } from '../Props/PropLeaderboard';
 import { PropStats } from '../Props/PropStats';
+import { GameScoreboard } from '../GameScoreboard';
+import { StatusCard } from '../StatusCard';
+import { PayoutSummaryCard } from '../PayoutSummaryCard';
 
 import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check } from 'lucide-react';
 import { PropsWizard as PropWizard } from '../PropsWizard/PropsWizard';
@@ -26,10 +29,9 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
     const [allCards, setAllCards] = useState<PropCard[]>([]);
     const [showShareModal, setShowShareModal] = useState(false);
 
-    // Subscribe to cards once at top level
     useEffect(() => {
         if (!pool.id) return;
-        const unsub = dbService.subscribeToAllPropCards(pool.id, (cards) => {
+        const unsub = dbService.subscribeToPropCards(pool.id, (cards) => {
             setAllCards(cards);
         });
         return () => unsub();
@@ -82,7 +84,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                         onClick={() => setActiveTab('cards')}
                         className={`pb-3 border-b-2 font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'cards' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}
                     >
-                        <Grid3X3 size={16} /> My Cards
+                        <Grid3X3 size={16} /> Overview
                     </button>
                     <button
                         onClick={() => setActiveTab('leaderboard')}
@@ -122,15 +124,49 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
             {/* Main Content */}
             <main className="max-w-7xl mx-auto px-4 py-8">
                 {activeTab === 'cards' && (
-                    <div className="max-w-3xl mx-auto">
-                        <PropCardForm
-                            poolId={pool.id}
-                            config={pool.props}
-                            isLocked={pool.isLocked}
-                            currentUser={user}
-                            userCards={allCards.filter(c => c.userId === user?.id)}
-                            onOpenAuth={onOpenAuth}
-                        />
+                    <div className="max-w-6xl mx-auto space-y-8">
+                        {/* Scoreboard */}
+                        <GameScoreboard gameState={pool as any} />
+
+                        {/* Status Grid */}
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <StatusCard
+                                gameState={pool as any}
+                                mode="props"
+                                totalEntries={allCards.length}
+                            />
+                            <PayoutSummaryCard
+                                gameState={pool as any}
+                                winners={[]} // Prop winners are handled differently or TBD
+                                mode="props"
+                                totalEntries={allCards.length}
+                            />
+                        </div>
+
+                        <div className="grid lg:grid-cols-2 gap-8 items-start">
+                            {/* Entry Form */}
+                            <div className="order-2 lg:order-1">
+                                <PropCardForm
+                                    poolId={pool.id}
+                                    config={pool.props}
+                                    isLocked={pool.isLocked}
+                                    currentUser={user}
+                                    userCards={allCards.filter(c => c.userId === user?.id)}
+                                    onOpenAuth={onOpenAuth}
+                                />
+                            </div>
+
+                            {/* Leaderboard Condensed */}
+                            <div className="order-1 lg:order-2">
+                                <PropLeaderboard
+                                    gameState={pool as any}
+                                    currentUser={user}
+                                    cards={allCards}
+                                    isManager={false} // Read only view here
+                                    isAdmin={false} // Read only view here
+                                />
+                            </div>
+                        </div>
                     </div>
                 )}
 

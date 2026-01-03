@@ -6,14 +6,16 @@ import { Lock, Trophy, Zap, HelpCircle, ExternalLink, Check, Copy, Shuffle } fro
 interface StatusCardProps {
     gameState: GameState;
     onOpenRules?: () => void;
+    mode?: 'squares' | 'props';
+    totalEntries?: number;
 }
 
-export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules }) => {
+export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, mode = 'squares', totalEntries = 0 }) => {
     const [statusTab, setStatusTab] = useState<'overview' | 'rules' | 'payment'>('overview');
     const [gPayCopied, setGPayCopied] = useState(false);
 
     // Helper to calculate winner? Not needed for Overview.
-    const squaresRemaining = 100 - gameState.squares.filter(s => s.owner).length;
+    const squaresRemaining = gameState.squares ? 100 - gameState.squares.filter(s => s.owner).length : 0;
 
     return (
         <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
@@ -50,7 +52,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules }
                                 if (!gameState.isLocked) return (
                                     <div className="flex items-center gap-2">
                                         <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span></span>
-                                        <div><p className="text-emerald-400 font-bold text-sm leading-none">Open</p><p className="text-slate-500 text-[10px]">Grid is available to choose squares</p></div>
+                                        <div><p className="text-emerald-400 font-bold text-sm leading-none">Open</p><p className="text-slate-500 text-[10px]">{mode === 'props' ? 'Entries are open' : 'Grid is available to choose squares'}</p></div>
                                     </div>
                                 );
                                 const status = gameState.scores?.gameStatus;
@@ -77,8 +79,17 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules }
                             })()}
                         </div>
                         <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{gameState.contactEmail || 'Admin'}</p></div>
-                        <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Cost Per Square:</h3><p className="text-white font-medium text-sm">${gameState.costPerSquare}</p></div>
-                        <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Squares Remaining:</h3><p className="text-white font-medium text-sm">{squaresRemaining}</p></div>
+                        {mode === 'props' ? (
+                            <>
+                                <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Entry Fee:</h3><p className="text-white font-medium text-sm">${gameState.props?.cost || 5} per card</p></div>
+                                <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Total Entries:</h3><p className="text-white font-medium text-sm">{totalEntries}</p></div>
+                            </>
+                        ) : (
+                            <>
+                                <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Cost Per Square:</h3><p className="text-white font-medium text-sm">${gameState.costPerSquare}</p></div>
+                                <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Squares Remaining:</h3><p className="text-white font-medium text-sm">{squaresRemaining}</p></div>
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -93,64 +104,88 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules }
                             />
                         </div>
 
-                        <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {gameState.maxSquaresPerPlayer || 'N/A'} squares per player</p></div>
+                        <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">{mode === 'props' ? `Max ${gameState.props?.maxCards || 1} cards per player` : `Max ${gameState.maxSquaresPerPlayer || 'N/A'} squares per player`}</p></div>
 
-                        {/* Event Payout Rule */}
-                        {gameState.ruleVariations.scoreChangePayout && (
-                            <div className="bg-slate-900 border border-emerald-500/30 rounded-xl p-3 text-sm">
-                                <h4 className="text-emerald-400 font-bold uppercase text-xs mb-1 flex items-center gap-1">
-                                    <Trophy size={12} /> Every Score Pays Rule
-                                </h4>
-                                <p className="text-slate-300 text-xs leading-relaxed">
-                                    This pool pays out whenever the score changes.
-                                    {gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? (
-                                        <span> <strong>Equal Split:</strong> The total prize pot is divided equally among all scoring events.</span>
-                                    ) : gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? (
-                                        <span> <strong>Hybrid Split:</strong> Weighted payouts for Final/Halftime, with the remainder split among all other scores.</span>
-                                    ) : (
-                                        <span> A fixed amount of <strong>${gameState.scoreChangePayoutAmount}</strong> is deducted from the pot for each score.</span>
-                                    )}
-                                    <br />
-                                    <span className="text-slate-500 italic mt-1 block">
-                                        Winning square is determined by the last digits of the NEW score.
-                                    </span>
-                                </p>
-                            </div>
+                        {mode === 'props' && (
+                            <>
+                                <div className="bg-slate-900 border border-indigo-500/30 rounded-xl p-3 text-sm">
+                                    <h4 className="text-indigo-400 font-bold uppercase text-xs mb-2 flex items-center gap-1">
+                                        <Trophy size={12} /> Side Hustle Rules
+                                    </h4>
+                                    <ul className="text-slate-300 text-xs leading-relaxed space-y-1 list-disc pl-4">
+                                        <li>Predictions relate to the upcoming game.</li>
+                                        <li>Most points wins the pot (or 1st place).</li>
+                                        <li><strong>Tiebreaker:</strong> Closest to Total Game Score.</li>
+                                    </ul>
+                                </div>
+
+                                <div className="mt-4">
+                                    <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Scoring:</h3>
+                                    <p className="text-slate-300 text-xs">Points are awarded for each correct answer. The specific point values are listed on the card entry form.</p>
+                                </div>
+                            </>
                         )}
 
-                        <div>
-                            <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Active Rules:</h3>
-                            <div className="flex flex-col gap-2 items-start">
-                                <button onClick={() => onOpenRules?.()} disabled={!onOpenRules} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left w-full">
-                                    {gameState.ruleVariations.quarterlyRollover ? (
-                                        <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
-                                            <Zap size={12} className="fill-emerald-400" /> Rollover Active
-                                        </div>
-                                    ) : (
-                                        <div className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold">Standard Payouts</div>
-                                    )}
-                                    {onOpenRules && <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors ml-auto" />}
-                                </button>
-
-                                {gameState.ruleVariations.reverseWinners && (
-                                    <button onClick={() => onOpenRules?.()} disabled={!onOpenRules} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1 w-full">
-                                        <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
-                                            <Zap size={12} className="fill-indigo-400" /> Reverse Winners Active
-                                        </div>
-                                        {onOpenRules && <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors ml-auto" />}
-                                    </button>
+                        {mode === 'squares' && (
+                            <>
+                                {/* Event Payout Rule */}
+                                {gameState.ruleVariations?.scoreChangePayout && (
+                                    <div className="bg-slate-900 border border-emerald-500/30 rounded-xl p-3 text-sm">
+                                        <h4 className="text-emerald-400 font-bold uppercase text-xs mb-1 flex items-center gap-1">
+                                            <Trophy size={12} /> Every Score Pays Rule
+                                        </h4>
+                                        <p className="text-slate-300 text-xs leading-relaxed">
+                                            This pool pays out whenever the score changes.
+                                            {gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? (
+                                                <span> <strong>Equal Split:</strong> The total prize pot is divided equally among all scoring events.</span>
+                                            ) : gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? (
+                                                <span> <strong>Hybrid Split:</strong> Weighted payouts for Final/Halftime, with the remainder split among all other scores.</span>
+                                            ) : (
+                                                <span> A fixed amount of <strong>${gameState.scoreChangePayoutAmount}</strong> is deducted from the pot for each score.</span>
+                                            )}
+                                            <br />
+                                            <span className="text-slate-500 italic mt-1 block">
+                                                Winning square is determined by the last digits of the NEW score.
+                                            </span>
+                                        </p>
+                                    </div>
                                 )}
 
-                                {gameState.numberSets === 4 && (
-                                    <button onClick={() => onOpenRules?.()} disabled={!onOpenRules} title="New random numbers are generated for every quarter (4 sets total)." className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1 w-full">
-                                        <div className="bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
-                                            <Shuffle size={12} className="text-blue-400" /> 4 Sets (Quarterly Numbers)
-                                        </div>
-                                        {onOpenRules && <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors ml-auto" />}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                                <div>
+                                    <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Active Rules:</h3>
+                                    <div className="flex flex-col gap-2 items-start">
+                                        <button onClick={() => onOpenRules?.()} disabled={!onOpenRules} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left w-full">
+                                            {gameState.ruleVariations.quarterlyRollover ? (
+                                                <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+                                                    <Zap size={12} className="fill-emerald-400" /> Rollover Active
+                                                </div>
+                                            ) : (
+                                                <div className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold">Standard Payouts</div>
+                                            )}
+                                            {onOpenRules && <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors ml-auto" />}
+                                        </button>
+
+                                        {gameState.ruleVariations.reverseWinners && (
+                                            <button onClick={() => onOpenRules?.()} disabled={!onOpenRules} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1 w-full">
+                                                <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
+                                                    <Zap size={12} className="fill-indigo-400" /> Reverse Winners Active
+                                                </div>
+                                                {onOpenRules && <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors ml-auto" />}
+                                            </button>
+                                        )}
+
+                                        {gameState.numberSets === 4 && (
+                                            <button onClick={() => onOpenRules?.()} disabled={!onOpenRules} title="New random numbers are generated for every quarter (4 sets total)." className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1 w-full">
+                                                <div className="bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
+                                                    <Shuffle size={12} className="text-blue-400" /> 4 Sets (Quarterly Numbers)
+                                                </div>
+                                                {onOpenRules && <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors ml-auto" />}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -196,6 +231,6 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules }
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 };

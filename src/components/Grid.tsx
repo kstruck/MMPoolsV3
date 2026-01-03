@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import type { GameState, Winner, PlayerDetails, User } from '../types';
+import type { GameState, Winner, PlayerDetails, User, PropCard } from '../types';
 import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon, Zap, Printer, ZoomIn, ZoomOut, DollarSign } from 'lucide-react';
 import { getTeamLogo } from '../constants';
 import { PropCardForm } from './Props/PropCardForm';
 import { PropLeaderboard } from './Props/PropLeaderboard';
 import { dbService } from '../services/dbService';
-import { GameScoreboard } from './GameScoreboard';
 import { StatusCard } from './StatusCard';
 import { PayoutSummaryCard } from './PayoutSummaryCard';
 
@@ -120,17 +119,18 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    }, [errorMsg]);
 
    const [viewMode, setViewMode] = useState<'grid' | 'props'>('grid');
-   const [userPropCard, setUserPropCard] = useState<any>(null);
+   const [allPropCards, setAllPropCards] = useState<PropCard[]>([]);
 
-   // Subscribe to user's prop card if props enabled
+   // Subscribe to prop cards for stats when in props mode
    useEffect(() => {
-      if (gameState.props?.enabled && currentUser) {
-         const unsub = dbService.subscribeToPropCard(gameState.id, currentUser.id, (card) => {
-            setUserPropCard(card);
-         });
-         return () => unsub();
-      }
-   }, [gameState.id, currentUser, gameState.props?.enabled]);
+      if (viewMode !== 'props' || !gameState.id) return;
+      const unsub = dbService.subscribeToPropCards(gameState.id, (cards) => setAllPropCards(cards));
+      return () => unsub();
+   }, [viewMode, gameState.id]);
+
+   const userPropCard = null; // We handle this inside PropCardForm now (or pass if needed)
+
+
 
    // Listen to view mode changes
    useEffect(() => {
@@ -859,13 +859,10 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          {viewMode === 'props' && (
             <div className="container mx-auto max-w-6xl px-4 pb-20 animate-in fade-in slide-in-from-bottom-4 space-y-8">
 
-               {/* 1. Scoreboard */}
-               <GameScoreboard gameState={gameState} />
-
-               {/* 2. Info Cards */}
+               {/* 1. Info Cards (Scoreboard removed to avoid duplication with App.tsx) */}
                <div className="grid lg:grid-cols-2 gap-8 items-stretch">
-                  <StatusCard gameState={gameState} />
-                  <PayoutSummaryCard gameState={gameState} winners={winners || []} />
+                  <StatusCard gameState={gameState} mode="props" totalEntries={allPropCards.length} />
+                  <PayoutSummaryCard gameState={gameState} winners={winners || []} mode="props" totalEntries={allPropCards.length} />
                </div>
 
                <div className="grid lg:grid-cols-2 gap-8 items-start">
