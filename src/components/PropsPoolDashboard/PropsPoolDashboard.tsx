@@ -9,6 +9,7 @@ import { PropStats } from '../Props/PropStats';
 import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check } from 'lucide-react';
 import { PropsWizard as PropWizard } from '../PropsWizard/PropsWizard';
 import { dbService } from '../../services/dbService';
+import { ShareModal } from '../modals/ShareModal';
 
 interface PropsPoolDashboardProps {
     pool: PropsPool;
@@ -22,6 +23,7 @@ interface PropsPoolDashboardProps {
 export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack, initialTab = 'cards' }) => {
     const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading'>(initialTab);
     const [allCards, setAllCards] = useState<PropCard[]>([]);
+    const [showShareModal, setShowShareModal] = useState(false);
 
     // Subscribe to cards once at top level
     useEffect(() => {
@@ -64,7 +66,10 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <button className="p-2 hover:bg-slate-800 rounded-lg text-indigo-400 hover:text-white transition-colors">
+                        <button
+                            onClick={() => setShowShareModal(true)}
+                            className="p-2 hover:bg-slate-800 rounded-lg text-indigo-400 hover:text-white transition-colors"
+                        >
                             <Share2 size={20} />
                         </button>
                     </div>
@@ -167,6 +172,13 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                     </div>
                 )}
             </main>
+
+            {/* Share Modal */}
+            <ShareModal
+                isOpen={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                shareUrl={`${window.location.origin}/#pool/${pool.id}`}
+            />
         </div>
     );
 };
