@@ -5,6 +5,9 @@ import { getTeamLogo } from '../constants';
 import { PropCardForm } from './Props/PropCardForm';
 import { PropLeaderboard } from './Props/PropLeaderboard';
 import { dbService } from '../services/dbService';
+import { GameScoreboard } from './GameScoreboard';
+import { StatusCard } from './StatusCard';
+import { PayoutSummaryCard } from './PayoutSummaryCard';
 
 interface GridProps {
    gameState: GameState;
@@ -854,7 +857,17 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
          {/* --- VIEW: SIDE HUSTLE --- */}
          {viewMode === 'props' && (
-            <div className="container mx-auto max-w-6xl px-4 pb-20 animate-in fade-in slide-in-from-bottom-4">
+            <div className="container mx-auto max-w-6xl px-4 pb-20 animate-in fade-in slide-in-from-bottom-4 space-y-8">
+
+               {/* 1. Scoreboard */}
+               <GameScoreboard gameState={gameState} />
+
+               {/* 2. Info Cards */}
+               <div className="grid lg:grid-cols-2 gap-8 items-stretch">
+                  <StatusCard gameState={gameState} />
+                  <PayoutSummaryCard gameState={gameState} winners={winners || []} />
+               </div>
+
                <div className="grid lg:grid-cols-2 gap-8 items-start">
                   {/* LEFT COLUMN: Entry Form */}
                   <div className="order-2 lg:order-1">

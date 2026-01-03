@@ -225,6 +225,7 @@ export interface Scores {
   clock?: string; // e.g. "12:45"
   period?: number; // 0=Pre, 1=Q1, 2=Q2, etc.
   startTime?: string; // ISO String or Display String
+  syncStatus?: 'searching' | 'found' | 'not-found';
 }
 
 export interface PayoutConfig {

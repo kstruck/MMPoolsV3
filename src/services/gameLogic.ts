@@ -26,8 +26,22 @@ export const calculateScenarioWinners = (state: GameState, scoringTeam: 'home' |
   if (!state.axisNumbers || !state.isLocked) return [];
 
   // Get current scores (use latest available or 0-0)
-  const currentHome = (state.scores.final?.home ?? state.scores.q3?.home ?? state.scores.half?.home ?? state.scores.q1?.home ?? 0);
-  const currentAway = (state.scores.final?.away ?? state.scores.q3?.away ?? state.scores.half?.away ?? state.scores.q1?.away ?? 0);
+  const currentHome = state.scores.current?.home ?? (state.scores.final?.home ?? state.scores.q3?.home ?? state.scores.half?.home ?? state.scores.q1?.home ?? 0);
+  const currentAway = state.scores.current?.away ?? (state.scores.final?.away ?? state.scores.q3?.away ?? state.scores.half?.away ?? state.scores.q1?.away ?? 0);
+
+  // Determine active axis based on game progress
+  let activeAxis = state.axisNumbers;
+  if (state.numberSets === 4 && state.quarterlyNumbers) {
+    if (!state.scores.q1) {
+      activeAxis = state.quarterlyNumbers.q1 || activeAxis;
+    } else if (!state.scores.half) {
+      activeAxis = state.quarterlyNumbers.q2 || activeAxis;
+    } else if (!state.scores.q3) {
+      activeAxis = state.quarterlyNumbers.q3 || activeAxis;
+    } else {
+      activeAxis = state.quarterlyNumbers.q4 || activeAxis;
+    }
+  }
 
   const scenarios = [1, 2, 3, 6, 7, 8]; // Common football scores
   const results: ScenarioResult[] = [];
@@ -43,8 +57,8 @@ export const calculateScenarioWinners = (state: GameState, scoringTeam: 'home' |
       awayDigit = getLastDigit(currentAway + points);
     }
 
-    const rowIndex = state.axisNumbers!.away.indexOf(awayDigit);
-    const colIndex = state.axisNumbers!.home.indexOf(homeDigit);
+    const rowIndex = activeAxis!.away.indexOf(awayDigit);
+    const colIndex = activeAxis!.home.indexOf(homeDigit);
 
     if (rowIndex !== -1 && colIndex !== -1) {
       const squareId = rowIndex * 10 + colIndex;

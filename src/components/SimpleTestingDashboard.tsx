@@ -104,8 +104,8 @@ export const SimpleTestingDashboard: React.FC = () => {
                         onClick={handleRunSingle}
                         disabled={isRunning || !selectedScenario}
                         className={`px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all ${isRunning || !selectedScenario
-                                ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                             }`}
                     >
                         <Play className="w-4 h-4" />
@@ -116,8 +116,8 @@ export const SimpleTestingDashboard: React.FC = () => {
                         onClick={handleRunAll}
                         disabled={isRunning}
                         className={`px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all ${isRunning
-                                ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                                : 'bg-amber-600 hover:bg-amber-500 text-white'
+                            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                            : 'bg-amber-600 hover:bg-amber-500 text-white'
                             }`}
                     >
                         <Play className="w-4 h-4" />
@@ -140,8 +140,8 @@ export const SimpleTestingDashboard: React.FC = () => {
                         {getStatusIcon(result.status)}
                         <h3 className="text-lg font-bold text-white">{result.scenarioName}</h3>
                         <span className={`px-2 py-1 rounded text-xs font-bold ${result.status === 'PASS' ? 'bg-green-500/20 text-green-400' :
-                                result.status === 'FAIL' ? 'bg-red-500/20 text-red-400' :
-                                    'bg-yellow-500/20 text-yellow-400'
+                            result.status === 'FAIL' ? 'bg-red-500/20 text-red-400' :
+                                'bg-yellow-500/20 text-yellow-400'
                             }`}>
                             {result.status}
                         </span>
@@ -189,6 +189,17 @@ export const SimpleTestingDashboard: React.FC = () => {
                                     <p className="font-bold text-white">{r.scenarioName}</p>
                                     {r.validation && (
                                         <p className="text-xs text-slate-400">{r.validation.summary}</p>
+                                    )}
+                                    {/* Show detailed failures if failed */}
+                                    {r.status === 'FAIL' && r.validation && (
+                                        <div className="mt-2 space-y-1 bg-red-950/30 p-2 rounded border border-red-500/20">
+                                            {r.validation.results.filter((res: any) => !res.passed).map((res: any, idx: number) => (
+                                                <p key={idx} className="text-xs text-red-300 flex items-start gap-1">
+                                                    <XCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                                                    {res.message}
+                                                </p>
+                                            ))}
+                                        </div>
                                     )}
                                     {r.error && (
                                         <p className="text-xs text-red-400">{r.error}</p>

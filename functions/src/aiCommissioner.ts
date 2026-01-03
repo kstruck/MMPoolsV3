@@ -177,6 +177,11 @@ export const onAIRequest = onDocumentCreated({
             rules: pool.ruleVariations
         },
         currentScore: pool.scores,
+        digits: {
+            current: pool.axisNumbers,
+            quarterly: pool.quarterlyNumbers || null,
+            numberSets: pool.numberSets || 1
+        },
         auditTrail // Crucial for "Numbers changed" claims
     };
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService'; // Assuming you have an exported db instance
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, where } from 'firebase/firestore';
 import type { AuditLogEvent, AuditEventType } from '../types';
 import { Shield, AlertTriangle, Info, FileJson, Clock, Lock, RefreshCw, Activity, DollarSign, User, Grid, Unlock } from 'lucide-react';
 
@@ -29,26 +29,39 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
 
     useEffect(() => {
         const auditRef = collection(db, 'pools', poolId, 'audit');
-        // Basic query - specific filters can be complex with Firestore, doing client-side filter for now if low volume,
-        // or simple 'in' queries if volume is high. For MVPs, client side filter of last 100 events is usually okay.
-        // Let's try to query mostly everything sorted by time.
-        const q = query(auditRef, orderBy('timestamp', 'desc'), limit(100));
+        let q;
+
+        // Dynamic query matching the filter (Server-side filtering)
+        // This ensures we get specific history even if it's old
+        if (filter === 'ALL') {
+            q = query(auditRef, orderBy('timestamp', 'desc'), limit(100));
+        } else {
+            const types = FILTER_MAP[filter];
+            if (types.length > 0) {
+                // If index is missing, this might fail in console, but it's the correct way to get data
+                q = query(auditRef, where('type', 'in', types), orderBy('timestamp', 'desc'), limit(100));
+            } else {
+                q = query(auditRef, orderBy('timestamp', 'desc'), limit(100));
+            }
+        }
 
         const unsubscribe = onSnapshot(q, (snap) => {
             const evts: AuditLogEvent[] = [];
             snap.forEach(doc => {
                 const d = doc.data();
-                // Map Firestore Timestamp to number if needed, or use as is
-                // Interface says timestamp: number
                 evts.push({ ...d, id: doc.id } as AuditLogEvent);
             });
             setEvents(evts);
             setLoading(false);
+        }, (error) => {
+            console.error("Audit log subscription failed:", error);
+            setLoading(false);
         });
 
         return () => unsubscribe();
-    }, [poolId]);
+    }, [poolId, filter]);
 
+    // Client filtering is now redundant but kept ensuring data integrity if switching fast
     const filteredEvents = events.filter(e => {
         if (filter === 'ALL') return true;
         const types = FILTER_MAP[filter];
