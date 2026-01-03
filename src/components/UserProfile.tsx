@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types';
 import { dbService } from '../services/dbService';
+import { auth } from '../firebase';
+import { authService } from '../services/authService';
 
 import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon } from 'lucide-react';
 
@@ -23,6 +25,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
     });
 
     const [isSaving, setIsSaving] = useState(false);
+    const [isVerifying, setIsVerifying] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
@@ -71,6 +74,24 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
             setMessage({ type: 'error', text: 'Failed to save changes. Please try again.' });
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleResendVerification = async () => {
+        setIsVerifying(true);
+        setMessage(null);
+        try {
+            if (auth.currentUser) {
+                await authService.sendVerificationEmail(auth.currentUser);
+                setMessage({ type: 'success', text: 'Verification email sent! Please check your inbox (and spam folder).' });
+            } else {
+                setMessage({ type: 'error', text: 'Authentication session missing. Please refresh the page.' });
+            }
+        } catch (error) {
+            console.error('Error sending verification email:', error);
+            setMessage({ type: 'error', text: 'Failed to send verification email. Please try again later.' });
+        } finally {
+            setIsVerifying(false);
         }
     };
 
@@ -163,6 +184,22 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                 <div className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-400 cursor-not-allowed">
                                     {user.email || 'No Email'}
                                 </div>
+                                {!user.emailVerified && (
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleResendVerification}
+                                            disabled={isVerifying}
+                                            className="text-xs text-amber-400 hover:text-amber-300 underline font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait"
+                                        >
+                                            {isVerifying ? (
+                                                <><Loader size={12} className="animate-spin" /> Sending...</>
+                                            ) : (
+                                                'Email not verified. Click to resend link.'
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

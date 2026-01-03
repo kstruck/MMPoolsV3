@@ -188,6 +188,17 @@ export const dbService = {
         }
     },
 
+    updatePropCard: async (poolId: string, cardId: string, updates: Partial<PropCard> | any) => {
+        try {
+            const cardRef = doc(db, 'pools', poolId, 'propCards', cardId);
+            await updateDoc(cardRef, updates);
+            console.log('[dbService] Prop card updated:', cardId);
+        } catch (error) {
+            console.error("[dbService] Error updating prop card:", error);
+            throw error;
+        }
+    },
+
     // Alias for Grid component compatibility - uses Cloud Function to bypass security rules
     joinWaitlist: async (poolId: string, entry: { email: string; name: string; timestamp: number }) => {
         try {

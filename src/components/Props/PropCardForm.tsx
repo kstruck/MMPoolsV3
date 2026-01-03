@@ -26,10 +26,11 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [fetchedCards, setFetchedCards] = useState<PropCard[]>([]);
+    const [allPoolCards, setAllPoolCards] = useState<PropCard[]>([]);
     const [viewingCardId, setViewingCardId] = useState<string | null>(null);
     const [editingCardId, setEditingCardId] = useState<string | null>(null); // NEW: editing mode
     // Auto-show new card form when no userCards provided (will hide once cards are fetched)
-    const [showNewCardForm, setShowNewCardForm] = useState(!userCards || userCards.length === 0);
+    const [showNewCardForm, setShowNewCardForm] = useState((!userCards || userCards.length === 0) && !effectiveIsLocked);
 
     const activeCards = userCards || fetchedCards;
     const [isConfirming, setIsConfirming] = useState(false);
@@ -41,16 +42,20 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
 
     // Subscribe to cards if not provided via props
     useEffect(() => {
-        if (userCards) return;
+        // if (userCards) return; // REMOVED: Always fetch to get global stats
         if (!effectivePoolId || !currentUser?.uid) return; // Use uid for subscription filter
 
         const unsub = dbService.subscribeToAllPropCards(effectivePoolId, (cards) => {
-            const myCards = cards.filter((c: any) => c.userId === currentUser.uid);
-            setFetchedCards(myCards);
+            setAllPoolCards(cards); // Store all cards for stats
 
-            // Auto-show new card form if no cards yet
-            if (myCards.length === 0) {
-                setShowNewCardForm(true);
+            if (!userCards) {
+                const myCards = cards.filter((c: any) => c.userId === currentUser.uid);
+                setFetchedCards(myCards);
+
+                // Auto-show new card form if no cards yet and not locked
+                if (myCards.length === 0 && !effectiveIsLocked) {
+                    setShowNewCardForm(true);
+                }
             }
         });
         return () => unsub();
@@ -60,10 +65,18 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const viewingCard = viewingCardId ? activeCards.find(c => (c as any).id === viewingCardId) : null;
 
     useEffect(() => {
-        if (userCards && userCards.length === 0) {
+        if (userCards && userCards.length === 0 && !effectiveIsLocked) {
             setShowNewCardForm(true);
         }
-    }, [userCards]);
+    }, [userCards, effectiveIsLocked]);
+
+    // Force close form if locked
+    useEffect(() => {
+        if (effectiveIsLocked) {
+            setShowNewCardForm(false);
+            setEditingCardId(null);
+        }
+    }, [effectiveIsLocked]);
 
     const handleInitPurchase = () => {
         if (!currentUser) return;
@@ -143,7 +156,11 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
         }
 
         try {
-            await dbService.updatePropCard(effectivePoolId, editingCardId, answers, Number(tiebreaker), cardName || undefined);
+            await dbService.updatePropCard(effectivePoolId, editingCardId, {
+                answers,
+                tiebreakerVal: Number(tiebreaker),
+                cardName: cardName || undefined
+            });
             // Reset edit state
             setEditingCardId(null);
             setViewingCardId(null);
@@ -228,7 +245,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         })}
                     </div>
 
-                    {canBuyMoreCards && !showNewCardForm && (
+                    {canBuyMoreCards && !showNewCardForm && !effectiveIsLocked && (
                         <button
                             onClick={() => { setViewingCardId(null); setShowNewCardForm(true); setAnswers({}); setTiebreaker(''); }}
                             className="mt-3 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold flex items-center justify-center gap-2"
@@ -406,12 +423,69 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             )}
 
             {/* Locked / Max Reached Message */}
-            {!showNewCardForm && !viewingCardId && activeCards.length > 0 && (
+            {!showNewCardForm && !viewingCardId && (
                 <div className="text-center p-6 text-slate-500">
                     {effectiveIsLocked ? (
                         <>
-                            <Lock size={24} className="mx-auto mb-2" />
-                            <p>Picks locked. Good luck!</p>
+                            <Lock size={24} className="mx-auto mb-2 text-rose-500" />
+                            <p className="text-rose-400 font-bold mb-6">Picks locked</p>
+
+                            {/* STATS DISPLAY */}
+                            <div className="text-left space-y-6 animate-in fade-in">
+                                <h3 className="text-xl font-bold text-white text-center mb-6 flex items-center justify-center gap-2">
+                                    <Trophy size={20} className="text-amber-400" />
+                                    Pool Statistics
+                                </h3>
+                                <div className="text-center text-xs text-slate-500 mb-4">
+                                    Based on {allPoolCards.length} entries
+                                </div>
+                                {questions.map((q, qIdx) => {
+                                    // Count answers
+                                    const counts = new Array(q.options.length).fill(0);
+                                    allPoolCards.forEach(c => {
+                                        const ans = c.answers[q.id];
+                                        if (ans !== undefined && ans >= 0 && ans < counts.length) {
+                                            counts[ans]++;
+                                        }
+                                    });
+
+                                    return (
+                                        <div key={q.id} className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                                            <h4 className="text-white font-medium mb-3 flex items-start gap-2">
+                                                <span className="text-slate-500 font-bold">{qIdx + 1}.</span>
+                                                {q.text}
+                                            </h4>
+                                            <div className="space-y-3">
+                                                {q.options.map((opt, optIdx) => {
+                                                    const count = counts[optIdx];
+                                                    const pct = allPoolCards.length > 0 ? Math.round((count / allPoolCards.length) * 100) : 0;
+                                                    const isCorrect = q.correctOption === optIdx;
+
+                                                    return (
+                                                        <div key={optIdx} className="relative">
+                                                            <div className="flex justify-between text-xs mb-1 text-slate-400 font-medium">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className={isCorrect ? 'text-emerald-400 font-bold' : ''}>
+                                                                        {opt}
+                                                                    </span>
+                                                                    {isCorrect && <Check size={12} className="text-emerald-400" />}
+                                                                </div>
+                                                                <span>{pct}% ({count})</span>
+                                                            </div>
+                                                            <div className="h-2 bg-slate-900 rounded-full overflow-hidden">
+                                                                <div
+                                                                    className={`h-full rounded-full ${isCorrect ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                                                                    style={{ width: `${pct}%`, opacity: count === 0 ? 0 : 1 }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
                         </>
                     ) : !canBuyMoreCards ? (
                         <>

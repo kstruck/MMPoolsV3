@@ -402,6 +402,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }));
   };
 
+  const updatePropPlayerDetails = async (uid: string, details: { name: string, email: string, phone: string, notes: string }) => {
+    const userCards = propCards.filter(c => c.userId === uid);
+    const updates: any = { userName: details.name, userEmail: details.email };
+    await Promise.all(userCards.map(c => dbService.updatePropCard(gameState.id, c.id, updates)));
+    setEditingPlayer(null);
+  };
+
+  const removePropPlayer = async (uid: string) => {
+    // No confirmation dialog (Sandbox restriction)
+    const userCards = propCards.filter(c => c.userId === uid);
+    await Promise.all(userCards.map(c => dbService.deletePropCard(gameState.id, c.id)));
+  };
+
 
   const updatePlayerSquares = (ownerName: string, updates: Partial<Square>) => {
     const newSquares = gameState.squares.map(sq =>
@@ -2050,24 +2063,92 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 ) : (
                   <div className="divide-y divide-slate-800">
                     {getPropPlayers().map((player) => (
-                      <div key={player.uid} className="bg-slate-900 hover:bg-slate-800/50 transition-colors p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
-                            <UserIcon size={20} className="text-slate-400" />
+                      <div key={player.uid} className="bg-slate-900 hover:bg-slate-800/50 transition-colors">
+                        <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.uid ? null : player.uid)}>
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
+                              <UserIcon size={20} className="text-slate-400" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-white text-sm">{player.name}</h4>
+                              <div className="flex gap-2 text-xs">
+                                <span className="text-slate-400">{player.cards.length} Cards</span>
+                                {player.totalOwed > 0 && <span className="text-rose-400 font-bold">Owes ${player.totalOwed}</span>}
+                                {player.totalOwed === 0 && <span className="text-emerald-400 font-bold">Paid in Full</span>}
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-bold text-white text-sm">{player.name}</h4>
-                            <div className="flex gap-2 text-xs">
-                              <span className="text-slate-400">{player.cards.length} Cards</span>
-                              {player.totalOwed > 0 && <span className="text-rose-400 font-bold">Owes ${player.totalOwed}</span>}
-                              {player.totalOwed === 0 && <span className="text-emerald-400 font-bold">Paid in Full</span>}
+
+                          <div className="flex items-center gap-4">
+                            {player.email && (
+                              <a href={`mailto:${player.email}?subject=${encodeURIComponent(gameState.name)} Payment Reminder`} onClick={(e) => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Email Player"><Mail size={16} /></a>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingPlayer({
+                                  originalName: player.uid, // Use UID as key
+                                  name: player.name,
+                                  email: player.email || '',
+                                  phone: '',
+                                  notes: ''
+                                });
+                              }}
+                              className="p-2 text-slate-400 hover:text-indigo-400 transition-colors"
+                              title="Edit Player"
+                            >
+                              <Settings size={16} />
+                            </button>
+                            <div className={`transition-transform duration-200 ${expandedPlayer === player.uid ? 'rotate-180' : ''}`}>
+                              <ArrowRight size={16} className="text-slate-600 rotate-90" />
                             </div>
                           </div>
                         </div>
-                        {/* Simplified actions/view for props */}
-                        <div className="text-xs text-slate-500">
-                          {player.email}
-                        </div>
+
+                        {expandedPlayer === player.uid && (
+                          <div className="px-4 pb-4 pl-16 animate-in slide-in-from-top-2">
+                            <div className="bg-slate-950 rounded-lg p-4 border border-slate-800">
+                              <div className="space-y-2">
+                                {player.cards.map((card: any, idx: number) => (
+                                  <div key={card.id} className="bg-slate-900 border border-slate-800 rounded p-3">
+                                    <div className="flex justify-between items-center mb-2">
+                                      <span className="text-sm font-bold text-slate-300">Card #{idx + 1}</span>
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => dbService.updatePropCard(gameState.id, card.id, { isPaid: !card.isPaid })}
+                                          className={`text-xs px-2 py-1 rounded font-bold border transition-colors ${card.isPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}
+                                        >
+                                          {card.isPaid ? 'PAID' : 'UNPAID'}
+                                        </button>
+                                        <button
+                                          onClick={() => dbService.deletePropCard(gameState.id, card.id)}
+                                          className="text-slate-600 hover:text-rose-500 transition-colors"
+                                          title="Delete Card"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    {/* Answers Summary */}
+                                    <div className="text-xs text-slate-500 grid grid-cols-2 gap-x-4 gap-y-1">
+                                      {gameState.props?.questions.map((q, i) => (
+                                        <div key={q.id} className="truncate">
+                                          <span className="font-bold text-slate-600 mr-1">{i + 1}.</span>
+                                          <span className={card.answers?.[q.id] ? 'text-slate-400' : 'text-slate-700 italic'}>
+                                            {card.answers?.[q.id] || 'No Answer'}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="mt-4 pt-4 border-t border-slate-800 flex justify-end">
+                                <button onClick={() => removePropPlayer(player.uid)} className="text-xs text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1"><Trash2 size={12} /> Remove Player & Delete All Cards</button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2100,7 +2181,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                     <div className="flex justify-end gap-2 pt-4">
                       <button onClick={() => setEditingPlayer(null)} className="px-4 py-2 text-slate-300 hover:text-white font-bold">Cancel</button>
-                      <button onClick={() => updatePlayerDetails(editingPlayer.originalName, editingPlayer)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold">Save Changes</button>
+                      <button
+                        onClick={() => {
+                          if (playerTab === 'props') {
+                            updatePropPlayerDetails(editingPlayer.originalName, editingPlayer);
+                          } else {
+                            updatePlayerDetails(editingPlayer.originalName, editingPlayer);
+                          }
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold"
+                      >
+                        Save Changes
+                      </button>
                     </div>
                   </div>
                 </div>

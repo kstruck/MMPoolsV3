@@ -183,6 +183,7 @@ export const authService = {
       await sendEmailVerification(user);
     } catch (e) {
       console.error("Error sending verification email:", e);
+      throw e;
     }
   },
 
