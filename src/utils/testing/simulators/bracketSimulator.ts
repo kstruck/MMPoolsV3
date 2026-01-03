@@ -1,7 +1,7 @@
 // BRACKET Pool Test Simulator
 // Creates a bracket pool, adds test entries with picks, scores them, and verifies results
 
-import { getFirestore, doc, collection, addDoc, getDocs, updateDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, collection, addDoc, getDocs, updateDoc } from 'firebase/firestore';
 import type { BracketPool, BracketEntry, Tournament, Game, TournamentSlot } from '../../../types';
 
 export interface BracketTestResult {

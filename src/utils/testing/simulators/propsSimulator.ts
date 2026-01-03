@@ -29,8 +29,8 @@ export interface PropsScenarioSettings {
 }
 
 export async function runScenario(
-    scenario: string,
-    mode: 'dry-run' | 'actual' | 'mock',
+    _scenario: string,
+    _mode: 'dry-run' | 'actual' | 'mock',
     settings?: PropsScenarioSettings
 ): Promise<PropsTestResult> {
     const steps: PropsTestResult['steps'] = [];
