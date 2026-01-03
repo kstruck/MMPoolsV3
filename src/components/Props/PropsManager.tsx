@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Trash2, Edit2, Check, Save, ChevronDown, ChevronUp, Search, Filter, X, Lightbulb } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PropQuestion, PropsPool, PropCard, PropSeed } from '../../types';
@@ -11,9 +11,9 @@ interface PropsManagerProps {
     isWizardMode?: boolean;
 }
 
-export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateConfig, allCards }) => {
+export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateConfig, allCards, isWizardMode }) => {
     // Local state for form management
-    const [questions, setQuestions] = useState<PropQuestion[]>(gameState.props.questions || []);
+    const [questions, setQuestions] = useState<PropQuestion[]>(gameState.props?.questions || []);
     const [editingId, setEditingId] = useState<string | null>(null);
 
     // Filter/Search State
@@ -58,7 +58,19 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
         });
     }, [questions, questionSearch, selectedCategory]);
 
-    const hasChanges = JSON.stringify(questions) !== JSON.stringify(gameState.props.questions);
+    const hasChanges = JSON.stringify(questions) !== JSON.stringify(gameState.props?.questions || []);
+
+    // Auto-sync questions to parent in wizard mode (so main SAVE button works)
+    useEffect(() => {
+        if (isWizardMode && updateConfig && hasChanges) {
+            updateConfig({
+                props: {
+                    ...gameState.props,
+                    questions: questions
+                }
+            });
+        }
+    }, [questions]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // --- Handlers ---
 
