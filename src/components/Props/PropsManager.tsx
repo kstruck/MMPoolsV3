@@ -166,7 +166,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-hidden">
+                        <div className="flex-1 min-h-0 overflow-hidden">
                             <SeedLibrary
                                 existingQuestions={questions}
                                 onAdd={(seed) => {
@@ -578,7 +578,7 @@ const SeedLibrary: React.FC<{
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-slate-700">
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-slate-700">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center h-full text-slate-500">
                         <div className="animate-spin w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full mb-4"></div>

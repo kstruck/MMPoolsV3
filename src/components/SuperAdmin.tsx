@@ -759,13 +759,22 @@ export const SuperAdmin: React.FC = () => {
                                                     const contact = users.find(u => u.id === ownerId)?.email || (isBracket ? 'N/A' : (pool as GameState).contactEmail);
 
                                                     let filledPct = 0;
+                                                    let filledDisplay = '';
                                                     if (isBracket) {
                                                         const bp = pool as any;
                                                         const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal;
                                                         filledPct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round(((bp.entryCount || 0) / max) * 100);
+                                                        filledDisplay = `${bp.entryCount || 0} Entries`;
+                                                    } else if (pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') {
+                                                        const pp = pool as any;
+                                                        const entryCount = pool.type === 'PROPS' ? (pp.entryCount || 0) : (pp.entries ? Object.keys(pp.entries).length : 0);
+                                                        filledPct = 0;
+                                                        filledDisplay = `${entryCount} Entries`;
                                                     } else {
                                                         const sp = pool as GameState;
-                                                        filledPct = sp.squares?.filter(s => s.owner).length || 0;
+                                                        const filledCount = sp.squares?.filter(s => s.owner).length || 0;
+                                                        filledPct = filledCount;
+                                                        filledDisplay = `${100 - filledCount} Left`;
                                                     }
 
                                                     return (
@@ -804,10 +813,12 @@ export const SuperAdmin: React.FC = () => {
                                                             <td className="p-4 text-slate-400 text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
                                                             <td className="p-4">
                                                                 <div className="flex items-center gap-2">
-                                                                    <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-                                                                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${filledPct}% ` }}></div>
-                                                                    </div>
-                                                                    <span className="text-xs text-slate-500">{filledPct}%</span>
+                                                                    {(pool.type === 'SQUARES' || isBracket) && (
+                                                                        <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                                                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${filledPct}%` }}></div>
+                                                                        </div>
+                                                                    )}
+                                                                    <span className="text-xs text-slate-500">{filledDisplay}</span>
                                                                 </div>
                                                             </td>
                                                             <td className="p-4 flex gap-2">
