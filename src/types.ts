@@ -492,6 +492,8 @@ export type AuditEventType =
   | 'ADMIN_OVERRIDE_WINNER'
   | 'ADMIN_OVERRIDE_DIGITS'
   | 'ADMIN_OVERRIDE_SQUARE_STATE'
+  | 'PROP_CARD_PURCHASED'
+  | 'PROP_QUESTION_GRADED'
   | 'AI_ARTIFACT_CREATED';
 
 export interface AuditLogEvent {

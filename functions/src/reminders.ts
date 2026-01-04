@@ -83,21 +83,25 @@ export const runReminders = functions.scheduler.onSchedule("every 15 minutes", a
     console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check`);
 
     for (const doc of poolsSnapshot.docs) {
-        // CRITICAL FIX: doc.data() does NOT include the document ID!
-        // We must add it manually for pool.id to work in downstream functions.
-        const pool = { id: doc.id, ...doc.data() } as GameState;
+        try {
+            // CRITICAL FIX: doc.data() does NOT include the document ID!
+            // We must add it manually for pool.id to work in downstream functions.
+            const pool = { id: doc.id, ...doc.data() } as GameState;
 
-        if (!pool.reminders) continue; // Skip if not configured
+            if (!pool.reminders) continue; // Skip if not configured
 
-        // 1. PAYMENT REMINDERS
-        if (pool.reminders.payment?.enabled) {
-            await checkPaymentReminders(pool, now);
-        }
+            // 1. PAYMENT REMINDERS
+            if (pool.reminders.payment?.enabled) {
+                await checkPaymentReminders(pool, now);
+            }
 
-        // 2. LOCK REMINDERS
-        if (pool.reminders.lock?.enabled) {
-            console.log(`[runReminders] Checking lock for pool ${pool.id}: lockAt=${pool.reminders.lock.lockAt}, isLocked=${pool.isLocked}`);
-            await checkLockReminders(pool, now);
+            // 2. LOCK REMINDERS
+            if (pool.reminders.lock?.enabled) {
+                console.log(`[runReminders] Checking lock for pool ${pool.id}: lockAt=${pool.reminders.lock.lockAt}, isLocked=${pool.isLocked}`);
+                await checkLockReminders(pool, now);
+            }
+        } catch (poolError: any) {
+            console.error(`[runReminders] Error processing pool ${doc.id}:`, poolError);
         }
     }
     console.log(`[runReminders] Completed reminder check`);
@@ -270,7 +274,17 @@ async function checkLockReminders(pool: GameState, now: number) {
     const settings = pool.reminders!.lock;
     if (!settings.lockAt) return;
 
-    const msUntilLock = settings.lockAt - now;
+    // Robust handling of lockAt (could be number or Timestamp)
+    const lockAtNum = typeof settings.lockAt === 'number'
+        ? settings.lockAt
+        : (settings.lockAt as any)?.toMillis?.() || new Date(settings.lockAt as any).getTime();
+
+    if (isNaN(lockAtNum)) {
+        console.warn(`[checkLockReminders] Invalid lockAt for pool ${pool.id}:`, settings.lockAt);
+        return;
+    }
+
+    const msUntilLock = lockAtNum - now;
     const minutesUntilLock = msUntilLock / 1000 / 60;
 
     if (minutesUntilLock <= 0) {

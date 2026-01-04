@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../services/dbService'; // Assuming you have an exported db instance
-import { collection, query, orderBy, limit, onSnapshot, where } from 'firebase/firestore';
+import { db } from '../firebase';
+import { collection, query, orderBy, onSnapshot, where, limit } from 'firebase/firestore';
 import type { AuditLogEvent, AuditEventType } from '../types';
-import { Shield, AlertTriangle, Info, FileJson, Clock, Lock, RefreshCw, Activity, DollarSign, User, Grid, Unlock } from 'lucide-react';
+import {
+    Shield, AlertTriangle, Info, FileJson, Clock, Lock,
+    RefreshCw, Activity, DollarSign, User, Grid, Unlock,
+    HelpCircle, UserPlus
+} from 'lucide-react';
 
 interface AuditLogProps {
     poolId: string;
@@ -13,10 +17,10 @@ type FilterType = 'ALL' | 'SQUARES' | 'LOCK' | 'DIGITS' | 'SCORES' | 'WINNERS' |
 
 const FILTER_MAP: Record<FilterType, AuditEventType[]> = {
     'ALL': [],
-    'SQUARES': ['SQUARE_RESERVED', 'SQUARE_RELEASED'],
+    'SQUARES': ['SQUARE_RESERVED', 'SQUARE_RELEASED', 'PROP_CARD_PURCHASED'],
     'LOCK': ['POOL_LOCKED', 'POOL_UNLOCKED', 'POOL_CREATED'],
     'DIGITS': ['DIGITS_GENERATED'],
-    'SCORES': ['SCORE_FINALIZED'],
+    'SCORES': ['SCORE_FINALIZED', 'ADMIN_OVERRIDE_SCORE', 'PROP_QUESTION_GRADED'],
     'WINNERS': ['WINNER_COMPUTED'],
     'OVERRIDES': ['ADMIN_OVERRIDE_SCORE', 'ADMIN_OVERRIDE_WINNER', 'ADMIN_OVERRIDE_DIGITS', 'ADMIN_OVERRIDE_SQUARE_STATE']
 };
@@ -84,6 +88,8 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
         if (type === 'WINNER_COMPUTED') return <DollarSign size={16} className="text-yellow-400" />;
         if (type === 'SQUARE_RESERVED') return <User size={16} className="text-blue-400" />;
         if (type === 'SQUARE_RELEASED') return <User size={16} className="text-slate-400" />;
+        if (type === 'ADMIN_OVERRIDE_SCORE' || type === 'PROP_QUESTION_GRADED') return <HelpCircle className="text-amber-400" size={16} />;
+        if (type === 'PROP_CARD_PURCHASED') return <UserPlus className="text-indigo-400" size={16} />;
         if (type.startsWith('ADMIN_OVERRIDE')) return <AlertTriangle size={16} className="text-rose-500" />;
         return <Info size={16} className="text-slate-400" />;
     };

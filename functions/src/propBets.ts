@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from 'firebase-admin';
 import { PropCard, GameState } from './types';
+import { writeAuditEvent } from './audit';
 
 // 1. Purchase Prop Card (Supports multiple cards per user)
 // 1. Purchase Prop Card (Supports multiple cards per user)
@@ -81,6 +82,16 @@ export const purchasePropCard = onCall(async (request) => {
         entryCount: admin.firestore.FieldValue.increment(1)
     });
 
+    // Audit Log
+    await writeAuditEvent({
+        poolId,
+        type: 'PROP_CARD_PURCHASED',
+        message: `${finalUserName} purchased a Prop Card: ${cardName || 'Card'}`,
+        severity: 'INFO',
+        actor: request.auth ? { uid: request.auth.uid, role: 'USER', label: finalUserName } : { uid: userId, role: 'GUEST', label: finalUserName },
+        payload: { userId, cardName, timestamp: card.purchasedAt }
+    });
+
     return { success: true, cardCount: existingCards.size + 1 };
 });
 
@@ -153,6 +164,16 @@ export const gradeProp = onCall(async (request) => {
 
     await batch.commit();
 
+    // Audit Log
+    await writeAuditEvent({
+        poolId,
+        type: 'PROP_QUESTION_GRADED',
+        message: `Question Graded: "${questions[qIndex].text}"`,
+        severity: 'INFO',
+        actor: { uid: request.auth.uid, role: 'ADMIN', label: 'Admin' },
+        payload: { questionId, correctOptionIndex }
+    });
+
     return { success: true, updated: cardsSnap.size };
 });
 
@@ -200,6 +221,16 @@ export const updatePropCard = onCall(async (request) => {
         tiebreakerVal: Number(tiebreakerVal) || cardData.tiebreakerVal,
         cardName: cardName || cardData.cardName,
         updatedAt: Date.now()
+    });
+
+    // Audit Log
+    await writeAuditEvent({
+        poolId,
+        type: 'ADMIN_OVERRIDE_SQUARE_STATE', // Reusing OR could add PROP_CARD_UPDATED
+        message: `${cardData.userName} updated Prop Card: ${cardName || cardData.cardName}`,
+        severity: 'INFO',
+        actor: { uid: userId, role: 'USER', label: cardData.userName },
+        payload: { cardId, cardName }
     });
 
     return { success: true };

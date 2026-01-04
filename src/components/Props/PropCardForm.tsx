@@ -43,13 +43,13 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     // Subscribe to cards if not provided via props
     useEffect(() => {
         // if (userCards) return; // REMOVED: Always fetch to get global stats
-        if (!effectivePoolId || !currentUser?.uid) return; // Use uid for subscription filter
+        if (!effectivePoolId || !currentUser?.id) return; // Use id (uid) for subscription filter
 
         const unsub = dbService.subscribeToPropCards(effectivePoolId, (cards) => {
             setAllPoolCards(cards); // Store all cards for stats
 
             if (!userCards) {
-                const myCards = cards.filter((c: any) => c.userId === currentUser.uid);
+                const myCards = cards.filter((c: any) => c.userId === currentUser.id);
                 setFetchedCards(myCards);
 
                 // Auto-show new card form if no cards yet and not locked
@@ -59,7 +59,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             }
         });
         return () => unsub();
-    }, [effectivePoolId, currentUser?.uid]);
+    }, [effectivePoolId, currentUser?.id]);
 
     const canBuyMoreCards = activeCards.length < maxCards;
     const viewingCard = viewingCardId ? activeCards.find(c => (c as any).id === viewingCardId) : null;
