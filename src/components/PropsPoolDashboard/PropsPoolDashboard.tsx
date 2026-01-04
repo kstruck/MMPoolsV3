@@ -43,7 +43,10 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
     const showStats = pool.isLocked || isManager || isAdmin;
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white pb-20">
+        <div
+            className="min-h-screen text-white pb-20 transition-colors duration-500"
+            style={{ backgroundColor: pool.branding?.backgroundColor || '#0f172a' }}
+        >
             {/* Header */}
             <header className="bg-slate-900/50 backdrop-blur-md relative border-b border-slate-800">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -52,9 +55,15 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                             <ChevronLeft size={20} />
                         </button>
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-600/20">
-                                🎲
-                            </div>
+                            {pool.branding?.logoUrl ? (
+                                <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-800 p-1 shadow-lg">
+                                    <img src={pool.branding.logoUrl} alt={pool.name} className="max-w-full max-h-full object-contain" />
+                                </div>
+                            ) : (
+                                <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-600/20">
+                                    🎲
+                                </div>
+                            )}
                             <div>
                                 <h1 className="font-bold text-lg leading-tight">{pool.name}</h1>
                                 <div className="flex items-center gap-2 text-xs text-slate-500">
