@@ -35,7 +35,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
     const [archiveTab, setArchiveTab] = useState<'active' | 'archived'>('active');
     const [filterCharity, setFilterCharity] = useState(false);
     const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'locked' | 'live' | 'final'>('all');
-    const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 10, mid 10-50, high > 50
+    const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 20, mid 20-50, high > 50
     const [selectedLeague, setSelectedLeague] = useState<string>('all');
     const [sortBy, setSortBy] = useState<'name' | 'date' | 'price' | 'fill'>('date');
 
@@ -74,14 +74,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                     const bp = p as any; // BracketPool
                     isClosed = bp.status === 'COMPLETED';
                     isLocked = bp.status === 'LOCKED' || bp.status === 'COMPLETED';
-                    // isLive not really applicable or checked via dates
                 } else if (p.type === 'SQUARES') {
                     const sp = p as GameState;
                     isClosed = sp.scores?.gameStatus === 'post';
                     isLive = sp.scores?.gameStatus === 'in';
                     isLocked = sp.isLocked;
                 } else {
-                    // NFL_PLAYOFFS, PROPS, or other types
                     isClosed = false;
                     isLive = false;
                     isLocked = (p as any).isLocked || false;
@@ -129,17 +127,17 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
             if (sortBy === 'date') {
                 const aDate = aIsBracket ? 0 : new Date((a as GameState).scores?.startTime || 0).getTime();
                 const bDate = bIsBracket ? 0 : new Date((b as GameState).scores?.startTime || 0).getTime();
-                return bDate - aDate; // Newest first
+                return bDate - aDate;
             }
             if (sortBy === 'price') {
                 const aPrice = aIsBracket ? ((a as any).settings?.entryFee || 0) : (a as GameState).costPerSquare;
                 const bPrice = bIsBracket ? ((b as any).settings?.entryFee || 0) : (b as GameState).costPerSquare;
-                return bPrice - aPrice; // Highest first
+                return bPrice - aPrice;
             }
             if (sortBy === 'fill') {
                 const aFill = aIsBracket ? 0 : a.type === 'SQUARES' ? (a as GameState).squares?.filter(s => s.owner).length || 0 : 0;
                 const bFill = bIsBracket ? 0 : b.type === 'SQUARES' ? (b as GameState).squares?.filter(s => s.owner).length || 0 : 0;
-                return bFill - aFill; // Fullest first
+                return bFill - aFill;
             }
             return 0;
         });
@@ -375,9 +373,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         let charityEnabled = false;
 
                                         if (isBracket) {
-                                            const bp = pool as any; // BracketPool
+                                            const bp = pool as any;
                                             filled = bp.entryCount || 0;
-                                            const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal; // Mock 100 if unlimited for progress
+                                            const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal;
                                             pct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round((filled / max) * 100);
                                             homeTeam = 'Tournament';
                                             awayTeam = 'Bracket';
@@ -395,10 +393,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                             isLocked = sp.isLocked;
                                             charityEnabled = !!sp.charity?.enabled;
                                         } else {
-                                            // NFL_PLAYOFFS or PROPS
                                             const pp = pool as any;
                                             filled = pp.entryCount || 0;
-                                            pct = 0; // No percentage for these types
+                                            pct = 0;
                                             homeTeam = pp.name || 'Pool';
                                             awayTeam = pool.type === 'NFL_PLAYOFFS' ? 'Playoffs' : 'Props';
                                             cost = pp.settings?.entryFee || 0;
@@ -413,11 +410,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                     </div>
                                                 )}
 
-                                                {/* CLICKABLE AREA FOR MANAGE */}
                                                 <div className="cursor-pointer flex-1" onClick={() => window.location.hash = `#admin/${pool.id}`}>
                                                     <div className="flex justify-between items-start mb-4 relative z-10">
                                                         <div className="flex items-center gap-3">
-                                                            {/* Initial Icon */}
                                                             <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-lg font-bold text-indigo-400 group-hover:scale-105 transition-transform">
                                                                 {pool.name.substring(0, 2).toUpperCase()}
                                                             </div>
@@ -438,7 +433,6 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                         </div>
                                                     </div>
 
-                                                    {/* Matchup */}
                                                     <div className="bg-black/30 rounded-lg p-3 border border-slate-800/50 mb-4 relative z-10">
                                                         <div className="flex items-center justify-between mb-2">
                                                             <div className="flex items-center gap-2">
@@ -468,126 +462,120 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                         </div>
                                                     </div>
 
-                                                    {/* Progress & Meta */}
-                                                    <div className="flex items-center gap-4">
+                                                    <div className="flex items-center gap-4 mb-4">
                                                         <div className="flex items-center gap-1.5">
                                                             {(isBracket || pool.type === 'SQUARES') && (
                                                                 <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                                                                     <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }}></div>
                                                                 </div>
                                                             )}
-                                                            <span>{(isBracket || pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') ? `${filled} Entries` : `${100 - filled} Left`}</span>
+                                                            <span className="text-xs font-medium text-slate-400">{(isBracket || pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') ? `${filled} Entries` : `${100 - filled} Left`}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {!isLocked ? (
+                                                                <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[10px] font-bold uppercase">Open</span>
+                                                            ) : (
+                                                                <span className="text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 text-[10px] font-bold uppercase">Locked</span>
+                                                            )}
                                                         </div>
                                                     </div>
+                                                </div>
 
-                                                    <div className="flex items-center gap-2">
-                                                        {!isLocked ? (
-                                                            <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Open</span>
-                                                        ) : (
-                                                            <span className="text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Locked</span>
-                                                        )}
-                                                    </div>
-
-                                                    {/* ACTION BUTTONS */}
-                                                    <div className="grid grid-cols-12 gap-2 relative z-20 pt-4 border-t border-slate-800/50">
-                                                        <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#admin/${pool.id}`; }} className="col-span-4 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage</button>
-                                                        <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#pool/${pool.id}`; }} className="col-span-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View</button>
-                                                        {onDuplicatePool && (
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); onDuplicatePool(pool.id); }}
-                                                                className="col-span-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg flex items-center justify-center transition-all border border-slate-700"
-                                                                title="Duplicate Pool"
-                                                            >
-                                                                <Copy size={14} />
-                                                            </button>
-                                                        )}
-                                                        {onArchivePool && (
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); onArchivePool(pool.id, archiveTab !== 'archived'); }}
-                                                                className={`col-span-2 rounded-lg flex items-center justify-center transition-all border ${archiveTab === 'archived'
-                                                                    ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20'
-                                                                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20'
-                                                                    }`}
-                                                                title={archiveTab === 'archived' ? 'Restore Pool' : 'Archive Pool'}
-                                                            >
-                                                                {archiveTab === 'archived' ? <RotateCcw size={14} /> : <Archive size={14} />}
-                                                            </button>
-                                                        )}
-                                                        <button onClick={(e) => { e.stopPropagation(); setDeleteModal({ isOpen: true, poolId: pool.id, poolName: pool.name }); }} className="col-span-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/50 rounded-lg flex items-center justify-center transition-all"><Trash2 size={14} /></button>
-                                                    </div>
+                                                <div className="grid grid-cols-12 gap-2 relative z-20 pt-4 border-t border-slate-800/50 mt-auto">
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#admin/${pool.id}`; }} className="col-span-4 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#pool/${pool.id}`; }} className="col-span-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View</button>
+                                                    {onDuplicatePool && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); onDuplicatePool(pool.id); }}
+                                                            className="col-span-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg flex items-center justify-center transition-all border border-slate-700"
+                                                            title="Duplicate Pool"
+                                                        >
+                                                            <Copy size={14} />
+                                                        </button>
+                                                    )}
+                                                    {onArchivePool && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); onArchivePool(pool.id, archiveTab !== 'archived'); }}
+                                                            className={`col-span-2 rounded-lg flex items-center justify-center transition-all border ${archiveTab === 'archived'
+                                                                ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20'
+                                                                : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20'
+                                                                }`}
+                                                            title={archiveTab === 'archived' ? 'Restore Pool' : 'Archive Pool'}
+                                                        >
+                                                            {archiveTab === 'archived' ? <RotateCcw size={14} /> : <Archive size={14} />}
+                                                        </button>
+                                                    )}
+                                                    <button onClick={(e) => { e.stopPropagation(); setDeleteModal({ isOpen: true, poolId: pool.id, poolName: pool.name }); }} className="col-span-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/50 rounded-lg flex items-center justify-center transition-all px-1"><Trash2 size={14} /></button>
                                                 </div>
                                             </div>
                                         );
                                     })}
                                 </div>
-                                </section>
                             )}
+                        </div>
                     </div>
-                    </div>
-                </main >
+                )}
+            </main>
 
-    {/* Delete Confirmation Modal */ }
-{
-    deleteModal.isOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-md w-full relative">
-                <button onClick={() => { setDeleteModal({ isOpen: false, poolId: '', poolName: '' }); setDeleteConfirmText(''); }} className="absolute top-4 right-4 text-slate-400 hover:text-white">
-                    <X size={20} />
-                </button>
+            {deleteModal.isOpen && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-md w-full relative">
+                        <button onClick={() => { setDeleteModal({ isOpen: false, poolId: '', poolName: '' }); setDeleteConfirmText(''); }} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+                            <X size={20} />
+                        </button>
 
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center">
-                        <AlertTriangle size={24} className="text-rose-400" />
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-bold text-white">Delete Pool</h3>
-                        <p className="text-sm text-slate-400">This action cannot be undone</p>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center">
+                                <AlertTriangle size={24} className="text-rose-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">Delete Pool</h3>
+                                <p className="text-sm text-slate-400">This action cannot be undone</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900 rounded-lg p-4 mb-4 border border-slate-700">
+                            <p className="text-sm text-slate-300 mb-3">
+                                To confirm deletion, please type the pool name:
+                            </p>
+                            <p className="text-sm font-mono bg-slate-950 px-3 py-2 rounded border border-slate-800 text-amber-400 mb-3">
+                                {deleteModal.poolName}
+                            </p>
+                            <input
+                                type="text"
+                                value={deleteConfirmText}
+                                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                placeholder="Type pool name here..."
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                            />
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => { setDeleteModal({ isOpen: false, poolId: '', poolName: '' }); setDeleteConfirmText(''); }}
+                                className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (deleteConfirmText === deleteModal.poolName) {
+                                        onDeletePool(deleteModal.poolId);
+                                        setDeleteModal({ isOpen: false, poolId: '', poolName: '' });
+                                        setDeleteConfirmText('');
+                                    }
+                                }}
+                                disabled={deleteConfirmText !== deleteModal.poolName}
+                                className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Trash2 size={16} /> Delete Forever
+                            </button>
+                        </div>
                     </div>
                 </div>
+            )}
 
-                <div className="bg-slate-900 rounded-lg p-4 mb-4 border border-slate-700">
-                    <p className="text-sm text-slate-300 mb-3">
-                        To confirm deletion, please type the pool name:
-                    </p>
-                    <p className="text-sm font-mono bg-slate-950 px-3 py-2 rounded border border-slate-800 text-amber-400 mb-3">
-                        {deleteModal.poolName}
-                    </p>
-                    <input
-                        type="text"
-                        value={deleteConfirmText}
-                        onChange={(e) => setDeleteConfirmText(e.target.value)}
-                        placeholder="Type pool name here..."
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
-                    />
-                </div>
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={() => { setDeleteModal({ isOpen: false, poolId: '', poolName: '' }); setDeleteConfirmText(''); }}
-                        className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={() => {
-                            if (deleteConfirmText === deleteModal.poolName) {
-                                onDeletePool(deleteModal.poolId);
-                                setDeleteModal({ isOpen: false, poolId: '', poolName: '' });
-                                setDeleteConfirmText('');
-                            }
-                        }}
-                        disabled={deleteConfirmText !== deleteModal.poolName}
-                        className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
-                    >
-                        <Trash2 size={16} /> Delete Forever
-                    </button>
-                </div>
-            </div>
+            <Footer />
         </div>
-    )
-}
-
-<Footer />
-        </div >
     );
 };
