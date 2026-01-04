@@ -759,24 +759,38 @@ export const syncGameStatus = onSchedule({
     let errorCount = 0;
 
     try {
-        // 1. Fetch Active Pools
-        const poolsSnap = await db.collection("pools")
+        // 1. Fetch Active Pools AND Recently Completed Pools
+        // Get active/in-progress pools
+        const activePoolsSnap = await db.collection("pools")
             .where("scores.gameStatus", "!=", "post")
             .get();
 
-        if (poolsSnap.empty) {
+        // Also get recently completed pools (last 48 hours) to ensure score events are captured
+        // This is critical for Every Score Pays pools that may complete quickly
+        const twoDaysAgo = Date.now() - (48 * 60 * 60 * 1000);
+        const completedPoolsSnap = await db.collection("pools")
+            .where("scores.gameStatus", "==", "post")
+            .where("updatedAt", ">=", admin.firestore.Timestamp.fromMillis(twoDaysAgo))
+            .get();
+
+        // Combine both result sets
+        const allPools = [...activePoolsSnap.docs, ...completedPoolsSnap.docs];
+
+        if (allPools.length === 0) {
             await db.collection('system_logs').add({
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
                 type: 'SYNC_GAME_STATUS',
                 status: 'idle',
-                message: 'No active pools found',
+                message: 'No active or recently completed pools found',
                 durationMs: Date.now() - startTime
             });
             return;
         }
 
+        console.log(`[Sync] Processing ${allPools.length} pools (${activePoolsSnap.size} active, ${completedPoolsSnap.size} recently completed)`);
+
         // 2. Process Each Pool
-        for (const doc of poolsSnap.docs) {
+        for (const doc of allPools) {
             const pool = doc.data() as GameState;
 
             if (!pool.gameId) continue;
@@ -848,9 +862,11 @@ export const syncGameStatus = onSchedule({
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             type: 'SYNC_GAME_STATUS',
             status: errorCount > 0 ? 'partial' : 'success',
-            message: `Score Sync Cycle Completed: ${processedCount}/${poolsSnap.size} pools processed.`,
+            message: `Score Sync Cycle Completed: ${processedCount}/${allPools.length} pools processed.`,
             details: {
-                activePoolsFound: poolsSnap.size,
+                activePools: activePoolsSnap.size,
+                completedPools: completedPoolsSnap.size,
+                totalPoolsFound: allPools.length,
                 poolsProcessed: processedCount,
                 errors: errorCount
             },
