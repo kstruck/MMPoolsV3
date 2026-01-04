@@ -11,7 +11,10 @@ interface PayoutSummaryCardProps {
 }
 
 export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState, winners, mode = 'squares', totalEntries = 0 }) => {
-    const quarterlyPayouts = useMemo(() => calculateQuarterlyPayouts(gameState, winners), [gameState, winners]);
+    const quarterlyPayouts = useMemo(() => {
+        if (mode === 'props') return [];
+        return calculateQuarterlyPayouts(gameState, winners);
+    }, [gameState, winners, mode]);
 
     const totalPot = mode === 'props'
         ? (totalEntries * (gameState.props?.cost || 0))
@@ -60,17 +63,37 @@ export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState,
                     </div>
 
                     {mode === 'props' ? (
-                        <div className="mt-4 bg-slate-900 border border-slate-800 rounded-lg p-3 text-center">
-                            <Trophy className="w-8 h-8 text-amber-400 mx-auto mb-2" />
-                            <p className="text-sm text-slate-300 font-medium">Winner Takes All / Manager Discretion</p>
-                            <p className="text-[10px] text-slate-500 mt-1">Check "Rules" tab for details.</p>
+                        <div className="space-y-1">
+                            {((gameState as any).props?.payouts?.length > 1) ? (
+                                (gameState as any).props.payouts.map((percent: number, idx: number) => {
+                                    const amount = Math.floor(netPot * (percent / 100));
+                                    if (percent === 0) return null;
+                                    return (
+                                        <div key={idx} className="flex justify-between items-center text-sm">
+                                            <span className="text-slate-400 font-bold">
+                                                {idx === 0 ? '1st Place' : idx === 1 ? '2nd Place' : idx === 2 ? '3rd Place' : `${idx + 1}th Place`}
+                                                <span className="text-slate-600 font-normal ml-1">({percent}%)</span>
+                                            </span>
+                                            <span className="text-white font-mono font-bold">
+                                                ${amount.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="mt-4 bg-slate-900 border border-slate-800 rounded-lg p-3 text-center">
+                                    <Trophy className="w-8 h-8 text-amber-400 mx-auto mb-2" />
+                                    <p className="text-sm text-slate-300 font-medium">Winner Takes All / Manager Discretion</p>
+                                    <p className="text-[10px] text-slate-500 mt-1">Check "Rules" tab for details.</p>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="space-y-1">
                             {quarterlyPayouts
                                 .filter(card => {
+                                    if (!gameState.ruleVariations) return true;
                                     // Hybrid Strategy: Only show Half and Final cards in summary if desired?
-                                    // App.tsx logic:
                                     if (gameState.ruleVariations.scoreChangePayout && gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
                                         return card.period === 'half' || card.period === 'final';
                                     }
@@ -81,7 +104,7 @@ export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState,
                                     return true;
                                 })
                                 .map((card) => {
-                                    const percent = gameState.payouts ? gameState.payouts[card.period as keyof typeof gameState.payouts] : 0;
+                                    const percent = gameState.payouts ? (gameState.payouts as any)[card.period] : 0;
                                     // Check handling from App.tsx
                                     if (!percent && !gameState.ruleVariations?.scoreChangePayout) return null;
 

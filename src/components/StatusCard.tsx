@@ -98,8 +98,8 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
                         {/* Countdown Timer */}
                         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-center">
                             <PoolTimer
-                                targetDate={gameState.scores.startTime}
-                                gameStatus={gameState.scores.gameStatus}
+                                targetDate={gameState.scores?.startTime}
+                                gameStatus={gameState.scores?.gameStatus}
                                 isLocked={gameState.isLocked}
                             />
                         </div>

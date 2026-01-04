@@ -14,7 +14,7 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState }) => 
     };
 
     const getScoreboardVal = (period: 1 | 2 | 3 | 4, team: 'home' | 'away') => {
-        if (!gameState) return 0;
+        if (!gameState || !gameState.scores) return 0;
         const s = gameState.scores;
         const cur = sanitize(s.current?.[team]);
 
@@ -52,9 +52,9 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState }) => 
         return 0;
     };
 
-    const homeLogo = gameState.homeTeamLogo || getTeamLogo(gameState.homeTeam);
-    const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam);
-    const { gameStatus, startTime, clock, period, syncStatus } = gameState.scores;
+    const homeLogo = gameState.homeTeamLogo || (gameState.homeTeam ? getTeamLogo(gameState.homeTeam) : undefined);
+    const awayLogo = gameState.awayTeamLogo || (gameState.awayTeam ? getTeamLogo(gameState.awayTeam) : undefined);
+    const { gameStatus, startTime, clock, period, syncStatus } = gameState.scores || {};
 
     // Determine status text
     const renderStatus = () => {
@@ -96,27 +96,27 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState }) => 
                 {/* Away Team Row */}
                 <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center mb-3 bg-slate-900 p-4 rounded-lg border border-slate-800/50">
                     <div className="col-span-2 text-left pl-2 flex items-center gap-3">
-                        {awayLogo ? <img src={awayLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.awayTeam} /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{gameState.awayTeam.charAt(0)}</div>}
-                        <span className="text-lg md:text-xl truncate">{gameState.awayTeam}</span>
+                        {awayLogo ? <img src={awayLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.awayTeam} /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{gameState.awayTeam?.charAt(0) || '?'}</div>}
+                        <span className="text-lg md:text-xl truncate">{gameState.awayTeam || 'TBD'}</span>
                     </div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(1, 'away')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(2, 'away')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(3, 'away')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(4, 'away')}</div>
-                    <div className="text-3xl text-indigo-400 font-black">{sanitize(gameState.scores.current?.away)}</div>
+                    <div className="text-3xl text-indigo-400 font-black">{sanitize(gameState.scores?.current?.away)}</div>
                 </div>
 
                 {/* Home Team Row */}
                 <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center bg-slate-900 p-4 rounded-lg border border-slate-800/50">
                     <div className="col-span-2 text-left pl-2 flex items-center gap-3">
-                        {homeLogo ? <img src={homeLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.homeTeam} /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{gameState.homeTeam.charAt(0)}</div>}
-                        <span className="text-lg md:text-xl truncate">{gameState.homeTeam}</span>
+                        {homeLogo ? <img src={homeLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.homeTeam} /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{gameState.homeTeam?.charAt(0) || '?'}</div>}
+                        <span className="text-lg md:text-xl truncate">{gameState.homeTeam || 'TBD'}</span>
                     </div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(1, 'home')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(2, 'home')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(3, 'home')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(4, 'home')}</div>
-                    <div className="text-3xl text-rose-400 font-black">{sanitize(gameState.scores.current?.home)}</div>
+                    <div className="text-3xl text-rose-400 font-black">{sanitize(gameState.scores?.current?.home)}</div>
                 </div>
             </div>
         </div>

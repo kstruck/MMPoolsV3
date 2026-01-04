@@ -47,17 +47,20 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
         let rolloverContribution = 0;
 
         // Score Logic
-        const isFinal = !!squaresPool.scores[period];
-        const lockedScore = squaresPool.scores[period];
-        const liveScore = squaresPool.scores.current;
+        const scores = squaresPool.scores;
+        const isFinal = scores ? !!scores[period] : false;
+        const lockedScore = scores ? (scores as any)[period] : null;
+        const liveScore = scores ? scores.current : null;
         const home = lockedScore ? sanitize(lockedScore.home) : sanitize(liveScore?.home);
         const away = lockedScore ? sanitize(lockedScore.away) : sanitize(liveScore?.away);
 
         // Previous Score
         let prevHome = 0, prevAway = 0;
-        if (period === 'half') { prevHome = sanitize(squaresPool.scores.q1?.home); prevAway = sanitize(squaresPool.scores.q1?.away); }
-        else if (period === 'q3') { prevHome = sanitize(squaresPool.scores.half?.home); prevAway = sanitize(squaresPool.scores.half?.away); }
-        else if (period === 'final') { prevHome = sanitize(squaresPool.scores.q3?.home); prevAway = sanitize(squaresPool.scores.q3?.away); }
+        if (scores) {
+            if (period === 'half') { prevHome = sanitize(scores.q1?.home); prevAway = sanitize(scores.q1?.away); }
+            else if (period === 'q3') { prevHome = sanitize(scores.half?.home); prevAway = sanitize(scores.half?.away); }
+            else if (period === 'final') { prevHome = sanitize(scores.q3?.home); prevAway = sanitize(scores.q3?.away); }
+        }
 
         const qPointsHome = home - prevHome;
         const qPointsAway = away - prevAway;
@@ -81,7 +84,7 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
             const hD = getLastDigit(home);
             const aD = getLastDigit(away);
 
-            if (squaresPool.scores?.gameStatus === 'in' || squaresPool.scores?.gameStatus === 'post' || isFinal) {
+            if (scores?.gameStatus === 'in' || scores?.gameStatus === 'post' || isFinal) {
                 const row = squaresPool.axisNumbers.away.indexOf(aD);
                 const col = squaresPool.axisNumbers.home.indexOf(hD);
                 if (row !== -1 && col !== -1) {
@@ -90,12 +93,12 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
                         winnerName = owner;
                         hasWinner = true;
                     } else {
-                        winnerName = squaresPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold";
+                        winnerName = squaresPool.ruleVariations?.quarterlyRollover ? "Rollover" : "Unsold";
                     }
                 }
             }
 
-            if (squaresPool.ruleVariations.reverseWinners && hasWinner) {
+            if (squaresPool.ruleVariations?.reverseWinners && hasWinner) {
                 const rRow = squaresPool.axisNumbers.away.indexOf(hD);
                 const rCol = squaresPool.axisNumbers.home.indexOf(aD);
                 if (rRow !== -1 && rCol !== -1) {

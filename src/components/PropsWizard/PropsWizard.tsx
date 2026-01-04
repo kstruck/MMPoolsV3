@@ -171,13 +171,17 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                         </button>
                         <div className="flex items-center gap-2">
                             {STEPS.map((s, idx) => (
-                                <div key={idx} className={`flex items-center gap-2 ${idx === step ? 'opacity-100' : 'opacity-40'}`}>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${idx === step ? 'bg-indigo-600' : idx < step ? 'bg-emerald-600' : 'bg-slate-800'}`}>
+                                <button
+                                    key={idx}
+                                    onClick={() => setStep(idx)}
+                                    className={`flex items-center gap-2 transition-all hover:opacity-100 ${idx === step ? 'opacity-100' : 'opacity-40 cursor-pointer'}`}
+                                >
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${idx === step ? 'bg-indigo-600' : idx < step ? 'bg-emerald-600' : 'bg-slate-800'}`}>
                                         {idx < step ? <Check size={14} /> : idx + 1}
                                     </div>
-                                    <span className={`text-sm font-bold hidden md:block ${idx === step ? 'text-white' : 'text-slate-500'}`}>{s.title}</span>
+                                    <span className={`text-sm font-bold hidden md:block transition-colors ${idx === step ? 'text-white' : 'text-slate-500'}`}>{s.title}</span>
                                     {idx < STEPS.length - 1 && <div className="w-8 h-[1px] bg-slate-700 hidden md:block" />}
-                                </div>
+                                </button>
                             ))}
                         </div>
                     </div>
