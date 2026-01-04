@@ -392,19 +392,15 @@ export const onWinnerComputed = functions.firestore.onDocumentCreated("pools/{po
 
 // --- AUTO LOCK LOGIC ---
 
-const generateDigits = () => {
-    const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    // Fisher-Yates Shuffle
-    for (let i = nums.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [nums[i], nums[j]] = [nums[j], nums[i]];
-    }
-    return nums;
-};
+// --- HELPER: GENERATE DIGITS ---
+function generateDigits(): number[] {
+    return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
+}
 
+// --- EXECUTE AUTO LOCK ---
 async function executeAutoLock(pool: GameState) {
-    console.log(`[AutoLock] Executing for pool ${pool.id}`);
-    const poolRef = db.collection("pools").doc(pool.id);
+    const db = admin.firestore();
+    const poolRef = db.collection('pools').doc(pool.id);
 
     try {
         await db.runTransaction(async (t) => {
@@ -452,7 +448,7 @@ async function executeAutoLock(pool: GameState) {
             await writeAuditEvent({
                 poolId: pool.id,
                 type: 'DIGITS_GENERATED',
-                message: 'Auto-Generated Axis Numbers',
+                message: 'Auto-Generated Axis Numbers upon Auto-Lock',
                 severity: 'INFO',
                 actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' },
                 payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets },
@@ -460,19 +456,8 @@ async function executeAutoLock(pool: GameState) {
             }, t);
         });
 
-        // Notify Host
-        if (pool.contactEmail) {
-            const emailBody = `<p>Your pool <strong>${pool.name}</strong> has been auto-locked and numbers have been generated.</p>`;
-            const html = renderEmailHtml(`Pool Locked & Numbers Generated`, emailBody, `${BASE_URL}/#pool/${pool.id}`, 'View Pool');
-
-            await sendEmail(
-                pool.contactEmail,
-                `Pool Locked & Numbers Generated: ${pool.name}`,
-                html
-            );
-        }
-
+        console.log(`[AutoLock] SUCCESSFULLY LOCKED: ${pool.id}`);
     } catch (e) {
-        console.error(`[AutoLock] Failed for ${pool.id}:`, e);
+        console.error(`[AutoLock] Failed to lock pool ${pool.id}:`, e);
     }
 }

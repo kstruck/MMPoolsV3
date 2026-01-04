@@ -72,19 +72,24 @@ exports.runReminders = functions.scheduler.onSchedule("every 15 minutes", async 
     const poolsSnapshot = await db.collection("pools").get();
     console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check`);
     for (const doc of poolsSnapshot.docs) {
-        // CRITICAL FIX: doc.data() does NOT include the document ID!
-        // We must add it manually for pool.id to work in downstream functions.
-        const pool = Object.assign({ id: doc.id }, doc.data());
-        if (!pool.reminders)
-            continue; // Skip if not configured
-        // 1. PAYMENT REMINDERS
-        if ((_a = pool.reminders.payment) === null || _a === void 0 ? void 0 : _a.enabled) {
-            await checkPaymentReminders(pool, now);
+        try {
+            // CRITICAL FIX: doc.data() does NOT include the document ID!
+            // We must add it manually for pool.id to work in downstream functions.
+            const pool = Object.assign({ id: doc.id }, doc.data());
+            if (!pool.reminders)
+                continue; // Skip if not configured
+            // 1. PAYMENT REMINDERS
+            if ((_a = pool.reminders.payment) === null || _a === void 0 ? void 0 : _a.enabled) {
+                await checkPaymentReminders(pool, now);
+            }
+            // 2. LOCK REMINDERS
+            if ((_b = pool.reminders.lock) === null || _b === void 0 ? void 0 : _b.enabled) {
+                console.log(`[runReminders] Checking lock for pool ${pool.id}: lockAt=${pool.reminders.lock.lockAt}, isLocked=${pool.isLocked}`);
+                await checkLockReminders(pool, now);
+            }
         }
-        // 2. LOCK REMINDERS
-        if ((_b = pool.reminders.lock) === null || _b === void 0 ? void 0 : _b.enabled) {
-            console.log(`[runReminders] Checking lock for pool ${pool.id}: lockAt=${pool.reminders.lock.lockAt}, isLocked=${pool.isLocked}`);
-            await checkLockReminders(pool, now);
+        catch (poolError) {
+            console.error(`[runReminders] Error processing pool ${doc.id}:`, poolError);
         }
     }
     console.log(`[runReminders] Completed reminder check`);
@@ -231,10 +236,19 @@ async function notifyWaitlist(pool, releasedCount) {
     });
 }
 async function checkLockReminders(pool, now) {
+    var _a, _b;
     const settings = pool.reminders.lock;
     if (!settings.lockAt)
         return;
-    const msUntilLock = settings.lockAt - now;
+    // Robust handling of lockAt (could be number or Timestamp)
+    const lockAtNum = typeof settings.lockAt === 'number'
+        ? settings.lockAt
+        : ((_b = (_a = settings.lockAt) === null || _a === void 0 ? void 0 : _a.toMillis) === null || _b === void 0 ? void 0 : _b.call(_a)) || new Date(settings.lockAt).getTime();
+    if (isNaN(lockAtNum)) {
+        console.warn(`[checkLockReminders] Invalid lockAt for pool ${pool.id}:`, settings.lockAt);
+        return;
+    }
+    const msUntilLock = lockAtNum - now;
     const minutesUntilLock = msUntilLock / 1000 / 60;
     if (minutesUntilLock <= 0) {
         // Time has passed: Execute Auto-Lock if not already locked
@@ -324,18 +338,14 @@ exports.onWinnerComputed = functions.firestore.onDocumentCreated("pools/{poolId}
     }
 });
 // --- AUTO LOCK LOGIC ---
-const generateDigits = () => {
-    const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    // Fisher-Yates Shuffle
-    for (let i = nums.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [nums[i], nums[j]] = [nums[j], nums[i]];
-    }
-    return nums;
-};
+// --- HELPER: GENERATE DIGITS ---
+function generateDigits() {
+    return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
+}
+// --- EXECUTE AUTO LOCK ---
 async function executeAutoLock(pool) {
-    console.log(`[AutoLock] Executing for pool ${pool.id}`);
-    const poolRef = db.collection("pools").doc(pool.id);
+    const db = admin.firestore();
+    const poolRef = db.collection('pools').doc(pool.id);
     try {
         await db.runTransaction(async (t) => {
             const doc = await t.get(poolRef);
@@ -376,22 +386,17 @@ async function executeAutoLock(pool) {
             await (0, audit_1.writeAuditEvent)({
                 poolId: pool.id,
                 type: 'DIGITS_GENERATED',
-                message: 'Auto-Generated Axis Numbers',
+                message: 'Auto-Generated Axis Numbers upon Auto-Lock',
                 severity: 'INFO',
                 actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' },
                 payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets },
                 dedupeKey: `DIGITS_GENERATED:${pool.id}:initial:${digitsHash}`
             }, t);
         });
-        // Notify Host
-        if (pool.contactEmail) {
-            const emailBody = `<p>Your pool <strong>${pool.name}</strong> has been auto-locked and numbers have been generated.</p>`;
-            const html = (0, emailStyles_1.renderEmailHtml)(`Pool Locked & Numbers Generated`, emailBody, `${emailStyles_1.BASE_URL}/#pool/${pool.id}`, 'View Pool');
-            await sendEmail(pool.contactEmail, `Pool Locked & Numbers Generated: ${pool.name}`, html);
-        }
+        console.log(`[AutoLock] SUCCESSFULLY LOCKED: ${pool.id}`);
     }
     catch (e) {
-        console.error(`[AutoLock] Failed for ${pool.id}:`, e);
+        console.error(`[AutoLock] Failed to lock pool ${pool.id}:`, e);
     }
 }
 //# sourceMappingURL=reminders.js.map

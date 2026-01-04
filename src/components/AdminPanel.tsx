@@ -767,7 +767,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <CheckCircle size={10} /> Grid will automatically lock and numbers will be generated at this time.
                   </p>
                   <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
-                    📍 Times shown in your local timezone: <span className="font-mono text-slate-400">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+                    📍 Times shown in your local timezone: <span className="font-mono text-slate-400">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span> <br />
+                    (Server Time: {new Date().toLocaleTimeString([], { timeZoneName: 'short' })})
                   </p>
                 </div>
               )}

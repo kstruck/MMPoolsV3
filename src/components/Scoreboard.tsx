@@ -20,6 +20,9 @@ interface Game {
         period: number;
         displayClock: string;
     };
+    week: {
+        number: number;
+    };
     competitions: Array<{
         competitors: Array<{
             id: string;
@@ -101,28 +104,33 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
         return () => clearInterval(interval);
     }, [autoRefresh, fetchScores]);
 
-    // Group games by date
-    const groupedGames = React.useMemo(() => {
-        const groups: Record<string, Game[]> = {};
+    // Categorize games by Active Week and Status
+    const categorizedGames = React.useMemo(() => {
+        if (!games.length) return { live: [], upcoming: [], completed: [], nextWeek: [] };
 
-        // Sort all games by date first
         const sorted = [...games].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-        sorted.forEach(game => {
-            const gameDate = new Date(game.date);
-            const dateKey = gameDate.toLocaleDateString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric'
-            });
+        // Find "Active Week" - the week of the first game that isn't long ago
+        // More reliably, just find the week number of the first non-completed game or the latest game
+        const activeWeekNum = sorted.find(g => g.status.type.state !== 'post')?.week?.number
+            || sorted[sorted.length - 1]?.week?.number;
 
-            if (!groups[dateKey]) {
-                groups[dateKey] = [];
+        return sorted.reduce((acc, game) => {
+            const isLive = game.status.type.state === 'in';
+            const isUpcoming = game.status.type.state === 'pre';
+            const weekNum = game.week?.number;
+
+            if (weekNum > activeWeekNum) {
+                acc.nextWeek.push(game);
+            } else if (isLive) {
+                acc.live.push(game);
+            } else if (isUpcoming) {
+                acc.upcoming.push(game);
+            } else {
+                acc.completed.push(game);
             }
-            groups[dateKey].push(game);
-        });
-
-        return groups;
+            return acc;
+        }, { live: [] as Game[], upcoming: [] as Game[], completed: [] as Game[], nextWeek: [] as Game[] });
     }, [games]);
 
     const getStatusBadge = (game: Game) => {
@@ -157,7 +165,93 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             return `${qLabel} ${clock}`;
         }
         if (state === 'post') return 'Final';
-        return ''; // Don't show date here since it's in the header
+        return '';
+    };
+
+    const renderGameSection = (title: string, gamesList: Game[], icon: React.ReactNode, borderColor: string = 'border-slate-700') => {
+        if (gamesList.length === 0) return null;
+
+        return (
+            <div className="space-y-4 mb-10">
+                <h3 className={`text-xl font-bold text-white flex items-center gap-2 border-b ${borderColor} pb-2`}>
+                    {icon} {title}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {gamesList.map(game => {
+                        const competition = game.competitions[0];
+                        const homeTeam = competition?.competitors.find(c => c.homeAway === 'home');
+                        const awayTeam = competition?.competitors.find(c => c.homeAway === 'away');
+                        const isLive = game.status.type.state === 'in';
+                        const isFinal = game.status.type.state === 'post';
+
+                        return (
+                            <div
+                                key={game.id}
+                                className={`bg-slate-800/50 border rounded-xl p-4 transition-all ${isLive
+                                    ? 'border-emerald-500/50 bg-emerald-500/5'
+                                    : 'border-slate-700 hover:border-slate-600'
+                                    }`}
+                            >
+                                {/* Date/Time Row */}
+                                <div className="flex justify-between items-center mb-1 text-[10px] text-slate-500 font-mono uppercase">
+                                    <span>{new Date(game.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                                    <span>{new Date(game.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
+
+                                {/* Status Row */}
+                                <div className="flex justify-between items-center mb-4">
+                                    {getStatusBadge(game)}
+                                    <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                                        {getGameClock(game)}
+                                    </span>
+                                </div>
+
+                                {/* Teams */}
+                                <div className="space-y-3">
+                                    {/* Away Team */}
+                                    <div className={`flex items-center justify-between ${isFinal && !awayTeam?.winner ? 'opacity-50' : ''}`}>
+                                        <div className="flex items-center gap-3">
+                                            <img
+                                                src={awayTeam?.team.logo || getTeamLogo(awayTeam?.team.displayName || '') || ''}
+                                                alt={awayTeam?.team.abbreviation}
+                                                className="w-8 h-8 object-contain"
+                                                onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
+                                            />
+                                            <div>
+                                                <p className="font-bold text-white leading-none">{awayTeam?.team.abbreviation}</p>
+                                                <p className="text-[10px] text-slate-500 mt-1">{awayTeam?.team.displayName}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`text-2xl font-bold font-mono ${awayTeam?.winner ? 'text-emerald-400' : 'text-white'}`}>
+                                            {awayTeam?.score || '0'}
+                                        </span>
+                                    </div>
+
+                                    {/* Home Team */}
+                                    <div className={`flex items-center justify-between ${isFinal && !homeTeam?.winner ? 'opacity-50' : ''}`}>
+                                        <div className="flex items-center gap-3">
+                                            <img
+                                                src={homeTeam?.team.logo || getTeamLogo(homeTeam?.team.displayName || '') || ''}
+                                                alt={homeTeam?.team.abbreviation}
+                                                className="w-8 h-8 object-contain"
+                                                onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
+                                            />
+                                            <div>
+                                                <p className="font-bold text-white leading-none">{homeTeam?.team.abbreviation}</p>
+                                                <p className="text-[10px] text-slate-500 mt-1">{homeTeam?.team.displayName}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`text-2xl font-bold font-mono ${homeTeam?.winner ? 'text-emerald-400' : 'text-white'}`}>
+                                            {homeTeam?.score || '0'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
     };
 
     return (
@@ -245,85 +339,13 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                     </div>
                 )}
 
-                {/* Games Grouped by Date */}
+                {/* categorized games sections */}
                 {!loading && games.length > 0 && (
-                    <div className="space-y-8">
-                        {Object.entries(groupedGames).map(([date, dateGames]) => (
-                            <div key={date}>
-                                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2 border-b border-slate-700 pb-2">
-                                    <Calendar size={20} className="text-indigo-400" />
-                                    {date}
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {dateGames.map(game => {
-                                        const competition = game.competitions[0];
-                                        const homeTeam = competition?.competitors.find(c => c.homeAway === 'home');
-                                        const awayTeam = competition?.competitors.find(c => c.homeAway === 'away');
-                                        const isLive = game.status.type.state === 'in';
-                                        const isFinal = game.status.type.state === 'post';
-
-                                        return (
-                                            <div
-                                                key={game.id}
-                                                className={`bg-slate-800/50 border rounded-xl p-4 transition-all ${isLive
-                                                    ? 'border-emerald-500/50 bg-emerald-500/5'
-                                                    : 'border-slate-700 hover:border-slate-600'
-                                                    }`}
-                                            >
-                                                {/* Status Row */}
-                                                <div className="flex justify-between items-center mb-4">
-                                                    {getStatusBadge(game)}
-                                                    <span className="text-xs text-slate-500 font-medium">
-                                                        {getGameClock(game)}
-                                                    </span>
-                                                </div>
-
-                                                {/* Teams */}
-                                                <div className="space-y-3">
-                                                    {/* Away Team */}
-                                                    <div className={`flex items-center justify-between ${isFinal && !awayTeam?.winner ? 'opacity-50' : ''}`}>
-                                                        <div className="flex items-center gap-3">
-                                                            <img
-                                                                src={awayTeam?.team.logo || getTeamLogo(awayTeam?.team.displayName || '') || ''}
-                                                                alt={awayTeam?.team.abbreviation}
-                                                                className="w-8 h-8 object-contain"
-                                                                onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
-                                                            />
-                                                            <div>
-                                                                <p className="font-bold text-white">{awayTeam?.team.abbreviation}</p>
-                                                                <p className="text-xs text-slate-500">{awayTeam?.team.displayName}</p>
-                                                            </div>
-                                                        </div>
-                                                        <span className={`text-2xl font-bold font-mono ${awayTeam?.winner ? 'text-emerald-400' : 'text-white'}`}>
-                                                            {awayTeam?.score || '0'}
-                                                        </span>
-                                                    </div>
-
-                                                    {/* Home Team */}
-                                                    <div className={`flex items-center justify-between ${isFinal && !homeTeam?.winner ? 'opacity-50' : ''}`}>
-                                                        <div className="flex items-center gap-3">
-                                                            <img
-                                                                src={homeTeam?.team.logo || getTeamLogo(homeTeam?.team.displayName || '') || ''}
-                                                                alt={homeTeam?.team.abbreviation}
-                                                                className="w-8 h-8 object-contain"
-                                                                onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
-                                                            />
-                                                            <div>
-                                                                <p className="font-bold text-white">{homeTeam?.team.abbreviation}</p>
-                                                                <p className="text-xs text-slate-500">{homeTeam?.team.displayName}</p>
-                                                            </div>
-                                                        </div>
-                                                        <span className={`text-2xl font-bold font-mono ${homeTeam?.winner ? 'text-emerald-400' : 'text-white'}`}>
-                                                            {homeTeam?.score || '0'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ))}
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        {renderGameSection('Live Games', categorizedGames.live, <PlayCircle className="text-emerald-500 animate-pulse" />, 'border-emerald-500/30')}
+                        {renderGameSection('Upcoming Games', categorizedGames.upcoming, <Calendar className="text-amber-500" />, 'border-amber-500/30')}
+                        {renderGameSection('Completed Games', categorizedGames.completed, <Trophy className="text-slate-500" />)}
+                        {renderGameSection('Next Week', categorizedGames.nextWeek, <Calendar className="text-indigo-500" />, 'border-indigo-500/30')}
                     </div>
                 )}
             </main>

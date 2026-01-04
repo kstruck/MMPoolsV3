@@ -19,7 +19,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
 export { db };
-import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard } from "../types";
+import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam } from "../types";
 
 /** Global statistics tracked across all pools */
 export interface GlobalStats {
@@ -571,6 +571,29 @@ export const dbService = {
             await deleteDoc(doc(db, "prop_questions", id));
         } catch (error) {
             console.error("Error deleting prop seed:", error);
+            throw error;
+        }
+    },
+
+    // --- GLOBAL PLAYOFF CONFIG ---
+    subscribeToPlayoffConfig: (callback: (config: { teams: PlayoffTeam[] } | null) => void) => {
+        return onSnapshot(doc(db, "config", "playoffs"), (docSnap) => {
+            if (docSnap.exists()) {
+                callback(docSnap.data() as { teams: PlayoffTeam[] });
+            } else {
+                callback(null);
+            }
+        });
+    },
+
+    savePlayoffConfig: async (teams: PlayoffTeam[]) => {
+        try {
+            await setDoc(doc(db, "config", "playoffs"), {
+                teams,
+                updatedAt: Date.now()
+            });
+        } catch (error) {
+            console.error("Error saving playoff config:", error);
             throw error;
         }
     }

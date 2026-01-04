@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { User, PlayoffTeam, PayoutSettings } from '../../types';
 import { dbService } from '../../services/dbService';
 import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe } from 'lucide-react';
@@ -33,6 +33,16 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [playoffTeams, setPlayoffTeams] = useState<PlayoffTeam[]>(PLAYOFF_TEAMS_MOCK);
+
+    useEffect(() => {
+        const unsub = dbService.subscribeToPlayoffConfig((config) => {
+            if (config && config.teams && config.teams.length > 0) {
+                setPlayoffTeams(config.teams);
+            }
+        });
+        return () => unsub();
+    }, []);
 
     const [formData, setFormData] = useState<{
         // Step 1: Basics
@@ -280,7 +290,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                     }
                 },
 
-                teams: PLAYOFF_TEAMS_MOCK,
+                teams: playoffTeams,
                 entries: {},
                 results: {},
                 isLocked: false,

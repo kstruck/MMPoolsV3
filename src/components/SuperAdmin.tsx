@@ -1,11 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
+import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam } from '../types';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
-import type { GameState, Pool, User, SystemSettings, PropSeed } from '../types';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy } from 'lucide-react';
+import { NFL_TEAMS, getTeamLogo } from '../constants';
 
 
 export const SuperAdmin: React.FC = () => {
@@ -15,7 +15,7 @@ export const SuperAdmin: React.FC = () => {
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
 
     // UI State
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
@@ -48,6 +48,10 @@ export const SuperAdmin: React.FC = () => {
     const [seedOpt1, setSeedOpt1] = useState('');
     const [seedOpt2, setSeedOpt2] = useState('');
 
+    // Playoff State
+    const [playoffTeams, setPlayoffTeams] = useState<PlayoffTeam[]>([]);
+    const [isSavingPlayoffs, setIsSavingPlayoffs] = useState(false);
+
     const fetchUsers = () => {
         dbService.getAllUsers()
             .then(setUsers)
@@ -77,9 +81,13 @@ export const SuperAdmin: React.FC = () => {
     useEffect(() => {
         const unsubThemes = dbService.subscribeToThemes(setThemes);
         const unsubSeeds = dbService.subscribeToPropSeeds(setPropSeeds);
+        const unsubPlayoffs = dbService.subscribeToPlayoffConfig((config) => {
+            if (config) setPlayoffTeams(config.teams);
+        });
         return () => {
             unsubThemes();
             unsubSeeds();
+            unsubPlayoffs();
         };
     }, []);
 
@@ -149,7 +157,45 @@ export const SuperAdmin: React.FC = () => {
         setSeedText(seed.text);
         setSeedOpt1(seed.options[0]);
         setSeedOpt2(seed.options[1]);
-        setActiveTab('props'); // Ensure on tab
+        setSeedCategories(seed.categories || (seed.category ? [seed.category] : ['Game']));
+    };
+
+    // --- PLAYOFF LOGIC ---
+    const handleSavePlayoffs = async () => {
+        setIsSavingPlayoffs(true);
+        try {
+            await dbService.savePlayoffConfig(playoffTeams);
+            alert("Playoff configuration saved!");
+        } catch (error) {
+            console.error(error);
+            alert("Failed to save playoff config.");
+        } finally {
+            setIsSavingPlayoffs(false);
+        }
+    };
+
+    const updatePlayoffTeam = (index: number, updates: Partial<PlayoffTeam>) => {
+        const newTeams = [...playoffTeams];
+        newTeams[index] = { ...newTeams[index], ...updates };
+        setPlayoffTeams(newTeams);
+    };
+
+    const addPlayoffTeam = (conference: 'AFC' | 'NFC') => {
+        if (playoffTeams.length >= 14) return;
+        const newTeam: PlayoffTeam = {
+            id: '',
+            name: '',
+            conference,
+            seed: 1,
+            eliminated: false
+        };
+        setPlayoffTeams([...playoffTeams, newTeam]);
+    };
+
+    const removePlayoffTeam = (index: number) => {
+        const newTeams = [...playoffTeams];
+        newTeams.splice(index, 1);
+        setPlayoffTeams(newTeams);
     };
 
     const handleDeleteSeed = async (id: string) => {
@@ -459,6 +505,7 @@ export const SuperAdmin: React.FC = () => {
         { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
         { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
         { id: 'props', label: 'Global Props', icon: <List size={16} /> },
+        { id: 'playoffs', label: 'Playoffs', icon: <Trophy size={16} /> },
         { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
     ] as const;
 
@@ -2264,6 +2311,192 @@ export const SuperAdmin: React.FC = () => {
                     </div>
                 )
             }
+
+            {/* ============ PLAYOFFS TAB ============ */}
+            {activeTab === 'playoffs' && (
+                <div className="space-y-6">
+                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                            <div>
+                                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                                    <Trophy className="text-amber-500" /> Playoff Challenge Configuration
+                                </h2>
+                                <p className="text-slate-400">Global configuration for teams, seeds, and elimination status.</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => {
+                                        if (confirm("Reset to 2024-25 NFL Playoff Teams?")) {
+                                            const MOCK = [
+                                                { id: 'KC', name: 'Kansas City Chiefs', conference: 'AFC', seed: 1, eliminated: false },
+                                                { id: 'BUF', name: 'Buffalo Bills', conference: 'AFC', seed: 2, eliminated: false },
+                                                { id: 'BAL', name: 'Baltimore Ravens', conference: 'AFC', seed: 3, eliminated: false },
+                                                { id: 'HOU', name: 'Houston Texans', conference: 'AFC', seed: 4, eliminated: false },
+                                                { id: 'LAC', name: 'Los Angeles Chargers', conference: 'AFC', seed: 5, eliminated: false },
+                                                { id: 'PIT', name: 'Pittsburgh Steelers', conference: 'AFC', seed: 6, eliminated: false },
+                                                { id: 'DEN', name: 'Denver Broncos', conference: 'AFC', seed: 7, eliminated: false },
+                                                { id: 'DET', name: 'Detroit Lions', conference: 'NFC', seed: 1, eliminated: false },
+                                                { id: 'PHI', name: 'Philadelphia Eagles', conference: 'NFC', seed: 2, eliminated: false },
+                                                { id: 'TB', name: 'Tampa Bay Buccaneers', conference: 'NFC', seed: 3, eliminated: false },
+                                                { id: 'ARI', name: 'Arizona Cardinals', conference: 'NFC', seed: 4, eliminated: false },
+                                                { id: 'MIN', name: 'Minnesota Vikings', conference: 'NFC', seed: 5, eliminated: false },
+                                                { id: 'WAS', name: 'Washington Commanders', conference: 'NFC', seed: 6, eliminated: false },
+                                                { id: 'GB', name: 'Green Bay Packers', conference: 'NFC', seed: 7, eliminated: false },
+                                            ];
+                                            setPlayoffTeams(MOCK as PlayoffTeam[]);
+                                        }
+                                    }}
+                                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                                >
+                                    Reset Default Teams
+                                </button>
+                                <button
+                                    onClick={handleSavePlayoffs}
+                                    disabled={isSavingPlayoffs}
+                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20"
+                                >
+                                    {isSavingPlayoffs ? 'Saving...' : 'Save Global Config'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* AFC Conference */}
+                            <div className="space-y-6">
+                                <h3 className="text-xl font-black text-red-500 flex items-center justify-between border-b border-red-500/20 pb-2">
+                                    AFC CONFERENCE
+                                    <button onClick={() => addPlayoffTeam('AFC')} className="text-[10px] bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2 py-1 rounded border border-red-500/30">ADD TEAM</button>
+                                </h3>
+                                <div className="space-y-3">
+                                    {playoffTeams.filter(t => t.conference === 'AFC').sort((a, b) => a.seed - b.seed).map((team) => {
+                                        const overallIdx = playoffTeams.indexOf(team);
+                                        const logo = getTeamLogo(team.id);
+                                        return (
+                                            <div key={overallIdx} className={`p-4 rounded-xl border transition-all ${team.eliminated ? 'bg-slate-900/50 border-slate-800 opacity-50' : 'bg-slate-900 border-slate-700 shadow-lg'}`}>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center p-1 border border-slate-700">
+                                                        {logo ? <img src={logo} alt={team.id} className="w-full h-full object-contain" /> : <div className="font-bold text-slate-500">{team.id || '?'}</div>}
+                                                    </div>
+                                                    <div className="flex-1 grid grid-cols-2 gap-3">
+                                                        <div className="col-span-2">
+                                                            <select
+                                                                value={team.id}
+                                                                onChange={(e) => {
+                                                                    const t = Object.values(NFL_TEAMS).find(nt => nt.abbr === e.target.value);
+                                                                    if (t) updatePlayoffTeam(overallIdx, { id: t.abbr, name: t.name });
+                                                                }}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-bold text-sm"
+                                                            >
+                                                                <option value="">Select Team...</option>
+                                                                {Object.values(NFL_TEAMS).sort((a, b) => a.name.localeCompare(b.name)).map(nt => (
+                                                                    <option key={nt.abbr} value={nt.abbr}>{nt.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Seed</label>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                max="8"
+                                                                value={team.seed}
+                                                                onChange={(e) => updatePlayoffTeam(overallIdx, { seed: parseInt(e.target.value) })}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white font-bold"
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center justify-end gap-4 pt-4">
+                                                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={team.eliminated}
+                                                                    onChange={(e) => updatePlayoffTeam(overallIdx, { eliminated: e.target.checked })}
+                                                                    className="w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-950"
+                                                                />
+                                                                <span className="text-xs font-bold text-slate-400">Eliminated</span>
+                                                            </label>
+                                                            <button onClick={() => removePlayoffTeam(overallIdx)} className="text-rose-500 hover:text-rose-400 p-1"><Trash2 size={16} /></button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* NFC Conference */}
+                            <div className="space-y-6">
+                                <h3 className="text-xl font-black text-blue-500 flex items-center justify-between border-b border-blue-500/20 pb-2">
+                                    NFC CONFERENCE
+                                    <button onClick={() => addPlayoffTeam('NFC')} className="text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 px-2 py-1 rounded border border-blue-500/30">ADD TEAM</button>
+                                </h3>
+                                <div className="space-y-3">
+                                    {playoffTeams.filter(t => t.conference === 'NFC').sort((a, b) => a.seed - b.seed).map((team) => {
+                                        const overallIdx = playoffTeams.indexOf(team);
+                                        const logo = getTeamLogo(team.id);
+                                        return (
+                                            <div key={overallIdx} className={`p-4 rounded-xl border transition-all ${team.eliminated ? 'bg-slate-900/50 border-slate-800 opacity-50' : 'bg-slate-900 border-slate-700 shadow-lg'}`}>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center p-1 border border-slate-700">
+                                                        {logo ? <img src={logo} alt={team.id} className="w-full h-full object-contain" /> : <div className="font-bold text-slate-500">{team.id || '?'}</div>}
+                                                    </div>
+                                                    <div className="flex-1 grid grid-cols-2 gap-3">
+                                                        <div className="col-span-2">
+                                                            <select
+                                                                value={team.id}
+                                                                onChange={(e) => {
+                                                                    const t = Object.values(NFL_TEAMS).find(nt => nt.abbr === e.target.value);
+                                                                    if (t) updatePlayoffTeam(overallIdx, { id: t.abbr, name: t.name });
+                                                                }}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-bold text-sm"
+                                                            >
+                                                                <option value="">Select Team...</option>
+                                                                {Object.values(NFL_TEAMS).sort((a, b) => a.name.localeCompare(b.name)).map(nt => (
+                                                                    <option key={nt.abbr} value={nt.abbr}>{nt.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Seed</label>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                max="8"
+                                                                value={team.seed}
+                                                                onChange={(e) => updatePlayoffTeam(overallIdx, { seed: parseInt(e.target.value) })}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white font-bold"
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center justify-end gap-4 pt-4">
+                                                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={team.eliminated}
+                                                                    onChange={(e) => updatePlayoffTeam(overallIdx, { eliminated: e.target.checked })}
+                                                                    className="w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-950"
+                                                                />
+                                                                <span className="text-xs font-bold text-slate-400">Eliminated</span>
+                                                            </label>
+                                                            <button onClick={() => removePlayoffTeam(overallIdx)} className="text-rose-500 hover:text-rose-400 p-1"><Trash2 size={16} /></button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {playoffTeams.length === 0 && (
+                            <div className="text-center p-12 bg-slate-900 rounded-2xl border border-dashed border-slate-700 mt-8">
+                                <Trophy size={48} className="text-slate-700 mx-auto mb-4" />
+                                <p className="text-slate-400">No teams configured yet. Reset to defaults or add teams manually.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
         </div >
     );

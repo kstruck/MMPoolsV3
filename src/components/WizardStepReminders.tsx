@@ -163,7 +163,6 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                         defaultTime.setMinutes(defaultTime.getMinutes() + 60);
                                     }
                                     updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: defaultTime.getTime() } } });
-                                    updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: defaultTime.getTime() } } });
                                 } else if (val === '0') {
                                     if (estimatedStartTime) {
                                         updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: estimatedStartTime.getTime() } } });

@@ -47,6 +47,11 @@ export const renderEmailHtml = (title: string, bodyContent: string, ctaLink?: st
                 Good luck!<br>
                 <a href="${BASE_URL}" style="color: #94a3b8; text-decoration: none; font-size: 12px; margin-top: 10px; display: inline-block;">Sent by March Melee Pools</a>
             </p>
+            
+            <hr style="border: 1px solid #eee; margin: 20px 0;" />
+            <p style="font-size: 12px; color: #666; text-align: center;">
+                Want to create and host your own pool? Go to <a href="${BASE_URL}" style="color: #4f46e5;">MarchMeleePools.com</a> and create a pool for your office, friends, or favorite charity today!
+            </p>
         </div>
     </div>
 </body>

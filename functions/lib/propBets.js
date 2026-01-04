@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const audit_1 = require("./audit");
 // 1. Purchase Prop Card (Supports multiple cards per user)
 // 1. Purchase Prop Card (Supports multiple cards per user)
 exports.purchasePropCard = (0, https_1.onCall)(async (request) => {
@@ -70,6 +71,15 @@ exports.purchasePropCard = (0, https_1.onCall)(async (request) => {
     await poolRef.update({
         entryCount: admin.firestore.FieldValue.increment(1)
     });
+    // Audit Log
+    await (0, audit_1.writeAuditEvent)({
+        poolId,
+        type: 'PROP_CARD_PURCHASED',
+        message: `${finalUserName} purchased a Prop Card: ${cardName || 'Card'}`,
+        severity: 'INFO',
+        actor: request.auth ? { uid: request.auth.uid, role: 'USER', label: finalUserName } : { uid: userId, role: 'GUEST', label: finalUserName },
+        payload: { userId, cardName, timestamp: card.purchasedAt }
+    });
     return { success: true, cardCount: existingCards.size + 1 };
 });
 // 2. Grade Prop (Admin Only)
@@ -124,6 +134,15 @@ exports.gradeProp = (0, https_1.onCall)(async (request) => {
         batch.update(doc.ref, { score });
     });
     await batch.commit();
+    // Audit Log
+    await (0, audit_1.writeAuditEvent)({
+        poolId,
+        type: 'PROP_QUESTION_GRADED',
+        message: `Question Graded: "${questions[qIndex].text}"`,
+        severity: 'INFO',
+        actor: { uid: request.auth.uid, role: 'ADMIN', label: 'Admin' },
+        payload: { questionId, correctOptionIndex }
+    });
     return { success: true, updated: cardsSnap.size };
 });
 // 3. Update Prop Card (Edit answers before lock)
@@ -164,6 +183,15 @@ exports.updatePropCard = (0, https_1.onCall)(async (request) => {
         tiebreakerVal: Number(tiebreakerVal) || cardData.tiebreakerVal,
         cardName: cardName || cardData.cardName,
         updatedAt: Date.now()
+    });
+    // Audit Log
+    await (0, audit_1.writeAuditEvent)({
+        poolId,
+        type: 'ADMIN_OVERRIDE_SQUARE_STATE', // Reusing OR could add PROP_CARD_UPDATED
+        message: `${cardData.userName} updated Prop Card: ${cardName || cardData.cardName}`,
+        severity: 'INFO',
+        actor: { uid: userId, role: 'USER', label: cardData.userName },
+        payload: { cardId, cardName }
     });
     return { success: true };
 });

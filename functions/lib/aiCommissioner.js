@@ -162,6 +162,11 @@ exports.onAIRequest = (0, firestore_1.onDocumentCreated)({
             rules: pool.ruleVariations
         },
         currentScore: pool.scores,
+        digits: {
+            current: pool.axisNumbers,
+            quarterly: pool.quarterlyNumbers || null,
+            numberSets: pool.numberSets || 1
+        },
         auditTrail // Crucial for "Numbers changed" claims
     };
     // 2. Generate
