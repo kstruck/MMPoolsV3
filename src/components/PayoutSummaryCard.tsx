@@ -15,7 +15,7 @@ export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState,
 
     const totalPot = mode === 'props'
         ? (totalEntries * (gameState.props?.cost || 0))
-        : gameState.squares.filter(s => s.owner).length * gameState.costPerSquare;
+        : (gameState.squares?.filter(s => s && s.owner).length || 0) * gameState.costPerSquare;
 
     const charityAmount = gameState.charity?.enabled
         ? Math.floor(totalPot * (gameState.charity.percentage / 100))
@@ -81,9 +81,9 @@ export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState,
                                     return true;
                                 })
                                 .map((card) => {
-                                    const percent = gameState.payouts[card.period as keyof typeof gameState.payouts];
+                                    const percent = gameState.payouts ? gameState.payouts[card.period as keyof typeof gameState.payouts] : 0;
                                     // Check handling from App.tsx
-                                    if (!percent && !gameState.ruleVariations.scoreChangePayout) return null;
+                                    if (!percent && !gameState.ruleVariations?.scoreChangePayout) return null;
 
                                     return (
                                         <div key={card.period} className="flex justify-between items-center text-sm">

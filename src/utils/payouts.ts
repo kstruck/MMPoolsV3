@@ -34,12 +34,14 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
     const periods = ['q1', 'half', 'q3', 'final'] as const;
     let accumulatedRollover = 0;
 
-    const totalPot = squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare;
+    const totalPot = squaresPool.squares
+        ? (squaresPool.squares.filter(s => s && s.owner).length * squaresPool.costPerSquare)
+        : 0;
     const charityDeduction = squaresPool.charity?.enabled ? Math.floor(totalPot * (squaresPool.charity.percentage / 100)) : 0;
     const netPot = totalPot - charityDeduction;
 
     return periods.map(period => {
-        const percent = squaresPool.payouts[period];
+        const percent = squaresPool.payouts ? squaresPool.payouts[period] : 0;
         const baseAmount = Math.floor(netPot * (percent / 100));
         let currentAmount = baseAmount;
         let rolloverContribution = 0;

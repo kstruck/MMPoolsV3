@@ -15,7 +15,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
     const [gPayCopied, setGPayCopied] = useState(false);
 
     // Helper to calculate winner? Not needed for Overview.
-    const squaresRemaining = gameState.squares ? 100 - gameState.squares.filter(s => s.owner).length : 0;
+    const squaresRemaining = gameState.squares ? 100 - gameState.squares.filter(s => s && s.owner).length : 0;
 
     return (
         <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
