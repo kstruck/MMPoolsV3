@@ -473,24 +473,63 @@ const processGameUpdate = async (
             // Use real ESPN scoring play data
             console.log(`[ScoreUpdate] Using ${espnScores.scoringPlays.length} actual ESPN scoring plays`);
 
+            // Track current score as we process plays
+            let prevHome = freshCurrent.home;
+            let prevAway = freshCurrent.away;
+
             for (const play of espnScores.scoringPlays) {
                 // ESPN returns awayScore/homeScore - we need to map to pool's home/away
                 // Check if ESPN's home matches pool's home, or if we need to swap
                 const needsSwap = shouldSwapHomeAway(freshPool, espnScores.homeTeamName, espnScores.awayTeamName);
 
-                const step = {
-                    home: needsSwap ? play.awayScore : play.homeScore,
-                    away: needsSwap ? play.homeScore : play.awayScore,
-                    desc: play.description || 'Score'
-                };
+                const playHome = needsSwap ? play.awayScore : play.homeScore;
+                const playAway = needsSwap ? play.homeScore : play.awayScore;
 
-                // Only add if this score is beyond our current recorded score
-                // (prevents processing old plays we've already recorded)
-                if (step.home >= freshCurrent.home && step.away >= freshCurrent.away) {
-                    if (step.home !== freshCurrent.home || step.away !== freshCurrent.away) {
-                        steps.push(step);
-                    }
+                // Only process plays beyond our current recorded score
+                if (playHome < freshCurrent.home || playAway < freshCurrent.away) {
+                    continue;
                 }
+                if (playHome === freshCurrent.home && playAway === freshCurrent.away) {
+                    continue;
+                }
+
+                // Calculate the point change from this play
+                const deltaH = playHome - prevHome;
+                const deltaA = playAway - prevAway;
+
+                // ESPN combines TD+XP into single plays (7 or 8 points)
+                // If pool wants separate TD/XP winners, we need to decompose
+                if (!combine && ((deltaH === 7 || deltaH === 8) || (deltaA === 7 || deltaA === 8))) {
+                    // Decompose TD+XP combinations
+                    if (deltaH === 7) {
+                        // TD (6) + XP (1)
+                        steps.push({ home: prevHome + 6, away: prevAway, desc: 'Touchdown' });
+                        steps.push({ home: playHome, away: playAway, desc: 'Extra Point' });
+                    } else if (deltaH === 8) {
+                        // TD (6) + 2PT (2)
+                        steps.push({ home: prevHome + 6, away: prevAway, desc: 'Touchdown' });
+                        steps.push({ home: playHome, away: playAway, desc: '2Pt Conv' });
+                    } else if (deltaA === 7) {
+                        // TD (6) + XP (1)
+                        steps.push({ home: prevHome, away: prevAway + 6, desc: 'Touchdown' });
+                        steps.push({ home: playHome, away: playAway, desc: 'Extra Point' });
+                    } else if (deltaA === 8) {
+                        // TD (6) + 2PT (2)
+                        steps.push({ home: prevHome, away: prevAway + 6, desc: 'Touchdown' });
+                        steps.push({ home: playHome, away: playAway, desc: '2Pt Conv' });
+                    }
+                } else {
+                    // Use ESPN play as-is (FG, Safety, or combined TD+XP when pool allows)
+                    steps.push({
+                        home: playHome,
+                        away: playAway,
+                        desc: play.description || 'Score'
+                    });
+                }
+
+                // Update tracking
+                prevHome = playHome;
+                prevAway = playAway;
             }
         } else {
             // FALLBACK: No ESPN scoring plays available - use old decomposition as backup
