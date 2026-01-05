@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { PlayoffPool, User, PlayoffTeam } from '../../types';
+import type { PlayoffPool, User } from '../../types';
 import { Trophy, ListOrdered, FileText } from 'lucide-react';
 import { RankingForm } from './RankingForm';
 
