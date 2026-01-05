@@ -138,12 +138,13 @@ export async function runScenario(
             });
 
             // Update pool with entries (SuperAdmin can update pool)
+            // Also explicitly set isLocked: true to ensure test expectations are met (createPool might default to false)
             try {
-                await dbService.updatePool(poolId, { entries } as any);
+                await dbService.updatePool(poolId, { entries, isLocked: true } as any);
             } catch (e) {
-                await updateDoc(doc(db, 'pools', poolId), { entries });
+                await updateDoc(doc(db, 'pools', poolId), { entries, isLocked: true });
             }
-            addStep('Add Entries', 'success', `Successfully added ${testEntries.length} playoff entries`);
+            addStep('Add Entries', 'success', `Successfully added ${testEntries.length} playoff entries and LOCKED pool`);
         }
 
         // === C. CALCULATE SCORES ===

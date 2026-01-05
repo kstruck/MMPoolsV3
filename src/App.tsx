@@ -949,28 +949,35 @@ const App: React.FC = () => {
 
     if ('type' in currentPool && currentPool.type === 'BRACKET') {
       return (
-        <BracketPoolDashboard
-          pool={currentPool as any}
-          user={user}
-          onBack={() => window.location.hash = '#participant'}
-          onShare={() => {
-            navigator.clipboard.writeText(window.location.href);
-            alert("Link copied to clipboard!");
-          }}
-        />
+        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+          <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} onCreatePool={handleCreatePool} />
+          <div className="flex-grow">
+            <BracketPoolDashboard
+              pool={currentPool as any}
+              user={user}
+              onBack={() => window.location.hash = '#participant'}
+              onShare={() => {
+                navigator.clipboard.writeText(window.location.href);
+                alert("Link copied to clipboard!");
+              }}
+            />
+          </div>
+          <Footer />
+        </div>
       );
     }
 
     if ('type' in currentPool && currentPool.type === 'PROPS') {
       return (
         <>
-          <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
+          <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} onCreatePool={handleCreatePool} />
           <PropsPoolDashboard
             pool={currentPool as PropsPool}
             user={user}
             onBack={() => window.location.hash = '#participant'}
             initialTab="admin"
             isManager={true}
+            isAdmin={isSuperAdmin}
             onOpenAuth={() => setShowAuthModal(true)}
           />
           <Footer />
@@ -981,19 +988,22 @@ const App: React.FC = () => {
     if (currentPool.type && currentPool.type !== 'SQUARES') {
       if (currentPool.type === 'NFL_PLAYOFFS') {
         // Redirect to Playoff Dashboard (which now has Manager controls)
-        // Instead of error, we render the PlayoffDashboard.
-        // Note: Logic above already handles BRACKET and PROPS.
-        // We can just fall through or explicitly render here.
         return (
-          <PlayoffDashboard
-            pool={currentPool as PlayoffPool}
-            user={user}
-            onBack={() => window.location.hash = '#participant'}
-            onShare={() => {
-              navigator.clipboard.writeText(window.location.href);
-              alert("Link copied!");
-            }}
-          />
+          <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+            <Header user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} onCreatePool={handleCreatePool} />
+            <div className="flex-grow">
+              <PlayoffDashboard
+                pool={currentPool as PlayoffPool}
+                user={user}
+                onBack={() => window.location.hash = '#participant'}
+                onShare={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  alert("Link copied!");
+                }}
+              />
+            </div>
+            <Footer />
+          </div>
         );
       }
       return <div className="text-white p-20 text-center font-bold">Admin panel is only available for SQUARES pools. Use the appropriate admin interface for this pool type.</div>;
