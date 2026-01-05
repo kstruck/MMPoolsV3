@@ -1,6 +1,6 @@
 import React from 'react';
 import type { PlayoffTeam } from '../../types';
-import { Calendar, Clock, Trophy } from 'lucide-react';
+
 import { getTeamLogo } from '../../constants';
 
 interface ScheduleDisplayProps {
