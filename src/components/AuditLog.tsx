@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, orderBy, onSnapshot, where, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import type { AuditLogEvent, AuditEventType } from '../types';
 import {
     Shield, AlertTriangle, Info, FileJson, Clock, Lock,
@@ -33,21 +33,10 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
 
     useEffect(() => {
         const auditRef = collection(db, 'pools', poolId, 'audit');
-        let q;
 
-        // Dynamic query matching the filter (Server-side filtering)
-        // This ensures we get specific history even if it's old
-        if (filter === 'ALL') {
-            q = query(auditRef, orderBy('timestamp', 'asc'), limit(100)); // Chronological order: earliest first
-        } else {
-            const types = FILTER_MAP[filter];
-            if (types.length > 0) {
-                // If index is missing, this might fail in console, but it's the correct way to get data
-                q = query(auditRef, where('type', 'in', types), orderBy('timestamp', 'asc'), limit(100)); // Chronological order
-            } else {
-                q = query(auditRef, orderBy('timestamp', 'asc'), limit(100)); // Chronological order
-            }
-        }
+        // SIMPLIFIED QUERY: Fetch all events sorted by time
+        // We filter client-side to avoid needing composite indexes for every filter type
+        const q = query(auditRef, orderBy('timestamp', 'asc'), limit(500));
 
         const unsubscribe = onSnapshot(q, (snap) => {
             const evts: AuditLogEvent[] = [];
@@ -63,7 +52,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
         });
 
         return () => unsubscribe();
-    }, [poolId, filter]);
+    }, [poolId]); // Remove 'filter' dependency as we fetch all now
 
     // Client filtering is now redundant but kept ensuring data integrity if switching fast
     const filteredEvents = events.filter(e => {
