@@ -106,14 +106,19 @@ export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState,
                                 .map((card) => {
                                     // For hybrid strategy, calculate percentage from the actual card amount
                                     let displayPercent = 0;
-                                    if (gameState.ruleVariations?.scoreChangePayout && gameState.ruleVariations?.scoreChangePayoutStrategy === 'hybrid') {
+                                    // Check if hybrid OR if default (missing strategy but scoreChangePayout is true)
+                                    const isHybrid = (gameState.ruleVariations?.scoreChangePayout && gameState.ruleVariations?.scoreChangePayoutStrategy === 'hybrid') ||
+                                        (gameState.ruleVariations?.scoreChangePayout && !gameState.ruleVariations?.scoreChangePayoutStrategy);
+
+                                    if (isHybrid) {
                                         // Derive percentage from calculated amount
                                         if (netPot > 0 && card.amount > 0) {
                                             displayPercent = Math.round((card.amount / netPot) * 100);
                                         } else {
-                                            // Fallback to reading from hybrid weights
-                                            const weights = gameState.ruleVariations.scoreChangeHybridWeights;
-                                            displayPercent = weights?.[card.period === 'half' ? 'halftime' : 'final'] || 0;
+                                            // Fallback to reading from hybrid weights OR defaults
+                                            const weights = gameState.ruleVariations?.scoreChangeHybridWeights;
+                                            if (card.period === 'half') displayPercent = weights?.halftime || 20;
+                                            if (card.period === 'final') displayPercent = weights?.final || 40;
                                         }
                                     } else {
                                         // Standard quarterly: read from payouts

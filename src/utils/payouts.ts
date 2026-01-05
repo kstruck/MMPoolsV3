@@ -43,18 +43,24 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
     return periods.map(period => {
         // CRITICAL FIX: For hybrid strategy, use hybrid weights instead of payouts
         let percent = 0;
-        if (squaresPool.ruleVariations?.scoreChangePayout && squaresPool.ruleVariations?.scoreChangePayoutStrategy === 'hybrid') {
-            // Use hybrid weights for Final and Halftime
-            if (period === 'final') {
-                percent = squaresPool.ruleVariations.scoreChangeHybridWeights?.final || 40;
-            } else if (period === 'half') {
-                percent = squaresPool.ruleVariations.scoreChangeHybridWeights?.halftime || 20;
+        if (squaresPool.ruleVariations?.scoreChangePayout) {
+            const strategy = squaresPool.ruleVariations.scoreChangePayoutStrategy || 'hybrid';
+
+            if (strategy === 'hybrid') {
+                // Use hybrid weights for Final and Halftime
+                if (period === 'final') {
+                    percent = squaresPool.ruleVariations.scoreChangeHybridWeights?.final || 40;
+                } else if (period === 'half') {
+                    percent = squaresPool.ruleVariations.scoreChangeHybridWeights?.halftime || 20;
+                    // Q1 and Q3 don't have fixed payouts in hybrid mode
+                    percent = 0;
+                }
             } else {
-                // Q1 and Q3 don't have fixed payouts in hybrid mode
-                percent = 0;
+                // Standard quarterly payouts if NOT hybrid (e.g. equal split or custom)
+                percent = squaresPool.payouts ? squaresPool.payouts[period] : 0;
             }
         } else {
-            // Standard quarterly payouts
+            // Standard quarterly payouts for non-score-change pools
             percent = squaresPool.payouts ? squaresPool.payouts[period] : 0;
         }
 

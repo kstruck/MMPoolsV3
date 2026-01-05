@@ -909,7 +909,7 @@ exports.fixPoolScores = (0, https_1.onCall)({
         }
     }
     */
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g;
     const db = admin.firestore();
     const targetPoolId = (_a = request.data) === null || _a === void 0 ? void 0 : _a.poolId;
     let poolsSnap;
@@ -950,9 +950,11 @@ exports.fixPoolScores = (0, https_1.onCall)({
                     console.log(`  - ${p.awayScore}-${p.homeScore}: ${p.description}`);
                 });
             }
-            // CRITICAL FIX: For Every Score Pays pools, reset scores to force full decomposition
-            if (((_c = pool.ruleVariations) === null || _c === void 0 ? void 0 : _c.scoreChangePayout) && ((_d = pool.scores) === null || _d === void 0 ? void 0 : _d.current)) {
-                console.log(`[FixPool] Resetting ${doc.id} from ${pool.scores.current.home}-${pool.scores.current.away} to 0-0`);
+            // CRITICAL FIX: For Every Score Pays pools, ALWAYS reset scores to force full decomposition
+            if ((_c = pool.ruleVariations) === null || _c === void 0 ? void 0 : _c.scoreChangePayout) {
+                const currentH = ((_e = (_d = pool.scores) === null || _d === void 0 ? void 0 : _d.current) === null || _e === void 0 ? void 0 : _e.home) || 0;
+                const currentA = ((_g = (_f = pool.scores) === null || _f === void 0 ? void 0 : _f.current) === null || _g === void 0 ? void 0 : _g.away) || 0;
+                console.log(`[FixPool] Resetting ${doc.id} from ${currentH}-${currentA} to 0-0`);
                 await doc.ref.update({
                     'scores.current': { home: 0, away: 0 },
                     scoreEvents: []
