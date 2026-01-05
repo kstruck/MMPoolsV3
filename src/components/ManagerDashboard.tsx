@@ -434,7 +434,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                             charityEnabled = !!sp.charity?.enabled;
                                         } else {
                                             const pp = pool as any;
-                                            filled = pp.entryCount || 0;
+                                            filled = Object.keys(pp.entries || {}).length || pp.entryCount || 0;
                                             pct = 0;
                                             homeTeam = pp.name || 'Pool';
                                             awayTeam = pool.type === 'NFL_PLAYOFFS' ? 'Playoffs' : 'Props';
