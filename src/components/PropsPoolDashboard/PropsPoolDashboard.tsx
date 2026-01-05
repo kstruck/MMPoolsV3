@@ -135,7 +135,23 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                 {activeTab === 'cards' && (
                     <div className="max-w-6xl mx-auto space-y-8">
                         {/* Scoreboard */}
-                        <GameScoreboard gameState={pool as any} />
+                        <GameScoreboard
+                            gameState={pool as any}
+                            onRepair={(isManager || isAdmin) ? async () => {
+                                if (!window.confirm("Repair/Re-sync Scoreboard from ESPN?")) return;
+                                try {
+                                    const res = await dbService.fixPoolScores(pool.id);
+                                    if (res.success) {
+                                        alert("Repair Successful. Reloading...");
+                                        window.location.reload();
+                                    } else {
+                                        alert("Repair Failed: " + res.message);
+                                    }
+                                } catch (e: any) {
+                                    alert("Error: " + e.message);
+                                }
+                            } : undefined}
+                        />
 
                         {/* Status Grid */}
                         <div className="grid md:grid-cols-2 gap-6">
@@ -198,18 +214,50 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                 )}
 
                 {activeTab === 'admin' && (
-                    <div className="max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-xl p-6">
-                        <PropWizard
-                            user={user}
-                            onCancel={() => setActiveTab('cards')} // Or handle otherwise
-                            onComplete={() => {
-                                // Refresh or notify? The wizard handles actual update.
-                                // Just force a reload or maybe we need to reload pool data?
-                                window.location.reload();
-                            }}
-                            initialData={pool as any}
-                            embedded={true}
-                        />
+                    <div className="max-w-4xl mx-auto space-y-6">
+                        {/* Fix Sync Tool */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div>
+                                <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                                    <Shield className="text-amber-500" size={20} /> Score Sync Repair
+                                </h3>
+                                <p className="text-slate-400 text-sm mt-1">If the scoreboard is missing updated scores or events, use this tool to force a re-sync from ESPN.</p>
+                            </div>
+                            <button
+                                onClick={async () => {
+                                    if (!window.confirm("This will force a full re-sync of scores from ESPN. Continue?")) return;
+                                    const btn = document.getElementById('btn-fix-sync');
+                                    if (btn) btn.innerText = 'Repairing...';
+                                    try {
+                                        const res = await dbService.fixPoolScores(pool.id);
+                                        alert(res.success ? 'Success! Reloading page...' : 'Failed: ' + res.message);
+                                        if (res.success) window.location.reload();
+                                    } catch (e: any) {
+                                        alert('Error: ' + e.message);
+                                    }
+                                    if (btn) btn.innerText = 'Run Repair';
+                                }}
+                                id="btn-fix-sync"
+                                className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9" /><path d="M17.64 15 22 10.64" /><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25V7.86c0-.55-.45-1-1-1H16.4c-.84 0-1.65-.33-2.25-.93L12.9 4.68" /><path d="M16.25 16.25 9 9" /></svg>
+                                Run Repair
+                            </button>
+                        </div>
+
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <PropWizard
+                                user={user}
+                                onCancel={() => setActiveTab('cards')} // Or handle otherwise
+                                onComplete={() => {
+                                    // Refresh or notify? The wizard handles actual update.
+                                    // Just force a reload or maybe we need to reload pool data?
+                                    window.location.reload();
+                                }}
+                                initialData={pool as any}
+                                embedded={true}
+                            />
+                        </div>
                     </div>
                 )}
 

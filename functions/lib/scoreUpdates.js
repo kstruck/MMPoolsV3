@@ -284,13 +284,15 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     }
     // Prepare New Scores Object
     const newScores = Object.assign(Object.assign({}, freshPool.scores), { current: espnScores.current, gameStatus: state, period: period, clock: espnScores.clock, startTime: espnScores.startTime || freshPool.scores.startTime });
-    if (isQ1Final && !((_b = freshPool.scores) === null || _b === void 0 ? void 0 : _b.q1))
+    // Ensure final games have complete score records even if we missed partial updates
+    const allowOverwrite = isGameFinal;
+    if (isQ1Final && (!((_b = freshPool.scores) === null || _b === void 0 ? void 0 : _b.q1) || allowOverwrite))
         newScores.q1 = espnScores.q1;
-    if (isHalfFinal && !((_c = freshPool.scores) === null || _c === void 0 ? void 0 : _c.half))
+    if (isHalfFinal && (!((_c = freshPool.scores) === null || _c === void 0 ? void 0 : _c.half) || allowOverwrite))
         newScores.half = espnScores.half;
-    if (isQ3Final && !((_d = freshPool.scores) === null || _d === void 0 ? void 0 : _d.q3))
+    if (isQ3Final && (!((_d = freshPool.scores) === null || _d === void 0 ? void 0 : _d.q3) || allowOverwrite))
         newScores.q3 = espnScores.q3;
-    if (isGameFinal && !((_e = freshPool.scores) === null || _e === void 0 ? void 0 : _e.final)) {
+    if (isGameFinal && (!((_e = freshPool.scores) === null || _e === void 0 ? void 0 : _e.final) || allowOverwrite)) {
         newScores.final = (freshPool.includeOvertime && espnScores.apiTotal !== undefined)
             ? espnScores.apiTotal
             : (espnScores.final || espnScores.current);

@@ -20,31 +20,83 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const [poolWinners, setPoolWinners] = useState<Record<string, Winner[]>>({});
 
     useEffect(() => {
-        const unsubscribe = dbService.subscribeToPools((pools) => {
-            const participating = pools.filter(p => {
-                const isOwner = p.ownerId === user.id;
-                const matchesId = p.squares.some(s => s.reservedByUid === user.id);
-                const matchesName = p.squares.some(s =>
+        setIsLoading(true);
+        let unsubPublic: () => void = () => { };
+        let unsubOwned: () => void = () => { };
+        let unsubAll: () => void = () => { };
+
+        // Helper to process and filter pools
+        const processPools = (allPools: GameState[]) => {
+            const participating = allPools.filter(p => {
+                const isOwner = p.ownerId === user.id || p.managerName === user.name; // Basic check
+                const matchId = p.squares.some(s => s.reservedByUid === user.id);
+                const matchName = p.squares.some(s =>
                     !s.reservedByUid && s.owner && (
                         s.owner === user.name ||
-                        (user.email && s.owner === user.email) ||
-                        (user.email && s.owner.toLowerCase() === user.email.split('@')[0].toLowerCase())
+                        (user.email && (s.owner === user.email || s.owner.toLowerCase() === user.email.split('@')[0].toLowerCase()))
                     )
                 );
-                return isOwner || matchesId || matchesName;
+                return isOwner || matchId || matchName;
             });
-            setMyPools(participating);
+
+            // Deduplicate by ID just in case
+            const unique = Array.from(new Map(participating.map(p => [p.id, p])).values());
+            setMyPools(unique);
             setIsLoading(false);
 
-            // Subscribe to winners for each pool
-            participating.forEach(pool => {
+            // Subscribe to winners
+            unique.forEach(pool => {
                 dbService.subscribeToWinners(pool.id, (winners) => {
                     setPoolWinners(prev => ({ ...prev, [pool.id]: winners }));
                 });
             });
-        });
-        return () => unsubscribe();
-    }, [user.id]);
+        };
+
+        if (user.role === 'SUPER_ADMIN') {
+            unsubAll = dbService.subscribeToAllPools((pools) => {
+                processPools(pools);
+            }, (error) => {
+                console.error("SuperAdmin Pool Fetch Error", error);
+                setIsLoading(false);
+            });
+        } else {
+            // Regular User: Fetch Public + Owned logic
+            // We need to maintain a local cache to merge updates
+            let publicPools: GameState[] = [];
+            let ownedPools: GameState[] = [];
+
+            const mergeAndUpdate = () => {
+                const merged = [...publicPools, ...ownedPools];
+                // Unique by ID
+                const uniqueAll = Array.from(new Map(merged.map(p => [p.id, p])).values());
+                processPools(uniqueAll);
+            };
+
+            unsubPublic = dbService.subscribeToPools((pools) => {
+                publicPools = pools;
+                mergeAndUpdate();
+            }, (err) => {
+                console.error("Public Pools Error", err);
+                setIsLoading(false);
+            });
+
+            unsubOwned = dbService.subscribeToPools((pools) => {
+                ownedPools = pools;
+                mergeAndUpdate();
+            }, (err) => {
+                console.error("Owned Pools Error", err);
+                // Don't verify loading false here strictly, wait for public? 
+                // Actually relying on public to finish first or second. 
+                // It's safe to let either update UI.
+            }, user.id);
+        }
+
+        return () => {
+            unsubPublic();
+            unsubOwned();
+            unsubAll();
+        };
+    }, [user.id, user.role, user.name, user.email]);
 
     // Lifetime Stats Calculation
     const lifetimeStats = useMemo(() => {

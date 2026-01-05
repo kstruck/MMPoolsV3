@@ -6,6 +6,8 @@ import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
+import { auth } from '../firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 
 
 export const SuperAdmin: React.FC = () => {
@@ -975,6 +977,17 @@ export const SuperAdmin: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-slate-500 font-mono text-xs max-w-[100px] truncate" title={u.id}>{u.id}</td>
                                             <td className="p-4 flex gap-2">
+                                                <button onClick={async () => {
+                                                    if (!u.email) return alert("User has no email");
+                                                    if (confirm(`Send password reset email to ${u.email}?`)) {
+                                                        try {
+                                                            await sendPasswordResetEmail(auth, u.email);
+                                                            alert("Password reset email sent.");
+                                                        } catch (e: any) {
+                                                            alert("Error sending reset email: " + e.message);
+                                                        }
+                                                    }
+                                                }} className="text-amber-400 hover:text-amber-300 transition-colors" title="Send Password Reset"><Settings size={16} /></button>
                                                 <button onClick={() => handleEditUser(u)} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Edit</button>
                                                 <button onClick={() => handleDeleteUser(u)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
                                             </td>

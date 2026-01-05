@@ -4,14 +4,16 @@ import { getTeamLogo } from '../constants';
 
 interface GameScoreboardProps {
     gameState: GameState;
+    onRepair?: () => void;
 }
 
-export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState }) => {
+export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRepair }) => {
     const sanitize = (n: any) => {
         if (n === null || n === undefined) return 0;
         const val = parseInt(n);
         return isNaN(val) ? 0 : val;
     };
+    /* ... existing sanitize and getScoreboardVal ... */
 
     const getScoreboardVal = (period: 1 | 2 | 3 | 4, team: 'home' | 'away') => {
         if (!gameState || !gameState.scores) return 0;
@@ -82,7 +84,18 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState }) => 
         <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative mb-8 max-w-4xl mx-auto w-full">
             <div className="absolute top-0 right-0 w-64 h-64 bg-slate-800/20 rounded-full blur-3xl"></div>
             <div className="p-4 border-b border-slate-800 text-center relative z-10 flex flex-col md:flex-row items-center justify-between px-8">
-                <h3 className="text-white font-bold text-xl tracking-tight">Game Scoreboard</h3>
+                <div className="flex items-center gap-3">
+                    <h3 className="text-white font-bold text-xl tracking-tight">Game Scoreboard</h3>
+                    {onRepair && (
+                        <button
+                            onClick={onRepair}
+                            className="text-amber-500 hover:text-amber-400 p-1 rounded hover:bg-slate-800 transition-colors"
+                            title="Repair Scoreboard Sync"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9" /><path d="M17.64 15 22 10.64" /><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25V7.86c0-.55-.45-1-1-1H16.4c-.84 0-1.65-.33-2.25-.93L12.9 4.68" /><path d="M16.25 16.25 9 9" /></svg>
+                        </button>
+                    )}
+                </div>
                 {renderStatus()}
             </div>
 

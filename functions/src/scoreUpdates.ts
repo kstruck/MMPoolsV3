@@ -348,10 +348,13 @@ const processGameUpdate = async (
         startTime: espnScores.startTime || freshPool.scores.startTime
     };
 
-    if (isQ1Final && !freshPool.scores?.q1) newScores.q1 = espnScores.q1;
-    if (isHalfFinal && !freshPool.scores?.half) newScores.half = espnScores.half;
-    if (isQ3Final && !freshPool.scores?.q3) newScores.q3 = espnScores.q3;
-    if (isGameFinal && !freshPool.scores?.final) {
+    // Ensure final games have complete score records even if we missed partial updates
+    const allowOverwrite = isGameFinal;
+
+    if (isQ1Final && (!freshPool.scores?.q1 || allowOverwrite)) newScores.q1 = espnScores.q1;
+    if (isHalfFinal && (!freshPool.scores?.half || allowOverwrite)) newScores.half = espnScores.half;
+    if (isQ3Final && (!freshPool.scores?.q3 || allowOverwrite)) newScores.q3 = espnScores.q3;
+    if (isGameFinal && (!freshPool.scores?.final || allowOverwrite)) {
         newScores.final = (freshPool.includeOvertime && espnScores.apiTotal !== undefined)
             ? espnScores.apiTotal
             : (espnScores.final || espnScores.current);
