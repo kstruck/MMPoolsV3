@@ -41,7 +41,23 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
     const netPot = totalPot - charityDeduction;
 
     return periods.map(period => {
-        const percent = squaresPool.payouts ? squaresPool.payouts[period] : 0;
+        // CRITICAL FIX: For hybrid strategy, use hybrid weights instead of payouts
+        let percent = 0;
+        if (squaresPool.ruleVariations?.scoreChangePayout && squaresPool.ruleVariations?.scoreChangePayoutStrategy === 'hybrid') {
+            // Use hybrid weights for Final and Halftime
+            if (period === 'final') {
+                percent = squaresPool.ruleVariations.scoreChangeHybridWeights?.final || 40;
+            } else if (period === 'half') {
+                percent = squaresPool.ruleVariations.scoreChangeHybridWeights?.halftime || 20;
+            } else {
+                // Q1 and Q3 don't have fixed payouts in hybrid mode
+                percent = 0;
+            }
+        } else {
+            // Standard quarterly payouts
+            percent = squaresPool.payouts ? squaresPool.payouts[period] : 0;
+        }
+
         const baseAmount = Math.floor(netPot * (percent / 100));
         let currentAmount = baseAmount;
         let rolloverContribution = 0;

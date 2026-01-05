@@ -374,6 +374,7 @@ async function executeAutoLock(pool) {
                 };
             }
             t.update(poolRef, updates);
+            // CRITICAL FIX: Skip dedupe to avoid read-after-write transaction errors
             // Audit Logs
             await (0, audit_1.writeAuditEvent)({
                 poolId: pool.id,
@@ -381,6 +382,7 @@ async function executeAutoLock(pool) {
                 message: 'Auto-locked by system (Timer)',
                 severity: 'INFO',
                 actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' }
+                // NO dedupeKey - auto-lock should only happen once anyway
             }, t);
             const digitsHash = (0, audit_1.computeDigitsHash)({ home: axisNumbers.home, away: axisNumbers.away, poolId: pool.id, period: 'q1' });
             await (0, audit_1.writeAuditEvent)({
@@ -389,8 +391,8 @@ async function executeAutoLock(pool) {
                 message: 'Auto-Generated Axis Numbers upon Auto-Lock',
                 severity: 'INFO',
                 actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' },
-                payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets },
-                dedupeKey: `DIGITS_GENERATED:${pool.id}:initial:${digitsHash}`
+                payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets }
+                // NO dedupeKey - prevent read-after-write error
             }, t);
         });
         console.log(`[AutoLock] SUCCESSFULLY LOCKED: ${pool.id}`);
