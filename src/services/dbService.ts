@@ -376,7 +376,26 @@ export const dbService = {
         const q = query(collection(db, "pools", poolId, "winners"));
         return onSnapshot(q, (snapshot) => {
             const winners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as Winner);
-            callback(winners);
+
+            // Sort winners chronologically for "Event" winners
+            // Document IDs for events are in format "event_[home]_[away]" which naturally sorts chronologically
+            const sorted = winners.sort((a, b) => {
+                // Keep quarterly winners in their natural order (q1, half, q3, final)
+                const periodOrder: Record<string, number> = { 'q1': 1, 'half': 2, 'q3': 3, 'final': 4 };
+
+                if (a.period === 'Event' && b.period === 'Event') {
+                    // For event winners, sort by document ID which contains scores
+                    return (a.id || '').localeCompare(b.id || '');
+                } else if (a.period !== 'Event' && b.period !== 'Event') {
+                    // For quarterly winners, use period order
+                    return (periodOrder[a.period] || 99) - (periodOrder[b.period] || 99);
+                } else {
+                    // Event winners come after quarterly winners
+                    return a.period === 'Event' ? 1 : -1;
+                }
+            });
+
+            callback(sorted);
         }, (error) => {
             console.error("Error subscribing to winners:", error);
             callback([]);

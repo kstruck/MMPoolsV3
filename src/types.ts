@@ -460,6 +460,7 @@ export interface User {
 }
 
 export interface Winner {
+  id?: string; // Firestore document ID
   period: string; // 'Q1', 'Half', 'Q3', 'Final', 'Event'
   squareId: number; // -1 if rollover
   owner: string;

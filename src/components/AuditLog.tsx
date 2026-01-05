@@ -38,14 +38,14 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
         // Dynamic query matching the filter (Server-side filtering)
         // This ensures we get specific history even if it's old
         if (filter === 'ALL') {
-            q = query(auditRef, orderBy('timestamp', 'desc'), limit(100));
+            q = query(auditRef, orderBy('timestamp', 'asc'), limit(100)); // Chronological order: earliest first
         } else {
             const types = FILTER_MAP[filter];
             if (types.length > 0) {
                 // If index is missing, this might fail in console, but it's the correct way to get data
-                q = query(auditRef, where('type', 'in', types), orderBy('timestamp', 'desc'), limit(100));
+                q = query(auditRef, where('type', 'in', types), orderBy('timestamp', 'asc'), limit(100)); // Chronological order
             } else {
-                q = query(auditRef, orderBy('timestamp', 'desc'), limit(100));
+                q = query(auditRef, orderBy('timestamp', 'asc'), limit(100)); // Chronological order
             }
         }
 

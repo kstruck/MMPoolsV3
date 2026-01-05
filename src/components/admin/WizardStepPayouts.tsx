@@ -64,7 +64,11 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                     <button
                         onClick={() => updateConfig({
                             payouts: { q1: 0, half: 0, q3: 0, final: 0 },
-                            ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: true }
+                            ruleVariations: {
+                                ...gameState.ruleVariations,
+                                scoreChangePayout: true,
+                                combineTDandXP: false // Separate TD and 2PT conversions for maximum scoring events
+                            }
                         })}
                         className={`relative p-6 rounded-2xl border-2 text-left transition-all group ${gameState.ruleVariations.scoreChangePayout
                             ? 'bg-indigo-600/10 border-indigo-500 ring-4 ring-indigo-500/10'
