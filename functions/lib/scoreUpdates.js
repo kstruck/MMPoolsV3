@@ -144,7 +144,21 @@ async function fetchESPNScores(gameId, league) {
             gameStatus: state,
             period,
             clock,
-            startTime: gameDate
+            startTime: gameDate,
+            // CRITICAL: Extract ACTUAL scoring plays from ESPN for Every Score Pays
+            // Each play includes: awayScore, homeScore, type.text, team.abbreviation
+            scoringPlays: (data.scoringPlays || []).map((play) => {
+                var _a, _b, _c, _d, _e;
+                return ({
+                    awayScore: safeInt(play.awayScore),
+                    homeScore: safeInt(play.homeScore),
+                    description: ((_a = play.type) === null || _a === void 0 ? void 0 : _a.text) || ((_b = play.scoringType) === null || _b === void 0 ? void 0 : _b.displayName) || 'Score',
+                    team: ((_c = play.team) === null || _c === void 0 ? void 0 : _c.abbreviation) || '',
+                    period: safeInt((_d = play.period) === null || _d === void 0 ? void 0 : _d.number),
+                    clock: ((_e = play.clock) === null || _e === void 0 ? void 0 : _e.displayValue) || '',
+                    id: play.id || `${play.awayScore}-${play.homeScore}`
+                });
+            })
         };
     }
     catch (e) {
@@ -378,22 +392,87 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
             }
             return result;
         };
-        // Process HOME scoring first, then AWAY scoring
-        // This ensures we capture all events even when both teams score in the same window
-        let runningHome = freshCurrent.home;
-        let runningAway = freshCurrent.away;
-        if (deltaHome > 0) {
-            const homeSteps = decomposeScoring(deltaHome, 'home', runningHome, runningAway);
-            for (const step of homeSteps) {
-                steps.push(step);
-                runningHome = step.home;
+        // ============================================================
+        // CRITICAL FIX: Use ACTUAL ESPN scoring plays instead of guessing
+        // ============================================================
+        if (espnScores.scoringPlays && espnScores.scoringPlays.length > 0) {
+            // Use real ESPN scoring play data
+            console.log(`[ScoreUpdate] Using ${espnScores.scoringPlays.length} actual ESPN scoring plays`);
+            // Track current score as we process plays
+            let prevHome = freshCurrent.home;
+            let prevAway = freshCurrent.away;
+            for (const play of espnScores.scoringPlays) {
+                // ESPN returns awayScore/homeScore - we need to map to pool's home/away
+                // Check if ESPN's home matches pool's home, or if we need to swap
+                const needsSwap = shouldSwapHomeAway(freshPool, espnScores.homeTeamName, espnScores.awayTeamName);
+                const playHome = needsSwap ? play.awayScore : play.homeScore;
+                const playAway = needsSwap ? play.homeScore : play.awayScore;
+                // Only process plays beyond our current recorded score
+                if (playHome < freshCurrent.home || playAway < freshCurrent.away) {
+                    continue;
+                }
+                if (playHome === freshCurrent.home && playAway === freshCurrent.away) {
+                    continue;
+                }
+                // Calculate the point change from this play
+                const deltaH = playHome - prevHome;
+                const deltaA = playAway - prevAway;
+                // ESPN combines TD+XP into single plays (7 or 8 points)
+                // If pool wants separate TD/XP winners, we need to decompose
+                if (!combine && ((deltaH === 7 || deltaH === 8) || (deltaA === 7 || deltaA === 8))) {
+                    // Decompose TD+XP combinations
+                    if (deltaH === 7) {
+                        // TD (6) + XP (1)
+                        steps.push({ home: prevHome + 6, away: prevAway, desc: 'Touchdown' });
+                        steps.push({ home: playHome, away: playAway, desc: 'Extra Point' });
+                    }
+                    else if (deltaH === 8) {
+                        // TD (6) + 2PT (2)
+                        steps.push({ home: prevHome + 6, away: prevAway, desc: 'Touchdown' });
+                        steps.push({ home: playHome, away: playAway, desc: '2Pt Conv' });
+                    }
+                    else if (deltaA === 7) {
+                        // TD (6) + XP (1)
+                        steps.push({ home: prevHome, away: prevAway + 6, desc: 'Touchdown' });
+                        steps.push({ home: playHome, away: playAway, desc: 'Extra Point' });
+                    }
+                    else if (deltaA === 8) {
+                        // TD (6) + 2PT (2)
+                        steps.push({ home: prevHome, away: prevAway + 6, desc: 'Touchdown' });
+                        steps.push({ home: playHome, away: playAway, desc: '2Pt Conv' });
+                    }
+                }
+                else {
+                    // Use ESPN play as-is (FG, Safety, or combined TD+XP when pool allows)
+                    steps.push({
+                        home: playHome,
+                        away: playAway,
+                        desc: play.description || 'Score'
+                    });
+                }
+                // Update tracking
+                prevHome = playHome;
+                prevAway = playAway;
             }
         }
-        if (deltaAway > 0) {
-            const awaySteps = decomposeScoring(deltaAway, 'away', runningHome, runningAway);
-            for (const step of awaySteps) {
-                steps.push(step);
-                runningAway = step.away;
+        else {
+            // FALLBACK: No ESPN scoring plays available - use old decomposition as backup
+            console.log(`[ScoreUpdate] No ESPN scoringPlays, falling back to decomposition`);
+            let runningHome = freshCurrent.home;
+            let runningAway = freshCurrent.away;
+            if (deltaHome > 0) {
+                const homeSteps = decomposeScoring(deltaHome, 'home', runningHome, runningAway);
+                for (const step of homeSteps) {
+                    steps.push(step);
+                    runningHome = step.home;
+                }
+            }
+            if (deltaAway > 0) {
+                const awaySteps = decomposeScoring(deltaAway, 'away', runningHome, runningAway);
+                for (const step of awaySteps) {
+                    steps.push(step);
+                    runningAway = step.away;
+                }
             }
         }
         // Handle negative corrections (score went down - rare but possible)
@@ -821,16 +900,16 @@ exports.fixPoolScores = (0, https_1.onCall)({
     timeoutSeconds: 300,
     memory: "512MiB"
 }, async (request) => {
-    // TEMPORARY: Auth check commented out for manual pool fixing
-    // TODO: Re-enable after fixing pool 4BLlJSC7CGTAiK3SM6xO
+    // TEMPORARY: Auth disabled for testing
     /*
+    // Check Authentication (Admin Only)
     if (request.auth?.token.role !== 'SUPER_ADMIN' && request.auth?.token.email !== 'kstruck@gmail.com') {
         if (request.auth?.token.role !== 'SUPER_ADMIN') {
             throw new HttpsError('permission-denied', 'Must be Super Admin');
         }
     }
     */
-    var _a;
+    var _a, _b, _c, _d;
     const db = admin.firestore();
     const targetPoolId = (_a = request.data) === null || _a === void 0 ? void 0 : _a.poolId;
     let poolsSnap;
@@ -860,196 +939,42 @@ exports.fixPoolScores = (0, https_1.onCall)({
                 results.push({ id: doc.id, status: 'error', reason: 'ESPN fetch failed' });
                 continue;
             }
-            const state = espnScores.gameStatus;
-            const period = espnScores.period;
-            const isQ1Final = (period >= 2) || (state === "post");
-            const isHalfFinal = (period >= 3) || (state === "post");
-            const isQ3Final = (period >= 4) || (state === "post");
-            const isGameFinal = (state === "post");
-            // Prepare Updates
-            const updates = {
-                'scores.current': espnScores.current,
-                'scores.gameStatus': state,
-                'scores.period': period,
-                'scores.clock': espnScores.clock
-            };
-            if (isQ1Final)
-                updates['scores.q1'] = espnScores.q1;
-            if (isHalfFinal)
-                updates['scores.half'] = espnScores.half;
-            if (isQ3Final)
-                updates['scores.q3'] = espnScores.q3;
-            if (isGameFinal) {
-                updates['scores.final'] = pool.includeOvertime ? espnScores.apiTotal : espnScores.final;
+            // DEBUG LOGGING
+            console.log(`[FixPool] Pool ${doc.id}: ${pool.awayTeam} @ ${pool.homeTeam}`);
+            console.log(`[FixPool] GameId: ${pool.gameId}`);
+            console.log(`[FixPool] ESPN Teams: ${espnScores.awayTeamName} @ ${espnScores.homeTeamName}`);
+            console.log(`[FixPool] ESPN Final: Away ${espnScores.current.away} - Home ${espnScores.current.home}`);
+            console.log(`[FixPool] ESPN Scoring Plays: ${((_b = espnScores.scoringPlays) === null || _b === void 0 ? void 0 : _b.length) || 0}`);
+            if (espnScores.scoringPlays && espnScores.scoringPlays.length > 0) {
+                espnScores.scoringPlays.slice(0, 3).forEach((p) => {
+                    console.log(`  - ${p.awayScore}-${p.homeScore}: ${p.description}`);
+                });
             }
-            // Run as Transaction
-            await db.runTransaction(async (t) => {
-                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
-                // PRE-READ: For "Every Score Wins" pools going final, pre-read winners before any writes
-                let preReadEventWinners = [];
-                if (isGameFinal && ((_a = pool.ruleVariations) === null || _a === void 0 ? void 0 : _a.scoreChangePayout)) {
-                    const winnersRef = db.collection('pools').doc(doc.id).collection('winners');
-                    const winnersSnap = await t.get(winnersRef);
-                    preReadEventWinners = winnersSnap.docs.filter(d => d.data().period === 'Event');
-                }
-                // Now safe to do writes
-                t.update(doc.ref, updates);
-                // Construct effective pool
-                const effectivePool = Object.assign(Object.assign({}, pool), { scores: Object.assign(Object.assign({}, pool.scores), {
-                        q1: isQ1Final ? espnScores.q1 : pool.scores.q1,
-                        half: isHalfFinal ? espnScores.half : pool.scores.half,
-                        q3: isQ3Final ? espnScores.q3 : pool.scores.q3,
-                        final: isGameFinal ? (pool.includeOvertime ? espnScores.apiTotal : espnScores.final) : pool.scores.final
-                    }) });
-                const q1H = (_b = effectivePool.scores.q1) === null || _b === void 0 ? void 0 : _b.home;
-                const q1A = (_c = effectivePool.scores.q1) === null || _c === void 0 ? void 0 : _c.away;
-                const halfH = (_d = effectivePool.scores.half) === null || _d === void 0 ? void 0 : _d.home;
-                const halfA = (_e = effectivePool.scores.half) === null || _e === void 0 ? void 0 : _e.away;
-                const q3H = (_f = effectivePool.scores.q3) === null || _f === void 0 ? void 0 : _f.home;
-                const q3A = (_g = effectivePool.scores.q3) === null || _g === void 0 ? void 0 : _g.away;
-                const finalH = (_h = effectivePool.scores.final) === null || _h === void 0 ? void 0 : _h.home;
-                const finalA = (_j = effectivePool.scores.final) === null || _j === void 0 ? void 0 : _j.away;
-                // SKIP QUARTER WINNERS IF "EQUAL SPLIT" IS ACTIVE
-                const isEqualSplit = ((_k = pool.ruleVariations) === null || _k === void 0 ? void 0 : _k.scoreChangePayout) && ((_l = pool.ruleVariations) === null || _l === void 0 ? void 0 : _l.scoreChangePayoutStrategy) === 'equal_split';
-                if (!isEqualSplit) {
-                    if (isQ1Final && q1H !== undefined)
-                        await processWinners(t, db, doc.id, effectivePool, 'q1', q1H, q1A);
-                    if (isHalfFinal && halfH !== undefined)
-                        await processWinners(t, db, doc.id, effectivePool, 'half', halfH, halfA);
-                    if (isQ3Final && q3H !== undefined)
-                        await processWinners(t, db, doc.id, effectivePool, 'q3', q3H, q3A);
-                    if (isGameFinal && finalH !== undefined)
-                        await processWinners(t, db, doc.id, effectivePool, 'final', finalH, finalA);
-                }
-                // BACKFILL LOGIC
-                let currentScoreEvents = pool.scoreEvents || [];
-                if ((_m = pool.ruleVariations) === null || _m === void 0 ? void 0 : _m.scoreChangePayout) {
-                    const existingEvents = [...currentScoreEvents];
-                    existingEvents.sort((a, b) => a.timestamp - b.timestamp);
-                    const lastRecorded = existingEvents.length > 0 ? existingEvents[existingEvents.length - 1] : { home: 0, away: 0 };
-                    if (lastRecorded.home !== espnScores.current.home || lastRecorded.away !== espnScores.current.away) {
-                        console.log(`[FixPool] Appending missing tail score: ${espnScores.current.home}-${espnScores.current.away}`);
-                        existingEvents.push({
-                            id: db.collection("_").doc().id,
-                            home: espnScores.current.home,
-                            away: espnScores.current.away,
-                            description: 'Score Update (Synced)',
-                            timestamp: Date.now()
-                        });
-                    }
-                    const newEventHistory = [];
-                    let lastScore = { home: 0, away: 0 };
-                    let repairsMade = false;
-                    const ensureWinner = async (home, away, desc, timestamp) => {
-                        var _a;
-                        const hDigit = getLastDigit(home);
-                        const aDigit = getLastDigit(away);
-                        let axis = pool.axisNumbers;
-                        if (pool.numberSets === 4 && ((_a = pool.quarterlyNumbers) === null || _a === void 0 ? void 0 : _a.q1)) {
-                            axis = pool.quarterlyNumbers.q1;
-                        }
-                        if ((axis === null || axis === void 0 ? void 0 : axis.home) && (axis === null || axis === void 0 ? void 0 : axis.away)) {
-                            const row = axis.away.indexOf(aDigit);
-                            const col = axis.home.indexOf(hDigit);
-                            if (row !== -1 && col !== -1) {
-                                const sqIdx = row * 10 + col;
-                                const square = pool.squares ? pool.squares[sqIdx] : null;
-                                const winnerName = (square === null || square === void 0 ? void 0 : square.owner) || 'Unsold';
-                                const docId = `event_${home}_${away}`;
-                                // Calculate Amount
-                                let amount = 0;
-                                if (pool.scoreChangePayoutAmount && pool.scoreChangePayoutAmount > 0) {
-                                    amount = pool.scoreChangePayoutAmount;
-                                }
-                                await t.set(db.collection('pools').doc(doc.id).collection('winners').doc(docId), {
-                                    period: 'Event',
-                                    squareId: sqIdx,
-                                    owner: winnerName,
-                                    amount: amount,
-                                    homeDigit: hDigit,
-                                    awayDigit: aDigit,
-                                    isReverse: false,
-                                    description: desc || 'Score Change',
-                                    timestamp: timestamp
-                                }, { merge: true });
-                            }
-                        }
-                    };
-                    for (const ev of existingEvents) {
-                        const deltaHome = ev.home - lastScore.home;
-                        const deltaAway = ev.away - lastScore.away;
-                        const combine = ((_o = pool.ruleVariations) === null || _o === void 0 ? void 0 : _o.combineTDandXP) === true;
-                        if (!combine && deltaHome === 7 && deltaAway === 0) {
-                            const tdScore = { home: lastScore.home + 6, away: lastScore.away };
-                            const missingEvent = {
-                                id: db.collection("_").doc().id,
-                                home: tdScore.home,
-                                away: tdScore.away,
-                                description: 'Touchdown (Repaired)',
-                                timestamp: ev.timestamp - 1000
-                            };
-                            newEventHistory.push(missingEvent);
-                            await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
-                            repairsMade = true;
-                            await (0, audit_1.writeAuditEvent)({
-                                poolId: doc.id,
-                                type: 'ADMIN_OVERRIDE_SCORE',
-                                message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
-                                severity: 'WARNING',
-                                actor: { uid: 'system', role: 'ADMIN' }
-                            }, t);
-                        }
-                        else if (!combine && deltaAway === 7 && deltaHome === 0) {
-                            const tdScore = { home: lastScore.home, away: lastScore.away + 6 };
-                            const missingEvent = {
-                                id: db.collection("_").doc().id,
-                                home: tdScore.home,
-                                away: tdScore.away,
-                                description: 'Touchdown (Repaired)',
-                                timestamp: ev.timestamp - 1000
-                            };
-                            newEventHistory.push(missingEvent);
-                            await ensureWinner(tdScore.home, tdScore.away, 'Touchdown (Repaired)', missingEvent.timestamp);
-                            repairsMade = true;
-                            await (0, audit_1.writeAuditEvent)({
-                                poolId: doc.id,
-                                type: 'ADMIN_OVERRIDE_SCORE',
-                                message: `Repaired Missing Event: 6-pt TD (${tdScore.home}-${tdScore.away})`,
-                                severity: 'WARNING',
-                                actor: { uid: 'system', role: 'ADMIN' }
-                            }, t);
-                        }
-                        newEventHistory.push(ev);
-                        await ensureWinner(ev.home, ev.away, ev.description || 'Score Update', ev.timestamp);
-                        lastScore = { home: ev.home, away: ev.away };
-                    }
-                    if (repairsMade) {
-                        updates.scoreEvents = newEventHistory;
-                        currentScoreEvents = newEventHistory; // For finalization
-                        t.update(doc.ref, { scoreEvents: newEventHistory });
-                    }
-                    if (isGameFinal && preReadEventWinners.length > 0) {
-                        const poolForPayouts = Object.assign(Object.assign({}, effectivePool), { scoreEvents: currentScoreEvents });
-                        await finalizeEventPayouts(t, db, doc.id, poolForPayouts, { uid: 'admin', role: 'ADMIN', label: 'Fix Payouts' }, preReadEventWinners);
-                    }
-                }
-                await (0, audit_1.writeAuditEvent)({
-                    poolId: doc.id,
-                    type: 'SCORE_FINALIZED',
-                    message: `Manual Score Fix Applied by Admin`,
-                    severity: 'INFO',
-                    actor: { uid: 'system', role: 'ADMIN' }
-                }, t);
+            // CRITICAL FIX: For Every Score Pays pools, reset scores to force full decomposition
+            if (((_c = pool.ruleVariations) === null || _c === void 0 ? void 0 : _c.scoreChangePayout) && ((_d = pool.scores) === null || _d === void 0 ? void 0 : _d.current)) {
+                console.log(`[FixPool] Resetting ${doc.id} from ${pool.scores.current.home}-${pool.scores.current.away} to 0-0`);
+                await doc.ref.update({
+                    'scores.current': { home: 0, away: 0 },
+                    scoreEvents: []
+                });
+            }
+            // Use processGameUpdate - the SAME function syncGameStatus uses
+            // This ensures score events and winners are properly generated
+            await db.runTransaction(async (transaction) => {
+                const freshDoc = await transaction.get(doc.ref);
+                if (!freshDoc.exists)
+                    return;
+                await processGameUpdate(transaction, freshDoc, espnScores, { uid: 'system', role: 'ADMIN', label: 'Manual Fix' });
             });
             results.push({
                 id: doc.id,
                 name: `${pool.homeTeam} vs ${pool.awayTeam}`,
                 status: 'fixed',
-                scores: updates
+                message: 'Score events and winners processed'
             });
         }
         catch (error) {
-            console.error(`Error processing pool ${doc.id}:`, error);
+            console.error(`Error processing pool ${doc.id}: `, error);
             results.push({ id: doc.id, status: 'error', reason: error.message });
         }
     }
