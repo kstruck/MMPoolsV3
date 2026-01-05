@@ -36,8 +36,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   checkNameAvailable,
   currentUser
 }) => {
+  /* AI Commissioner State - Commented out for now
   const [aiIdea, setAiIdea] = useState<string>('');
   const [isThinking, setIsThinking] = useState(false);
+  */
   const [slugError, setSlugError] = useState<string | null>(null);
 
   // Updated Tab Order and Default
@@ -171,6 +173,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }, 1500);
   };
 
+  /*
   const askGeminiForIdeas = async () => {
     setIsThinking(true);
     setAiIdea('');
