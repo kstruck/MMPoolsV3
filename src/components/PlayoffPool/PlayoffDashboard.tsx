@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { PlayoffPool, User } from '../../types';
+import type { PlayoffPool, User, PlayoffTeam } from '../../types';
 import { Trophy, ListOrdered, FileText } from 'lucide-react';
 import { RankingForm } from './RankingForm';
 
@@ -13,24 +13,21 @@ interface PlayoffDashboardProps {
 export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack, onShare }) => {
     const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules'>('picks');
 
+    // --- Score Calculation Logic ---
+    const getRoundScore = (rankings: Record<string, number>, roundKey: 'WILD_CARD' | 'DIVISIONAL' | 'CONF_CHAMP' | 'SUPER_BOWL') => {
+        const winners = pool.results?.[roundKey] || [];
+        const multiplier = pool.settings?.scoring?.roundMultipliers?.[roundKey] || 1;
+
+        let score = 0;
+        winners.forEach(winnerId => {
+            const rank = rankings[winnerId] || 0;
+            score += (rank * multiplier);
+        });
+        return score;
+    };
+
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20">
-            {/* Header / Nav would go here, reusing App's Header via props or context? 
-                App.tsx usually renders Header outside the dashboard for consistent nav. 
-                But for BracketDashboard, it renders its own or wraps it. 
-                Let's assume App.tsx renders Header if this is returned as a specific view, 
-                OR we render Header here. 
-                BracketPoolDashboard renders its own because it takes over the page. 
-                Let's follow that pattern.
-            */}
-
-            {/* Re-using App's Header is complex if not passed. 
-                Let's assume the parent (App.tsx) handles the main Header if possible, 
-                OR we simply copy the Header usage if we have the props.
-                Actually, simpler to just have a specific header for this dashboard or use the global one.
-                App.tsx passes `user`... let's just render a Dashboard Header.
-            */}
-
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4 md:p-6">
                 {/* Pool Header */}
@@ -54,22 +51,22 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-slate-800 mb-6">
+                <div className="flex border-b border-slate-800 mb-6 overflow-x-auto">
                     <button
                         onClick={() => setActiveTab('picks')}
-                        className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'picks' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                        className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'picks' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                     >
                         <ListOrdered size={16} /> My Picks
                     </button>
                     <button
                         onClick={() => setActiveTab('leaderboard')}
-                        className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'leaderboard' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                        className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'leaderboard' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                     >
                         <Trophy size={16} /> Leaderboard
                     </button>
                     <button
                         onClick={() => setActiveTab('rules')}
-                        className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'rules' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                        className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'rules' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                     >
                         <FileText size={16} /> Rules
                     </button>
@@ -83,41 +80,65 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         </div>
                     )}
                     {activeTab === 'leaderboard' && (
-                        <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                        <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="border-b border-slate-800 bg-slate-950/50">
-                                        <th className="p-4 text-slate-400 font-bold text-sm">Rank</th>
-                                        <th className="p-4 text-slate-400 font-bold text-sm">Player</th>
-                                        <th className="p-4 text-slate-400 font-bold text-sm text-right">Score</th>
-                                        <th className="p-4 text-slate-400 font-bold text-sm text-right hidden md:table-cell">Tiebreaker</th>
+                                        <th className="p-4 text-slate-400 font-bold text-sm sticky left-0 bg-slate-950/90 backdrop-blur z-10 w-12">#</th>
+                                        <th className="p-4 text-slate-400 font-bold text-sm sticky left-12 bg-slate-950/90 backdrop-blur z-10 min-w-[200px]">Player</th>
+                                        <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Wild Cards</th>
+                                        <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Divisional</th>
+                                        <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Conf Champ</th>
+                                        <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Super Bowl</th>
+                                        <th className="p-4 text-emerald-400 font-bold text-sm text-right bg-emerald-500/5">Total</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {Object.values(pool.entries || {})
-                                        .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
+                                        .map(entry => {
+                                            // Calculate dynamic scores if not already persisted
+                                            const scoreWC = getRoundScore(entry.rankings, 'WILD_CARD');
+                                            const scoreDiv = getRoundScore(entry.rankings, 'DIVISIONAL');
+                                            const scoreConf = getRoundScore(entry.rankings, 'CONF_CHAMP');
+                                            const scoreSB = getRoundScore(entry.rankings, 'SUPER_BOWL');
+                                            const total = scoreWC + scoreDiv + scoreConf + scoreSB;
+
+                                            // Fallback to persisted totalScore if needed, but calculated is better for real-time
+                                            return { ...entry, scoreWC, scoreDiv, scoreConf, scoreSB, calculatedTotal: total };
+                                        })
+                                        .sort((a, b) => b.calculatedTotal - a.calculatedTotal || Math.abs(pool.teams?.[0]?.seed ? 0 : 0)) // Tiebreaker logic todo
                                         .map((entry, index) => {
                                             const isMe = user?.id === entry.userId;
                                             return (
                                                 <tr key={entry.userId} className={`border-b border-slate-800/50 ${isMe ? 'bg-indigo-900/20' : 'hover:bg-slate-800/50'}`}>
-                                                    <td className="p-4 font-bold text-slate-300">
+                                                    <td className="p-4 font-bold text-slate-500 sticky left-0 bg-inherit border-r border-slate-800/50">
                                                         {index + 1}
                                                     </td>
-                                                    <td className="p-4">
+                                                    <td className="p-4 sticky left-12 bg-inherit border-r border-slate-800/50">
                                                         <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>{entry.userName}</div>
+                                                        <div className="text-xs text-slate-500 mt-1">Tiebreaker: {entry.tiebreaker}</div>
                                                     </td>
-                                                    <td className="p-4 text-right font-black text-emerald-400 text-lg">
-                                                        {entry.totalScore || 0}
+                                                    <td className="p-4 text-center font-mono text-slate-300">
+                                                        {entry.scoreWC > 0 ? entry.scoreWC : '-'}
                                                     </td>
-                                                    <td className="p-4 text-right text-slate-500 hidden md:table-cell">
-                                                        {entry.tiebreaker}
+                                                    <td className="p-4 text-center font-mono text-slate-300">
+                                                        {entry.scoreDiv > 0 ? entry.scoreDiv : '-'}
+                                                    </td>
+                                                    <td className="p-4 text-center font-mono text-slate-300">
+                                                        {entry.scoreConf > 0 ? entry.scoreConf : '-'}
+                                                    </td>
+                                                    <td className="p-4 text-center font-mono text-slate-300">
+                                                        {entry.scoreSB > 0 ? entry.scoreSB : '-'}
+                                                    </td>
+                                                    <td className="p-4 text-right font-black text-emerald-400 text-lg bg-emerald-500/5">
+                                                        {entry.calculatedTotal}
                                                     </td>
                                                 </tr>
                                             );
                                         })}
                                     {(!pool.entries || Object.keys(pool.entries).length === 0) && (
                                         <tr>
-                                            <td colSpan={4} className="p-8 text-center text-slate-500 italic">No entries yet. Be the first!</td>
+                                            <td colSpan={7} className="p-8 text-center text-slate-500 italic">No entries yet. Be the first!</td>
                                         </tr>
                                     )}
                                 </tbody>

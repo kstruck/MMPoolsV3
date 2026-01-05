@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GripVertical, Check, Save } from 'lucide-react';
+import { GripVertical, Check, Save, Loader, AlertTriangle, Lock } from 'lucide-react';
 import type { PlayoffPool, PlayoffTeam, User } from '../../types';
 import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -17,6 +17,10 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+    // Confirmation & Disclaimer State
+    const [isConfirming, setIsConfirming] = useState(false);
+    const [liabilityAccepted, setLiabilityAccepted] = useState(false);
 
     // Initialize state
     useEffect(() => {
@@ -49,12 +53,13 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
 
     // Drag Config
     const handleDragStart = (index: number) => {
+        if (pool.isLocked) return;
         setDraggedIndex(index);
     };
 
     const handleDragOver = (e: React.DragEvent, index: number) => {
         e.preventDefault();
-        if (draggedIndex === null || draggedIndex === index) return;
+        if (pool.isLocked || draggedIndex === null || draggedIndex === index) return;
 
         const newItems = [...rankedTeams];
         const draggedItem = newItems.splice(draggedIndex, 1)[0];
@@ -68,7 +73,16 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
         setDraggedIndex(null);
     };
 
-    const handleSave = async () => {
+    const handleInitSave = () => {
+        if (!user) return;
+        if (pool.isLocked) return;
+
+        setError(null);
+        setLiabilityAccepted(false);
+        setIsConfirming(true);
+    };
+
+    const handleFinalizeSubmission = async () => {
         if (!user) return;
         setIsSubmitting(true);
         setError(null);
@@ -83,19 +97,6 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
                 rankingsMap[team.id] = points;
             });
 
-            // Optimistic update via updatePool (later replace with Cloud Function if complex validation needed)
-            // Optimistic update via updatePool (actual save via Cloud Function)
-
-            // We need to update nested field `entries.${userId}`.
-            // dbService.updatePool takes Partial<GameState>.
-            // We need a specific method to update entries or cast to any.
-            // Or use dot notation key but Typescript hates it.
-            // Let's rely on backend or improved dbService later.
-            // For now, assume we can update `entries` object totally (dangerous for concurrency) 
-            // OR use a dedicated `submitPlayoffEntry` function if I create one.
-            // I'll create a helper in dbService or just do it here carefully.
-
-            // Call Cloud Function
             const submitPicks = httpsCallable(functions, 'submitPlayoffPicks');
             await submitPicks({
                 poolId: pool.id,
@@ -104,92 +105,198 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
             });
 
             setSuccess(true);
-            setTimeout(() => setSuccess(false), 3000);
+            setIsConfirming(false); // Close modal
             if (onSaved) onSaved();
+
+            // Clear success after 3s
+            setTimeout(() => setSuccess(false), 3000);
+
         } catch (err: any) {
             console.error(err);
-            setError("Failed to save picks. Try again.");
+            setError(err.message || "Failed to save picks");
+            setIsConfirming(false); // Close modal on error to show error message
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    if (!user) return <div className="text-center p-4 text-amber-500 font-bold">Please sign in to make picks.</div>;
-    if (pool.isLocked) return <div className="text-center p-4 text-rose-500 font-bold">Picks are Locked for this pool.</div>;
-
     return (
-        <div className="max-w-2xl mx-auto space-y-8">
-            <div className="bg-slate-900/50 p-4 rounded-xl border border-blue-500/20 text-center">
-                <p className="text-sm text-blue-200">
-                    <span className="font-bold block text-lg mb-1">Rank Teams by Confidence</span>
-                    Top (14 pts) to Bottom (1 pt). Drag to reorder.
-                </p>
+        <div className="space-y-6">
+            {/* Instructions */}
+            <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-lg p-4 flex gap-3">
+                <AlertTriangle className="text-indigo-400 shrink-0" size={24} />
+                <div className="text-sm text-slate-300">
+                    <p className="font-bold text-indigo-400 mb-1">How to Rank</p>
+                    <p>Drag and drop teams to set your rankings. The top team (Rank 14) earns the most points for wins. The bottom team (Rank 1) earns the least.</p>
+                </div>
             </div>
 
+            {pool.isLocked && (
+                <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-4 flex items-center gap-3 text-rose-400 font-bold mb-4">
+                    <Lock size={20} />
+                    Picks are locked. No further changes allowed.
+                </div>
+            )}
+
+            {/* Draggable List */}
             <div className="space-y-2">
                 {rankedTeams.map((team, index) => {
-                    const points = 14 - index;
-                    const isDragged = index === draggedIndex;
+                    const rank = 14 - index;
+                    let rankColor = "text-slate-400";
+                    if (rank >= 11) rankColor = "text-emerald-400"; // Top tier
+                    if (rank <= 4) rankColor = "text-rose-400"; // Bottom tier
 
                     return (
                         <div
                             key={team.id}
-                            draggable
+                            draggable={!pool.isLocked}
                             onDragStart={() => handleDragStart(index)}
                             onDragOver={(e) => handleDragOver(e, index)}
                             onDragEnd={handleDragEnd}
-                            className={`flex items-center gap-4 bg-slate-800 p-3 rounded-lg border border-slate-700 cursor-move transition-all select-none ${isDragged ? 'opacity-50 scale-95 border-dashed border-indigo-500' : 'hover:border-indigo-500/50 hover:bg-slate-750'}`}
+                            className={`
+                                flex items-center gap-4 p-4 rounded-lg border transition-all select-none
+                                ${pool.isLocked ? 'bg-slate-900/50 border-slate-800 cursor-default opacity-75' : 'bg-slate-800 border-slate-700 hover:border-slate-500 cursor-grab active:cursor-grabbing hover:bg-slate-750'}
+                                ${draggedIndex === index ? 'opacity-50 ring-2 ring-indigo-500' : ''}
+                            `}
                         >
-                            {/* Points Badge */}
-                            <div className={`w-12 h-12 flex items-center justify-center rounded-full font-black text-xl shadow-lg border-2 ${index < 4 ? 'bg-amber-500/10 border-amber-500 text-amber-500' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>
-                                {points}
-                            </div>
+                            {/* Grip Handle */}
+                            {!pool.isLocked && (
+                                <div className="text-slate-500">
+                                    <GripVertical size={20} />
+                                </div>
+                            )}
 
-                            <GripVertical className="text-slate-600" />
+                            {/* Rank Number */}
+                            <div className={`text-xl font-black w-8 text-center ${rankColor}`}>
+                                {rank}
+                            </div>
 
                             {/* Team Info */}
-                            <div className="flex-1 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    {/* Ideally display logo here if getTeamLogo(team.id) works */}
-                                    <div className={`w-10 h-10 rounded flex items-center justify-center font-bold text-sm ${team.conference === 'AFC' ? 'bg-red-900/40 text-red-200' : 'bg-blue-900/40 text-blue-200'}`}>
-                                        {team.id}
-                                    </div>
-                                    <div>
-                                        <div className="font-bold text-white">{team.name}</div>
-                                        <div className="text-xs text-slate-500">{team.conference} #{team.seed}</div>
-                                    </div>
-                                </div>
+                            <div className="flex-1">
+                                <span className="font-bold text-white text-lg block">{team.name}</span>
+                                <span className="text-xs text-slate-400 uppercase font-bold">{team.conference} Seed #{team.seed}</span>
                             </div>
+
+                            {/* Status Pill (if eliminated) */}
+                            {team.eliminated && (
+                                <div className="px-2 py-1 bg-rose-500/10 text-rose-400 text-xs font-bold rounded uppercase">
+                                    Eliminated
+                                </div>
+                            )}
                         </div>
                     );
                 })}
             </div>
 
-            {/* Tiebreaker */}
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex flex-col items-center gap-4">
-                <label className="text-sm font-bold uppercase text-slate-500 tracking-wider">Tiebreaker: Super Bowl Total Points</label>
-                <input
-                    type="number"
-                    value={tiebreaker || ''}
-                    onChange={(e) => setTiebreaker(Number(e.target.value))}
-                    className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-center text-2xl font-bold text-white w-32 focus:border-indigo-500 outline-none"
-                    placeholder="0"
-                />
+            {/* Tiebreaker Input */}
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mt-8">
+                <label className="block text-slate-400 text-sm font-bold uppercase mb-2">
+                    Tiebreaker: Total Super Bowl Points
+                </label>
+                <div className="relative">
+                    <input
+                        type="number"
+                        value={tiebreaker}
+                        onChange={(e) => setTiebreaker(Number(e.target.value))}
+                        disabled={pool.isLocked}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white text-lg font-bold focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                        placeholder="e.g. 45"
+                    />
+                </div>
+                <p className="text-xs text-slate-500 mt-2">Combined score of both teams in the Super Bowl.</p>
             </div>
 
-            {/* Submit */}
-            <div className="sticky bottom-4">
-                {error && <div className="bg-rose-500/10 text-rose-500 p-3 rounded-lg mb-4 text-center border border-rose-500/20">{error}</div>}
-                {success && <div className="bg-emerald-500/10 text-emerald-500 p-3 rounded-lg mb-4 text-center border border-emerald-500/20 flex items-center justify-center gap-2"><Check size={18} /> Picks Saved Successfully!</div>}
+            {/* Error / Success Messages */}
+            {error && (
+                <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-center font-bold animate-in fade-in">
+                    {error}
+                </div>
+            )}
+            {success && (
+                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-center font-bold animate-in fade-in flex items-center justify-center gap-2">
+                    <Check size={20} /> Picks Saved Successfully!
+                </div>
+            )}
 
-                <button
-                    onClick={handleSave}
-                    disabled={isSubmitting || rankedTeams.length !== 14}
-                    className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-black py-4 rounded-xl shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95"
-                >
-                    {isSubmitting ? 'Saving...' : <><Save size={20} /> SUBMIT RANKINGS</>}
-                </button>
-            </div>
+            {/* Submit Button */}
+            {!pool.isLocked && (
+                <div className="sticky bottom-4 z-10 pt-4 pb-2"> {/* Sticky footer for easy access */}
+                    <button
+                        onClick={handleInitSave}
+                        disabled={isSubmitting}
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-6 rounded-xl text-lg shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <Loader className="animate-spin" size={24} /> Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save size={24} /> Save Picks
+                            </>
+                        )}
+                    </button>
+                </div>
+            )}
+
+            {/* CONFIRMATION MODAL */}
+            {isConfirming && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-md w-full">
+                        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                            {isSubmitting ? <Loader className="animate-spin text-emerald-400" /> : <Check className="text-emerald-400" />}
+                            Confirm Submission
+                        </h3>
+
+                        <div className="bg-slate-900 rounded-lg p-4 mb-4 space-y-3">
+                            <p className="text-slate-300 text-sm">
+                                You are about to submit your rankings for the <span className="text-emerald-400 font-bold">{pool.name}</span>.
+                                You can update these picks anytime until the pool locks.
+                            </p>
+
+                            <div className="border-t border-slate-700 pt-3 flex justify-between">
+                                <span className="text-slate-400">Tiebreaker Prediction:</span>
+                                <span className="text-white font-mono font-bold">{tiebreaker} pts</span>
+                            </div>
+                        </div>
+
+                        {/* LIABILITY DISCLAIMER */}
+                        <div className="mb-6">
+                            <label className="flex items-start gap-3 cursor-pointer group">
+                                <div className="relative flex items-center mt-0.5">
+                                    <input
+                                        type="checkbox"
+                                        checked={liabilityAccepted}
+                                        onChange={(e) => setLiabilityAccepted(e.target.checked)}
+                                        className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-slate-500 bg-slate-900 transition-all checked:border-emerald-500 checked:bg-emerald-500 hover:border-emerald-400"
+                                    />
+                                    <Check size={14} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
+                                </div>
+                                <p className="text-xs text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
+                                    By checking this box and submitting, I acknowledge and agree that MarchMeleePools does not administer, hold, or distribute prizes. Any prizes are provided solely by the Pool Manager/Organizer. Any questions, disputes, or claims related to prizes or pool outcomes must be resolved directly between the user and the Pool Manager/Organizer.
+                                </p>
+                            </label>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setIsConfirming(false)}
+                                disabled={isSubmitting}
+                                className="flex-1 py-3 text-slate-400 hover:bg-slate-700 rounded-lg font-bold transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleFinalizeSubmission}
+                                disabled={!liabilityAccepted || isSubmitting}
+                                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg font-bold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all"
+                            >
+                                {isSubmitting ? 'Submitting...' : 'Confirm & Save'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
