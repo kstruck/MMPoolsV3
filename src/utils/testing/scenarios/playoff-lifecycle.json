@@ -1,0 +1,114 @@
+{
+    "id": "playoff-lifecycle",
+    "name": "Playoff Lifecycle (Multi-Entry)",
+    "description": "Tests full lifecycle: Multiple entries per user, scoring updates, and leaderboard verification.",
+    "poolType": "NFL_PLAYOFFS",
+    "poolConfig": {
+        "name": "Playoff Lifecycle Test",
+        "type": "NFL_PLAYOFFS",
+        "season": "2025"
+    },
+    "testEntries": [
+        {
+            "userName": "Alice",
+            "rankings": {
+                "KC": 14,
+                "SF": 13,
+                "BUF": 12,
+                "DAL": 11,
+                "BAL": 10,
+                "DET": 9,
+                "HOU": 8,
+                "TB": 7,
+                "CLE": 6,
+                "PHI": 5,
+                "MIA": 4,
+                "LAR": 3,
+                "PIT": 2,
+                "GB": 1
+            },
+            "tiebreaker": 50
+        },
+        {
+            "userName": "Alice",
+            "rankings": {
+                "SF": 14,
+                "KC": 13,
+                "DAL": 12,
+                "BUF": 11,
+                "DET": 10,
+                "BAL": 9,
+                "TB": 8,
+                "HOU": 7,
+                "PHI": 6,
+                "CLE": 5,
+                "LAR": 4,
+                "MIA": 3,
+                "GB": 2,
+                "PIT": 1
+            },
+            "tiebreaker": 45
+        },
+        {
+            "userName": "Bob",
+            "rankings": {
+                "BUF": 14,
+                "DET": 13,
+                "KC": 12,
+                "SF": 11,
+                "DAL": 10,
+                "BAL": 9,
+                "HOU": 8,
+                "TB": 7,
+                "CLE": 6,
+                "PHI": 5,
+                "MIA": 4,
+                "LAR": 3,
+                "PIT": 2,
+                "GB": 1
+            },
+            "tiebreaker": 55
+        }
+    ],
+    "roundResults": {
+        "WILD_CARD": [
+            "KC",
+            "BUF",
+            "BAL",
+            "HOU",
+            "SF",
+            "DET"
+        ],
+        "DIVISIONAL": [
+            "KC",
+            "BAL",
+            "SF",
+            "DET"
+        ],
+        "CONF_CHAMP": [
+            "KC",
+            "SF"
+        ],
+        "SUPER_BOWL": [
+            "KC"
+        ]
+    },
+    "assertions": [
+        {
+            "type": "playoffEntryCount",
+            "expected": 3,
+            "message": "Should have 3 total entries (Alice x2, Bob x1)"
+        },
+        {
+            "type": "playoffWinner",
+            "expected": "Alice",
+            "message": "Alice (Entry 1 with KC at #14) should win"
+        },
+        {
+            "type": "poolStatus",
+            "expected": true,
+            "field": "isLocked",
+            "message": "Pool should be locked"
+        }
+    ]
+}

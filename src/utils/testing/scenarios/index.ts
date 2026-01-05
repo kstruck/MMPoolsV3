@@ -7,6 +7,7 @@ import partialFill from './partial-fill.json';
 import propsBasic from './props-basic.json';
 import bracketBasic from './bracket-basic.json';
 import playoffBasic from './playoff-basic.json';
+import playoffLifecycle from './playoff-lifecycle.json';
 
 export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
 
@@ -55,11 +56,14 @@ export interface TestScenario {
     }>;
     testEntries?: Array<{
         userName: string;
-        answers: Record<string, number>;
-        tiebreakerVal?: number;
+        answers?: Record<string, number>; // Props
+        rankings?: Record<string, number>; // Playoff
+        tiebreaker?: number; // Props
+        tiebreakerVal?: number; // Playoff (standardize?)
     }>;
     grading?: Record<string, number>;
     assertions: TestAssertion[];
+    roundResults?: any; // Playoff round results
 }
 
 export const SCENARIOS: Record<string, TestScenario> = {
@@ -69,6 +73,7 @@ export const SCENARIOS: Record<string, TestScenario> = {
     'props-basic': propsBasic as unknown as TestScenario,
     'bracket-basic': bracketBasic as unknown as TestScenario,
     'playoff-basic': playoffBasic as unknown as TestScenario,
+    'playoff-lifecycle': playoffLifecycle as unknown as TestScenario,
 };
 
 export const SCENARIO_LIST = Object.values(SCENARIOS);

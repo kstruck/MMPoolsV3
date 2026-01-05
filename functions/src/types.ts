@@ -392,6 +392,7 @@ export interface PlayoffTeam {
 }
 
 export interface PlayoffEntry {
+    id?: string; // Unique Entry ID
     userId: string;
     userName: string;
     rankings: Record<string, number>; // teamId -> rank (1-14)

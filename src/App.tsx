@@ -979,6 +979,23 @@ const App: React.FC = () => {
     }
 
     if (currentPool.type && currentPool.type !== 'SQUARES') {
+      if (currentPool.type === 'NFL_PLAYOFFS') {
+        // Redirect to Playoff Dashboard (which now has Manager controls)
+        // Instead of error, we render the PlayoffDashboard.
+        // Note: Logic above already handles BRACKET and PROPS.
+        // We can just fall through or explicitly render here.
+        return (
+          <PlayoffDashboard
+            pool={currentPool as PlayoffPool}
+            user={user}
+            onBack={() => window.location.hash = '#participant'}
+            onShare={() => {
+              navigator.clipboard.writeText(window.location.href);
+              alert("Link copied!");
+            }}
+          />
+        );
+      }
       return <div className="text-white p-20 text-center font-bold">Admin panel is only available for SQUARES pools. Use the appropriate admin interface for this pool type.</div>;
     }
 

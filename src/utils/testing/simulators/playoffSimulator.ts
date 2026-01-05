@@ -119,17 +119,23 @@ export async function runScenario(
 
             const entries: Record<string, PlayoffEntry> = {};
 
-            for (const entry of testEntries) {
-                const userId = `test-${entry.userName.toLowerCase()}`;
-                entries[userId] = {
+            testEntries.forEach((entry, idx) => {
+                // Generate a consistent userId for the simulator based on name
+                const userId = `test-${entry.userName.toLowerCase().replace(/\s+/g, '')}`;
+
+                // Use a unique Entry ID (e.g., userId_index) to allow multiple entries per user
+                const entryId = `${userId}_${idx}`;
+
+                entries[entryId] = {
+                    id: entryId,
                     userId,
                     userName: entry.userName,
                     rankings: entry.rankings,
                     tiebreaker: entry.tiebreaker || 0,
                     totalScore: 0,
-                    submittedAt: Date.now()
+                    submittedAt: Date.now() + idx // staggered slightly
                 };
-            }
+            });
 
             // Update pool with entries (SuperAdmin can update pool)
             try {

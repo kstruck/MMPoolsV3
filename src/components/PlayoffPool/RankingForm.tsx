@@ -7,10 +7,12 @@ import { httpsCallable } from 'firebase/functions';
 interface RankingFormProps {
     pool: PlayoffPool;
     user: User | null;
+    entryId?: string | null; // Optional: ID of entry being edited
     onSaved?: () => void;
+    onCancel?: () => void;
 }
 
-export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved }) => {
+export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, onSaved, onCancel }) => {
     const [rankedTeams, setRankedTeams] = useState<PlayoffTeam[]>([]);
     const [tiebreaker, setTiebreaker] = useState<number>(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,31 +27,45 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
     // Initialize state
     useEffect(() => {
         if (pool && pool.teams) {
-            // Check if user already has an entry
-            const existingEntry = user ? pool.entries?.[user.id] : null;
+            // Determine which entry to load
+            // If entryId provided, find it. 
+            // If NOT provided, do NOT load existing (forces new entry).
+            // UNLESS we want default behavior for single-entry pools? 
+            // For back-compat, if no entryId but user has one, maybe load it? 
+            // Implementation Plan says: "add 'Add Another Entry' button to clear form". 
+            // So if entryId is explicitly null, we start fresh.
+
+            let existingEntry = null;
+            if (entryId) {
+                existingEntry = pool.entries?.[entryId];
+            } else if (entryId === undefined && user) {
+                // Legacy Fallback: check by userId if we map it? 
+                // But entries are now keyed by ID. 
+                // We need to find *an* entry for this user if we want default edit mode.
+                // But for "Add New", we want clean state.
+                // Let's assume parent controls this: if entryId passed, edit. If null, new.
+            }
 
             if (existingEntry) {
                 // Reconstruct order from rankings
-                // existingEntry.rankings is { teamId: rank } (Rank 14 = Top, Rank 1 = Bottom)
-                // We want the list to show [Rank 14 Team, Rank 13 Team...]
                 const sorted = [...pool.teams].sort((a, b) => {
-                    const rankA = existingEntry.rankings[a.id] || 0;
-                    const rankB = existingEntry.rankings[b.id] || 0;
+                    const rankA = existingEntry!.rankings[a.id] || 0;
+                    const rankB = existingEntry!.rankings[b.id] || 0;
                     return rankB - rankA; // Descending (14 first)
                 });
                 setRankedTeams(sorted);
                 setTiebreaker(existingEntry.tiebreaker);
             } else {
-                // Default order (seeds?) or just as is
-                // Sort by conference then seed for initial view?
+                // Default order
                 const initial = [...pool.teams].sort((a, b) => {
                     if (a.conference !== b.conference) return a.conference.localeCompare(b.conference);
                     return a.seed - b.seed;
                 });
                 setRankedTeams(initial);
+                setTiebreaker(0);
             }
         }
-    }, [pool, user]);
+    }, [pool, user, entryId]);
 
     // Drag Config
     const handleDragStart = (index: number) => {
@@ -101,7 +117,8 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
             await submitPicks({
                 poolId: pool.id,
                 rankings: rankingsMap,
-                tiebreaker: Number(tiebreaker)
+                tiebreaker: Number(tiebreaker),
+                entryId: entryId // Pass entryId to backend (null = new, string = edit)
             });
 
             setSuccess(true);
@@ -122,6 +139,15 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, onSaved })
 
     return (
         <div className="space-y-6">
+            {onCancel && (
+                <button
+                    onClick={onCancel}
+                    className="mb-4 text-slate-400 hover:text-white flex items-center gap-2 text-sm font-bold"
+                >
+                    &larr; Back to Entry List
+                </button>
+            )}
+
             {/* Instructions */}
             <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-lg p-4 flex gap-3">
                 <AlertTriangle className="text-indigo-400 shrink-0" size={24} />

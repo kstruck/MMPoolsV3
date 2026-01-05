@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { PlayoffPool, User } from '../../types';
-import { Trophy, ListOrdered, FileText } from 'lucide-react';
+import { Trophy, ListOrdered, FileText, Plus, Edit2, Settings } from 'lucide-react';
 import { RankingForm } from './RankingForm';
 
 interface PlayoffDashboardProps {
@@ -12,6 +12,16 @@ interface PlayoffDashboardProps {
 
 export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack, onShare }) => {
     const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules'>('picks');
+    const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+    const [isAddingNew, setIsAddingNew] = useState(false);
+
+    const isManager = user?.id === pool.ownerId || user?.role === 'SUPER_ADMIN';
+
+    // --- My Entries Logic ---
+    const myEntries = useMemo(() => {
+        if (!user || !pool.entries) return [];
+        return Object.values(pool.entries).filter(e => e.userId === user.id);
+    }, [pool.entries, user]);
 
     // --- Score Calculation Logic ---
     const getRoundScore = (rankings: Record<string, number>, roundKey: 'WILD_CARD' | 'DIVISIONAL' | 'CONF_CHAMP' | 'SUPER_BOWL') => {
@@ -24,6 +34,23 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
             score += (rank * multiplier);
         });
         return score;
+    };
+
+    const handleEditEntry = (entryId: string) => {
+        setEditingEntryId(entryId);
+        setIsAddingNew(false);
+        setActiveTab('picks');
+    };
+
+    const handleAddNew = () => {
+        setEditingEntryId(null);
+        setIsAddingNew(true);
+        setActiveTab('picks');
+    };
+
+    const handleCancelEdit = () => {
+        setEditingEntryId(null);
+        setIsAddingNew(false);
     };
 
     return (
@@ -41,6 +68,11 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         </div>
                     </div>
                     <div className="flex gap-2">
+                        {isManager && (
+                            <button onClick={() => alert("Pool Settings Management coming soon!")} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
+                                <Settings size={16} /> Manage Pool
+                            </button>
+                        )}
                         <button onClick={onShare} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
                             Share
                         </button>
@@ -53,7 +85,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                 {/* Tabs */}
                 <div className="flex border-b border-slate-800 mb-6 overflow-x-auto">
                     <button
-                        onClick={() => setActiveTab('picks')}
+                        onClick={() => { setActiveTab('picks'); handleCancelEdit(); }}
                         className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'picks' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                     >
                         <ListOrdered size={16} /> My Picks
@@ -76,7 +108,73 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                 <div className="min-h-[400px]">
                     {activeTab === 'picks' && (
                         <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 md:p-8">
-                            <RankingForm pool={pool} user={user} />
+
+                            {/* Render Form if Adding or Editing, OR if no entries exist yet (force first entry) */}
+                            {(isAddingNew || editingEntryId || myEntries.length === 0) ? (
+                                <RankingForm
+                                    pool={pool}
+                                    user={user}
+                                    entryId={editingEntryId}
+                                    onSaved={handleCancelEdit}
+                                    onCancel={myEntries.length > 0 ? handleCancelEdit : undefined} // Can't cancel if it's the first required entry
+                                />
+                            ) : (
+                                /* List View of Entries */
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="text-xl font-bold text-white">Your Entries</h3>
+                                        {!pool.isLocked && (
+                                            <button
+                                                onClick={handleAddNew}
+                                                className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
+                                            >
+                                                <Plus size={16} /> Add Entry
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        {myEntries.map((entry, idx) => (
+                                            <div key={entry.id || idx} className="bg-slate-800 border border-slate-700 rounded-lg p-4 hover:border-indigo-500 transition-colors group">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div>
+                                                        <h4 className="font-bold text-white text-lg">Entry #{idx + 1}</h4>
+                                                        <p className="text-xs text-slate-400 uppercase font-bold">Tiebreaker: {entry.tiebreaker}</p>
+                                                    </div>
+                                                    {!pool.isLocked ? (
+                                                        <button
+                                                            onClick={() => handleEditEntry(entry.id || '')}
+                                                            className="text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 p-2 rounded-lg transition-colors"
+                                                            title="Edit Entry"
+                                                        >
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-rose-400 text-xs font-bold bg-rose-500/10 px-2 py-1 rounded">Locked</span>
+                                                    )}
+                                                </div>
+
+                                                {/* Preview top 3 picks? */}
+                                                <div className="space-y-2">
+                                                    <p className="text-xs text-slate-500 uppercase font-bold">Top Picks:</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {pool.teams
+                                                            .map(t => ({ ...t, rank: entry.rankings[t.id] || 0 }))
+                                                            .sort((a, b) => b.rank - a.rank)
+                                                            .slice(0, 3)
+                                                            .map(t => (
+                                                                <span key={t.id} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded text-xs font-bold text-slate-300">
+                                                                    #{t.seed} {t.name}
+                                                                </span>
+                                                            ))
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                     {activeTab === 'leaderboard' && (
@@ -110,7 +208,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                         .map((entry, index) => {
                                             const isMe = user?.id === entry.userId;
                                             return (
-                                                <tr key={entry.userId} className={`border-b border-slate-800/50 ${isMe ? 'bg-indigo-900/20' : 'hover:bg-slate-800/50'}`}>
+                                                <tr key={entry.id || entry.userId} className={`border-b border-slate-800/50 ${isMe ? 'bg-indigo-900/20' : 'hover:bg-slate-800/50'}`}>
                                                     <td className="p-4 font-bold text-slate-500 sticky left-0 bg-inherit border-r border-slate-800/50">
                                                         {index + 1}
                                                     </td>

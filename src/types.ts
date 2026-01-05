@@ -25,6 +25,7 @@ export interface PlayoffTeam {
 }
 
 export interface PlayoffEntry {
+  id?: string; // Unique Entry ID (v2 support)
   userId: string;
   userName: string; // Denormalized for display
   rankings: Record<string, number>; // teamId -> rank (1-14)
