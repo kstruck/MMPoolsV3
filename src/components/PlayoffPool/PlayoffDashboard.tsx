@@ -20,7 +20,9 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     // --- My Entries Logic ---
     const myEntries = useMemo(() => {
         if (!user || !pool.entries) return [];
-        return Object.values(pool.entries).filter(e => e.userId === user.id);
+        return Object.entries(pool.entries)
+            .map(([id, entry]) => ({ ...entry, id }))
+            .filter(e => e.userId === user.id);
     }, [pool.entries, user]);
 
     // --- Score Calculation Logic ---
