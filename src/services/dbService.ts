@@ -384,7 +384,19 @@ export const dbService = {
                 const periodOrder: Record<string, number> = { 'q1': 1, 'half': 2, 'q3': 3, 'final': 4 };
 
                 if (a.period === 'Event' && b.period === 'Event') {
-                    // For event winners, sort by document ID which contains scores
+                    // Sort by total score (Home + Away) to ensure chronological order
+                    // ID format: event_HOME_AWAY
+                    const getReq = (id: string = '') => {
+                        const parts = id.replace('event_', '').split('_');
+                        const h = parseInt(parts[0]) || 0;
+                        const a = parseInt(parts[1]) || 0;
+                        return { h, a, total: h + a };
+                    };
+                    const scoreA = getReq(a.id);
+                    const scoreB = getReq(b.id);
+
+                    if (scoreA.total !== scoreB.total) return scoreA.total - scoreB.total;
+                    // Tie-breaker: just standard string compare if totals equal (rare/impossible for sequential scoring unless correction)
                     return (a.id || '').localeCompare(b.id || '');
                 } else if (a.period !== 'Event' && b.period !== 'Event') {
                     // For quarterly winners, use period order
