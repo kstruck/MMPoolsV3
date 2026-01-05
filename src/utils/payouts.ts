@@ -134,10 +134,10 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
 
         // Rollover Calculation
         const isRollover = winnerName === "Rollover";
-        if (isRollover) {
+        if (isRollover && isFinal) {
             accumulatedRollover += baseAmount;
             currentAmount = 0;
-        } else if (hasWinner) {
+        } else if (hasWinner && !isRollover) {
             rolloverContribution = accumulatedRollover;
             currentAmount += accumulatedRollover;
             accumulatedRollover = 0;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import type { PoolTheme, GameState, PropsPool, Scores, Square } from '../types';
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User as UserIcon, Shield, Heart, Bell, Clock, Download, Globe, QrCode, TrendingUp, Plus } from 'lucide-react';
+import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User as UserIcon, Shield, Heart, Bell, Clock, Download, Globe, QrCode, TrendingUp, Plus, Hammer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { GoogleGenAI } from '@google/genai';
 import { getTeamLogo } from '../constants';
@@ -361,6 +361,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setFetchStatus({ type: 'error', msg: 'Game not found.' });
     }
     setIsFetchingScores(false);
+  };
+
+  const [isFixing, setIsFixing] = useState(false);
+  const handleFixSync = async () => {
+    if (!window.confirm("This will reset the score events and force a full re-sync from ESPN. Use this ONLY if scores are stuck or missing. Continue?")) return;
+    setIsFixing(true);
+    setFetchStatus({ type: 'neutral', msg: 'Repairing...' });
+    try {
+      const result = await dbService.fixPoolScores(gameState.id);
+      if (result.success) {
+        setFetchStatus({ type: 'success', msg: 'Repair Complete' });
+        // Optional: reload to see changes
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        setFetchStatus({ type: 'error', msg: 'Repair Failed' });
+      }
+    } catch (e) {
+      console.error(e);
+      setFetchStatus({ type: 'error', msg: 'Repair Error' });
+    }
+    setIsFixing(false);
   };
 
   const totalPayout = (gameState.payouts.q1 || 0) + (gameState.payouts.half || 0) + (gameState.payouts.q3 || 0) + (gameState.payouts.final || 0);
@@ -1855,6 +1876,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
               <p className="text-slate-400 text-sm mb-6">{gameState.gameId ? `Linked to Game ID: ${gameState.gameId}. Updates will be precise.` : `Fuzzy matching active.`}</p>
               <button onClick={handleFetchLiveScores} disabled={isFetchingScores} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button>
+              <button onClick={handleFixSync} disabled={isFixing} className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all ml-2"><Hammer size={18} className={isFixing ? 'animate-spin' : ''} />{isFixing ? 'Repairing...' : 'Fix Sync'}</button>
             </div>
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800"><h3 className="font-bold text-white mb-4">Quarterly Scores</h3><div className="grid gap-4">{(['q1', 'half', 'q3', 'final'] as const).map((period) => {
               const isActive = !!gameState.scores[period];

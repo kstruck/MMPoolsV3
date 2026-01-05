@@ -1090,9 +1090,12 @@ export const fixPoolScores = onCall({
                 });
             }
 
-            // CRITICAL FIX: For Every Score Pays pools, reset scores to force full decomposition
-            if (pool.ruleVariations?.scoreChangePayout && pool.scores?.current) {
-                console.log(`[FixPool] Resetting ${doc.id} from ${pool.scores.current.home}-${pool.scores.current.away} to 0-0`);
+            // CRITICAL FIX: For Every Score Pays pools, ALWAYS reset scores to force full decomposition
+            if (pool.ruleVariations?.scoreChangePayout) {
+                const currentH = pool.scores?.current?.home || 0;
+                const currentA = pool.scores?.current?.away || 0;
+                console.log(`[FixPool] Resetting ${doc.id} from ${currentH}-${currentA} to 0-0`);
+
                 await doc.ref.update({
                     'scores.current': { home: 0, away: 0 },
                     scoreEvents: []
