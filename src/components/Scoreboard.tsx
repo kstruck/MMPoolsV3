@@ -104,33 +104,36 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
         return () => clearInterval(interval);
     }, [autoRefresh, fetchScores]);
 
-    // Categorize games by Active Week and Status
+    // Categorize games by Status
     const categorizedGames = React.useMemo(() => {
-        if (!games.length) return { live: [], upcoming: [], completed: [], nextWeek: [] };
+        if (!games.length) return { live: [], upcoming: [], completed: [] };
 
-        const sorted = [...games].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const live: Game[] = [];
+        const upcoming: Game[] = [];
+        const completed: Game[] = [];
 
-        // Find "Active Week" - the week of the first game that isn't long ago
-        // More reliably, just find the week number of the first non-completed game or the latest game
-        const activeWeekNum = sorted.find(g => g.status.type.state !== 'post')?.week?.number
-            || sorted[sorted.length - 1]?.week?.number;
-
-        return sorted.reduce((acc, game) => {
-            const isLive = game.status.type.state === 'in';
-            const isUpcoming = game.status.type.state === 'pre';
-            const weekNum = game.week?.number;
-
-            if (weekNum > activeWeekNum) {
-                acc.nextWeek.push(game);
-            } else if (isLive) {
-                acc.live.push(game);
-            } else if (isUpcoming) {
-                acc.upcoming.push(game);
+        games.forEach(game => {
+            const state = game.status.type.state;
+            if (state === 'in') {
+                live.push(game);
+            } else if (state === 'pre') {
+                upcoming.push(game);
             } else {
-                acc.completed.push(game);
+                completed.push(game);
             }
-            return acc;
-        }, { live: [] as Game[], upcoming: [] as Game[], completed: [] as Game[], nextWeek: [] as Game[] });
+        });
+
+        // Sort:
+        // Live: Chronological (Earliest Start First) - though for live usually means "started first"
+        live.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        // Upcoming: Chronological (Earliest Start First) - "Upcoming games listed before completed" handled by section order
+        upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        // Completed: Reverse Chronological (Most Recent First)
+        completed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        return { live, upcoming, completed };
     }, [games]);
 
     const getStatusBadge = (game: Game) => {
@@ -344,8 +347,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                         {renderGameSection('Live Games', categorizedGames.live, <PlayCircle className="text-emerald-500 animate-pulse" />, 'border-emerald-500/30')}
                         {renderGameSection('Upcoming Games', categorizedGames.upcoming, <Calendar className="text-amber-500" />, 'border-amber-500/30')}
-                        {renderGameSection('Completed Games', categorizedGames.completed, <Trophy className="text-slate-500" />)}
-                        {renderGameSection('Next Week', categorizedGames.nextWeek, <Calendar className="text-indigo-500" />, 'border-indigo-500/30')}
+                        {renderGameSection('Completed Games - Recent', categorizedGames.completed, <Trophy className="text-slate-500" />)}
                     </div>
                 )}
             </main>

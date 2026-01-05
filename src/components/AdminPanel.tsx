@@ -3,7 +3,7 @@ import { dbService } from '../services/dbService';
 import type { PoolTheme, GameState, PropsPool, Scores, Square } from '../types';
 import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User as UserIcon, Shield, Heart, Bell, Clock, Download, Globe, QrCode, TrendingUp, Plus, Hammer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { GoogleGenAI } from '@google/genai';
+
 import { getTeamLogo } from '../constants';
 import { fetchGameScore } from '../services/scoreService';
 import { AnnouncementManager } from './AnnouncementManager';
@@ -196,9 +196,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } catch (error) {
       console.error("Gemini Error", error);
       setAiIdea("Failed to connect to AI Commissioner.");
-    }
     setIsThinking(false);
   };
+  */
 
   const handleExportUsers = () => {
     const uniqueUsers = new Map<string, { name: string; email: string; phone: string }>();
@@ -1997,7 +1997,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="p-8 text-center text-slate-500">No players yet. Share the pool link!</div>
                 ) : (
                   <div className="divide-y divide-slate-800">
-                    {getPlayers().map((player) => (
+                    {getPlayers().map((player: any) => (
 
                       <div key={player.name} className="bg-slate-900 hover:bg-slate-800/50 transition-colors">
                         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.name ? null : player.name)}>
@@ -2050,7 +2050,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   <span className="text-xs font-bold text-slate-500 uppercase">Squares Owned</span>
                                   <button onClick={() => updatePlayerSquares(player.name, { isPaid: true })} className="text-xs text-emerald-400 hover:text-emerald-300 font-bold">Mark All Paid</button>
                                 </div>
-                                {player.squares.map(sq => (
+                                {player.squares.map((sq: any) => (
                                   <div key={sq.id} className="flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-800">
                                     <span className="text-sm font-mono text-slate-300">Square #{sq.id}</span>
                                     <div className="flex items-center gap-3">
@@ -2088,7 +2088,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="p-8 text-center text-slate-500">No prop cards purchased yet.</div>
                 ) : (
                   <div className="divide-y divide-slate-800">
-                    {getPropPlayers().map((player) => (
+                    {getPropPlayers().map((player: any) => (
                       <div key={player.uid} className="bg-slate-900 hover:bg-slate-800/50 transition-colors">
                         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.uid ? null : player.uid)}>
                           <div className="flex items-center gap-4">

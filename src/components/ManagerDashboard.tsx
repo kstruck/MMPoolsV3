@@ -35,6 +35,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
     const [archiveTab, setArchiveTab] = useState<'active' | 'archived'>('active');
     const [filterCharity, setFilterCharity] = useState(false);
     const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'locked' | 'live' | 'final'>('all');
+    const [filterType, setFilterType] = useState<'all' | 'squares' | 'props' | 'bracket' | 'playoff'>('all');
     const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 20, mid 20-50, high > 50
     const [selectedLeague, setSelectedLeague] = useState<string>('all');
     const [sortBy, setSortBy] = useState<'name' | 'date' | 'price' | 'fill'>('date');
@@ -54,6 +55,18 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
             // Search Match
             const searchLower = searchTerm.toLowerCase();
             const isBracket = p.type === 'BRACKET';
+            const isProps = p.type === 'PROPS';
+            const isPlayoff = p.type === 'NFL_PLAYOFFS';
+            const isSquares = !p.type || p.type === 'SQUARES';
+
+            // Type Filter
+            if (filterType !== 'all') {
+                if (filterType === 'squares' && !isSquares) return false;
+                if (filterType === 'props' && !isProps) return false;
+                if (filterType === 'bracket' && !isBracket) return false;
+                if (filterType === 'playoff' && !isPlayoff) return false;
+            }
+
             const matchesSearch =
                 p.name.toLowerCase().includes(searchLower) ||
                 (!isBracket && (p as GameState).homeTeam.toLowerCase().includes(searchLower)) ||
@@ -141,7 +154,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
             }
             return 0;
         });
-    }, [pools, searchTerm, filterCharity, filterStatus, filterPrice, selectedLeague, archiveTab, sortBy]);
+    }, [pools, searchTerm, filterCharity, filterStatus, filterPrice, selectedLeague, archiveTab, sortBy, filterType]);
 
     if (!user) {
         return (
@@ -215,6 +228,33 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                     className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 pl-10 text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
                                 />
                                 <Search className="absolute left-3 top-3.5 text-slate-500" size={18} />
+                            </div>
+
+                            {/* Pool Type Filter */}
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <Trophy size={14} /> Pool Type
+                                </h3>
+                                <div className="flex flex-col gap-2">
+                                    {[
+                                        { id: 'all', label: 'All Types' },
+                                        { id: 'squares', label: 'Squares' },
+                                        { id: 'props', label: 'Side Hustle' },
+                                        { id: 'bracket', label: 'NCAA Brackets' },
+                                        { id: 'playoff', label: 'Playoff Brackets' },
+                                    ].map((type) => (
+                                        <button
+                                            key={type.id}
+                                            onClick={() => setFilterType(type.id as any)}
+                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all flex justify-between items-center ${filterType === type.id
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                                }`}
+                                        >
+                                            <span>{type.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             {/* Sport Filter */}

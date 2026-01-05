@@ -18,6 +18,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedLeague, setSelectedLeague] = useState<string>('all');
     const [filterCharity, setFilterCharity] = useState(false);
+    const [filterType, setFilterType] = useState<'all' | 'squares' | 'props' | 'bracket' | 'playoff'>('all');
     const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 10, mid 10-50, high > 50
     const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'live' | 'closed'>('all');
 
@@ -34,6 +35,14 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
             const isPublic = isBracket ? (p as BracketPool).isListedPublic : (isPlayoff ? true : (isProps ? (p as PropsPool).isPublic : (p as GameState).isPublic));
 
             if (!isPublic) return false;
+
+            // Type Filter
+            if (filterType !== 'all') {
+                if (filterType === 'squares' && !isSquares) return false;
+                if (filterType === 'props' && !isProps) return false;
+                if (filterType === 'bracket' && !isBracket) return false;
+                if (filterType === 'playoff' && !isPlayoff) return false;
+            }
 
             // Search Match
             const searchLower = searchTerm.toLowerCase();
@@ -110,7 +119,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
 
             return true;
         });
-    }, [pools, searchTerm, selectedLeague, filterCharity, filterPrice, filterStatus]);
+    }, [pools, searchTerm, selectedLeague, filterCharity, filterPrice, filterStatus, filterType]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
@@ -140,6 +149,33 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full bg-slate-900/50 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
                             />
+                        </div>
+
+                        {/* Pool Type Filter */}
+                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Trophy size={14} /> Pool Type
+                            </h3>
+                            <div className="flex flex-col gap-2">
+                                {[
+                                    { id: 'all', label: 'All Types' },
+                                    { id: 'squares', label: 'Squares' },
+                                    { id: 'props', label: 'Side Hustle' },
+                                    { id: 'bracket', label: 'NCAA Brackets' },
+                                    { id: 'playoff', label: 'Playoff Brackets' },
+                                ].map((type) => (
+                                    <button
+                                        key={type.id}
+                                        onClick={() => setFilterType(type.id as any)}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all flex justify-between items-center ${filterType === type.id
+                                            ? 'bg-indigo-600 text-white'
+                                            : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                            }`}
+                                    >
+                                        <span>{type.label}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         {/* Status Filter */}

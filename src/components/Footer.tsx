@@ -10,7 +10,7 @@ export const Footer: React.FC = () => {
                         <Logo height="h-14" />
                     </div>
                     <div className="text-sm text-white font-bold">
-                        © 2025 MarchMeleePools. All rights reserved.
+                        © 2026 MarchMeleePools. All rights reserved.
                     </div>
                     <div className="flex gap-6 text-sm text-white font-bold">
                         <a href="#privacy" className="hover:text-orange-400 transition-colors">Privacy</a>
