@@ -104,17 +104,30 @@ export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState,
                                     return true;
                                 })
                                 .map((card) => {
-                                    const percent = gameState.payouts ? (gameState.payouts as any)[card.period] : 0;
+                                    // For hybrid strategy, calculate percentage from the actual card amount
+                                    let displayPercent = 0;
+                                    if (gameState.ruleVariations?.scoreChangePayout && gameState.ruleVariations?.scoreChangePayoutStrategy === 'hybrid') {
+                                        // Derive percentage from calculated amount
+                                        if (netPot > 0 && card.amount > 0) {
+                                            displayPercent = Math.round((card.amount / netPot) * 100);
+                                        } else {
+                                            // Fallback to reading from hybrid weights
+                                            const weights = gameState.ruleVariations.scoreChangeHybridWeights;
+                                            displayPercent = weights?.[card.period === 'half' ? 'halftime' : 'final'] || 0;
+                                        }
+                                    } else {
+                                        // Standard quarterly: read from payouts
+                                        displayPercent = gameState.payouts ? (gameState.payouts as any)[card.period] : 0;
+                                    }
+
                                     // Check handling from App.tsx
-                                    if (!percent && !gameState.ruleVariations?.scoreChangePayout) return null;
+                                    if (!displayPercent && !gameState.ruleVariations?.scoreChangePayout) return null;
 
                                     return (
                                         <div key={card.period} className="flex justify-between items-center text-sm">
                                             <span className="text-slate-400 font-bold">{card.label}
                                                 <span className="text-slate-600 font-normal ml-1">
-                                                    {gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid'
-                                                        ? `(${(gameState.ruleVariations.scoreChangeHybridWeights as any)?.[card.period === 'half' ? 'halftime' : 'final'] || 0}%)`
-                                                        : `(${percent}%)`}
+                                                    ({displayPercent}%)
                                                 </span>
                                             </span>
                                             <div className="flex flex-col items-end">
