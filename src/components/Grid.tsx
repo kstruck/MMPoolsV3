@@ -359,6 +359,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       if (!isMultiSet) return winners;
 
       return winners.filter(w => {
+         // CRITICAL FIX: Always include "Event" winners (Score Change payouts)
+         if (w.period === 'Event' || w.period === 'Bonus') return true;
+
          // Map activeSet (q1, q2, q3, final) to Winner Period (q1, half, q3, final)
          const periodMap: Record<string, string> = {
             'q1': 'q1',
