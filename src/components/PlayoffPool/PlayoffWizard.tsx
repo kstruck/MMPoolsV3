@@ -596,17 +596,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                             <p className="text-slate-500 text-[10px] mt-1">Lowercase letters, numbers, and dashes only.</p>
                         </div>
 
-                        <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Season</label>
-                            <select
-                                value={formData.season}
-                                onChange={(e) => update({ season: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-emerald-500"
-                            >
-                                <option value="2024">2024-25 NFL Playoffs</option>
-                                <option value="2025">2025-26 NFL Playoffs</option>
-                            </select>
-                        </div>
+
 
                         <div className="md:col-span-1">
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Manager Name</label>
@@ -729,9 +719,8 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                             {/* Quick Select Buttons */}
                             <div className="flex flex-wrap gap-2 mb-4">
                                 {[
-                                    { label: 'Wild Card Kickoff', time: '2025-01-11T16:30:00-05:00' },
-                                    { label: 'Sunday Start', time: '2025-01-12T13:00:00-05:00' },
-                                    { label: 'Divisional Round', time: '2025-01-18T16:30:00-05:00' }
+                                    { label: 'Wild Card Kickoff', time: '2026-01-10T14:30:00-07:00' },
+                                    { label: 'Divisional Round', time: '2026-01-17T14:30:00-07:00' }
                                 ].map((preset) => (
                                     <button
                                         key={preset.label}
