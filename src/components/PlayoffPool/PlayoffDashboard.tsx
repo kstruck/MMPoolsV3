@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { PlayoffPool, User } from '../../types';
 import { Trophy, ListOrdered, FileText, Plus, Edit2, Settings } from 'lucide-react';
 import { RankingForm } from './RankingForm';
+import { PlayoffResultsManager } from './PlayoffResultsManager';
 
 interface PlayoffDashboardProps {
     pool: PlayoffPool;
@@ -14,6 +15,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules'>('picks');
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
+    const [isResultsManagerOpen, setIsResultsManagerOpen] = useState(false);
     // const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Deprecated
 
     const isManager = user?.id === pool.ownerId || user?.role === 'SUPER_ADMIN';
@@ -77,12 +79,17 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     </div>
                     <div className="flex gap-2">
                         {isManager && (
-                            <button onClick={() => window.location.hash = `#playoff-wizard/${pool.id}`} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
-                                <Settings size={16} /> Manage Pool
-                            </button>
+                            <>
+                                <button onClick={() => window.location.hash = `#playoff-wizard/${pool.id}`} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
+                                    <Settings size={16} /> Manage Pool
+                                </button>
+                                <button onClick={() => setIsResultsManagerOpen(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 shadow-lg shadow-indigo-900/20">
+                                    <Trophy size={16} /> Manage Results
+                                </button>
+                            </>
                         )}
-                        <button onClick={onShare} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
-                            Share
+                        <button onClick={onShare} className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors border border-slate-700">
+                            <FileText size={16} /> Share
                         </button>
                         <button onClick={onBack} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
                             Back
@@ -118,7 +125,20 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 md:p-8">
 
                             {/* Render Form if Adding or Editing, OR if no entries exist yet (force first entry) */}
-                            {(isAddingNew || editingEntryId || myEntries.length === 0) ? (
+                            {(!user) ? (
+                                <div className="text-center py-12">
+                                    <h3 className="text-2xl font-bold text-white mb-4">Login Required</h3>
+                                    <p className="text-slate-400 mb-8 max-w-md mx-auto">
+                                        You must be logged in to create an entry for the <span className="text-emerald-400 font-bold">{pool.name}</span>.
+                                    </p>
+                                    <button
+                                        onClick={() => document.dispatchEvent(new CustomEvent('open-auth-modal', { detail: { mode: 'login' } }))}
+                                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-full shadow-lg shadow-emerald-900/20 transition-all transform hover:scale-105"
+                                    >
+                                        Login or Register to Play
+                                    </button>
+                                </div>
+                            ) : (isAddingNew || editingEntryId || myEntries.length === 0) ? (
                                 <RankingForm
                                     pool={pool}
                                     user={user}
@@ -302,7 +322,13 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     onClose={() => setIsSettingsOpen(false)}
                     pool={pool}
                 />
-            )} */}
+            {/* Results Manager Modal */}
+            {isResultsManagerOpen && (
+                <PlayoffResultsManager
+                    pool={pool}
+                    onClose={() => setIsResultsManagerOpen(false)}
+                />
+            )}
         </div>
     );
 };

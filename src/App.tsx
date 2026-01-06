@@ -104,6 +104,16 @@ const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  useEffect(() => {
+    const handleAuthModal = (e: any) => {
+      const mode = e.detail?.mode || 'login';
+      setAuthMode(mode);
+      setShowAuthModal(true);
+    };
+    document.addEventListener('open-auth-modal', handleAuthModal);
+    return () => document.removeEventListener('open-auth-modal', handleAuthModal);
+  }, []);
+
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [gPayCopied, setGPayCopied] = useState(false);
 

@@ -11,7 +11,7 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be logged in.');
     }
-    const { poolId, rankings, tiebreaker } = request.data;
+    const { poolId, rankings, tiebreaker, entryId } = request.data;
     const uid = request.auth.uid;
     if (!poolId || !rankings) {
         throw new https_1.HttpsError('invalid-argument', 'Missing poolId or rankings.');
@@ -43,18 +43,27 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
                     throw new https_1.HttpsError('failed-precondition', 'Pool is manually locked.');
                 }
             }
+            // Determine Entry ID (New or overwrite)
+            // If entryId provided, verify it belongs to user (if enforcing ownership)
+            // Or just generate new one if null
+            // For now, simpler: if entryId provided, use it. If not, generate new unique ID.
+            let finalEntryId = entryId;
+            if (!finalEntryId) {
+                finalEntryId = `${uid}_${Date.now()}`;
+            }
             // Construct Entry
             const entry = {
+                id: finalEntryId, // Added ID to entry object for easier localized ref
                 userId: uid,
                 userName: request.auth.token.name || request.auth.token.email || 'Anonymous',
                 rankings,
                 tiebreaker: Number(tiebreaker) || 0,
-                totalScore: 0, // Reset score on update? Or keep? Usually 0 until calced.
+                totalScore: 0,
                 submittedAt: Date.now()
             };
             // Update specific map key using dot notation to avoid overwriting other entries
             transaction.update(poolRef, {
-                [`entries.${uid}`]: entry
+                [`entries.${finalEntryId}`]: entry
             });
         });
         return { success: true };
