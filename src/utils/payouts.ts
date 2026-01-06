@@ -52,8 +52,6 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
                     percent = squaresPool.ruleVariations.scoreChangeHybridWeights?.final || 40;
                 } else if (period === 'half') {
                     percent = squaresPool.ruleVariations.scoreChangeHybridWeights?.halftime || 20;
-                    // Q1 and Q3 don't have fixed payouts in hybrid mode
-                    percent = 0;
                 }
             } else {
                 // Standard quarterly payouts if NOT hybrid (e.g. equal split or custom)

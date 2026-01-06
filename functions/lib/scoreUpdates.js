@@ -168,7 +168,7 @@ async function fetchESPNScores(gameId, league) {
 }
 // Helper to handle winner logging and computation (Shared between sync and fix)
 const processWinners = async (transaction, db, poolId, poolData, periodKey, homeScore, awayScore, skipDedupe = false) => {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     // Safety check for axis numbers
     if (!poolData.axisNumbers || !poolData.axisNumbers.home || !poolData.axisNumbers.away)
         return;
@@ -190,9 +190,25 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
             return;
         }
     }
-    const payoutPct = getSafePayout(poolData.payouts, periodKey);
+    let payoutPct = 0;
+    // Check Strategy
+    const strategy = (_e = poolData.ruleVariations) === null || _e === void 0 ? void 0 : _e.scoreChangePayoutStrategy;
+    if (((_f = poolData.ruleVariations) === null || _f === void 0 ? void 0 : _f.scoreChangePayout) && strategy === 'hybrid') {
+        // Use Hybrid Weights
+        const weights = poolData.ruleVariations.scoreChangeHybridWeights;
+        if (periodKey === 'final')
+            payoutPct = (weights === null || weights === void 0 ? void 0 : weights.final) || 40;
+        else if (periodKey === 'half')
+            payoutPct = (weights === null || weights === void 0 ? void 0 : weights.halftime) || 20;
+        else
+            payoutPct = 0; // Q1/Q3 are 0 in hybrid
+    }
+    else {
+        // Standard (or Standard Quarterly if scoreChangePayout is false)
+        payoutPct = getSafePayout(poolData.payouts, periodKey);
+    }
     let amount = (totalPot * payoutPct) / 100;
-    if ((_e = poolData.ruleVariations) === null || _e === void 0 ? void 0 : _e.reverseWinners)
+    if ((_g = poolData.ruleVariations) === null || _g === void 0 ? void 0 : _g.reverseWinners)
         amount /= 2;
     const label = periodKey === 'q1' ? 'Q1' : periodKey === 'half' ? 'Halftime' : periodKey === 'q3' ? 'Q3' : 'Final';
     const axis = poolData.axisNumbers;
@@ -216,7 +232,7 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
             };
             transaction.set(db.collection('pools').doc(poolId).collection('winners').doc(periodKey), winnerDoc);
         }
-        if ((_f = poolData.ruleVariations) === null || _f === void 0 ? void 0 : _f.reverseWinners) {
+        if ((_h = poolData.ruleVariations) === null || _h === void 0 ? void 0 : _h.reverseWinners) {
             const rRow = axis.away.indexOf(hDigit);
             const rCol = axis.home.indexOf(aDigit);
             if (rRow !== -1 && rCol !== -1) {
@@ -252,7 +268,7 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     const db = admin.firestore();
     const freshPool = Object.assign(Object.assign({}, doc.data()), overrides);
     if (!espnScores)
-        return;
+        return { updated: false };
     // ============ CRITICAL: Detect and correct home/away team orientation ============
     // ESPN returns scores based on actual venue (Falcons = home in Atlanta)
     // Pool's homeTeam/awayTeam are just labels that may not match ESPN's designation
@@ -664,6 +680,7 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     if (isGameFinal && ((_x = freshPool.ruleVariations) === null || _x === void 0 ? void 0 : _x.scoreChangePayout) && preReadEventWinners) {
         await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, preReadEventWinners);
     }
+    return { updated: shouldUpdate };
 };
 // Helper to calculate and backfill amounts for all score events when game is over
 // IMPORTANT: eventWinners must be PRE-READ before any writes to avoid transaction errors
@@ -732,9 +749,9 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
         const activePoolsSnap = await db.collection("pools")
             .where("scores.gameStatus", "!=", "post")
             .get();
-        // Also get recently completed pools (last 48 hours) to ensure score events are captured
+        // Also get recently completed pools (last 6 hours) to ensure score events are captured
         // This is critical for Every Score Pays pools that may complete quickly
-        const twoDaysAgo = Date.now() - (48 * 60 * 60 * 1000);
+        const twoDaysAgo = Date.now() - (6 * 60 * 60 * 1000);
         const completedPoolsSnap = await db.collection("pools")
             .where("scores.gameStatus", "==", "post")
             .where("updatedAt", ">=", admin.firestore.Timestamp.fromMillis(twoDaysAgo))
@@ -779,26 +796,31 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
                     errorCount++;
                     continue;
                 }
+                let result = { updated: false };
                 await db.runTransaction(async (transaction) => {
                     const freshDoc = await transaction.get(doc.ref);
                     if (!freshDoc.exists)
                         return;
-                    await processGameUpdate(transaction, freshDoc, espnScores, { uid: 'system', role: 'SYSTEM' });
+                    result = await processGameUpdate(transaction, freshDoc, espnScores, { uid: 'system', role: 'SYSTEM' });
                 });
-                // Log Successful Fetch & Process
-                await db.collection('system_logs').add({
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    type: 'ESPN_FETCH_SUCCESS',
-                    status: 'success',
-                    message: `Fetched ESPN scores for Game ${pool.gameId} (Pool ${doc.id})`,
-                    details: {
-                        poolId: doc.id,
-                        gameId: pool.gameId,
-                        currentScore: espnScores.current,
-                        period: espnScores.period,
-                        clock: espnScores.clock
-                    }
-                });
+                // Log Successful Fetch & Process ONLY if updated (to reduce noise)
+                // Or if it's an active pool (not post) to show it's alive?
+                // No, reducing noise is better. Only log changes or errors.
+                if (result.updated) {
+                    await db.collection('system_logs').add({
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        type: 'ESPN_FETCH_SUCCESS',
+                        status: 'success',
+                        message: `Updated scores for Game ${pool.gameId} (Pool ${doc.id})`,
+                        details: {
+                            poolId: doc.id,
+                            gameId: pool.gameId,
+                            currentScore: espnScores.current,
+                            period: espnScores.period,
+                            clock: espnScores.clock
+                        }
+                    });
+                }
                 processedCount++;
             }
             catch (e) {
@@ -959,6 +981,11 @@ exports.fixPoolScores = (0, https_1.onCall)({
                 console.log(`[FixPool] Resetting ${doc.id} from ${currentH}-${currentA} to 0-0`);
                 await doc.ref.update({
                     'scores.current': { home: 0, away: 0 },
+                    'scores.q1': null,
+                    'scores.half': null,
+                    'scores.q3': null,
+                    'scores.final': null,
+                    'scores.apiTotal': null,
                     scoreEvents: []
                 });
             }

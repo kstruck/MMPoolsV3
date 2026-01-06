@@ -205,7 +205,21 @@ const processWinners = async (
         }
     }
 
-    const payoutPct = getSafePayout(poolData.payouts, periodKey);
+    let payoutPct = 0;
+
+    // Check Strategy
+    const strategy = poolData.ruleVariations?.scoreChangePayoutStrategy;
+    if (poolData.ruleVariations?.scoreChangePayout && strategy === 'hybrid') {
+        // Use Hybrid Weights
+        const weights = poolData.ruleVariations.scoreChangeHybridWeights;
+        if (periodKey === 'final') payoutPct = weights?.final || 40;
+        else if (periodKey === 'half') payoutPct = weights?.halftime || 20;
+        else payoutPct = 0; // Q1/Q3 are 0 in hybrid
+    } else {
+        // Standard (or Standard Quarterly if scoreChangePayout is false)
+        payoutPct = getSafePayout(poolData.payouts, periodKey);
+    }
+
     let amount = (totalPot * payoutPct) / 100;
     if (poolData.ruleVariations?.reverseWinners) amount /= 2;
 
@@ -299,7 +313,7 @@ const processGameUpdate = async (
     const db = admin.firestore();
     const freshPool = { ...doc.data() as GameState, ...overrides };
 
-    if (!espnScores) return;
+    if (!espnScores) return { updated: false };
 
     // ============ CRITICAL: Detect and correct home/away team orientation ============
     // ESPN returns scores based on actual venue (Falcons = home in Atlanta)
@@ -763,6 +777,8 @@ const processGameUpdate = async (
     if (isGameFinal && freshPool.ruleVariations?.scoreChangePayout && preReadEventWinners) {
         await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, preReadEventWinners);
     }
+
+    return { updated: shouldUpdate };
 };
 
 // Helper to calculate and backfill amounts for all score events when game is over
@@ -847,9 +863,9 @@ export const syncGameStatus = onSchedule({
             .where("scores.gameStatus", "!=", "post")
             .get();
 
-        // Also get recently completed pools (last 48 hours) to ensure score events are captured
+        // Also get recently completed pools (last 6 hours) to ensure score events are captured
         // This is critical for Every Score Pays pools that may complete quickly
-        const twoDaysAgo = Date.now() - (48 * 60 * 60 * 1000);
+        const twoDaysAgo = Date.now() - (6 * 60 * 60 * 1000);
         const completedPoolsSnap = await db.collection("pools")
             .where("scores.gameStatus", "==", "post")
             .where("updatedAt", ">=", admin.firestore.Timestamp.fromMillis(twoDaysAgo))
@@ -900,10 +916,11 @@ export const syncGameStatus = onSchedule({
                     continue;
                 }
 
+                let result = { updated: false };
                 await db.runTransaction(async (transaction) => {
                     const freshDoc = await transaction.get(doc.ref);
                     if (!freshDoc.exists) return;
-                    await processGameUpdate(
+                    result = await processGameUpdate(
                         transaction,
                         freshDoc,
                         espnScores,
@@ -911,20 +928,24 @@ export const syncGameStatus = onSchedule({
                     );
                 });
 
-                // Log Successful Fetch & Process
-                await db.collection('system_logs').add({
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                    type: 'ESPN_FETCH_SUCCESS',
-                    status: 'success',
-                    message: `Fetched ESPN scores for Game ${pool.gameId} (Pool ${doc.id})`,
-                    details: {
-                        poolId: doc.id,
-                        gameId: pool.gameId,
-                        currentScore: espnScores.current,
-                        period: espnScores.period,
-                        clock: espnScores.clock
-                    }
-                });
+                // Log Successful Fetch & Process ONLY if updated (to reduce noise)
+                // Or if it's an active pool (not post) to show it's alive?
+                // No, reducing noise is better. Only log changes or errors.
+                if (result.updated) {
+                    await db.collection('system_logs').add({
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        type: 'ESPN_FETCH_SUCCESS',
+                        status: 'success',
+                        message: `Updated scores for Game ${pool.gameId} (Pool ${doc.id})`,
+                        details: {
+                            poolId: doc.id,
+                            gameId: pool.gameId,
+                            currentScore: espnScores.current,
+                            period: espnScores.period,
+                            clock: espnScores.clock
+                        }
+                    });
+                }
                 processedCount++;
             } catch (e: any) {
                 console.error(`Error processing pool ${doc.id}:`, e);
@@ -1101,6 +1122,11 @@ export const fixPoolScores = onCall({
 
                 await doc.ref.update({
                     'scores.current': { home: 0, away: 0 },
+                    'scores.q1': null,
+                    'scores.half': null,
+                    'scores.q3': null,
+                    'scores.final': null,
+                    'scores.apiTotal': null,
                     scoreEvents: []
                 });
             }
