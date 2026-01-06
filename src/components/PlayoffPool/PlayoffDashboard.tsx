@@ -9,7 +9,6 @@ interface PlayoffDashboardProps {
     pool: PlayoffPool;
     user: User | null;
     onBack: () => void;
-    onBack: () => void;
 }
 
 export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack }) => {
