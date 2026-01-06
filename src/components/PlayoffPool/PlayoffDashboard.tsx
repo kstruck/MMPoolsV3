@@ -167,7 +167,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                             <div key={entry.id || idx} className="bg-slate-800 border border-slate-700 rounded-lg p-4 hover:border-indigo-500 transition-colors group">
                                                 <div className="flex justify-between items-start mb-4">
                                                     <div>
-                                                        <h4 className="font-bold text-white text-lg">Entry #{idx + 1}</h4>
+                                                        <h4 className="font-bold text-white text-lg">{entry.entryName || `Entry #${idx + 1}`}</h4>
                                                         <p className="text-xs text-slate-400 uppercase font-bold">Tiebreaker: {entry.tiebreaker}</p>
                                                     </div>
                                                     {!pool.isLocked ? (
@@ -275,28 +275,27 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                 </button>
                                                             )}
                                                         </div>
-                                                        {pool.isLocked && (
-                                                            <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                                                                <span>Tiebreaker: {entry.tiebreaker}</span>
-                                                                {entry.paid && (
-                                                                    <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-500/20">
-                                                                        Paid
-                                                                    </span>
-                                                                )}
-                                                                {!entry.paid && isManager && (
-                                                                    <span className="bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-rose-500/20">
-                                                                        Unpaid
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                                        {/* Status Indicators (Always Visible) */}
+                                                        <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                                                            {pool.isLocked && <span>Tiebreaker: {entry.tiebreaker}</span>}
+                                                            {entry.paid && (
+                                                                <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-500/20">
+                                                                    Paid
+                                                                </span>
+                                                            )}
+                                                            {!entry.paid && isManager && (
+                                                                <span className="bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-rose-500/20">
+                                                                    Unpaid
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="p-4 text-slate-400 border-r border-slate-800/50">
                                                         <div className="flex justify-between items-center group/row">
                                                             {entry.userName}
                                                             {/* Manager Actions */}
                                                             {isManager && (
-                                                                <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                                                                <div className="flex items-center gap-1">
                                                                     <button
                                                                         onClick={async (e) => {
                                                                             e.stopPropagation();

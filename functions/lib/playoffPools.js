@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.submitPlayoffPicks = void 0;
+exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.managePlayoffEntry = exports.submitPlayoffPicks = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
@@ -150,7 +150,7 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
     // Check Max Entries Limit (if creating new)
     if (!entryId) {
         const userEntries = Object.values(pool.entries || {}).filter(e => e.userId === uid);
-        const maxEntries = ((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.maxEntriesPerUser) || 1; // Default to 1 if not set
+        const maxEntries = ((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.maxEntriesPerUser) || 50; // Default to 50 to prevent blocking if setting is missing
         if (userEntries.length >= maxEntries) {
             throw new https_1.HttpsError('resource-exhausted', `Max entries reached (${maxEntries})`);
         }
@@ -162,6 +162,47 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
         [`entries.${key}`]: entryData
     });
     return { success: true, entryId: key };
+});
+exports.managePlayoffEntry = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth)
+        throw new https_1.HttpsError('unauthenticated', 'Login required');
+    const { poolId, entryId, action, value } = request.data; // action: 'togglePaid' | 'delete'
+    const uid = request.auth.uid;
+    const isAdmin = request.auth.token.role === 'SUPER_ADMIN';
+    const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists)
+        throw new https_1.HttpsError('not-found', 'Pool not found');
+    const pool = poolSnap.data();
+    const isManager = pool.ownerId === uid || isAdmin;
+    const entry = (_a = pool.entries) === null || _a === void 0 ? void 0 : _a[entryId];
+    if (!entry)
+        throw new https_1.HttpsError('not-found', 'Entry not found');
+    if (action === 'togglePaid') {
+        if (!isManager)
+            throw new https_1.HttpsError('permission-denied', 'Only managers can update payment status');
+        await poolRef.update({
+            [`entries.${entryId}.paid`]: value
+        });
+        return { success: true, message: `Entry marked as ${value ? 'Paid' : 'Unpaid'}` };
+    }
+    if (action === 'delete') {
+        const isOwner = entry.userId === uid;
+        // Owners can delete only if pool is NOT locked
+        if (isOwner && !isManager && pool.isLocked) {
+            throw new https_1.HttpsError('failed-precondition', 'Cannot delete entry after pool is locked');
+        }
+        // Managers can delete anytime. Owners can delete before lock.
+        if (!isOwner && !isManager) {
+            throw new https_1.HttpsError('permission-denied', 'You do not have permission to delete this entry');
+        }
+        await poolRef.update({
+            [`entries.${entryId}`]: admin.firestore.FieldValue.delete()
+        });
+        return { success: true, message: 'Entry deleted' };
+    }
+    throw new https_1.HttpsError('invalid-argument', 'Invalid action');
 });
 exports.calculatePlayoffScores = (0, https_1.onCall)(async (request) => {
     if (!request.auth)
