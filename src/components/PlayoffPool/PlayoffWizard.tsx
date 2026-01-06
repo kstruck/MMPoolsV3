@@ -365,6 +365,8 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
 
                 settings: {
                     entryFee: formData.entryFee,
+                    maxEntriesTotal: formData.maxEntriesTotal,
+                    maxEntriesPerUser: formData.maxEntriesPerUser,
                     paymentInstructions: formData.paymentInstructions,
                     isListedPublic: formData.isListedPublic,
                     payouts: formData.payouts,

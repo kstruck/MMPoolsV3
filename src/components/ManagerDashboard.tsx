@@ -122,7 +122,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                     if (isBracket || p.type === 'PROPS') return false;
                     const poolLeague = (p as any).league || 'nfl';
                     const isCollege = poolLeague === 'college' || poolLeague === 'ncaa';
-                    const isNfl = poolLeague === 'nfl';
+
+                    // Allow NFL_PLAYOFFS to show up under NFL filter
+                    const isNfl = poolLeague === 'nfl' || poolLeague === 'NFL' || p.type === 'NFL_PLAYOFFS';
 
                     if (selectedLeague === 'nfl' && !isNfl) return false;
                     if (selectedLeague === 'college' && !isCollege) return false;
@@ -240,8 +242,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         { id: 'all', label: 'All Types' },
                                         { id: 'squares', label: 'Squares' },
                                         { id: 'props', label: 'Side Hustle' },
-                                        { id: 'bracket', label: 'NCAA Brackets' },
                                         { id: 'playoff', label: 'Playoff Brackets' },
+                                        { id: 'bracket', label: 'NCAA Brackets' },
                                     ].map((type) => (
                                         <button
                                             key={type.id}
