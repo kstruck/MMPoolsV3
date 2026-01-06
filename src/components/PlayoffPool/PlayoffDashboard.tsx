@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { PlayoffPool, User } from '../../types';
 import { dbService } from '../../services/dbService';
-import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2 } from 'lucide-react';
+import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2, Share2, Shield } from 'lucide-react';
 import { RankingForm } from './RankingForm';
 import type { PlayoffEntry } from '../../types';
 
@@ -71,10 +71,30 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         )}
                         <div>
                             <h1 className="text-3xl font-black text-white mb-2">{pool.name}</h1>
-                            <div className="flex items-center gap-2 text-slate-400 text-sm">
-                                <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded text-xs font-bold uppercase">NFL Playoffs</span>
-                                <span>•</span>
-                                <span>Season {pool.season}</span>
+                            <div className="flex items-center gap-3 text-slate-400 text-sm">
+                                <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded text-xs font-bold uppercase border border-emerald-500/20">
+                                    {pool.type === 'NFL_PLAYOFFS' ? 'Playoff Challenge' : 'Pool'}
+                                </span>
+                                {pool.settings?.entryFee > 0 && (
+                                    <span className="text-slate-300 font-bold bg-slate-800 px-2 py-1 rounded border border-slate-700">
+                                        ${pool.settings.entryFee} Entry
+                                    </span>
+                                )}
+                                <button
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(window.location.href);
+                                        // Simple feedback - could be improved with toast
+                                        const btn = document.activeElement as HTMLElement;
+                                        if (btn) {
+                                            const originalText = btn.innerHTML;
+                                            btn.innerHTML = '<span class="text-emerald-400">Copied!</span>';
+                                            setTimeout(() => btn.innerHTML = originalText, 2000);
+                                        }
+                                    }}
+                                    className="flex items-center gap-1 text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors ml-2 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20 hover:bg-indigo-500/20"
+                                >
+                                    <Share2 size={12} /> Share
+                                </button>
                             </div>
                         </div>
                     </div>
