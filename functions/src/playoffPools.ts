@@ -177,6 +177,53 @@ export const submitPlayoffPicks = onCall(async (request) => {
     return { success: true, entryId: key };
 });
 
+export const managePlayoffEntry = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+    const { poolId, entryId, action, value } = request.data; // action: 'togglePaid' | 'delete'
+    const uid = request.auth.uid;
+    const isAdmin = request.auth.token.role === 'SUPER_ADMIN';
+
+    const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists) throw new HttpsError('not-found', 'Pool not found');
+
+    const pool = poolSnap.data() as PlayoffPool;
+    const isManager = pool.ownerId === uid || isAdmin;
+    const entry = pool.entries?.[entryId];
+
+    if (!entry) throw new HttpsError('not-found', 'Entry not found');
+
+    if (action === 'togglePaid') {
+        if (!isManager) throw new HttpsError('permission-denied', 'Only managers can update payment status');
+
+        await poolRef.update({
+            [`entries.${entryId}.paid`]: value
+        });
+        return { success: true, message: `Entry marked as ${value ? 'Paid' : 'Unpaid'}` };
+    }
+
+    if (action === 'delete') {
+        const isOwner = entry.userId === uid;
+
+        // Owners can delete only if pool is NOT locked
+        if (isOwner && !isManager && pool.isLocked) {
+            throw new HttpsError('failed-precondition', 'Cannot delete entry after pool is locked');
+        }
+
+        // Managers can delete anytime. Owners can delete before lock.
+        if (!isOwner && !isManager) {
+            throw new HttpsError('permission-denied', 'You do not have permission to delete this entry');
+        }
+
+        await poolRef.update({
+            [`entries.${entryId}`]: admin.firestore.FieldValue.delete()
+        });
+        return { success: true, message: 'Entry deleted' };
+    }
+
+    throw new HttpsError('invalid-argument', 'Invalid action');
+});
+
 export const calculatePlayoffScores = onCall(async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
     const { poolId } = request.data;

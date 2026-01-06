@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.submitPlayoffPicks = void 0;
+exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.submitPlayoffPicks = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
@@ -124,6 +124,7 @@ const saveAndPropagateResults = async (results) => {
     return uniqueDocs.size;
 };
 exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
+    var _a;
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     const { poolId, rankings, tiebreaker, entryId, entryName } = request.data;
@@ -146,8 +147,16 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
         totalScore: 0,
         submittedAt: Date.now()
     };
-    // Key Logic: use entryId if provided, else define default key (usually uid)
-    const key = entryId || uid;
+    // Check Max Entries Limit (if creating new)
+    if (!entryId) {
+        const userEntries = Object.values(pool.entries || {}).filter(e => e.userId === uid);
+        const maxEntries = ((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.maxEntriesPerUser) || 1; // Default to 1 if not set
+        if (userEntries.length >= maxEntries) {
+            throw new https_1.HttpsError('resource-exhausted', `Max entries reached (${maxEntries})`);
+        }
+    }
+    // Key Logic: use entryId if provided, else generate unique key
+    const key = entryId || `${uid}_${Date.now()}`;
     entryData.id = key;
     await poolRef.update({
         [`entries.${key}`]: entryData
@@ -274,5 +283,35 @@ exports.onPlayoffConfigUpdate = (0, firestore_1.onDocumentWritten)("config/playo
     });
     await batch.commit();
     logger.info(`Playoff Config Sync: Updated ${count} pools with new team data.`);
+});
+/**
+ * Callable function to manually force a sync of the global playoff config to all pools.
+ * Useful if the trigger fails or for retro-fixing.
+ */
+exports.syncPlayoffPools = (0, https_1.onCall)(async (request) => {
+    // Ensure admin only (optional, but good practice)
+    // if (!request.auth?.token.admin) throw new HttpsError('permission-denied', 'Admins only');
+    const configSnap = await db.doc("config/playoffs").get();
+    if (!configSnap.exists) {
+        throw new https_1.HttpsError('not-found', 'Global Playoff Config not found');
+    }
+    const config = configSnap.data();
+    if (!config || !config.teams) {
+        throw new https_1.HttpsError('failed-precondition', 'Global Config missing teams data');
+    }
+    const teams = config.teams;
+    const poolsSnap = await db.collection('pools').where('type', '==', 'NFL_PLAYOFFS').get();
+    if (poolsSnap.empty) {
+        return { success: true, message: "No playoff pools found." };
+    }
+    const batch = db.batch();
+    let count = 0;
+    poolsSnap.docs.forEach(doc => {
+        batch.update(doc.ref, { teams });
+        count++;
+    });
+    await batch.commit();
+    logger.info(`Manual Playoff Sync: Updated ${count} pools.`);
+    return { success: true, count, message: `Successfully synced ${count} pools.` };
 });
 //# sourceMappingURL=playoffPools.js.map

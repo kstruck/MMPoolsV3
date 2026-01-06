@@ -638,5 +638,16 @@ export const dbService = {
             console.error("Error syncing playoff pools:", error);
             throw error;
         }
+    },
+
+    managePlayoffEntry: async (poolId: string, entryId: string, action: 'togglePaid' | 'delete', value?: any): Promise<{ success: boolean; message: string }> => {
+        try {
+            const fn = httpsCallable(functions, 'managePlayoffEntry');
+            const result = await fn({ poolId, entryId, action, value });
+            return result.data as { success: boolean; message: string };
+        } catch (error) {
+            console.error("Error managing playoff entry:", error);
+            throw error;
+        }
     }
 };

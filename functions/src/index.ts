@@ -23,7 +23,7 @@ export { createBracketEntry, updateBracketEntry, submitBracketEntry } from "./br
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { onGameComplete } from "./postGameEmail";
 export { onAnnouncementCreated } from "./announcements";
-export { submitPlayoffPicks, calculatePlayoffScores, updateGlobalPlayoffResults, checkPlayoffScores, onPlayoffConfigUpdate, syncPlayoffPools } from "./playoffPools";
+export { submitPlayoffPicks, calculatePlayoffScores, updateGlobalPlayoffResults, checkPlayoffScores, onPlayoffConfigUpdate, syncPlayoffPools, managePlayoffEntry } from "./playoffPools";
 export { joinWaitlist } from "./waitlist";
 export { generateTestScenario, validateTestResults, generateTestReport } from "./aiTesting";
 export { inspectPoolState } from "./debug";

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { PlayoffPool, User } from '../../types';
-import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X } from 'lucide-react';
+import { dbService } from '../../services/dbService';
+import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2 } from 'lucide-react';
 import { RankingForm } from './RankingForm';
 import type { PlayoffEntry } from '../../types';
 
@@ -170,13 +171,31 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                         <p className="text-xs text-slate-400 uppercase font-bold">Tiebreaker: {entry.tiebreaker}</p>
                                                     </div>
                                                     {!pool.isLocked ? (
-                                                        <button
-                                                            onClick={() => handleEditEntry(entry.id || '')}
-                                                            className="text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 p-2 rounded-lg transition-colors"
-                                                            title="Edit Entry"
-                                                        >
-                                                            <Edit2 size={16} />
-                                                        </button>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => handleEditEntry(entry.id || '')}
+                                                                className="text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 p-2 rounded-lg transition-colors"
+                                                                title="Edit Entry"
+                                                            >
+                                                                <Edit2 size={16} />
+                                                            </button>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (!confirm("Are you sure you want to delete this entry?")) return;
+                                                                    try {
+                                                                        await dbService.managePlayoffEntry(pool.id, entry.id || '', 'delete');
+                                                                        // Optimistic update handled by Firestore subscription
+                                                                    } catch (err) {
+                                                                        console.error(err);
+                                                                        alert("Failed to delete entry");
+                                                                    }
+                                                                }}
+                                                                className="text-white hover:text-rose-100 bg-rose-600 hover:bg-rose-500 p-2 rounded-lg transition-colors border border-rose-500/50 shadow-lg shadow-rose-500/10"
+                                                                title="Delete Entry"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
                                                     ) : (
                                                         <span className="text-rose-400 text-xs font-bold bg-rose-500/10 px-2 py-1 rounded">Locked</span>
                                                     )}
@@ -257,11 +276,61 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                             )}
                                                         </div>
                                                         {pool.isLocked && (
-                                                            <div className="text-xs text-slate-500 mt-1">Tiebreaker: {entry.tiebreaker}</div>
+                                                            <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                                                                <span>Tiebreaker: {entry.tiebreaker}</span>
+                                                                {entry.paid && (
+                                                                    <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-500/20">
+                                                                        Paid
+                                                                    </span>
+                                                                )}
+                                                                {!entry.paid && isManager && (
+                                                                    <span className="bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-rose-500/20">
+                                                                        Unpaid
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         )}
                                                     </td>
                                                     <td className="p-4 text-slate-400 border-r border-slate-800/50">
-                                                        {entry.userName}
+                                                        <div className="flex justify-between items-center group/row">
+                                                            {entry.userName}
+                                                            {/* Manager Actions */}
+                                                            {isManager && (
+                                                                <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                                                                    <button
+                                                                        onClick={async (e) => {
+                                                                            e.stopPropagation();
+                                                                            if (!confirm(`Mark ${entry.entryName} as ${entry.paid ? 'Unpaid' : 'Paid'}?`)) return;
+                                                                            try {
+                                                                                await dbService.managePlayoffEntry(pool.id, entry.id || '', 'togglePaid', !entry.paid);
+                                                                                // Optimistic update handled by Firestore sub
+                                                                            } catch (err) {
+                                                                                alert('Failed to update payment status');
+                                                                            }
+                                                                        }}
+                                                                        className={`p-1.5 rounded hover:bg-slate-700 transition-colors ${entry.paid ? 'text-emerald-400' : 'text-slate-500'}`}
+                                                                        title={entry.paid ? "Mark Unpaid" : "Mark Paid"}
+                                                                    >
+                                                                        <span className="font-bold text-xs">$</span>
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={async (e) => {
+                                                                            e.stopPropagation();
+                                                                            if (!confirm(`Delete entry "${entry.entryName}"? This cannot be undone.`)) return;
+                                                                            try {
+                                                                                await dbService.managePlayoffEntry(pool.id, entry.id || '', 'delete');
+                                                                            } catch (err) {
+                                                                                alert('Failed to delete entry');
+                                                                            }
+                                                                        }}
+                                                                        className="p-1.5 rounded hover:bg-rose-900/50 text-slate-500 hover:text-rose-500 transition-colors"
+                                                                        title="Delete Entry"
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="p-4 text-center font-mono text-slate-300">
                                                         {entry.scoreWC > 0 ? entry.scoreWC : '-'}

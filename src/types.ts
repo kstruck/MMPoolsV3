@@ -33,6 +33,7 @@ export interface PlayoffEntry {
   tiebreaker: number; // Super Bowl Total Score
   totalScore: number;
   submittedAt: number;
+  paid?: boolean; // NEW: Payment status
 }
 
 export interface PlayoffPool {

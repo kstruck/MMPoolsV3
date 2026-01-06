@@ -400,6 +400,7 @@ export interface PlayoffEntry {
     tiebreaker: number;
     totalScore: number;
     submittedAt: number;
+    paid?: boolean; // NEW: Payment status
 }
 
 export interface PlayoffPool {
