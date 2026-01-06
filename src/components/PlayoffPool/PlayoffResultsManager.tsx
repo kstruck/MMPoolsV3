@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { PlayoffPool } from '../../types';
+import type { PlayoffPool } from '../../types';
 import { dbService } from '../../services/dbService';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase'; // Adjust import
-import { Save, AlertTriangle, CheckCircle, Trophy } from 'lucide-react';
+import { Save, Trophy } from 'lucide-react';
 
 interface PlayoffResultsManagerProps {
     pool: PlayoffPool;
@@ -25,7 +25,6 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ po
     });
 
     const [isSaving, setIsSaving] = useState(false);
-    const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
     // Helper to toggle a team in a round
     const toggleTeam = (round: keyof typeof results, teamId: string) => {
@@ -41,7 +40,6 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ po
 
     const handleSave = async () => {
         setIsSaving(true);
-        setStatus('idle');
         try {
             // 1. Update Pool Doc
             await dbService.updatePool(pool.id, { results } as any);
@@ -50,11 +48,9 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ po
             const calculateScores = httpsCallable(functions, 'playoffPools-calculatePlayoffScores');
             await calculateScores({ poolId: pool.id });
 
-            setStatus('success');
             setTimeout(onClose, 1500);
         } catch (error) {
             console.error(error);
-            setStatus('error');
         } finally {
             setIsSaving(false);
         }
@@ -95,8 +91,8 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ po
                                             key={team.id}
                                             onClick={() => toggleTeam(round.key as any, team.id)}
                                             className={`p-2 rounded text-sm font-bold transition-colors ${isSelected
-                                                    ? 'bg-emerald-600 text-white'
-                                                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                                ? 'bg-emerald-600 text-white'
+                                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                                                 }`}
                                         >
                                             {team.name}
