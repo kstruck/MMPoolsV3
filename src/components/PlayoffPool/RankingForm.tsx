@@ -115,6 +115,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                 tiebreaker: Number(tiebreaker),
                 entryId: entryId // Pass entryId to backend (null = new, string = edit)
             });
+            console.log("Submitting picks:", { poolId: pool.id, entryId, rankings: rankingsMap });
 
             setSuccess(true);
             setIsConfirming(false); // Close modal
