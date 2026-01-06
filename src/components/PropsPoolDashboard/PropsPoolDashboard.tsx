@@ -9,7 +9,7 @@ import { GameScoreboard } from '../GameScoreboard';
 import { StatusCard } from '../StatusCard';
 import { PayoutSummaryCard } from '../PayoutSummaryCard';
 
-import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check } from 'lucide-react';
+import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check, Lock } from 'lucide-react';
 import { PropsWizard as PropWizard } from '../PropsWizard/PropsWizard';
 import { dbService } from '../../services/dbService';
 import { ShareModal } from '../modals/ShareModal';
@@ -37,8 +37,8 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
         return () => unsub();
     }, [pool.id]);
 
-    // Helper functions
 
+    const [locking, setLocking] = useState(false); // Add state
 
     const showStats = pool.isLocked || isManager || isAdmin;
 
@@ -215,6 +215,42 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
 
                 {activeTab === 'admin' && (
                     <div className="max-w-4xl mx-auto space-y-6">
+
+                        {/* Manual Lock Control */}
+                        {!pool.isLocked && (
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                                <div>
+                                    <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                                        <Lock className="text-rose-500" size={20} /> Lock Pool
+                                    </h3>
+                                    <p className="text-slate-400 text-sm mt-1">
+                                        Manually lock the pool to prevent further entries.
+                                        <br />
+                                        <span className="text-amber-500 text-xs">Note: This cannot be undone from this dashboard.</span>
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        if (!window.confirm("Are you sure you want to LOCK this pool? No more entries will be allowed.")) return;
+                                        setLocking(true);
+                                        try {
+                                            await dbService.lockPool(pool.id);
+                                            alert("Pool Locked Successfully!");
+                                            window.location.reload();
+                                        } catch (e: any) {
+                                            alert("Error: " + e.message);
+                                        } finally {
+                                            setLocking(false);
+                                        }
+                                    }}
+                                    disabled={locking}
+                                    className="bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
+                                >
+                                    {locking ? 'Locking...' : 'Lock Pool Now'}
+                                </button>
+                            </div>
+                        )}
+
                         {/* Fix Sync Tool */}
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col md:flex-row justify-between items-center gap-4">
                             <div>

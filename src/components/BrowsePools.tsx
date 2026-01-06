@@ -20,7 +20,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
     const [filterCharity, setFilterCharity] = useState(false);
     const [filterType, setFilterType] = useState<'all' | 'squares' | 'props' | 'bracket' | 'playoff'>('all');
     const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 10, mid 10-50, high > 50
-    const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'live' | 'closed'>('all');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'live' | 'closed'>('open');
 
     // Filter Logic
     const filteredPools = useMemo(() => {

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.submitPlayoffPicks = void 0;
+exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.submitPlayoffPicks = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
@@ -248,5 +248,31 @@ exports.checkPlayoffScores = (0, scheduler_1.onSchedule)("every 30 minutes", asy
     catch (error) {
         logger.error("Error checking playoff scores:", error);
     }
+});
+const firestore_1 = require("firebase-functions/v2/firestore");
+exports.onPlayoffConfigUpdate = (0, firestore_1.onDocumentWritten)("config/playoffs", async (event) => {
+    var _a;
+    const after = (_a = event.data) === null || _a === void 0 ? void 0 : _a.after.data();
+    // const before = event.data?.before.data();
+    // If no data (deleted) or no changes to teams, skip
+    if (!after || !after.teams)
+        return;
+    // Simple deep equality check or just always update to be safe
+    // If teams array changed, propagate to all Playoff Pools
+    const teams = after.teams;
+    logger.info("Playoff Config Sync: Detected change in config/playoffs. Syncing to all pools...");
+    const poolsSnap = await db.collection('pools').where('type', '==', 'NFL_PLAYOFFS').get();
+    if (poolsSnap.empty) {
+        logger.info("Playoff Config Sync: No pools found to update.");
+        return;
+    }
+    const batch = db.batch();
+    let count = 0;
+    poolsSnap.docs.forEach(doc => {
+        batch.update(doc.ref, { teams });
+        count++;
+    });
+    await batch.commit();
+    logger.info(`Playoff Config Sync: Updated ${count} pools with new team data.`);
 });
 //# sourceMappingURL=playoffPools.js.map

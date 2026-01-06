@@ -264,3 +264,37 @@ export const checkPlayoffScores = onSchedule("every 30 minutes", async (event) =
         logger.error("Error checking playoff scores:", error);
     }
 });
+
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
+
+export const onPlayoffConfigUpdate = onDocumentWritten("config/playoffs", async (event) => {
+    const after = event.data?.after.data();
+    // const before = event.data?.before.data();
+
+    // If no data (deleted) or no changes to teams, skip
+    if (!after || !after.teams) return;
+
+    // Simple deep equality check or just always update to be safe
+    // If teams array changed, propagate to all Playoff Pools
+    const teams = after.teams as any[];
+
+    logger.info("Playoff Config Sync: Detected change in config/playoffs. Syncing to all pools...");
+
+    const poolsSnap = await db.collection('pools').where('type', '==', 'NFL_PLAYOFFS').get();
+
+    if (poolsSnap.empty) {
+        logger.info("Playoff Config Sync: No pools found to update.");
+        return;
+    }
+
+    const batch = db.batch();
+    let count = 0;
+
+    poolsSnap.docs.forEach(doc => {
+        batch.update(doc.ref, { teams });
+        count++;
+    });
+
+    await batch.commit();
+    logger.info(`Playoff Config Sync: Updated ${count} pools with new team data.`);
+});

@@ -69,37 +69,58 @@ async function executeAutoLock(pool: GameState) {
         await db.runTransaction(async (t) => {
             const doc = await t.get(poolRef);
             if (!doc.exists) return; // Deleted?
-            const currentPool = doc.data() as GameState;
+            const currentPool = doc.data() as any;
 
             if (currentPool.isLocked) {
                 console.log(`[AutoLock] Skipped - already locked: ${pool.id}`);
                 return;
             }
 
-            // Generate Digits
-            const axisNumbers = {
-                home: generateDigits(),
-                away: generateDigits(),
-            };
-
             let updates: any = {
                 isLocked: true,
-                lockGrid: true, // Legacy/UI sync
-                axisNumbers,
                 updatedAt: admin.firestore.Timestamp.now(),
             };
 
-            // Handle 4-Set initialization
-            if (currentPool.numberSets === 4) {
-                updates.quarterlyNumbers = {
-                    q1: axisNumbers
+            const type = currentPool.type || 'SQUARES';
+
+            // Specific logic per pool type
+            if (type === 'SQUARES') {
+                updates.lockGrid = true; // Legacy/UI sync
+
+                // Generate Digits
+                const axisNumbers = {
+                    home: generateDigits(),
+                    away: generateDigits(),
                 };
+                updates.axisNumbers = axisNumbers;
+
+                // Handle 4-Set initialization
+                if (currentPool.numberSets === 4) {
+                    updates.quarterlyNumbers = {
+                        q1: axisNumbers
+                    };
+                }
+
+                // Log Digits Generation
+                const digitsHash = computeDigitsHash({ home: axisNumbers.home, away: axisNumbers.away, poolId: pool.id, period: 'q1' });
+                await writeAuditEvent({
+                    poolId: pool.id,
+                    type: 'DIGITS_GENERATED',
+                    message: 'Auto-Generated Axis Numbers upon Auto-Lock',
+                    severity: 'INFO',
+                    actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' },
+                    payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets }
+                    // NO dedupeKey - prevent read-after-write error
+                }, t);
+            } else if (type === 'BRACKET') {
+                updates.status = 'LOCKED';
+                updates.lockAt = admin.firestore.Timestamp.now(); // Ensure sync
             }
+            // PROPS and NFL_PLAYOFFS just use isLocked: true
 
             t.update(poolRef, updates);
 
-            // CRITICAL FIX: Skip dedupe to avoid read-after-write transaction errors
-            // Audit Logs
+            // Generic Audit Log
             await writeAuditEvent({
                 poolId: pool.id,
                 type: 'POOL_LOCKED',
@@ -107,17 +128,6 @@ async function executeAutoLock(pool: GameState) {
                 severity: 'INFO',
                 actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' }
                 // NO dedupeKey - auto-lock should only happen once anyway
-            }, t);
-
-            const digitsHash = computeDigitsHash({ home: axisNumbers.home, away: axisNumbers.away, poolId: pool.id, period: 'q1' });
-            await writeAuditEvent({
-                poolId: pool.id,
-                type: 'DIGITS_GENERATED',
-                message: 'Auto-Generated Axis Numbers upon Auto-Lock',
-                severity: 'INFO',
-                actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' },
-                payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets }
-                // NO dedupeKey - prevent read-after-write error
             }, t);
         });
 

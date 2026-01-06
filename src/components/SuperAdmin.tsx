@@ -4,7 +4,7 @@ import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
 import { auth } from '../firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
@@ -881,6 +881,24 @@ export const SuperAdmin: React.FC = () => {
                                                                 {!isBracket && (
                                                                     <button onClick={() => handleFixScores(pool as GameState)} className="text-amber-400 hover:text-amber-300 text-xs font-bold border border-amber-500/30 px-2 py-1 rounded flex items-center gap-1">
                                                                         <Settings size={12} /> Fix
+                                                                    </button>
+                                                                )}
+                                                                {/* Close/Lock Button */}
+                                                                {!(pool as any).isLocked && !((pool as any).lockAt && (pool as any).status === 'LOCKED') && (
+                                                                    <button
+                                                                        onClick={async (e) => {
+                                                                            e.stopPropagation();
+                                                                            if (!window.confirm(`Are you sure you want to LOCK "${pool.name}"? This will prevent further entries.`)) return;
+                                                                            try {
+                                                                                await dbService.lockPool(pool.id);
+                                                                                alert("Pool Locked");
+                                                                                // Ideally refresh pools
+                                                                            } catch (e: any) { alert("Error: " + e.message); }
+                                                                        }}
+                                                                        className="text-rose-400 hover:text-rose-300 text-xs font-bold border border-rose-500/30 px-2 py-1 rounded flex items-center gap-1"
+                                                                        title="Lock Pool"
+                                                                    >
+                                                                        <Lock size={12} /> Lock
                                                                     </button>
                                                                 )}
                                                                 <button onClick={() => handleDeletePool(pool.id)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
