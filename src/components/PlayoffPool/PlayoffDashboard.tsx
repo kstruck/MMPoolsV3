@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { PlayoffPool, User } from '../../types';
 import { dbService } from '../../services/dbService';
-import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2, Share2, Shield } from 'lucide-react';
+import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2, Share2 } from 'lucide-react';
 import { RankingForm } from './RankingForm';
 import type { PlayoffEntry } from '../../types';
 
