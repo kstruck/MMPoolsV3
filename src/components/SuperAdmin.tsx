@@ -2013,8 +2013,10 @@ export const SuperAdmin: React.FC = () => {
                                             <div className="text-white font-bold">
                                                 {viewingPool.type === 'BRACKET'
                                                     ? `${(viewingPool as any).entryCount || 0} Entries`
-                                                    : `${(viewingPool as GameState).squares.filter(s => s.owner).length} / 100`}
-                                            </div >
+                                                    : viewingPool.type === 'NFL_PLAYOFFS' || viewingPool.type === 'PROPS'
+                                                        ? `${(viewingPool as any).entries ? Object.keys((viewingPool as any).entries).length : 0} Entries`
+                                                        : `${(viewingPool as GameState).squares?.filter(s => s.owner).length || 0} / 100`}
+                                            </div>
                                         </div >
                                         <div>
                                             <div className="text-xs text-slate-500">Price</div>
@@ -2027,7 +2029,9 @@ export const SuperAdmin: React.FC = () => {
                                             <div className="text-emerald-400 font-bold font-mono">
                                                 ${viewingPool.type === 'BRACKET'
                                                     ? ((viewingPool as any).entryCount || 0) * (viewingPool as any).settings.entryFee
-                                                    : (viewingPool as GameState).squares.filter(s => s.owner).length * (viewingPool as GameState).costPerSquare}
+                                                    : viewingPool.type === 'NFL_PLAYOFFS' || viewingPool.type === 'PROPS'
+                                                        ? ((viewingPool as any).entries ? Object.keys((viewingPool as any).entries).length : 0) * ((viewingPool as any).settings?.entryFee || (viewingPool as GameState).costPerSquare || 0)
+                                                        : ((viewingPool as GameState).squares?.filter(s => s.owner).length || 0) * ((viewingPool as GameState).costPerSquare || 0)}
                                             </div>
                                         </div>
                                     </div >
