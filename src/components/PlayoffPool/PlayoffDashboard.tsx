@@ -252,7 +252,13 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                             // Fallback to persisted totalScore if needed, but calculated is better for real-time
                                             return { ...entry, scoreWC, scoreDiv, scoreConf, scoreSB, calculatedTotal: total };
                                         })
-                                        .sort((a, b) => b.calculatedTotal - a.calculatedTotal || Math.abs(pool.teams?.[0]?.seed ? 0 : 0)) // Tiebreaker logic todo
+                                        .sort((a, b) => {
+                                            if (b.calculatedTotal !== a.calculatedTotal) return b.calculatedTotal - a.calculatedTotal;
+                                            // Secondary: Alphabetical by Entry Name
+                                            const nameA = a.entryName || a.userName || '';
+                                            const nameB = b.entryName || b.userName || '';
+                                            return nameA.localeCompare(nameB);
+                                        })
                                         .map((entry, index) => {
                                             const isMe = user?.id === entry.userId;
                                             return (

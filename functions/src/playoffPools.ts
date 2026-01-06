@@ -174,6 +174,53 @@ export const submitPlayoffPicks = onCall(async (request) => {
         [`entries.${key}`]: entryData
     });
 
+    // 5. Send Confirmation Email
+    try {
+        const userEmail = request.auth.token.email;
+        if (userEmail) {
+            // Construct Email HTML
+            const pickList = pool.teams
+                .map(t => ({ ...t, rank: rankings[t.id] || 0 }))
+                .sort((a, b) => b.rank - a.rank)
+                .map(t => `<li style="margin-bottom: 5px;"><strong>${t.rank} pts:</strong> ${t.name} (${t.seed})</li>`)
+                .join('');
+
+            const emailHtml = `
+                <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
+                    <h1 style="color: #4f46e5;">Entry Confirmed!</h1>
+                    <p>Hi ${userName},</p>
+                    <p>Your picks for <strong>${pool.name}</strong> have been saved.</p>
+                    
+                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <p style="margin: 0; font-weight: bold;">Entry Name: ${entryData.entryName}</p>
+                        <p style="margin: 5px 0 0 0;">Tiebreaker (Total SB Points): ${entryData.tiebreaker}</p>
+                    </div>
+
+                    <h3>Your Rankings:</h3>
+                    <ul style="padding-left: 20px;">
+                        ${pickList}
+                    </ul>
+
+                    <p style="margin-top: 30px;">
+                        <a href="https://www.marchmeleepools.com/#pool/${poolId}" style="background-color: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Pool</a>
+                    </p>
+                </div>
+            `;
+
+            await db.collection('mail').add({
+                to: userEmail,
+                message: {
+                    subject: `Picks Confirmed: ${pool.name}`,
+                    html: emailHtml,
+                    text: `Your picks for ${pool.name} have been saved. Entry: ${entryData.entryName}. View at https://www.marchmeleepools.com/#pool/${poolId}`
+                }
+            });
+        }
+    } catch (emailErr) {
+        console.error("Failed to send confirmation email:", emailErr);
+        // Non-blocking
+    }
+
     return { success: true, entryId: key };
 });
 
