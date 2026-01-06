@@ -57,17 +57,22 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20">
+        <div className="min-h-screen text-slate-100 font-sans pb-20 duration-300" style={{ backgroundColor: pool.branding?.bgColor || '#020617' }}>
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4 md:p-6">
                 {/* Pool Header */}
                 <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                    <div>
-                        <h1 className="text-3xl font-black text-white mb-2">{pool.name}</h1>
-                        <div className="flex items-center gap-2 text-slate-400 text-sm">
-                            <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded text-xs font-bold uppercase">NFL Playoffs</span>
-                            <span>•</span>
-                            <span>Season {pool.season}</span>
+                    <div className="flex items-center gap-4">
+                        {pool.branding?.logo && (
+                            <img src={pool.branding.logo} alt="Pool Logo" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg" />
+                        )}
+                        <div>
+                            <h1 className="text-3xl font-black text-white mb-2">{pool.name}</h1>
+                            <div className="flex items-center gap-2 text-slate-400 text-sm">
+                                <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded text-xs font-bold uppercase">NFL Playoffs</span>
+                                <span>•</span>
+                                <span>Season {pool.season}</span>
+                            </div>
                         </div>
                     </div>
                     <div className="flex gap-2">

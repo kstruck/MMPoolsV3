@@ -356,7 +356,10 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                 googlePay: formData.googlePay,
                 cashapp: formData.cashapp,
                 paypal: formData.paypal,
-                branding: formData.branding,
+                branding: {
+                    logo: formData.branding.logoUrl,
+                    bgColor: formData.branding.backgroundColor
+                },
                 reminders: formData.reminders,
                 accessControl: formData.accessControl,
 
