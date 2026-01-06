@@ -9,10 +9,10 @@ interface PlayoffDashboardProps {
     pool: PlayoffPool;
     user: User | null;
     onBack: () => void;
-    onShare: () => void;
+    onBack: () => void;
 }
 
-export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack, onShare }) => {
+export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack }) => {
     const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules'>('picks');
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
@@ -91,9 +91,9 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                             setTimeout(() => btn.innerHTML = originalText, 2000);
                                         }
                                     }}
-                                    className="flex items-center gap-1 text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors ml-2 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20 hover:bg-indigo-500/20"
+                                    className="flex items-center gap-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-all ml-2 px-3 py-1.5 rounded-lg shadow-lg shadow-indigo-900/20 hover:scale-105 active:scale-95"
                                 >
-                                    <Share2 size={12} /> Share
+                                    <Share2 size={14} /> Share
                                 </button>
                             </div>
                         </div>
@@ -104,9 +104,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                 <Settings size={16} /> Manage Pool
                             </button>
                         )}
-                        <button onClick={onShare} className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg font-bold text-sm transition-colors border border-slate-700">
-                            <FileText size={16} /> Share
-                        </button>
+
                         <button onClick={onBack} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
                             Back
                         </button>
