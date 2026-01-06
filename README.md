@@ -43,6 +43,19 @@ A modern, real-time sports pool application supporting both **Gameday Squares** 
 *   **Auto-Lock System:** **NEW!** Pools automatically lock and generate random axis numbers at the scheduled kick-off time. **Now Robust:** Fixed frontend data saving to ensure reliability and corrected Timezone inputs to handle local game times accurately.
 *   **Date & Time Display:** **NEW!** Pool cards now explicitly show the scheduled Game Time or Bracket Lock Time.
 *   **Payout & Score History:** **Fixed!** "Fix Pool Scores" tool now correctly recalculates all past winners and payouts, ensuring the "Score Change History" audit log is always money-perfect. "No Money Won" status is now accurately reflected.
+### 🏆 NFL Playoff Challenge (NEW)
+*   **Rank 'Em Style:** A brand new pool type for the NFL Postseason. Participants rank all 14 playoff teams from 14 points (Most Confident) to 1 point (Least Confident).
+*   **Drag-and-Drop Interface:** Intuitive UI allows users to easily reorder teams before locking their entry.
+*   **Scoring System:** Points are awarded for every win, multiplied by the round multiplier (x1 Wild Card, x2 Divisional, x4 Conference, x8 Super Bowl).
+*   **Live Leaderboard:** Real-time standings sorted by **Maximum Possible Score** and current points.
+*   **Tiebreaker:** Integrated Super Bowl total score prediction.
+*   **Manager Controls:** Toggles for "Seed Bonus" (rewarding underdog picks) and full manual control over payment status.
+
+### 📧 Professional Communication Suite (NEW)
+*   **Unified Branding:** All system emails (Welcome, Reset Password, Receipts, Winner Alerts) now use a polished, standardized HTML template with the official logo and footer.
+*   **Smart Receipts:** Automated "Payment Received" emails are triggers instantly when a manager marks an entry as PAID, giving users peace of mind.
+*   **Urgency Reminders:** The system intelligently scans active Playoff Pools and sends a "Payment Due" reminder to unpaid users exactly **2 hours before the pool locks**, reducing ease of administration.
+*   **Entry Confirmations:** Users receive a detailed "Entry Confirmed" email with a summary of their ranked picks immediately after submission.
 
 ### 📦 Pool Lifecycle Management (NEW)
 *   **Archive Pools:** Managers can archive completed pools to keep their dashboard clean. Active/Archived tabs filter pools by status. Archived pools can be restored at any time.
