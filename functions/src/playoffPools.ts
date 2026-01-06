@@ -160,7 +160,7 @@ export const submitPlayoffPicks = onCall(async (request) => {
     // Check Max Entries Limit (if creating new)
     if (!entryId) {
         const userEntries = Object.values(pool.entries || {}).filter(e => e.userId === uid);
-        const maxEntries = pool.settings?.maxEntriesPerUser || 1; // Default to 1 if not set
+        const maxEntries = pool.settings?.maxEntriesPerUser || 50; // Default to 50 to prevent blocking if setting is missing
         if (userEntries.length >= maxEntries) {
             throw new HttpsError('resource-exhausted', `Max entries reached (${maxEntries})`);
         }
