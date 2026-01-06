@@ -2397,6 +2397,22 @@ export const SuperAdmin: React.FC = () => {
                                 >
                                     {isSavingPlayoffs ? 'Saving...' : 'Save Global Config'}
                                 </button>
+                                <button
+                                    onClick={async () => {
+                                        if (confirm("Force Sync global config to all Playoff Pools? This is useful if elimination status is out of sync.")) {
+                                            try {
+                                                const res = await dbService.syncPlayoffPools();
+                                                alert(res.message);
+                                            } catch (e: any) {
+                                                console.error(e);
+                                                alert("Sync Failed: " + e.message);
+                                            }
+                                        }
+                                    }}
+                                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2"
+                                >
+                                    <Bot size={16} /> Force Sync
+                                </button>
                             </div>
                         </div>
 
@@ -2543,7 +2559,8 @@ export const SuperAdmin: React.FC = () => {
                         )}
                     </div>
                 </div>
-            )}
+            )
+            }
 
         </div >
     );

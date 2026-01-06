@@ -135,11 +135,16 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                 </div>
                             ) : (isAddingNew || editingEntryId || myEntries.length === 0) ? (
                                 <RankingForm
+                                    key={editingEntryId || 'new'}
                                     pool={pool}
                                     user={user}
-                                    entryId={editingEntryId}
-                                    onSaved={handleCancelEdit}
-                                    onCancel={myEntries.length > 0 ? handleCancelEdit : undefined} // Can't cancel if it's the first required entry
+                                    entryId={editingEntryId || undefined}
+                                    onSaved={() => {
+                                        setEditingEntryId(null);
+                                        setIsAddingNew(false);
+                                        // Refresh is handled by snapshot
+                                    }}
+                                    onCancel={myEntries.length > 0 ? handleCancelEdit : undefined}
                                 />
                             ) : (
                                 /* List View of Entries */

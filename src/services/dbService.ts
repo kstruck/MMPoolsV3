@@ -627,5 +627,16 @@ export const dbService = {
             console.error("Error saving playoff config:", error);
             throw error;
         }
+    },
+
+    syncPlayoffPools: async (): Promise<{ success: boolean; count: number; message: string }> => {
+        try {
+            const fn = httpsCallable(functions, 'syncPlayoffPools');
+            const result = await fn();
+            return result.data as { success: boolean; count: number; message: string };
+        } catch (error) {
+            console.error("Error syncing playoff pools:", error);
+            throw error;
+        }
     }
 };

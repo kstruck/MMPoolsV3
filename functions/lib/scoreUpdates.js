@@ -753,7 +753,7 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
     timeoutSeconds: 60,
     memory: "256MiB"
 }, async (event) => {
-    var _a;
+    var _a, _b;
     const db = admin.firestore();
     const startTime = Date.now();
     let processedCount = 0;
@@ -796,6 +796,16 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
                 const start = pool.scores.startTime ? new Date(pool.scores.startTime).getTime() : 0;
                 if (start > now + 2 * 60 * 60 * 1000)
                     continue;
+            }
+            // Optimization: Stop syncing finalized games that are older than 36 hours
+            // This prevents "update loops" where a trivial update bumps 'updatedAt' forever
+            if (((_b = pool.scores) === null || _b === void 0 ? void 0 : _b.gameStatus) === 'post') {
+                const now = Date.now();
+                const start = pool.scores.startTime ? new Date(pool.scores.startTime).getTime() : 0;
+                // If game started more than 36 hours ago, stop looking at it
+                if (now - start > 36 * 60 * 60 * 1000) {
+                    continue;
+                }
             }
             try {
                 const espnScores = await fetchESPNScores(pool.gameId, pool.league || 'nfl');

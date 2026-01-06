@@ -8,6 +8,7 @@ const league = process.argv[3] || 'nfl'; // 'nfl' or 'college-football'
 
 async function inspect() {
     const url = `https://site.api.espn.com/apis/site/v2/sports/football/${league}/summary?event=${gameId}`;
+    const output = [];
 
     console.log('Fetching:', url);
 

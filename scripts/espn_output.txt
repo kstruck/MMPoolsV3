@@ -1,6 +1,16 @@
-=== ESPN API scoringPlays ===
-Game ID: 401772961
-
+=== STATUS OBJECT ===
+{
+  "type": {
+    "id": "3",
+    "name": "STATUS_FINAL",
+    "state": "post",
+    "completed": true,
+    "description": "Final",
+    "detail": "Final",
+    "shortDetail": "Final"
+  },
+  "isTBDFlex": false
+}
 Total plays: 4
 
 Play 1: 7-0

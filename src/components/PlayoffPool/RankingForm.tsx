@@ -50,7 +50,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                 setTiebreaker(existingEntry.tiebreaker);
                 setEntryName(existingEntry.entryName || '');
             } else {
-                // Default order
+                // Default order (New Entry)
                 const initial = [...pool.teams].sort((a, b) => {
                     if (a.conference !== b.conference) return a.conference.localeCompare(b.conference);
                     return a.seed - b.seed;
@@ -89,6 +89,15 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
 
         if (!user) {
             setShowAuthModal(true);
+            return;
+        }
+
+        // VALIDATION: Require Tiebreaker
+        if (!tiebreaker || tiebreaker <= 0) {
+            setError("Please enter a valid tiebreaker score (Total Points in Super Bowl).");
+            // Scroll to bottom helper
+            const el = document.getElementById('tiebreaker-input');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 

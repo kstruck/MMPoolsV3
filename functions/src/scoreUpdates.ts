@@ -916,6 +916,17 @@ export const syncGameStatus = onSchedule({
                 if (start > now + 2 * 60 * 60 * 1000) continue;
             }
 
+            // Optimization: Stop syncing finalized games that are older than 36 hours
+            // This prevents "update loops" where a trivial update bumps 'updatedAt' forever
+            if (pool.scores?.gameStatus === 'post') {
+                const now = Date.now();
+                const start = pool.scores.startTime ? new Date(pool.scores.startTime).getTime() : 0;
+                // If game started more than 36 hours ago, stop looking at it
+                if (now - start > 36 * 60 * 60 * 1000) {
+                    continue;
+                }
+            }
+
             try {
                 const espnScores = await fetchESPNScores(pool.gameId, (pool as any).league || 'nfl');
                 if (!espnScores) {

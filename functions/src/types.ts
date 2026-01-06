@@ -417,6 +417,7 @@ export interface PlayoffPool {
         paymentInstructions: string;
         isListedPublic: boolean;
         payouts: PayoutSettings;
+        maxEntriesPerUser?: number; // NEW: Limit entries
         scoring: {
             roundMultipliers: {
                 WILD_CARD: number;
