@@ -251,3 +251,59 @@ export const toggleWinnerPaid = onCall(async (request) => {
 
     return { success: true, isPaid: isNowPaid, winnerId };
 });
+
+// ============ FIX PARTICIPANT IDS (Backfill) ============
+export const fixParticipantIds = onCall(async (request) => {
+    const db = admin.firestore();
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Must be logged in.');
+
+    // Super Admin Check
+    const uid = request.auth.uid;
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (userDoc.data()?.role !== 'SUPER_ADMIN') {
+        throw new HttpsError('permission-denied', 'SuperAdmin only.');
+    }
+
+    const dryRun = request.data.dryRun === true;
+    let processed = 0;
+    let updated = 0;
+
+    const poolsSnap = await db.collection('pools').get();
+
+    for (const doc of poolsSnap.docs) {
+        const pool = doc.data();
+        const participantIds = new Set<string>();
+
+        // 1. Squares Pools
+        if (pool.squares && Array.isArray(pool.squares)) {
+            pool.squares.forEach((sq: any) => {
+                if (sq.reservedByUid) participantIds.add(sq.reservedByUid);
+            });
+        }
+
+        // 2. Playoff Pools / Bracket Pools
+        if (pool.entries && typeof pool.entries === 'object') {
+            Object.values(pool.entries).forEach((entry: any) => {
+                if (entry.userId) participantIds.add(entry.userId);
+            });
+        }
+
+        // 3. Compare with existing
+        const existing = new Set(pool.participantIds || []);
+        const toAdd = [...participantIds].filter(id => !existing.has(id));
+
+        processed++;
+
+        if (toAdd.length > 0) {
+            console.log(`Pool ${pool.name} (${doc.id}): Adding ${toAdd.length} participants.`);
+            if (!dryRun) {
+                await doc.ref.update({
+                    participantIds: admin.firestore.FieldValue.arrayUnion(...toAdd)
+                });
+                updated++;
+            }
+        }
+    }
+
+    return { success: true, processed, updated, dryRun };
+});

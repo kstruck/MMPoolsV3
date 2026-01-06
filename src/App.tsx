@@ -166,12 +166,13 @@ const App: React.FC = () => {
 
     let publicPools: Pool[] = [];
     let myPools: Pool[] = [];
+    let participatingPools: Pool[] = [];
 
     // Helper to merge and set
     const updateMergedPools = () => {
       // Merge arrays and deduplicate by ID
       const map = new Map();
-      [...publicPools, ...myPools].forEach(p => map.set(p.id, p));
+      [...publicPools, ...myPools, ...participatingPools].forEach(p => map.set(p.id, p));
       setPools(Array.from(map.values()));
       setIsPoolsLoading(false);
     };
@@ -195,6 +196,7 @@ const App: React.FC = () => {
     );
 
     let unsubMine = () => { };
+    let unsubParticipating = () => { };
 
     if (user) {
       unsubMine = dbService.subscribeToPools(
@@ -207,14 +209,27 @@ const App: React.FC = () => {
         },
         user.id
       );
+
+      unsubParticipating = dbService.subscribeToParticipatingPools(
+        user.id,
+        (p) => {
+          participatingPools = p;
+          updateMergedPools();
+        },
+        (error) => {
+          console.error("Part. Pool Sub Error", error);
+        }
+      );
     } else {
       myPools = [];
+      participatingPools = [];
       updateMergedPools();
     }
 
     return () => {
       unsubPublic();
       unsubMine();
+      unsubParticipating();
     };
   }, [user?.id]); // Re-run when user changes (login/logout)
 

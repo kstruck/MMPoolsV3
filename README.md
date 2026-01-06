@@ -11,6 +11,7 @@ A modern, real-time sports pool application supporting both **Gameday Squares** 
     *   **Smart Filtering:** Automatically categorizes pools into "Open," "Live," and "Completed" tabs.
     *   **Search:** Quickly find pools by name or team.
     *   **Status Tracking:** Visual progress bars and status badges for every entry.
+    *   **Unified Entries:** "My Entries" now seamlessly aggregates every pool you've joined, including private pools you don't manage.
 *   **User Profiles:** Users can manage their display name, phone number, and social links via a new Profile Manager. Changes sync instantly across Firestore and Authentication.
 *   **Enhanced Visualization:** **NEW!** Dynamic grid highlighting for active rows/columns, winning squares, and paid (Emerald) vs. reserved (Amber) status. Now supports **Hybrid Winner Highlighting**—visually distinguishing between standard period winners (Gold/Trophy) and "Every Score" event winners (Purple/Zap), with special gradients for dual winners.
 *   **Dynamic Layouts:** Smart responsive design that adapts to pool settings (e.g., auto-centering status cards when Charity is disabled).

@@ -427,6 +427,19 @@ export const SuperAdmin: React.FC = () => {
     // Tab state
 
 
+    // Fix Participant IDs Handler
+    const handleFixParticipantIds = async () => {
+        const dryRun = !confirm(`Run Backfill for Participant IDs? \n\nOK = Run LIVE (Writes to DB) \nCancel = DRY RUN (Logs Only)`);
+
+        try {
+            const result = await dbService.fixParticipantIds(dryRun);
+            alert(`Participant ID Backfill Complete (${dryRun ? 'DRY RUN' : 'LIVE'}): \nProcessed: ${result.processed} pools \nUpdated: ${result.updated} pools`);
+        } catch (error: any) {
+            console.error('Fix Participant IDs Error:', error);
+            alert(`Failed to fix participant IDs: ${error.message}`);
+        }
+    };
+
     // Group pools by sport/league (using existing league field from setup wizard)
     const getLeagueDisplayName = (league: string | undefined) => {
         switch (league) {
@@ -1629,6 +1642,12 @@ export const SuperAdmin: React.FC = () => {
                                         className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded text-white transition-colors font-bold"
                                     >
                                         Fix Scoring
+                                    </button>
+                                    <button
+                                        onClick={handleFixParticipantIds}
+                                        className="text-xs bg-amber-600 hover:bg-amber-500 px-3 py-1 rounded text-white transition-colors font-bold flex items-center gap-1"
+                                    >
+                                        <Users size={12} /> Fix Participants
                                     </button>
                                     <button
                                         onClick={() => {

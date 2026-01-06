@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.assertPoolOwnerOrSuperAdmin = void 0;
+exports.fixParticipantIds = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.assertPoolOwnerOrSuperAdmin = void 0;
 const admin = require("firebase-admin");
 const audit_1 = require("./audit");
 const https_1 = require("firebase-functions/v2/https");
@@ -215,5 +215,54 @@ exports.toggleWinnerPaid = (0, https_1.onCall)(async (request) => {
         payload: { winnerId, isPaid: isNowPaid }
     });
     return { success: true, isPaid: isNowPaid, winnerId };
+});
+// ============ FIX PARTICIPANT IDS (Backfill) ============
+exports.fixParticipantIds = (0, https_1.onCall)(async (request) => {
+    var _a;
+    const db = admin.firestore();
+    if (!request.auth)
+        throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
+    // Super Admin Check
+    const uid = request.auth.uid;
+    const userDoc = await db.collection('users').doc(uid).get();
+    if (((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) !== 'SUPER_ADMIN') {
+        throw new https_1.HttpsError('permission-denied', 'SuperAdmin only.');
+    }
+    const dryRun = request.data.dryRun === true;
+    let processed = 0;
+    let updated = 0;
+    const poolsSnap = await db.collection('pools').get();
+    for (const doc of poolsSnap.docs) {
+        const pool = doc.data();
+        const participantIds = new Set();
+        // 1. Squares Pools
+        if (pool.squares && Array.isArray(pool.squares)) {
+            pool.squares.forEach((sq) => {
+                if (sq.reservedByUid)
+                    participantIds.add(sq.reservedByUid);
+            });
+        }
+        // 2. Playoff Pools / Bracket Pools
+        if (pool.entries && typeof pool.entries === 'object') {
+            Object.values(pool.entries).forEach((entry) => {
+                if (entry.userId)
+                    participantIds.add(entry.userId);
+            });
+        }
+        // 3. Compare with existing
+        const existing = new Set(pool.participantIds || []);
+        const toAdd = [...participantIds].filter(id => !existing.has(id));
+        processed++;
+        if (toAdd.length > 0) {
+            console.log(`Pool ${pool.name} (${doc.id}): Adding ${toAdd.length} participants.`);
+            if (!dryRun) {
+                await doc.ref.update({
+                    participantIds: admin.firestore.FieldValue.arrayUnion(...toAdd)
+                });
+                updated++;
+            }
+        }
+    }
+    return { success: true, processed, updated, dryRun };
 });
 //# sourceMappingURL=poolOps.js.map

@@ -17,7 +17,7 @@ export { runReminders, onWinnerComputed } from "./reminders";
 export { autoLockPools } from "./autoLock"; // NEW: Dedicated 1-minute auto-lock scheduler
 export { onPoolLocked, recalculateGlobalStats } from "./statsTrigger";
 export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
-export { createPool, recalculatePoolWinners, toggleWinnerPaid } from "./poolOps";
+export { createPool, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds } from "./poolOps";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
 export { createBracketEntry, updateBracketEntry, submitBracketEntry } from "./bracketEntries";

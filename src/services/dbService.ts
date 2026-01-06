@@ -252,6 +252,17 @@ export const dbService = {
         }
     },
 
+    fixParticipantIds: async (dryRun: boolean = true): Promise<any> => {
+        try {
+            const fn = httpsCallable(functions, 'fixParticipantIds');
+            const result = await fn({ dryRun });
+            return result.data;
+        } catch (error) {
+            console.error("Error calling fixParticipantIds:", error);
+            throw error;
+        }
+    },
+
     reserveSquare: async (poolId: string, squareId: number, customerDetails?: PlayerDetails, guestDeviceKey?: string, pickedAsName?: string): Promise<void> => {
         try {
             const reserveSquareFn = httpsCallable(functions, 'reserveSquare');
@@ -341,6 +352,21 @@ export const dbService = {
             callback(pools);
         }, (error) => {
             console.error("Pool Subscription Error:", error);
+            if (onError) onError(error);
+        });
+    },
+
+    // Real-time listener for pools user has JOINED (as participant)
+    subscribeToParticipatingPools: (userId: string, callback: (pools: Pool[]) => void, onError?: (error: Error) => void) => {
+        const q = query(
+            collection(db, "pools"),
+            where("participantIds", "array-contains", userId)
+        );
+        return onSnapshot(q, (snapshot) => {
+            const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
+            callback(pools);
+        }, (error) => {
+            console.error("Participating Pool Subscription Error:", error);
             if (onError) onError(error);
         });
     },

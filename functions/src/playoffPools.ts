@@ -172,7 +172,8 @@ export const submitPlayoffPicks = onCall(async (request) => {
     entryData.id = key;
 
     await poolRef.update({
-        [`entries.${key}`]: entryData
+        [`entries.${key}`]: entryData,
+        participantIds: admin.firestore.FieldValue.arrayUnion(uid)
     });
 
 

@@ -160,7 +160,8 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
     const key = entryId || `${uid}_${Date.now()}`;
     entryData.id = key;
     await poolRef.update({
-        [`entries.${key}`]: entryData
+        [`entries.${key}`]: entryData,
+        participantIds: admin.firestore.FieldValue.arrayUnion(uid)
     });
     // 5. Send Confirmation Email
     try {
