@@ -123,8 +123,11 @@ async function fetchESPNScores(gameId, league) {
         const regFinalAway = q3Away + q4AwayRaw;
         const apiTotalHome = safeInt(homeComp.score);
         const apiTotalAway = safeInt(awayComp.score);
-        const period = safeInt(status.period);
         const state = ((_c = status.type) === null || _c === void 0 ? void 0 : _c.state) || 'pre';
+        let period = safeInt(status.period);
+        if (state === 'post' && period === 0) {
+            period = 4; // Default to 4 if final/post and period is 0
+        }
         const clock = status.displayClock || "0:00";
         const gameDate = competition.date;
         return {
@@ -323,6 +326,18 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     const currentScoresStr = JSON.stringify(freshPool.scores);
     const newScoresStr = JSON.stringify(newScores);
     if (currentScoresStr !== newScoresStr) {
+        // DEBUG: Find what changed
+        const diff = [];
+        const oldS = freshPool.scores || {};
+        const newS = newScores || {};
+        const allKeys = new Set([...Object.keys(oldS), ...Object.keys(newS)]);
+        allKeys.forEach(k => {
+            const v1 = JSON.stringify(oldS[k]);
+            const v2 = JSON.stringify(newS[k]);
+            if (v1 !== v2)
+                diff.push(`${k}: ${v1} -> ${v2}`);
+        });
+        console.log(`[ScoreSync] Update detected for ${doc.id}: ${diff.join(', ')}`);
         transactionUpdates.scores = newScores;
         shouldUpdate = true;
     }

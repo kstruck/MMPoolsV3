@@ -97,6 +97,7 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
         if (officialWinner) {
             winnerName = officialWinner.owner;
             hasWinner = true;
+            if (officialWinner.amount !== undefined && officialWinner.amount !== null) currentAmount = officialWinner.amount;
             if (officialReverseWinner) {
                 reverseWinnerName = officialReverseWinner.owner;
             }

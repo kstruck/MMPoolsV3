@@ -134,7 +134,7 @@ const saveAndPropagateResults = async (results: any) => {
 
 export const submitPlayoffPicks = onCall(async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
-    const { poolId, rankings, tiebreaker, entryId } = request.data;
+    const { poolId, rankings, tiebreaker, entryId, entryName } = request.data;
     const uid = request.auth.uid;
     const userName = request.auth.token.name || 'Anonymous';
 
@@ -150,6 +150,7 @@ export const submitPlayoffPicks = onCall(async (request) => {
     const entryData: PlayoffEntry = {
         userId: uid,
         userName,
+        entryName: entryName || userName, // Save custom name or fallback
         rankings,
         tiebreaker: Number(tiebreaker) || 0,
         totalScore: 0,

@@ -395,6 +395,7 @@ export interface PlayoffEntry {
     id?: string; // Unique Entry ID
     userId: string;
     userName: string;
+    entryName?: string; // NEW: Custom entry name
     rankings: Record<string, number>; // teamId -> rank (1-14)
     tiebreaker: number;
     totalScore: number;

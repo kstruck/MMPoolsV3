@@ -126,7 +126,7 @@ const saveAndPropagateResults = async (results) => {
 exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
-    const { poolId, rankings, tiebreaker, entryId } = request.data;
+    const { poolId, rankings, tiebreaker, entryId, entryName } = request.data;
     const uid = request.auth.uid;
     const userName = request.auth.token.name || 'Anonymous';
     const poolRef = db.collection('pools').doc(poolId);
@@ -140,6 +140,7 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
     const entryData = {
         userId: uid,
         userName,
+        entryName: entryName || userName, // Save custom name or fallback
         rankings,
         tiebreaker: Number(tiebreaker) || 0,
         totalScore: 0,

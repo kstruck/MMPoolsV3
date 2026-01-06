@@ -127,8 +127,11 @@ async function fetchESPNScores(gameId: string, league: string): Promise<any | nu
         const apiTotalHome = safeInt(homeComp.score);
         const apiTotalAway = safeInt(awayComp.score);
 
-        const period = safeInt(status.period);
         const state = status.type?.state || 'pre';
+        let period = safeInt(status.period);
+        if (state === 'post' && period === 0) {
+            period = 4; // Default to 4 if final/post and period is 0
+        }
         const clock = status.displayClock || "0:00";
         const gameDate = competition.date;
 
@@ -387,6 +390,18 @@ const processGameUpdate = async (
     const newScoresStr = JSON.stringify(newScores);
 
     if (currentScoresStr !== newScoresStr) {
+        // DEBUG: Find what changed
+        const diff: string[] = [];
+        const oldS = freshPool.scores || {};
+        const newS = newScores || {};
+        const allKeys = new Set([...Object.keys(oldS), ...Object.keys(newS)]);
+        allKeys.forEach(k => {
+            const v1 = JSON.stringify((oldS as any)[k]);
+            const v2 = JSON.stringify((newS as any)[k]);
+            if (v1 !== v2) diff.push(`${k}: ${v1} -> ${v2}`);
+        });
+        console.log(`[ScoreSync] Update detected for ${doc.id}: ${diff.join(', ')}`);
+
         transactionUpdates.scores = newScores;
         shouldUpdate = true;
     }

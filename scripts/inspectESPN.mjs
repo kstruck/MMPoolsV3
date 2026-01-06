@@ -14,11 +14,9 @@ async function inspect() {
     const resp = await fetch(url);
     const data = await resp.json();
 
-    const output = [];
-    output.push('=== ESPN API scoringPlays ===');
-    output.push(`Game ID: ${gameId}`);
-    output.push('');
-
+    output.push('=== STATUS OBJECT ===');
+    const status = data.header.status || data.header.competitions[0].status;
+    output.push(JSON.stringify(status, null, 2));
     if (data.scoringPlays) {
         output.push(`Total plays: ${data.scoringPlays.length}`);
         output.push('');

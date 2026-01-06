@@ -26,3 +26,4 @@ export { onAnnouncementCreated } from "./announcements";
 export { submitPlayoffPicks, calculatePlayoffScores, updateGlobalPlayoffResults, checkPlayoffScores } from "./playoffPools";
 export { joinWaitlist } from "./waitlist";
 export { generateTestScenario, validateTestResults, generateTestReport } from "./aiTesting";
+export { inspectPoolState } from "./debug";

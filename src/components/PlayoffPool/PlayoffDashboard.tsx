@@ -206,7 +206,8 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                 <thead>
                                     <tr className="border-b border-slate-800 bg-slate-950/50">
                                         <th className="p-4 text-slate-400 font-bold text-sm sticky left-0 bg-slate-950/90 backdrop-blur z-10 w-12">#</th>
-                                        <th className="p-4 text-slate-400 font-bold text-sm sticky left-12 bg-slate-950/90 backdrop-blur z-10 min-w-[200px]">Player</th>
+                                        <th className="p-4 text-slate-400 font-bold text-sm sticky left-12 bg-slate-950/90 backdrop-blur z-10 min-w-[180px]">Entry Name</th>
+                                        <th className="p-4 text-slate-400 font-bold text-sm bg-slate-950/50 backdrop-blur z-10 min-w-[150px]">Player Name</th>
                                         <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Wild Cards</th>
                                         <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Divisional</th>
                                         <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Conf Champ</th>
@@ -237,7 +238,9 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                     </td>
                                                     <td className="p-4 sticky left-12 bg-inherit border-r border-slate-800/50">
                                                         <div className="flex items-center gap-2">
-                                                            <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>{entry.userName}</div>
+                                                            <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>
+                                                                {entry.entryName || entry.userName}
+                                                            </div>
                                                             {pool.isLocked && (
                                                                 <button
                                                                     onClick={() => setViewingEntry(entry)}
@@ -251,6 +254,9 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                         {pool.isLocked && (
                                                             <div className="text-xs text-slate-500 mt-1">Tiebreaker: {entry.tiebreaker}</div>
                                                         )}
+                                                    </td>
+                                                    <td className="p-4 text-slate-400 border-r border-slate-800/50">
+                                                        {entry.userName}
                                                     </td>
                                                     <td className="p-4 text-center font-mono text-slate-300">
                                                         {entry.scoreWC > 0 ? entry.scoreWC : '-'}

@@ -1,95 +1,65 @@
 === ESPN API scoringPlays ===
-Game ID: 401772963
+Game ID: 401772961
 
-Total plays: 10
+Total plays: 4
 
-Play 1: 0-3
-  Type: Field Goal Good
-  Team: NYG
-  Q1 9:15
-
-Play 2: 3-3
-  Type: Field Goal Good
-  Team: DAL
-  Q1 5:21
-
-Play 3: 3-6
-  Type: Field Goal Good
-  Team: NYG
-  Q1 1:17
-
-Play 4: 10-6
+Play 1: 7-0
   Type: Rushing Touchdown
-  Team: DAL
-  Q1 0:28
+  Team: SEA
+  Q1 4:29
 
-Play 5: 10-9
+Play 2: 10-0
   Type: Field Goal Good
-  Team: NYG
-  Q2 9:45
+  Team: SEA
+  Q2 5:19
 
-Play 6: 10-16
-  Type: Passing Touchdown
-  Team: NYG
-  Q2 0:20
-
-Play 7: 10-24
-  Type: Passing Touchdown
-  Team: NYG
-  Q3 9:48
-
-Play 8: 17-24
-  Type: Rushing Touchdown
-  Team: DAL
-  Q4 14:57
-
-Play 9: 17-27
+Play 3: 10-3
   Type: Field Goal Good
-  Team: NYG
-  Q4 9:23
+  Team: SF
+  Q2 1:06
 
-Play 10: 17-34
-  Type: Rushing Touchdown
-  Team: NYG
-  Q4 5:47
+Play 4: 13-3
+  Type: Field Goal Good
+  Team: SEA
+  Q4 14:15
 
 === SAMPLE PLAY STRUCTURE ===
 {
-  "id": "401772963454",
+  "id": "401772961565",
   "type": {
-    "id": "59",
-    "text": "Field Goal Good",
-    "abbreviation": "FG"
+    "id": "68",
+    "text": "Rushing Touchdown",
+    "abbreviation": "TD"
   },
-  "text": "Ben Sauls 45 Yd Field Goal",
-  "awayScore": 0,
-  "homeScore": 3,
+  "text": "Zach Charbonnet 27 Yd Rush (Jason Myers Kick)",
+  "awayScore": 7,
+  "homeScore": 0,
   "period": {
     "number": 1
   },
   "clock": {
-    "value": 555,
-    "displayValue": "9:15"
+    "value": 269,
+    "displayValue": "4:29"
   },
   "team": {
-    "id": "19",
-    "uid": "s:20~l:28~t:19",
-    "displayName": "New York Giants",
-    "abbreviation": "NYG",
+    "id": "26",
+    "uid": "s:20~l:28~t:26",
+    "displayName": "Seattle Seahawks",
+    "abbreviation": "SEA",
     "links": [
       {
-        "href": "https://www.espn.com/nfl/team/_/name/nyg/new-york-giants",
+        "href": "https://www.espn.com/nfl/team/_/name/sea/seattle-seahawks",
         "text": "Clubhouse"
       },
       {
-        "href": "https://www.espn.com/nfl/team/schedule/_/name/nyg",
+        "href": "https://www.espn.com/nfl/team/schedule/_/name/sea",
         "text": "Schedule"
       }
     ],
-    "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/nyg.png",
+    "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/sea.png",
     "logos": [
       {
-        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/nyg.png",
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/sea.png",
         "width": 500,
         "height": 500,
         "alt": "",
@@ -97,10 +67,10 @@ Play 10: 17-34
           "full",
           "default"
         ],
-        "lastUpdated": "2024-06-25T18:55Z"
+        "lastUpdated": "2024-06-25T18:57Z"
       },
       {
-        "href": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/nyg.png",
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/sea.png",
         "width": 500,
         "height": 500,
         "alt": "",
@@ -108,10 +78,10 @@ Play 10: 17-34
           "full",
           "dark"
         ],
-        "lastUpdated": "2024-06-25T18:59Z"
+        "lastUpdated": "2024-06-25T18:57Z"
       },
       {
-        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/nyg.png",
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/sea.png",
         "width": 500,
         "height": 500,
         "alt": "",
@@ -119,10 +89,10 @@ Play 10: 17-34
           "full",
           "scoreboard"
         ],
-        "lastUpdated": "2024-06-25T18:55Z"
+        "lastUpdated": "2024-06-25T18:57Z"
       },
       {
-        "href": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/scoreboard/nyg.png",
+        "href": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/scoreboard/sea.png",
         "width": 500,
         "height": 500,
         "alt": "",
@@ -131,13 +101,13 @@ Play 10: 17-34
           "scoreboard",
           "dark"
         ],
-        "lastUpdated": "2024-06-25T18:59Z"
+        "lastUpdated": "2024-06-25T18:57Z"
       }
     ]
   },
   "scoringType": {
-    "name": "field-goal",
-    "displayName": "Field Goal",
-    "abbreviation": "FG"
+    "name": "touchdown",
+    "displayName": "Touchdown",
+    "abbreviation": "TD"
   }
 }

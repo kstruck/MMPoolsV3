@@ -17,6 +17,7 @@ interface RankingFormProps {
 
 export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, onSaved, onCancel }) => {
     const [rankedTeams, setRankedTeams] = useState<PlayoffTeam[]>([]);
+    const [entryName, setEntryName] = useState<string>(''); // NEW: Entry Name
     const [tiebreaker, setTiebreaker] = useState<number>(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -47,6 +48,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                 });
                 setRankedTeams(sorted);
                 setTiebreaker(existingEntry.tiebreaker);
+                setEntryName(existingEntry.entryName || '');
             } else {
                 // Default order
                 const initial = [...pool.teams].sort((a, b) => {
@@ -55,6 +57,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                 });
                 setRankedTeams(initial);
                 setTiebreaker(0);
+                setEntryName(user?.name || ''); // Default to username for new entries
             }
         }
     }, [pool, user, entryId]);
@@ -113,7 +116,8 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                 poolId: pool.id,
                 rankings: rankingsMap,
                 tiebreaker: Number(tiebreaker),
-                entryId: entryId // Pass entryId to backend (null = new, string = edit)
+                entryId: entryId, // Pass entryId to backend (null = new, string = edit)
+                entryName: entryName.trim() || user.name // Pass entry name
             });
             console.log("Submitting picks:", { poolId: pool.id, entryId, rankings: rankingsMap });
 
@@ -163,6 +167,21 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                             Picks are locked. No further changes allowed.
                         </div>
                     )}
+
+                    {/* Entry Name Input */}
+                    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl mb-4">
+                        <label className="block text-slate-400 text-xs font-bold uppercase mb-2">
+                            Entry Name
+                        </label>
+                        <input
+                            type="text"
+                            value={entryName}
+                            onChange={(e) => setEntryName(e.target.value)}
+                            disabled={pool.isLocked}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                            placeholder="My Winning Entry"
+                        />
+                    </div>
 
                     {/* Draggable List */}
                     <div className="space-y-2">

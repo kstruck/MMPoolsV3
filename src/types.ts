@@ -28,6 +28,7 @@ export interface PlayoffEntry {
   id?: string; // Unique Entry ID (v2 support)
   userId: string;
   userName: string; // Denormalized for display
+  entryName?: string; // NEW: Custom entry name
   rankings: Record<string, number>; // teamId -> rank (1-14)
   tiebreaker: number; // Super Bowl Total Score
   totalScore: number;
