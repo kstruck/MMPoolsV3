@@ -227,8 +227,10 @@ const App: React.FC = () => {
     if (hash.startsWith('#support')) return { view: 'support', id: null };
     if (hash.startsWith('#create-pool')) return { view: 'create-pool', id: null };
     if (hash.startsWith('#bracket-wizard')) return { view: 'bracket-wizard', id: null };
-    if (hash.startsWith('#playoff-wizard')) return { view: 'playoff-wizard', id: null };
-    if (hash.startsWith('#playoff-wizard')) return { view: 'playoff-wizard', id: null };
+    if (hash.startsWith('#playoff-wizard')) {
+      const parts = hash.split('/');
+      return { view: 'playoff-wizard', id: parts[1] || null };
+    }
     if (hash.startsWith('#props-wizard')) return { view: 'props-wizard', id: null };
     return { view: 'home', id: null };
   }, [hash]);
@@ -1166,8 +1168,9 @@ const App: React.FC = () => {
           {user && (
             <PlayoffWizard
               user={user}
-              onCancel={() => window.location.hash = '#'}
+              onCancel={() => window.location.hash = route.id ? `#pool/${route.id}` : '#'}
               onComplete={(newId) => window.location.hash = `#pool/${newId}`}
+              editPoolId={route.id}
             />
           )}
         </div>

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { User, PlayoffTeam, PayoutSettings } from '../../types';
 import { dbService } from '../../services/dbService';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe } from 'lucide-react';
 import { WizardStepBranding } from '../admin/WizardStepBranding';
 import { WizardStepAdvanced } from '../admin/WizardStepAdvanced';
@@ -27,9 +29,10 @@ interface PlayoffWizardProps {
     user: User;
     onCancel: () => void;
     onComplete: (poolId: string) => void;
+    editPoolId?: string | null;
 }
 
-export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, onComplete }) => {
+export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, onComplete, editPoolId }) => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -43,6 +46,88 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
         });
         return () => unsub();
     }, []);
+
+    // Load existing pool data if editing
+    useEffect(() => {
+        if (!editPoolId) return;
+
+        const loadPool = async () => {
+            try {
+                setLoading(true);
+                const poolRef = doc(db, 'pools', editPoolId);
+                const snap = await getDoc(poolRef);
+
+                if (snap.exists()) {
+                    const data = snap.data() as any; // Cast to any to handle loose mismatches
+
+                    // Map data to formData
+                    setFormData(prev => ({
+                        ...prev,
+                        name: data.name || prev.name,
+                        slug: data.urlSlug || prev.slug,
+                        season: data.season || prev.season,
+                        isListedPublic: data.settings?.isListedPublic || false,
+                        managerName: data.managerName || prev.managerName,
+                        contactEmail: data.contactEmail || prev.contactEmail,
+                        venmo: data.venmo || '',
+                        googlePay: data.googlePay || '',
+                        cashapp: data.cashapp || '',
+                        paypal: data.paypal || '',
+                        paymentInstructions: data.settings?.paymentInstructions || '',
+
+                        maxEntriesTotal: -1, // Not explicitly in PlayoffPool type yet, default to -1
+                        maxEntriesPerUser: 1, // Not explicitly in PlayoffPool type yet, default to 1
+                        entryFee: data.settings?.entryFee || 0,
+                        lockAt: data.lockDate || prev.lockAt,
+
+                        multipliers: {
+                            wc: data.settings?.scoring?.roundMultipliers?.WILD_CARD || 1,
+                            div: data.settings?.scoring?.roundMultipliers?.DIVISIONAL || 2,
+                            conf: data.settings?.scoring?.roundMultipliers?.CONF_CHAMP || 4,
+                            sb: data.settings?.scoring?.roundMultipliers?.SUPER_BOWL || 8,
+                        },
+
+                        payouts: data.settings?.payouts || prev.payouts,
+
+                        branding: {
+                            logoUrl: data.branding?.logo,
+                            backgroundColor: data.branding?.bgColor || prev.branding.backgroundColor
+                        },
+
+                        reminders: {
+                            auto24h: data.reminders?.auto24h ?? true,
+                            auto1h: data.reminders?.auto1h ?? true,
+                            autoLock: data.reminders?.autoLock ?? true,
+                            announceWinner: data.reminders?.announceWinner ?? true,
+                            recipientFilter: data.reminders?.recipientFilter || 'all'
+                        },
+
+                        accessControl: {
+                            password: data.accessControl?.password || '',
+                            requireEmail: data.accessControl?.requireEmail ?? false,
+                            requirePhone: data.accessControl?.requirePhone ?? false
+                        },
+
+                        // Remaining boolean toggles
+                        collectPhone: false,
+                        collectAddress: false,
+                        collectReferral: false,
+                        collectNotes: false,
+                        emailConfirmation: 'Email Confirmation',
+                        emailNumbersGenerated: true,
+                        notifyAdminFull: true
+                    }));
+                }
+            } catch (err) {
+                console.error("Failed to load pool for editing", err);
+                setError("Failed to load pool data.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadPool();
+    }, [editPoolId]);
 
     const [formData, setFormData] = useState<{
         // Step 1: Basics
@@ -293,12 +378,29 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                 teams: playoffTeams,
                 entries: {},
                 results: {},
-                isLocked: false,
                 lockDate: formData.lockAt
             };
 
-            const poolId = await dbService.createPool(newPool);
-            onComplete(poolId);
+            if (editPoolId) {
+                // Update existing
+                const poolRef = doc(db, 'pools', editPoolId);
+                await updateDoc(poolRef, {
+                    ...newPool,
+                    // Preserve some fields
+                    entries: undefined, // Don't overwrite entries
+                    results: undefined, // Don't overwrite results
+                    createdAt: undefined, // Preserve creation time
+                    updatedAt: Date.now()
+                });
+                // Remove undefined keys that we want null/ignored
+                const cleanUpdate = Object.fromEntries(Object.entries(newPool).filter(([_, v]) => v !== undefined && _ !== 'entries' && _ !== 'results'));
+                await updateDoc(poolRef, cleanUpdate);
+                onComplete(editPoolId);
+            } else {
+                // Create New
+                const poolId = await dbService.createPool(newPool);
+                onComplete(poolId);
+            }
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'Failed to create pool.');
@@ -334,7 +436,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                             <div>
                                 <h1 className="text-3xl font-bold text-white flex items-center gap-2">
                                     <Trophy className="text-emerald-400" size={28} />
-                                    Create Playoff Pool
+                                    {editPoolId ? 'Edit Pool Settings' : 'Create Playoff Pool'}
                                 </h1>
                                 <p className="text-sm text-slate-400">NFL Playoff Rankings</p>
                             </div>
@@ -413,7 +515,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                         >
                             {loading ? 'Creating...' : (
                                 <>
-                                    <CheckCircle size={18} /> Publish Pool
+                                    <CheckCircle size={18} /> {editPoolId ? 'Save Changes' : 'Publish Pool'}
                                 </>
                             )}
                         </button>
