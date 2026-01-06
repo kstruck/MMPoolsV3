@@ -6,8 +6,9 @@ import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
+import { doc, updateDoc } from 'firebase/firestore';
 
 
 import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
