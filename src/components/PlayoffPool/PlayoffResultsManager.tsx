@@ -1,30 +1,52 @@
-import React, { useState } from 'react';
-import type { PlayoffPool } from '../../types';
-import { dbService } from '../../services/dbService';
+import React, { useState, useEffect } from 'react';
+import type { PlayoffTeam } from '../../types';
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '../../firebase'; // Adjust import
+import { functions, db } from '../../firebase'; // Adjust import if needed
+import { doc, getDoc } from 'firebase/firestore';
 import { Save, Trophy } from 'lucide-react';
 
 interface PlayoffResultsManagerProps {
-    pool: PlayoffPool;
+    teams: PlayoffTeam[];
     onClose: () => void;
 }
 
-export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ pool, onClose }) => {
-    // Initialize with existing results or empty arrays
+export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ teams, onClose }) => {
+    // Initialize with empty results
     const [results, setResults] = useState<{
         WILD_CARD: string[];
         DIVISIONAL: string[];
         CONF_CHAMP: string[];
         SUPER_BOWL: string[];
     }>({
-        WILD_CARD: pool.results?.WILD_CARD || [],
-        DIVISIONAL: pool.results?.DIVISIONAL || [],
-        CONF_CHAMP: pool.results?.CONF_CHAMP || [],
-        SUPER_BOWL: pool.results?.SUPER_BOWL || [],
+        WILD_CARD: [],
+        DIVISIONAL: [],
+        CONF_CHAMP: [],
+        SUPER_BOWL: [],
     });
 
+    const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Fetch Global Results on Mount
+    useEffect(() => {
+        const fetchResults = async () => {
+            try {
+                const docRef = doc(db, 'system', 'playoff_results');
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.results) {
+                        setResults(data.results);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching global results:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchResults();
+    }, []);
 
     // Helper to toggle a team in a round
     const toggleTeam = (round: keyof typeof results, teamId: string) => {
@@ -78,15 +100,14 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ po
         }
     };
 
-    // Render logic showing teams available in each round (simplified: show all teams, let admin pick)
-    // Or better: Filter based on logic? For fallback, allow picking ANY team.
-
     const rounds = [
         { key: 'WILD_CARD', label: 'Wild Card' },
         { key: 'DIVISIONAL', label: 'Divisional' },
         { key: 'CONF_CHAMP', label: 'Conf. Champ' },
         { key: 'SUPER_BOWL', label: 'Super Bowl' },
     ];
+
+    if (isLoading) return <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 text-white font-bold">Loading Global Results...</div>;
 
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
@@ -106,7 +127,7 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ po
                                 {round.label} Winners
                             </h3>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                {pool.teams.map(team => {
+                                {teams.map(team => {
                                     const isSelected = results[round.key as keyof typeof results].includes(team.id);
                                     return (
                                         <button
