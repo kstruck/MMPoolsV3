@@ -1008,10 +1008,7 @@ const App: React.FC = () => {
                 pool={currentPool as PlayoffPool}
                 user={user}
                 onBack={() => window.location.hash = '#participant'}
-                onShare={() => {
-                  navigator.clipboard.writeText(window.location.href);
-                  alert("Link copied!");
-                }}
+
               />
             </div>
             <Footer />
