@@ -75,8 +75,8 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                         paypal: data.paypal || '',
                         paymentInstructions: data.settings?.paymentInstructions || '',
 
-                        maxEntriesTotal: -1, // Not explicitly in PlayoffPool type yet, default to -1
-                        maxEntriesPerUser: 1, // Not explicitly in PlayoffPool type yet, default to 1
+                        maxEntriesTotal: data.settings?.maxEntriesTotal || -1,
+                        maxEntriesPerUser: data.settings?.maxEntriesPerUser || 10, // Default to 10 if not found, or use standard default
                         entryFee: data.settings?.entryFee || 0,
                         lockAt: data.lockDate || prev.lockAt,
 

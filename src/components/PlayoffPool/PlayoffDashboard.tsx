@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import type { PlayoffPool, User } from '../../types';
-import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2 } from 'lucide-react';
+import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X } from 'lucide-react';
 import { RankingForm } from './RankingForm';
+import type { PlayoffEntry } from '../../types';
 
 interface PlayoffDashboardProps {
     pool: PlayoffPool;
@@ -14,6 +15,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules'>('picks');
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
+    const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
     // const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Deprecated
 
     const isManager = user?.id === pool.ownerId || user?.role === 'SUPER_ADMIN';
@@ -234,8 +236,21 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                         {index + 1}
                                                     </td>
                                                     <td className="p-4 sticky left-12 bg-inherit border-r border-slate-800/50">
-                                                        <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>{entry.userName}</div>
-                                                        <div className="text-xs text-slate-500 mt-1">Tiebreaker: {entry.tiebreaker}</div>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>{entry.userName}</div>
+                                                            {pool.isLocked && (
+                                                                <button
+                                                                    onClick={() => setViewingEntry(entry)}
+                                                                    className="text-slate-500 hover:text-emerald-400 transition-colors"
+                                                                    title="View Picks"
+                                                                >
+                                                                    <Eye size={16} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        {pool.isLocked && (
+                                                            <div className="text-xs text-slate-500 mt-1">Tiebreaker: {entry.tiebreaker}</div>
+                                                        )}
                                                     </td>
                                                     <td className="p-4 text-center font-mono text-slate-300">
                                                         {entry.scoreWC > 0 ? entry.scoreWC : '-'}
@@ -308,8 +323,63 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     )}
                 </div>
             </div>
-            {/* Settings Modal (Deprecated - using Wizard) */}
+            {/* View Picks Modal */}
+            {viewingEntry && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                    <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+                        <div className="p-6 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
+                            <div>
+                                <h3 className="text-xl font-bold text-white">{viewingEntry.userName}'s Picks</h3>
+                                <p className="text-sm text-slate-400">Tiebreaker Prediction: {viewingEntry.tiebreaker}</p>
+                            </div>
+                            <button
+                                onClick={() => setViewingEntry(null)}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-lg transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
 
+                        <div className="p-6 space-y-6">
+                            {/* Render picks grouped by rank */}
+                            <div className="space-y-4">
+                                {pool.teams
+                                    .map(t => ({ ...t, rank: viewingEntry.rankings[t.id] || 0 }))
+                                    .sort((a, b) => b.rank - a.rank)
+                                    .map((team, index) => (
+                                        <div key={team.id} className="flex items-center gap-4 bg-slate-800/50 p-3 rounded-lg border border-slate-800">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${index < 3 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-700 text-slate-400'
+                                                }`}>
+                                                {team.rank}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="font-bold text-white flex items-center gap-2">
+                                                    {team.name}
+                                                    <span className="text-xs font-normal text-slate-400 px-2 py-0.5 bg-slate-900 rounded border border-slate-700">
+                                                        #{team.seed} {team.conference}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {/* Show if they won any points yet */}
+                                            <div className="text-right">
+                                                {/* Logic for showing points could go here if we wanted detailed breakdown */}
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+
+                        <div className="p-6 border-t border-slate-800 bg-slate-950/50">
+                            <button
+                                onClick={() => setViewingEntry(null)}
+                                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-lg transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 };
