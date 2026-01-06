@@ -1,205 +1,89 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import * as admin from 'firebase-admin';
-import { PlayoffPool, PlayoffEntry } from './types';
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import * as logger from "firebase-functions/logger";
+import * as admin from "firebase-admin";
+import { PlayoffPool, PlayoffEntry } from "./types";
 
+if (!admin.apps.length) {
+    admin.initializeApp();
+}
 const db = admin.firestore();
 
-/**
- * Submit picks for a user (Rankings 1-14 + Tiebreaker)
- */
-export const submitPlayoffPicks = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'User must be logged in.');
-    }
+// Helper: Normalize team ID or Name for matching
+const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    const { poolId, rankings, tiebreaker, entryId } = request.data;
-    const uid = request.auth.uid;
+const TEAM_MAPPING: Record<string, string> = {
+    'kc': 'KC', 'kansascity': 'KC', 'chiefs': 'KC',
+    'buf': 'BUF', 'buffalo': 'BUF', 'bills': 'BUF',
+    'bal': 'BAL', 'baltimore': 'BAL', 'ravens': 'BAL',
+    'hou': 'HOU', 'houston': 'HOU', 'texans': 'HOU',
+    'cle': 'CLE', 'cleveland': 'CLE', 'browns': 'CLE',
+    'mia': 'MIA', 'miami': 'MIA', 'dolphins': 'MIA',
+    'pit': 'PIT', 'pittsburgh': 'PIT', 'steelers': 'PIT',
+    'sf': 'SF', 'sanfrancisco': 'SF', '49ers': 'SF',
+    'dal': 'DAL', 'dallas': 'DAL', 'cowboys': 'DAL',
+    'det': 'DET', 'detroit': 'DET', 'lions': 'DET',
+    'tb': 'TB', 'tampabay': 'TB', 'buccaneers': 'TB', 'bucs': 'TB',
+    'phi': 'PHI', 'philadelphia': 'PHI', 'eagles': 'PHI',
+    'lar': 'LAR', 'losangelesrams': 'LAR', 'rams': 'LAR',
+    'gb': 'GB', 'greenbay': 'GB', 'packers': 'GB',
+    'cin': 'CIN', 'cincinnati': 'CIN', 'bengals': 'CIN',
+    'jax': 'JAX', 'jacksonville': 'JAX', 'jagoars': 'JAX',
+    'lac': 'LAC', 'chargers': 'LAC',
+    'sea': 'SEA', 'seattle': 'SEA', 'seahawks': 'SEA',
+    'min': 'MIN', 'minnesota': 'MIN', 'vikings': 'MIN',
+    'no': 'NO', 'neworleans': 'NO', 'saints': 'NO',
+    'lv': 'LV', 'lasvegas': 'LV', 'raiders': 'LV',
+    'den': 'DEN', 'denver': 'DEN', 'broncos': 'DEN',
+    'atl': 'ATL', 'atlanta': 'ATL', 'falcons': 'ATL',
+    'car': 'CAR', 'carolina': 'CAR', 'panthers': 'CAR',
+    'chi': 'CHI', 'chicago': 'CHI', 'bears': 'CHI',
+    'ind': 'IND', 'indianapolis': 'IND', 'colts': 'IND',
+    'ten': 'TEN', 'tennessee': 'TEN', 'titans': 'TEN',
+    'nyg': 'NYG', 'giants': 'NYG',
+    'nyj': 'NYJ', 'jets': 'NYJ',
+    'wsh': 'WSH', 'washington': 'WSH', 'commanders': 'WSH',
+    'ari': 'ARI', 'arizona': 'ARI', 'cardinals': 'ARI',
+    'ne': 'NE', 'newengland': 'NE', 'patriots': 'NE'
+};
 
-    if (!poolId || !rankings) {
-        throw new HttpsError('invalid-argument', 'Missing poolId or rankings.');
-    } // tiebreaker can be 0
+const getTeamId = (espnTeam: any): string | null => {
+    if (!espnTeam) return null;
+    const abbrev = espnTeam.team?.abbreviation || '';
+    const name = espnTeam.team?.name || ''; // e.g. "Packers"
+    const location = espnTeam.team?.location || ''; // e.g. "Green Bay"
+    const displayName = espnTeam.team?.displayName || ''; // e.g. "Green Bay Packers"
 
-    // Validate 14 teams
-    const teamIds = Object.keys(rankings);
-    const ranks = Object.values(rankings) as number[];
+    if (TEAM_MAPPING[normalize(abbrev)]) return TEAM_MAPPING[normalize(abbrev)];
+    if (TEAM_MAPPING[normalize(name)]) return TEAM_MAPPING[normalize(name)];
+    if (TEAM_MAPPING[normalize(location)]) return TEAM_MAPPING[normalize(location)];
+    if (TEAM_MAPPING[normalize(displayName)]) return TEAM_MAPPING[normalize(displayName)];
 
-    if (teamIds.length !== 14) {
-        throw new HttpsError('invalid-argument', 'Must rank exactly 14 teams.');
-    }
+    return null;
+};
 
-    // Validate ranks are 1-14 unique
-    const uniqueRanks = new Set(ranks);
-    if (uniqueRanks.size !== 14 || Math.min(...ranks) !== 1 || Math.max(...ranks) !== 14) {
-        throw new HttpsError('invalid-argument', 'Rankings must be unique 1 to 14.');
-    }
-
-    const poolRef = db.collection('pools').doc(poolId);
-
-    try {
-        await db.runTransaction(async (transaction) => {
-            const poolDoc = await transaction.get(poolRef);
-            if (!poolDoc.exists) {
-                throw new HttpsError('not-found', 'Pool not found.');
-            }
-
-            const pool = poolDoc.data() as PlayoffPool;
-
-            if (pool.isLocked) { // Check lock date too?
-                if (pool.lockDate && Date.now() > pool.lockDate) {
-                    throw new HttpsError('failed-precondition', 'Pool is locked.');
-                }
-                if (pool.isLocked) {
-                    throw new HttpsError('failed-precondition', 'Pool is manually locked.');
-                }
-            }
-
-            // Determine Entry ID (New or overwrite)
-            // If entryId provided, verify it belongs to user (if enforcing ownership)
-            // Or just generate new one if null
-            // For now, simpler: if entryId provided, use it. If not, generate new unique ID.
-
-            let finalEntryId = entryId;
-            if (!finalEntryId) {
-                finalEntryId = `${uid}_${Date.now()}`;
-            }
-
-            // Construct Entry
-            const entry: PlayoffEntry = {
-                id: finalEntryId, // Added ID to entry object for easier localized ref
-                userId: uid,
-                userName: request.auth!.token.name || request.auth!.token.email || 'Anonymous',
-                rankings,
-                tiebreaker: Number(tiebreaker) || 0,
-                totalScore: 0,
-                submittedAt: Date.now()
-            };
-
-            // Update specific map key using dot notation to avoid overwriting other entries
-            transaction.update(poolRef, {
-                [`entries.${finalEntryId}`]: entry
-            });
-        });
-
-        return { success: true };
-    } catch (error) {
-        console.error("Error submitting picks:", error);
-        throw new HttpsError('internal', 'Failed to submit picks.');
-    }
-});
-
-/**
- * Calculate scores for a specific pool or all playoff pools.
- * Multipliers: Wild Card (10x), Divisional (12x), Conf (15x), SB (20x)
- */
-export const calculatePlayoffScores = onCall(async (request) => {
-    // Admin only? For now allow any auth for testing, or restrict.
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Must be logged in.');
-    }
-
-    // Ideally check super admin or pool owner
-    const poolId = request.data.poolId;
-
-    if (!poolId) {
-        throw new HttpsError('invalid-argument', 'poolId required for now.');
-    }
-
-    const poolRef = db.collection('pools').doc(poolId);
-    const poolDoc = await poolRef.get();
-
-    if (!poolDoc.exists) {
-        throw new HttpsError('not-found', 'Pool not found');
-    }
-
-    const pool = poolDoc.data() as PlayoffPool;
-
-    // Scoring Logic
-    // Access results: pool.results.WILD_CARD = ['KC', 'BUF']
-
-    // Use customized multipliers if available, otherwise fallback to defaults (Legacy support: 10, 12, 15, 20)
-    const settings = pool.settings?.scoring?.roundMultipliers;
-    const MULTIPLIERS = {
-        'WILD_CARD': settings?.WILD_CARD ?? 10,
-        'DIVISIONAL': settings?.DIVISIONAL ?? 12,
-        'CONF_CHAMP': settings?.CONF_CHAMP ?? 15,
-        'SUPER_BOWL': settings?.SUPER_BOWL ?? 20
-    };
-
-    const winnersWC = pool.results.WILD_CARD || [];
-    const winnersDiv = pool.results.DIVISIONAL || [];
-    const winnersConf = pool.results.CONF_CHAMP || [];
-    const winnersSB = pool.results.SUPER_BOWL || [];
-
-    const updates: Record<string, PlayoffEntry> = {};
-    let changesCount = 0;
-
-    for (const [userId, entry] of Object.entries(pool.entries || {})) {
-        let score = 0;
-
-        // Calc score
-        // For each team in rankings, if they are in winners list, add points
-
-        for (const teamId of winnersWC) {
-            const rank = entry.rankings[teamId] || 0;
-            score += rank * MULTIPLIERS.WILD_CARD;
-        }
-        for (const teamId of winnersDiv) {
-            const rank = entry.rankings[teamId] || 0;
-            score += rank * MULTIPLIERS.DIVISIONAL;
-        }
-        for (const teamId of winnersConf) {
-            const rank = entry.rankings[teamId] || 0;
-            score += rank * MULTIPLIERS.CONF_CHAMP;
-        }
-        for (const teamId of winnersSB) {
-            const rank = entry.rankings[teamId] || 0;
-            score += rank * MULTIPLIERS.SUPER_BOWL;
-        }
-
-        if (entry.totalScore !== score) {
-            updates[userId] = { ...entry, totalScore: score };
-            changesCount++;
-        }
-    }
-
-    if (changesCount > 0) {
-        // Batch updates? Map is nested, simplest is to read-modify-write the whole entries map or strict dot notation
-        // If map is huge, we hit limits. 
-        // For now, construct the writes.
-        const writeObj: any = {};
-        for (const [uid, ent] of Object.entries(updates)) {
-            writeObj[`entries.${uid}`] = ent;
-        }
-        await poolRef.update(writeObj);
-    }
-
-    return { success: true, updated: changesCount };
-});
-
-export const updateGlobalPlayoffResults = onCall(async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
-
-    // Check SuperAdmin
-    const userSnap = await db.collection('users').doc(request.auth.uid).get();
-    if (!userSnap.exists || userSnap.data()?.role !== 'SUPER_ADMIN') {
-        throw new HttpsError('permission-denied', 'Super Admin only');
-    }
-
-    const { results } = request.data;
-    if (!results) throw new HttpsError('invalid-argument', 'Missing results');
-
+// Extracted Logic to Propagate Results
+const saveAndPropagateResults = async (results: any) => {
     // 1. Save to Global Doc
     await db.collection('system').doc('playoff_results').set({ results, updatedAt: Date.now() });
 
     // 2. Query all Playoff Pools
-    const poolsSnap = await db.collection('pools').where('type', '==', 'playoff').get();
+    const poolsSnap = await db.collection('pools').where('type', '==', 'NFL_PLAYOFFS').get();
 
-    let totalUpdated = 0;
+    // Also try 'playoff' just in case for legacy pools (backward compatibility)
+    const poolsSnapLegacy = await db.collection('pools').where('type', '==', 'playoff').get();
+    const allDocs = [...poolsSnap.docs, ...poolsSnapLegacy.docs];
+
+    // Dedupe
+    const uniqueDocs = new Map();
+    allDocs.forEach(d => uniqueDocs.set(d.id, d));
+
+    if (uniqueDocs.size === 0) return 0;
+
     const batch = db.batch();
 
     // Process each pool
-    // Note: If > 500 pools, we need multiple batches. For now assuming < 500.
-    for (const poolDoc of poolsSnap.docs) {
+    for (const poolDoc of uniqueDocs.values()) {
         const pool = poolDoc.data() as PlayoffPool;
 
         // Define settings locally to reuse calc logic
@@ -217,7 +101,6 @@ export const updateGlobalPlayoffResults = onCall(async (request) => {
         const winnersSB = results.SUPER_BOWL || [];
 
         const updates: Record<string, PlayoffEntry> = {};
-        let poolChanged = false;
 
         // Recalculate all entries
         for (const [userId, entry] of Object.entries(pool.entries || {})) {
@@ -229,24 +112,154 @@ export const updateGlobalPlayoffResults = onCall(async (request) => {
 
             if (entry.totalScore !== score) {
                 updates[userId] = { ...entry, totalScore: score };
-                poolChanged = true;
             }
         }
 
-        // Add to batch if changed or if we need to sync results
         // Always sync results to pool doc so frontend sees them
         const poolUpdate: any = { results };
 
-        // Merge entry updates
-        for (const [uid, ent] of Object.entries(updates)) {
-            poolUpdate[`entries.${uid}`] = ent;
+        // Construct dot notation for batch update
+        if (Object.keys(updates).length > 0) {
+            for (const [uid, ent] of Object.entries(updates)) {
+                poolUpdate[`entries.${uid}`] = ent;
+            }
         }
 
         batch.update(poolDoc.ref, poolUpdate);
-        totalUpdated++;
     }
 
     await batch.commit();
+    return uniqueDocs.size;
+};
 
-    return { success: true, poolsUpdated: totalUpdated };
+export const submitPlayoffPicks = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+    const { poolId, rankings, tiebreaker, entryId } = request.data;
+    const uid = request.auth.uid;
+    const userName = request.auth.token.name || 'Anonymous';
+
+    const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+
+    if (!poolSnap.exists) throw new HttpsError('not-found', 'Pool not found');
+    const pool = poolSnap.data() as PlayoffPool;
+
+    if (pool.isLocked) throw new HttpsError('failed-precondition', 'Pool is locked');
+
+    // Create Entry Object
+    const entryData: PlayoffEntry = {
+        userId: uid,
+        userName,
+        rankings,
+        tiebreaker: Number(tiebreaker) || 0,
+        totalScore: 0,
+        submittedAt: Date.now()
+    };
+
+    // Key Logic: use entryId if provided, else define default key (usually uid)
+    const key = entryId || uid;
+    entryData.id = key;
+
+    await poolRef.update({
+        [`entries.${key}`]: entryData
+    });
+
+    return { success: true, entryId: key };
+});
+
+export const calculatePlayoffScores = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+    const { poolId } = request.data;
+
+    const poolRef = db.collection('pools').doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists) throw new HttpsError('not-found', 'Pool not found');
+
+    // We do nothing here, just acknowledge. Calculation is done via global triggers now.
+    // Kept to avoid breaking legacy frontend calls if any exist.
+    return { success: true, message: "Use Global Update instead" };
+});
+
+export const updateGlobalPlayoffResults = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+
+    // Check SuperAdmin
+    const userSnap = await db.collection('users').doc(request.auth.uid).get();
+    if (!userSnap.exists || userSnap.data()?.role !== 'SUPER_ADMIN') {
+        throw new HttpsError('permission-denied', 'Super Admin only');
+    }
+
+    const { results } = request.data;
+    if (!results) throw new HttpsError('invalid-argument', 'Missing results');
+
+    const count = await saveAndPropagateResults(results);
+    return { success: true, poolsUpdated: count };
+});
+
+// Scheduled Function: Check ESPN Scores
+export const checkPlayoffScores = onSchedule("every 30 minutes", async (event) => {
+    logger.info("Checking ESPN Playoff Scores...");
+
+    try {
+        const resp = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        // 1. Get Current Global Results
+        const docRef = db.collection('system').doc('playoff_results');
+        const docSnap = await docRef.get();
+        let currentResults = docSnap.exists ? docSnap.data()?.results : {};
+        if (!currentResults) {
+            currentResults = { WILD_CARD: [], DIVISIONAL: [], CONF_CHAMP: [], SUPER_BOWL: [] };
+        }
+
+        let hasUpdates = false;
+
+        // 2. Process Games
+        for (const competition of data.events || []) {
+            const game = competition.competitions[0];
+            const status = game.status.type.name; // STATUS_FINAL
+            const week = competition.week.number;
+            const seasonType = competition.season.type;
+
+            if (seasonType !== 3) continue; // Only Postseason
+
+            if (status === 'STATUS_FINAL') {
+                const winner = game.competitors.find((c: any) => c.winner === true);
+                if (winner) {
+                    const teamId = getTeamId(winner);
+                    if (teamId) {
+                        // Map Week to Round
+                        let roundKey = '';
+                        if (week === 1) roundKey = 'WILD_CARD';
+                        else if (week === 2) roundKey = 'DIVISIONAL';
+                        else if (week === 3) roundKey = 'CONF_CHAMP';
+                        else if (week === 5) roundKey = 'SUPER_BOWL';
+
+                        if (roundKey) {
+                            const currentRoundWinners = currentResults[roundKey] || [];
+                            if (!currentRoundWinners.includes(teamId)) {
+                                logger.info(`Found new winner: ${teamId} in ${roundKey}`);
+                                currentResults[roundKey] = [...currentRoundWinners, teamId];
+                                hasUpdates = true;
+                            }
+                        }
+                    } else {
+                        logger.warn(`Could not map ESPN team to ID: ${winner.team.displayName}`);
+                    }
+                }
+            }
+        }
+
+        // 3. Propagate if updates found
+        if (hasUpdates) {
+            logger.info("Propagating new playoff results...");
+            await saveAndPropagateResults(currentResults);
+        } else {
+            logger.info("No new playoff results found.");
+        }
+
+    } catch (error) {
+        logger.error("Error checking playoff scores:", error);
+    }
 });
