@@ -84,28 +84,101 @@ export const runReminders = functions.scheduler.onSchedule("every 15 minutes", a
 
     for (const doc of poolsSnapshot.docs) {
         try {
-            // CRITICAL FIX: doc.data() does NOT include the document ID!
-            // We must add it manually for pool.id to work in downstream functions.
-            const pool = { id: doc.id, ...doc.data() } as GameState;
+            const poolData = doc.data();
+            const pool = { id: doc.id, ...poolData } as any; // Loose type to handle unions
 
-            if (!pool.reminders) continue; // Skip if not configured
-
-            // 1. PAYMENT REMINDERS
-            if (pool.reminders.payment?.enabled) {
-                await checkPaymentReminders(pool, now);
+            // --- TYPE: SQUARES or PROPS --- 
+            if (pool.type === 'SQUARES' || pool.type === 'PROPS' || !pool.type) {
+                if (!pool.reminders) continue;
+                if (pool.reminders.payment?.enabled) await checkPaymentReminders(pool, now);
+                if (pool.reminders.lock?.enabled) await checkLockReminders(pool, now);
             }
 
-            // 2. LOCK REMINDERS
-            if (pool.reminders.lock?.enabled) {
-                console.log(`[runReminders] Checking lock for pool ${pool.id}: lockAt=${pool.reminders.lock.lockAt}, isLocked=${pool.isLocked}`);
-                await checkLockReminders(pool, now);
+            // --- TYPE: NFL PLAYOFFS ---
+            else if (pool.type === 'NFL_PLAYOFFS') {
+                await checkPlayoffReminders(pool, now);
             }
+
         } catch (poolError: any) {
             console.error(`[runReminders] Error processing pool ${doc.id}:`, poolError);
         }
     }
     console.log(`[runReminders] Completed reminder check`);
 });
+
+// --- PLAYOFF REMINDER LOGIC ---
+async function checkPlayoffReminders(pool: any, now: number) {
+    // 1. Check if locking soon (Start of Wild Card is traditionally the lock)
+    // Using `lockDate` or `lockAt` if available.
+    const lockTime = pool.lockDate || pool.lockAt;
+    if (!lockTime) return;
+
+    // Time Check: Is it within 2 hours of lock?
+    const msUntilLock = lockTime - now;
+    const hoursUntilLock = msUntilLock / (1000 * 60 * 60);
+
+    // Only send if between 0 and 2 hours
+    if (hoursUntilLock > 2 || hoursUntilLock <= 0) return;
+
+    // 2. Find Unpaid Entries that haven't been reminded
+    const entries = pool.entries || {};
+    const updates: Record<string, any> = {};
+    const emailsToSend: { email: string, name: string, entryName: string }[] = [];
+
+    for (const [entryId, entry] of Object.entries(entries) as [string, any][]) {
+        if (!entry.paid && !entry.paymentReminderSent) {
+            // Need user email. PlayoffEntry stores userId.
+            // Ideally we'd have it denormalized, but let's try to fetch or skip if missing.
+            // Optimization: Maybe we fetched all users? No, too expensive.
+            // Only fetch if we are going to send.
+
+            // Wait - we can't fetch individual users inside this loop efficiently if there are many.
+            // But usually pools are small (10-50 ppl).
+            if (entry.userId) {
+                const userSnap = await db.collection('users').doc(entry.userId).get();
+                if (userSnap.exists) {
+                    const email = userSnap.data()?.email;
+                    if (email) {
+                        emailsToSend.push({ email, name: entry.userName, entryName: entry.entryName });
+                        // Mark as sent immediately in memory updates
+                        updates[`entries.${entryId}.paymentReminderSent`] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if (emailsToSend.length > 0) {
+        console.log(`[PlayoffReminders] Sending ${emailsToSend.length} payment reminders for pool ${pool.id}`);
+
+        // Send Emails
+        for (const recipient of emailsToSend) {
+            const subject = `Action Required: Payment Due for ${pool.name}`;
+            const body = `
+                <p>Hi ${recipient.name},</p>
+                <p>The pool <strong>${pool.name}</strong> locks in less than 2 hours!</p>
+                <p>Your entry "<strong>${recipient.entryName}</strong>" is currently marked as <strong>Unpaid</strong>.</p>
+                
+                <div style="background-color: #fff1f2; border: 1px solid #e11d48; border-radius: 8px; padding: 15px; margin: 20px 0; color: #9f1239;">
+                    <p style="margin: 0; font-weight: bold;">⚠️ Payment Needed</p>
+                    <p style="margin: 5px 0 0 0;">Please pay the pool manager to secure your spot.</p>
+                </div>
+
+                ${pool.settings?.paymentInstructions ? `<p><strong>Instructions:</strong> ${pool.settings.paymentInstructions}</p>` : ''}
+            `;
+            const html = renderEmailHtml('Payment Reminder', body, `${BASE_URL}/#pool/${pool.id}`, 'View Pool');
+
+            // Queue Email
+            await db.collection("mail").add({
+                to: recipient.email,
+                message: { subject, html }
+            });
+        }
+
+        // Apply Updates (mark as sent)
+        await db.collection('pools').doc(pool.id).update(updates);
+    }
+}
 
 async function checkPaymentReminders(pool: GameState, now: number) {
     const settings = pool.reminders!.payment;

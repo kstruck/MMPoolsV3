@@ -3,6 +3,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { PlayoffPool, PlayoffEntry } from "./types";
+import { renderEmailHtml, BASE_URL } from "./emailStyles";
 
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -174,45 +175,48 @@ export const submitPlayoffPicks = onCall(async (request) => {
         [`entries.${key}`]: entryData
     });
 
+
+
     // 5. Send Confirmation Email
     try {
         const userEmail = request.auth.token.email;
         if (userEmail) {
-            // Construct Email HTML
+            // Construct Pick List
             const pickList = pool.teams
                 .map(t => ({ ...t, rank: rankings[t.id] || 0 }))
                 .sort((a, b) => b.rank - a.rank)
                 .map(t => `<li style="margin-bottom: 5px;"><strong>${t.rank} pts:</strong> ${t.name} (${t.seed})</li>`)
                 .join('');
 
-            const emailHtml = `
-                <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
-                    <h1 style="color: #4f46e5;">Entry Confirmed!</h1>
-                    <p>Hi ${userName},</p>
-                    <p>Your picks for <strong>${pool.name}</strong> have been saved.</p>
-                    
-                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                        <p style="margin: 0; font-weight: bold;">Entry Name: ${entryData.entryName}</p>
-                        <p style="margin: 5px 0 0 0;">Tiebreaker (Total SB Points): ${entryData.tiebreaker}</p>
-                    </div>
+            // Body Content (Inner HTML)
+            const bodyContent = `
+                <p>Hi ${userName},</p>
+                <p>Your picks for <strong>${pool.name}</strong> have been saved.</p>
+                
+                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; color: #1f2937;">
+                    <p style="margin: 0; font-weight: bold;">Entry: <span style="color: #4f46e5;">${entryData.entryName}</span></p>
+                    <p style="margin: 5px 0 0 0;">Tiebreaker: <strong>${entryData.tiebreaker}</strong> (Total Points)</p>
+                </div>
 
-                    <h3>Your Rankings:</h3>
-                    <ul style="padding-left: 20px;">
+                <h3 style="color: #334155; font-size: 16px; margin-bottom: 15px;">Your Rankings</h3>
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px;">
+                    <ul style="padding-left: 20px; margin: 0; color: #475569; font-size: 14px;">
                         ${pickList}
                     </ul>
-
-                    <p style="margin-top: 30px;">
-                        <a href="https://www.marchmeleepools.com/#pool/${poolId}" style="background-color: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Pool</a>
-                    </p>
                 </div>
             `;
 
+            // Render Standard Template
+            const poolUrl = `${BASE_URL}/#pool/${poolId}`;
+            const emailHtml = renderEmailHtml('Entry Confirmed! ✅', bodyContent, poolUrl, 'View Your Entry');
+
+            // Send via Firestore Trigger
             await db.collection('mail').add({
                 to: userEmail,
                 message: {
-                    subject: `Picks Confirmed: ${pool.name}`,
+                    subject: `Entry Confirmed: ${pool.name}`,
                     html: emailHtml,
-                    text: `Your picks for ${pool.name} have been saved. Entry: ${entryData.entryName}. View at https://www.marchmeleepools.com/#pool/${poolId}`
+                    text: `Your picks for ${pool.name} have been saved. Entry: ${entryData.entryName}. View at ${poolUrl}`
                 }
             });
         }
@@ -243,9 +247,48 @@ export const managePlayoffEntry = onCall(async (request) => {
     if (action === 'togglePaid') {
         if (!isManager) throw new HttpsError('permission-denied', 'Only managers can update payment status');
 
+        // Update status
         await poolRef.update({
             [`entries.${entryId}.paid`]: value
         });
+
+        // SEND RECEIPT EMAIL (If paid)
+        if (value === true) {
+            try {
+                // Get user email
+                let recipientEmail = '';
+                // Try to find email from User collection if not on entry
+                if (entry.userId) {
+                    const uSnap = await db.collection('users').doc(entry.userId).get();
+                    if (uSnap.exists) recipientEmail = uSnap.data()?.email;
+                }
+
+                if (recipientEmail) {
+                    const subject = `Payment Received: ${pool.name}`;
+                    const body = `
+                        <p>Hi ${entry.userName},</p>
+                        <p>Your payment for <strong>${pool.name}</strong> has been received/confirmed by the pool manager.</p>
+                        
+                        <div style="background-color: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 15px; margin: 20px 0; color: #064e3b;">
+                            <p style="margin: 0; font-weight: bold; font-size: 18px;">PAID ✅</p>
+                            <p style="margin: 5px 0 0 0;">Entry: ${entry.entryName || entry.userName}</p>
+                            ${pool.settings?.entryFee ? `<p style="margin: 5px 0 0 0;">Amount: $${pool.settings.entryFee}</p>` : ''}
+                        </div>
+
+                        <p>You are all set! Good luck in the playoffs.</p>
+                    `;
+                    const html = renderEmailHtml('Payment Receipt', body, `${BASE_URL}/#pool/${poolId}`, 'View Pool');
+                    await db.collection('mail').add({
+                        to: recipientEmail,
+                        message: { subject, html }
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to send receipt email:", err);
+                // Non-blocking
+            }
+        }
+
         return { success: true, message: `Entry marked as ${value ? 'Paid' : 'Unpaid'}` };
     }
 

@@ -321,9 +321,17 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                                 You can update these picks anytime until the pool locks.
                             </p>
 
-                            <div className="border-t border-slate-700 pt-3 flex justify-between">
-                                <span className="text-slate-400">Tiebreaker Prediction:</span>
-                                <span className="text-white font-mono font-bold">{tiebreaker} pts</span>
+                            <div className="border-t border-slate-700 pt-3 space-y-2">
+                                {(pool.settings?.entryFee ?? 0) > 0 && (
+                                    <div className="flex justify-between items-center text-emerald-400 bg-emerald-500/10 px-3 py-2 rounded-lg border border-emerald-500/20">
+                                        <span className="font-bold text-sm">Entry Cost:</span>
+                                        <span className="font-mono font-bold text-lg">${pool.settings.entryFee}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between px-1">
+                                    <span className="text-slate-400">Tiebreaker Prediction:</span>
+                                    <span className="text-white font-mono font-bold">{tiebreaker} pts</span>
+                                </div>
                             </div>
                         </div>
 
