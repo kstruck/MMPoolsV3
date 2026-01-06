@@ -41,13 +41,35 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ po
     const handleSave = async () => {
         setIsSaving(true);
         try {
-            // 1. Update Pool Doc
-            await dbService.updatePool(pool.id, { results } as any);
+            // Call Global Update Function
+            const updateGlobal = httpsCallable(functions, 'playoffPools-updateGlobalPlayoffResults');
+            await updateGlobal({ results });
 
-            // 2. Trigger Scoring Calculation
-            const calculateScores = httpsCallable(functions, 'playoffPools-calculatePlayoffScores');
-            await calculateScores({ poolId: pool.id });
+            setTimeout(onClose, 1500);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
+    const handleReset = async () => {
+        if (!confirm("Are you sure you want to RESET all results? This will set all scores to 0 for affected rounds.")) return;
+
+        setIsSaving(true);
+        try {
+            const emptyResults = {
+                WILD_CARD: [],
+                DIVISIONAL: [],
+                CONF_CHAMP: [],
+                SUPER_BOWL: []
+            };
+
+            // Call Global Update with Empty Results
+            const updateGlobal = httpsCallable(functions, 'playoffPools-updateGlobalPlayoffResults');
+            await updateGlobal({ results: emptyResults });
+
+            setResults(emptyResults);
             setTimeout(onClose, 1500);
         } catch (error) {
             console.error(error);
@@ -72,7 +94,7 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ po
                 <div className="p-6 border-b border-slate-800 flex justify-between items-center">
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
                         <Trophy className="w-6 h-6 text-yellow-500" />
-                        Manage Playoff Results
+                        Manage Global Playoff Results
                     </h2>
                     <button onClick={onClose} className="text-slate-400 hover:text-white">Close</button>
                 </div>
@@ -104,16 +126,26 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ po
                     ))}
                 </div>
 
-                <div className="p-6 border-t border-slate-800 flex justify-end gap-3 sticky bottom-0 bg-slate-900">
-                    <button onClick={onClose} className="px-4 py-2 text-slate-300 hover:text-white">Cancel</button>
+                <div className="p-6 border-t border-slate-800 flex justify-between gap-3 sticky bottom-0 bg-slate-900">
                     <button
-                        onClick={handleSave}
+                        onClick={handleReset}
                         disabled={isSaving}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2"
+                        className="text-rose-400 hover:text-rose-300 px-4 py-2 font-bold text-sm"
                     >
-                        {isSaving ? 'Saving...' : 'Save & Recalculate Scores'}
-                        {!isSaving && <Save size={18} />}
+                        Reset All Results
                     </button>
+
+                    <div className="flex gap-3">
+                        <button onClick={onClose} className="px-4 py-2 text-slate-300 hover:text-white">Cancel</button>
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2"
+                        >
+                            {isSaving ? 'Updating All Pools...' : 'Update All Pools'}
+                            {!isSaving && <Save size={18} />}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

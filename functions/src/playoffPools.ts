@@ -175,3 +175,78 @@ export const calculatePlayoffScores = onCall(async (request) => {
 
     return { success: true, updated: changesCount };
 });
+
+export const updateGlobalPlayoffResults = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+
+    // Check SuperAdmin
+    const userSnap = await db.collection('users').doc(request.auth.uid).get();
+    if (!userSnap.exists || userSnap.data()?.role !== 'SUPER_ADMIN') {
+        throw new HttpsError('permission-denied', 'Super Admin only');
+    }
+
+    const { results } = request.data;
+    if (!results) throw new HttpsError('invalid-argument', 'Missing results');
+
+    // 1. Save to Global Doc
+    await db.collection('system').doc('playoff_results').set({ results, updatedAt: Date.now() });
+
+    // 2. Query all Playoff Pools
+    const poolsSnap = await db.collection('pools').where('type', '==', 'playoff').get();
+
+    let totalUpdated = 0;
+    const batch = db.batch();
+
+    // Process each pool
+    // Note: If > 500 pools, we need multiple batches. For now assuming < 500.
+    for (const poolDoc of poolsSnap.docs) {
+        const pool = poolDoc.data() as PlayoffPool;
+
+        // Define settings locally to reuse calc logic
+        const settings = pool.settings?.scoring?.roundMultipliers;
+        const MULTIPLIERS = {
+            'WILD_CARD': settings?.WILD_CARD ?? 10,
+            'DIVISIONAL': settings?.DIVISIONAL ?? 12,
+            'CONF_CHAMP': settings?.CONF_CHAMP ?? 15,
+            'SUPER_BOWL': settings?.SUPER_BOWL ?? 20
+        };
+
+        const winnersWC = results.WILD_CARD || [];
+        const winnersDiv = results.DIVISIONAL || [];
+        const winnersConf = results.CONF_CHAMP || [];
+        const winnersSB = results.SUPER_BOWL || [];
+
+        const updates: Record<string, PlayoffEntry> = {};
+        let poolChanged = false;
+
+        // Recalculate all entries
+        for (const [userId, entry] of Object.entries(pool.entries || {})) {
+            let score = 0;
+            for (const teamId of winnersWC) score += (entry.rankings[teamId] || 0) * MULTIPLIERS.WILD_CARD;
+            for (const teamId of winnersDiv) score += (entry.rankings[teamId] || 0) * MULTIPLIERS.DIVISIONAL;
+            for (const teamId of winnersConf) score += (entry.rankings[teamId] || 0) * MULTIPLIERS.CONF_CHAMP;
+            for (const teamId of winnersSB) score += (entry.rankings[teamId] || 0) * MULTIPLIERS.SUPER_BOWL;
+
+            if (entry.totalScore !== score) {
+                updates[userId] = { ...entry, totalScore: score };
+                poolChanged = true;
+            }
+        }
+
+        // Add to batch if changed or if we need to sync results
+        // Always sync results to pool doc so frontend sees them
+        const poolUpdate: any = { results };
+
+        // Merge entry updates
+        for (const [uid, ent] of Object.entries(updates)) {
+            poolUpdate[`entries.${uid}`] = ent;
+        }
+
+        batch.update(poolDoc.ref, poolUpdate);
+        totalUpdated++;
+    }
+
+    await batch.commit();
+
+    return { success: true, poolsUpdated: totalUpdated };
+});

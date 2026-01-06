@@ -10,6 +10,8 @@ import { auth } from '../firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
 
 
+import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
+
 export const SuperAdmin: React.FC = () => {
     // --- STATE ---
     const [pools, setPools] = useState<Pool[]>([]);
@@ -53,6 +55,7 @@ export const SuperAdmin: React.FC = () => {
     // Playoff State
     const [playoffTeams, setPlayoffTeams] = useState<PlayoffTeam[]>([]);
     const [isSavingPlayoffs, setIsSavingPlayoffs] = useState(false);
+    const [showResultsManager, setShowResultsManager] = useState(false);
 
     const fetchUsers = () => {
         dbService.getAllUsers()
@@ -2338,6 +2341,12 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                             <div className="flex gap-3">
                                 <button
+                                    onClick={() => setShowResultsManager(true)}
+                                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2"
+                                >
+                                    <Trophy size={16} /> Manage Results / Score
+                                </button>
+                                <button
                                     onClick={() => {
                                         if (confirm("Reset to 2024-25 NFL Playoff Teams?")) {
                                             const MOCK = [
@@ -2372,6 +2381,13 @@ export const SuperAdmin: React.FC = () => {
                                 </button>
                             </div>
                         </div>
+
+                        {showResultsManager && (
+                            <PlayoffResultsManager
+                                teams={playoffTeams}
+                                onClose={() => setShowResultsManager(false)}
+                            />
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             {/* AFC Conference */}
