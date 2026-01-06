@@ -5,6 +5,7 @@ import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import { getTeamLogo } from '../../constants';
 import { ScheduleDisplay } from './ScheduleDisplay';
+import { AuthModal } from '../modals/AuthModal';
 
 interface RankingFormProps {
     pool: PlayoffPool;
@@ -21,6 +22,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+    const [showAuthModal, setShowAuthModal] = useState(false);
 
     // Confirmation & Disclaimer State
     const [isConfirming, setIsConfirming] = useState(false);
@@ -80,8 +82,12 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
     };
 
     const handleInitSave = () => {
-        if (!user) return;
         if (pool.isLocked) return;
+
+        if (!user) {
+            setShowAuthModal(true);
+            return;
+        }
 
         setError(null);
         setLiabilityAccepted(false);
@@ -329,6 +335,12 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                     </div>
                 </div>
             )}
+
+            <AuthModal
+                isOpen={showAuthModal}
+                onClose={() => setShowAuthModal(false)}
+                initialMode="register"
+            />
         </div>
     );
 };
