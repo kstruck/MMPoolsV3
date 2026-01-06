@@ -26,9 +26,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         let unsubAll: () => void = () => { };
 
         // Helper to process and filter pools
-        const processPools = (allPools: GameState[]) => {
+        const processPools = (allPools: Pool[]) => {
             const participating = allPools.filter(p => {
-                const isOwner = p.ownerId === user.id || p.managerName === user.name;
+                const isOwner = p.ownerId === user.id || (p as any).managerName === user.name;
 
                 // Squares Logic
                 if (p.type === 'SQUARES') {
@@ -76,8 +76,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         } else {
             // Regular User: Fetch Public + Owned logic
             // We need to maintain a local cache to merge updates
-            let publicPools: GameState[] = [];
-            let ownedPools: GameState[] = [];
+            let publicPools: Pool[] = [];
+            let ownedPools: Pool[] = [];
 
             const mergeAndUpdate = () => {
                 const merged = [...publicPools, ...ownedPools];
@@ -128,23 +128,25 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     (emailPrefix && s.owner?.toLowerCase() === emailPrefix)
                 );
                 totalSquares += userSquares.length;
+
+                // Check winners for this pool (Squares only logic)
+                const winners = poolWinners[pool.id] || [];
+                winners.forEach(winner => {
+                    const isMyWin = userSquares.some(s => s.id === winner.squareId);
+                    if (isMyWin) {
+                        totalWins++;
+                        totalWinnings += winner.amount || 0;
+                    }
+                });
+
             } else if (pool.type === 'NFL_PLAYOFFS') {
                 const pPool = pool as unknown as PlayoffPool;
                 const entries = pPool.entries ? Object.values(pPool.entries) : [];
                 const myEntries = entries.filter(e => e.userId === user.id);
                 totalSquares += myEntries.length; // Count entries as "squares" for now
+
+                // Playoff winners logic (TODO: Implement if needed, currently N/A or different)
             }
-
-
-            // Check winners for this pool
-            const winners = poolWinners[pool.id] || [];
-            winners.forEach(winner => {
-                const isMyWin = userSquares.some(s => s.id === winner.squareId);
-                if (isMyWin) {
-                    totalWins++;
-                    totalWinnings += winner.amount || 0;
-                }
-            });
         });
 
         return {
@@ -162,16 +164,19 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             const query = searchQuery.toLowerCase();
             const matchesSearch = !query ||
                 pool.name.toLowerCase().includes(query) ||
-                pool.homeTeam.toLowerCase().includes(query) ||
-                pool.awayTeam.toLowerCase().includes(query) ||
+                ((pool as GameState).homeTeam?.toLowerCase() || '').includes(query) ||
+                ((pool as GameState).awayTeam?.toLowerCase() || '').includes(query) ||
                 pool.id.includes(query);
 
             if (!matchesSearch) return false;
 
             // 2. Tab Status Filter
-            const isCompleted = pool.scores.gameStatus === 'post';
-            const isLive = pool.isLocked && !isCompleted;
-            const isOpen = !pool.isLocked;
+            const scores = (pool as GameState).scores;
+            const isLocked = (pool as GameState).isLocked;
+
+            const isCompleted = scores?.gameStatus === 'post';
+            const isLive = isLocked && !isCompleted;
+            const isOpen = !isLocked;
 
             if (activeTab === 'open') return isOpen;
             if (activeTab === 'live') return isLive;
@@ -183,15 +188,18 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     // Counts for Tabs
     const counts = useMemo(() => {
-        const open = myPools.filter(p => !p.isLocked).length;
-        const completed = myPools.filter(p => p.scores.gameStatus === 'post').length;
-        const live = myPools.filter(p => p.isLocked && p.scores.gameStatus !== 'post').length;
+        const open = myPools.filter(p => !(p as GameState).isLocked).length;
+        const completed = myPools.filter(p => (p as GameState).scores?.gameStatus === 'post').length;
+        const live = myPools.filter(p => (p as GameState).isLocked && (p as GameState).scores?.gameStatus !== 'post').length;
         return { all: myPools.length, open, live, completed };
     }, [myPools]);
 
-    const getStatusBadge = (pool: GameState) => {
-        if (pool.scores.gameStatus === 'post') return <span className="bg-slate-700 text-slate-300 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Completed</span>;
-        if (pool.isLocked) return <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider animate-pulse">Live Now</span>;
+    const getStatusBadge = (pool: Pool) => {
+        const status = (pool as GameState).scores?.gameStatus;
+        const isLocked = (pool as GameState).isLocked;
+
+        if (status === 'post') return <span className="bg-slate-700 text-slate-300 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Completed</span>;
+        if (isLocked) return <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider animate-pulse">Live Now</span>;
         return <span className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Open</span>;
     };
 
@@ -347,22 +355,22 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             return (
                                 <div
                                     key={pool.id}
-                                    onClick={() => window.location.hash = `#pool/${pool.urlSlug || pool.id}`}
+                                    onClick={() => window.location.hash = `#pool/${(pool as any).urlSlug || pool.id}`}
                                     className="group bg-slate-800/50 border border-slate-700 hover:border-emerald-500/50 hover:bg-slate-800 rounded-xl p-5 transition-all cursor-pointer relative overflow-hidden"
                                 >
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex items-center gap-3">
                                             <div className="flex -space-x-3 isolate">
                                                 <div className="w-10 h-10 rounded-full bg-slate-900 border-2 border-slate-700 flex items-center justify-center overflow-hidden relative z-10 shadow-md">
-                                                    {(pool.awayTeamLogo || getTeamLogo(pool.awayTeam)) ? (
-                                                        <img src={pool.awayTeamLogo || getTeamLogo(pool.awayTeam) || ''} alt="Away" className="w-full h-full object-contain p-0.5" />
+                                                    {((pool as GameState).awayTeamLogo || getTeamLogo((pool as GameState).awayTeam)) ? (
+                                                        <img src={(pool as GameState).awayTeamLogo || getTeamLogo((pool as GameState).awayTeam) || ''} alt="Away" className="w-full h-full object-contain p-0.5" />
                                                     ) : (
                                                         <Shield className="text-slate-600" size={16} />
                                                     )}
                                                 </div>
                                                 <div className="w-10 h-10 rounded-full bg-slate-900 border-2 border-slate-700 flex items-center justify-center overflow-hidden relative z-0 shadow-md">
-                                                    {(pool.homeTeamLogo || getTeamLogo(pool.homeTeam)) ? (
-                                                        <img src={pool.homeTeamLogo || getTeamLogo(pool.homeTeam) || ''} alt="Home" className="w-full h-full object-contain p-0.5" />
+                                                    {((pool as GameState).homeTeamLogo || getTeamLogo((pool as GameState).homeTeam)) ? (
+                                                        <img src={(pool as GameState).homeTeamLogo || getTeamLogo((pool as GameState).homeTeam) || ''} alt="Home" className="w-full h-full object-contain p-0.5" />
                                                     ) : (
                                                         <Shield className="text-slate-600" size={16} />
                                                     )}
@@ -372,13 +380,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                 <h3 className="font-bold text-white group-hover:text-emerald-400 transition-colors line-clamp-1">{pool.name}</h3>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     {getStatusBadge(pool)}
-                                                    {getStatusBadge(pool)}
                                                     <span className="text-xs text-slate-500 font-mono">{costDisplay}</span>
                                                 </div>
-                                                {pool.scores.startTime && (
+                                                {(pool as GameState).scores?.startTime && (
                                                     <div className="text-[10px] text-slate-400 mt-1 font-medium flex items-center gap-1">
                                                         <Calendar size={10} />
-                                                        {new Date(pool.scores.startTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                                        {new Date((pool as GameState).scores.startTime!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                                     </div>
                                                 )}
                                             </div>

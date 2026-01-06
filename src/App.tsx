@@ -164,8 +164,8 @@ const App: React.FC = () => {
     // 2. My Pools (for management, including private ones)
     // We merge them into one list.
 
-    let publicPools: GameState[] = [];
-    let myPools: GameState[] = [];
+    let publicPools: Pool[] = [];
+    let myPools: Pool[] = [];
 
     // Helper to merge and set
     const updateMergedPools = () => {
@@ -246,7 +246,7 @@ const App: React.FC = () => {
   }, [hash]);
 
   // Single Pool Subscription (for robust Deep Linking & Guest Access)
-  const [singlePool, setSinglePool] = useState<GameState | null>(null);
+  const [singlePool, setSinglePool] = useState<Pool | null>(null);
   const [isSinglePoolLoading, setIsSinglePoolLoading] = useState(false);
   const [singlePoolError, setSinglePoolError] = useState<any>(null);
 
@@ -274,7 +274,7 @@ const App: React.FC = () => {
 
   const currentPool = useMemo(() => {
     // Priority 1: Directly fetched single pool (most robust for deep links)
-    if (singlePool && route.id && (singlePool.id === route.id || singlePool.urlSlug?.toLowerCase() === route.id.toLowerCase())) return singlePool;
+    if (singlePool && route.id && (singlePool.id === route.id || (singlePool as any).urlSlug?.toLowerCase() === route.id.toLowerCase())) return singlePool;
 
     // Priority 2: Find in the global list (fallback if single fetch failed or is loading, but list has it)
     if (route.id) {

@@ -16,7 +16,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
-    const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
+    // const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
     // const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Deprecated
 
     const isManager = user?.id === pool.ownerId || user?.role === 'SUPER_ADMIN';
@@ -198,7 +198,11 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                 <Edit2 size={16} />
                                                             </button>
                                                             <button
-                                                                onClick={() => setDeletingEntryId(entry.id || '')}
+                                                                onClick={() => {
+                                                                    if (confirm('Delete this entry?')) {
+                                                                        dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
+                                                                    }
+                                                                }}
                                                                 className="text-white hover:text-rose-100 bg-rose-600 hover:bg-rose-500 p-2 rounded-lg transition-colors border border-rose-500/50 shadow-lg shadow-rose-500/10"
                                                                 title="Delete Entry"
                                                             >
@@ -330,7 +334,11 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            setDeletingEntryId(entry.id || '');
+                                                                            if (confirm('Are you sure you want to delete this entry?')) {
+                                                                                // alert('Deletion feature coming soon');
+                                                                                // TODO: Implement delete
+                                                                                dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
+                                                                            }
                                                                         }}
                                                                         className="p-1.5 rounded hover:bg-rose-900/50 text-slate-500 hover:text-rose-500 transition-colors"
                                                                         title="Delete Entry"
