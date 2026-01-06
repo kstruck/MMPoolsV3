@@ -667,461 +667,462 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
         );
     }
 
-    return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-2">Pool Rules</h3>
-                <p className="text-slate-400 text-sm mb-6">Configure entry fees, limits, and lock time.</p>
+    function renderStep2() {
+        return (
+            <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-2">Pool Rules</h3>
+                    <p className="text-slate-400 text-sm mb-6">Configure entry fees, limits, and lock time.</p>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Entry Fee</label>
-                        <div className="flex items-center gap-3">
-                            <div className="bg-emerald-500/20 p-3 rounded-lg text-emerald-400">
-                                <DollarSign size={24} />
-                            </div>
-                            <input
-                                type="number"
-                                value={formData.entryFee}
-                                onChange={(e) => update({ entryFee: parseInt(e.target.value) || 0 })}
-                                className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-emerald-500 py-1"
-                                min="0"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Max Entries Per User</label>
-                        <div className="flex items-center gap-3">
-                            <div className="bg-indigo-500/20 p-3 rounded-lg text-indigo-400">
-                                <Users size={24} />
-                            </div>
-                            <input
-                                type="number"
-                                value={formData.maxEntriesPerUser}
-                                onChange={(e) => update({ maxEntriesPerUser: parseInt(e.target.value) || 1 })}
-                                className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-indigo-500 py-1"
-                                min="1"
-                            />
-                        </div>
-                        <p className="text-xs text-slate-500 mt-2">How many rankings can one person submit?</p>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Total Entry Limit</label>
-                        <select
-                            value={formData.maxEntriesTotal}
-                            onChange={(e) => update({ maxEntriesTotal: parseInt(e.target.value) })}
-                            className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-emerald-500"
-                        >
-                            <option value="-1">Unlimited</option>
-                            <option value="10">10 Entries</option>
-                            <option value="25">25 Entries</option>
-                            <option value="50">50 Entries</option>
-                            <option value="100">100 Entries</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Lock Date/Time</label>
-
-                        {/* Quick Select Buttons */}
-                        <div className="flex flex-wrap gap-2 mb-4">
-                            {[
-                                { label: 'Wild Card Kickoff', time: '2025-01-11T16:30:00-05:00' },
-                                { label: 'Sunday Start', time: '2025-01-12T13:00:00-05:00' },
-                                { label: 'Divisional Round', time: '2025-01-18T16:30:00-05:00' }
-                            ].map((preset) => (
-                                <button
-                                    key={preset.label}
-                                    onClick={() => update({ lockAt: new Date(preset.time).getTime() })}
-                                    className="text-xs px-3 py-1.5 rounded-full bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700 transition-colors"
-                                >
-                                    {preset.label}
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="relative">
-                            <Calendar className="absolute left-3 top-3 text-emerald-500" size={18} />
-                            <input
-                                type="datetime-local"
-                                value={(() => {
-                                    const d = new Date(formData.lockAt);
-                                    // Adjust to local ISO string including offset
-                                    const offset = d.getTimezoneOffset() * 60000;
-                                    return new Date(d.getTime() - offset).toISOString().slice(0, 16);
-                                })()}
-                                onChange={(e) => {
-                                    const localDate = new Date(e.target.value);
-                                    update({ lockAt: localDate.getTime() });
-                                }}
-                                className="w-full bg-slate-950 border border-slate-700 rounded pl-10 pr-4 py-3 text-white outline-none focus:border-emerald-500 font-mono"
-                            />
-                        </div>
-                        <p className="text-xs text-slate-500 mt-2">
-                            Locked at: {new Date(formData.lockAt).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function renderStep3() {
-    return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                    <CheckCircle className="text-indigo-400" /> Scoring System
-                </h3>
-                <p className="text-slate-400 mb-6 text-sm">
-                    Participants rank all 14 playoff teams from 14 down to 1. If a team wins in a round, the participant gets points:<br />
-                    <span className="font-mono text-emerald-400">Assigned Rank × Round Multiplier</span>
-                </p>
-
-                <h4 className="font-bold mb-4 text-white border-b border-slate-800 pb-2">Round Multipliers</h4>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[
-                        { k: 'wc', l: 'Wild Card' },
-                        { k: 'div', l: 'Divisional' },
-                        { k: 'conf', l: 'Conference' },
-                        { k: 'sb', l: 'Super Bowl' }
-                    ].map(r => (
-                        <div key={r.k} className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                            <div className="text-sm text-slate-500 mb-1 uppercase font-bold">{r.l}</div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-slate-400 text-sm">×</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Entry Fee</label>
+                            <div className="flex items-center gap-3">
+                                <div className="bg-emerald-500/20 p-3 rounded-lg text-emerald-400">
+                                    <DollarSign size={24} />
+                                </div>
                                 <input
                                     type="number"
-                                    value={(formData.multipliers as any)[r.k]}
-                                    onChange={(e) => update({ multipliers: { ...formData.multipliers, [r.k]: Number(e.target.value) } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-bold text-center focus:border-indigo-500 outline-none text-white"
+                                    value={formData.entryFee}
+                                    onChange={(e) => update({ entryFee: parseInt(e.target.value) || 0 })}
+                                    className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-emerald-500 py-1"
+                                    min="0"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Max Entries Per User</label>
+                            <div className="flex items-center gap-3">
+                                <div className="bg-indigo-500/20 p-3 rounded-lg text-indigo-400">
+                                    <Users size={24} />
+                                </div>
+                                <input
+                                    type="number"
+                                    value={formData.maxEntriesPerUser}
+                                    onChange={(e) => update({ maxEntriesPerUser: parseInt(e.target.value) || 1 })}
+                                    className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-indigo-500 py-1"
                                     min="1"
                                 />
                             </div>
+                            <p className="text-xs text-slate-500 mt-2">How many rankings can one person submit?</p>
                         </div>
-                    ))}
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Total Entry Limit</label>
+                            <select
+                                value={formData.maxEntriesTotal}
+                                onChange={(e) => update({ maxEntriesTotal: parseInt(e.target.value) })}
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-emerald-500"
+                            >
+                                <option value="-1">Unlimited</option>
+                                <option value="10">10 Entries</option>
+                                <option value="25">25 Entries</option>
+                                <option value="50">50 Entries</option>
+                                <option value="100">100 Entries</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Lock Date/Time</label>
+
+                            {/* Quick Select Buttons */}
+                            <div className="flex flex-wrap gap-2 mb-4">
+                                {[
+                                    { label: 'Wild Card Kickoff', time: '2025-01-11T16:30:00-05:00' },
+                                    { label: 'Sunday Start', time: '2025-01-12T13:00:00-05:00' },
+                                    { label: 'Divisional Round', time: '2025-01-18T16:30:00-05:00' }
+                                ].map((preset) => (
+                                    <button
+                                        key={preset.label}
+                                        onClick={() => update({ lockAt: new Date(preset.time).getTime() })}
+                                        className="text-xs px-3 py-1.5 rounded-full bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 border border-slate-700 transition-colors"
+                                    >
+                                        {preset.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="relative">
+                                <Calendar className="absolute left-3 top-3 text-emerald-500" size={18} />
+                                <input
+                                    type="datetime-local"
+                                    value={(() => {
+                                        const d = new Date(formData.lockAt);
+                                        // Adjust to local ISO string including offset
+                                        const offset = d.getTimezoneOffset() * 60000;
+                                        return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+                                    })()}
+                                    onChange={(e) => {
+                                        const localDate = new Date(e.target.value);
+                                        update({ lockAt: localDate.getTime() });
+                                    }}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded pl-10 pr-4 py-3 text-white outline-none focus:border-emerald-500 font-mono"
+                                />
+                            </div>
+                            <p className="text-xs text-slate-500 mt-2">
+                                Locked at: {new Date(formData.lockAt).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-    );
-}
+        );
+    }
 
-function renderStep4() {
-    const total = [...formData.payouts.places, ...formData.payouts.bonuses].reduce((sum, p) => sum + p.percentage, 0);
-    const isValid = Math.abs(total - 100) < 0.01;
+    function renderStep3() {
+        return (
+            <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                        <CheckCircle className="text-indigo-400" /> Scoring System
+                    </h3>
+                    <p className="text-slate-400 mb-6 text-sm">
+                        Participants rank all 14 playoff teams from 14 down to 1. If a team wins in a round, the participant gets points:<br />
+                        <span className="font-mono text-emerald-400">Assigned Rank × Round Multiplier</span>
+                    </p>
 
-    return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-2">Payout Structure</h3>
-                <p className="text-slate-400 text-sm mb-6">Define how winnings will be distributed.</p>
-
-                {/* Total Indicator */}
-                <div className={`mb-6 p-4 rounded-lg border-2 ${isValid ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-rose-500/10 border-rose-500/30'}`}>
-                    <div className="flex justify-between items-center">
-                        <span className="font-bold text-white">Total Payout</span>
-                        <span className={`text-2xl font-black ${isValid ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {total.toFixed(1)}%
-                        </span>
-                    </div>
-                    {!isValid && (
-                        <p className="text-xs text-rose-300 mt-2">
-                            Must equal exactly 100% to proceed
-                        </p>
-                    )}
-                </div>
-
-                {/* Place Payouts */}
-                <div className="mb-6">
-                    <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-bold text-white">Place Payouts</h4>
-                        <button
-                            onClick={addPlace}
-                            className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded font-bold"
-                            type="button"
-                        >
-                            + Add Place
-                        </button>
-                    </div>
-                    <div className="space-y-2">
-                        {formData.payouts.places.map((place, i) => (
-                            <div key={i} className="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-700">
-                                <span className="text-sm font-bold text-slate-400 w-16">#{place.rank}</span>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="100"
-                                    step="1"
-                                    value={place.percentage}
-                                    onChange={(e) => updatePlace(i, parseFloat(e.target.value))}
-                                    className="flex-1"
-                                />
-                                <input
-                                    type="number"
-                                    value={place.percentage}
-                                    onChange={(e) => updatePlace(i, parseFloat(e.target.value) || 0)}
-                                    className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm text-center"
-                                    min="0"
-                                    max="100"
-                                    step="0.1"
-                                />
-                                <span className="text-sm text-slate-400">%</span>
-                                {formData.payouts.places.length > 1 && (
-                                    <button
-                                        onClick={() => removePlace(i)}
-                                        className="text-rose-400 hover:text-rose-300 text-sm"
-                                        type="button"
-                                    >
-                                        ✕
-                                    </button>
-                                )}
+                    <h4 className="font-bold mb-4 text-white border-b border-slate-800 pb-2">Round Multipliers</h4>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {[
+                            { k: 'wc', l: 'Wild Card' },
+                            { k: 'div', l: 'Divisional' },
+                            { k: 'conf', l: 'Conference' },
+                            { k: 'sb', l: 'Super Bowl' }
+                        ].map(r => (
+                            <div key={r.k} className="bg-slate-950 border border-slate-800 rounded-lg p-4">
+                                <div className="text-sm text-slate-500 mb-1 uppercase font-bold">{r.l}</div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-slate-400 text-sm">×</span>
+                                    <input
+                                        type="number"
+                                        value={(formData.multipliers as any)[r.k]}
+                                        onChange={(e) => update({ multipliers: { ...formData.multipliers, [r.k]: Number(e.target.value) } })}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-bold text-center focus:border-indigo-500 outline-none text-white"
+                                        min="1"
+                                    />
+                                </div>
                             </div>
                         ))}
                     </div>
                 </div>
+            </div>
+        );
+    }
 
-                {/* Bonus Payouts */}
-                <div>
-                    <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-bold text-white">Bonus Payouts</h4>
-                        <button
-                            onClick={addBonus}
-                            className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded font-bold"
-                            type="button"
-                        >
-                            + Add Bonus
-                        </button>
+    function renderStep4() {
+        const total = [...formData.payouts.places, ...formData.payouts.bonuses].reduce((sum, p) => sum + p.percentage, 0);
+        const isValid = Math.abs(total - 100) < 0.01;
+
+        return (
+            <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-2">Payout Structure</h3>
+                    <p className="text-slate-400 text-sm mb-6">Define how winnings will be distributed.</p>
+
+                    {/* Total Indicator */}
+                    <div className={`mb-6 p-4 rounded-lg border-2 ${isValid ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-rose-500/10 border-rose-500/30'}`}>
+                        <div className="flex justify-between items-center">
+                            <span className="font-bold text-white">Total Payout</span>
+                            <span className={`text-2xl font-black ${isValid ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {total.toFixed(1)}%
+                            </span>
+                        </div>
+                        {!isValid && (
+                            <p className="text-xs text-rose-300 mt-2">
+                                Must equal exactly 100% to proceed
+                            </p>
+                        )}
                     </div>
-                    {formData.payouts.bonuses.length === 0 ? (
-                        <p className="text-sm text-slate-500 text-center py-4">No bonus payouts configured</p>
-                    ) : (
+
+                    {/* Place Payouts */}
+                    <div className="mb-6">
+                        <div className="flex justify-between items-center mb-3">
+                            <h4 className="font-bold text-white">Place Payouts</h4>
+                            <button
+                                onClick={addPlace}
+                                className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded font-bold"
+                                type="button"
+                            >
+                                + Add Place
+                            </button>
+                        </div>
                         <div className="space-y-2">
-                            {formData.payouts.bonuses.map((bonus, i) => (
+                            {formData.payouts.places.map((place, i) => (
                                 <div key={i} className="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-700">
-                                    <input
-                                        type="text"
-                                        value={bonus.name}
-                                        onChange={(e) => updateBonus(i, 'name', e.target.value)}
-                                        className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm"
-                                        placeholder="Bonus Name"
-                                    />
+                                    <span className="text-sm font-bold text-slate-400 w-16">#{place.rank}</span>
                                     <input
                                         type="range"
                                         min="0"
-                                        max="50"
+                                        max="100"
                                         step="1"
-                                        value={bonus.percentage}
-                                        onChange={(e) => updateBonus(i, 'percentage', parseFloat(e.target.value))}
+                                        value={place.percentage}
+                                        onChange={(e) => updatePlace(i, parseFloat(e.target.value))}
                                         className="flex-1"
                                     />
                                     <input
                                         type="number"
-                                        value={bonus.percentage}
-                                        onChange={(e) => updateBonus(i, 'percentage', parseFloat(e.target.value) || 0)}
+                                        value={place.percentage}
+                                        onChange={(e) => updatePlace(i, parseFloat(e.target.value) || 0)}
                                         className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm text-center"
                                         min="0"
                                         max="100"
                                         step="0.1"
                                     />
                                     <span className="text-sm text-slate-400">%</span>
-                                    <button
-                                        onClick={() => removeBonus(i)}
-                                        className="text-rose-400 hover:text-rose-300 text-sm"
-                                        type="button"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function renderStep5() {
-    return (
-        <WizardStepBranding
-            branding={formData.branding}
-            onUpdate={(branding) => update({ branding: { ...formData.branding, ...branding } })}
-        />
-    );
-}
-
-function renderStep6() {
-    return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                    <Calendar size={20} className="text-emerald-400" />
-                    Smart Reminders
-                </h3>
-                <p className="text-slate-400 text-sm mb-6">Automatically notify players at key moments.</p>
-
-                <div className="space-y-4">
-                    <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition-colors">
-                        <div>
-                            <span className="font-bold text-slate-200 block">24-Hour Reminder</span>
-                            <span className="text-xs text-slate-500">Email all players 24h before lock</span>
-                        </div>
-                        <input
-                            type="checkbox"
-                            checked={formData.reminders.auto24h}
-                            onChange={(e) => update({ reminders: { ...formData.reminders, auto24h: e.target.checked } })}
-                            className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500"
-                        />
-                    </label>
-
-                    <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition-colors">
-                        <div>
-                            <span className="font-bold text-slate-200 block">1-Hour Reminder</span>
-                            <span className="text-xs text-slate-500">Final reminder 1h before lock</span>
-                        </div>
-                        <input
-                            type="checkbox"
-                            checked={formData.reminders.auto1h}
-                            onChange={(e) => update({ reminders: { ...formData.reminders, auto1h: e.target.checked } })}
-                            className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500"
-                        />
-                    </label>
-
-                    <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition-colors">
-                        <div>
-                            <span className="font-bold text-slate-200 block">Auto-Lock Pool</span>
-                            <span className="text-xs text-slate-500">Automatically lock at Wild Card start</span>
-                        </div>
-                        <input
-                            type="checkbox"
-                            checked={formData.reminders.autoLock}
-                            onChange={(e) => update({ reminders: { ...formData.reminders, autoLock: e.target.checked } })}
-                            className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500"
-                        />
-                    </label>
-
-                    <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition-colors">
-                        <div>
-                            <span className="font-bold text-slate-200 block">Winner Announcements</span>
-                            <span className="text-xs text-slate-500">Auto-email when winners are finalized</span>
-                        </div>
-                        <input
-                            type="checkbox"
-                            checked={formData.reminders.announceWinner}
-                            onChange={(e) => update({ reminders: { ...formData.reminders, announceWinner: e.target.checked } })}
-                            className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500"
-                        />
-                    </label>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function renderStep7() {
-    return (
-        <WizardStepAdvanced
-            settings={{
-                collectPhone: formData.collectPhone,
-                collectAddress: formData.collectAddress,
-                collectReferral: formData.collectReferral,
-                collectNotes: formData.collectNotes,
-                emailConfirmation: formData.emailConfirmation,
-                emailNumbersGenerated: formData.emailNumbersGenerated,
-                notifyAdminFull: formData.notifyAdminFull,
-                gridPassword: formData.accessControl.password,
-                isPublic: formData.isListedPublic
-            }}
-            poolUrl={`${window.location.origin}/#pool/${formData.slug || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-            poolSlug={formData.slug}
-            onUpdate={(settings) => {
-                const newData: any = {};
-                if (settings.collectPhone !== undefined) newData.collectPhone = settings.collectPhone;
-                if (settings.collectAddress !== undefined) newData.collectAddress = settings.collectAddress;
-                if (settings.collectReferral !== undefined) newData.collectReferral = settings.collectReferral;
-                if (settings.collectNotes !== undefined) newData.collectNotes = settings.collectNotes;
-                if (settings.emailConfirmation !== undefined) newData.emailConfirmation = settings.emailConfirmation;
-                if (settings.emailNumbersGenerated !== undefined) newData.emailNumbersGenerated = settings.emailNumbersGenerated;
-                if (settings.notifyAdminFull !== undefined) newData.notifyAdminFull = settings.notifyAdminFull;
-                if (settings.isPublic !== undefined) newData.isListedPublic = settings.isPublic;
-                if (settings.gridPassword !== undefined) {
-                    newData.accessControl = { ...formData.accessControl, password: settings.gridPassword };
-                }
-                update(newData);
-            }}
-        />
-    );
-}
-
-function renderStep8() {
-    return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-2">Review & Launch</h3>
-                <p className="text-slate-400 text-sm mb-6">Double-check everything before publishing your pool.</p>
-
-                <div className="space-y-4">
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                        <h4 className="font-bold text-white text-sm mb-2">Pool Details</h4>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div className="text-slate-400">Name:</div>
-                            <div className="text-white font-mono">{formData.name}</div>
-                            <div className="text-slate-400">Slug:</div>
-                            <div className="text-white font-mono">/{formData.slug}</div>
-                            <div className="text-slate-400">Season:</div>
-                            <div className="text-white">{formData.season}-{parseInt(formData.season) + 1} NFL Playoffs</div>
-                            <div className="text-slate-400">Manager:</div>
-                            <div className="text-white">{formData.managerName}</div>
-                            <div className="text-slate-400">Email:</div>
-                            <div className="text-white">{formData.contactEmail}</div>
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                        <h4 className="font-bold text-white text-sm mb-2">Rules</h4>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div className="text-slate-400">Entry Fee:</div>
-                            <div className="text-emerald-400 font-bold">${formData.entryFee}</div>
-                            <div className="text-slate-400">Max Per User:</div>
-                            <div className="text-white">{formData.maxEntriesPerUser} entries</div>
-                            <div className="text-slate-400">Total Limit:</div>
-                            <div className="text-white">{formData.maxEntriesTotal === -1 ? 'Unlimited' : formData.maxEntriesTotal}</div>
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                        <h4 className="font-bold text-white text-sm mb-2">Scoring Multipliers</h4>
-                        <div className="flex justify-between text-sm">
-                            <span className="text-slate-400">WC: ×{formData.multipliers.wc}</span>
-                            <span className="text-slate-400">Div: ×{formData.multipliers.div}</span>
-                            <span className="text-slate-400">Conf: ×{formData.multipliers.conf}</span>
-                            <span className="text-slate-400">SB: ×{formData.multipliers.sb}</span>
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                        <h4 className="font-bold text-white text-sm mb-2">Payouts</h4>
-                        <div className="space-y-1 text-sm">
-                            {formData.payouts.places.map(p => (
-                                <div key={p.rank} className="flex justify-between">
-                                    <span className="text-slate-400">#{p.rank}</span>
-                                    <span className="text-emerald-400 font-mono">{p.percentage}%</span>
-                                </div>
-                            ))}
-                            {formData.payouts.bonuses.map((b, i) => (
-                                <div key={i} className="flex justify-between">
-                                    <span className="text-amber-400">{b.name}</span>
-                                    <span className="text-amber-400 font-mono">{b.percentage}%</span>
+                                    {formData.payouts.places.length > 1 && (
+                                        <button
+                                            onClick={() => removePlace(i)}
+                                            className="text-rose-400 hover:text-rose-300 text-sm"
+                                            type="button"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     </div>
+
+                    {/* Bonus Payouts */}
+                    <div>
+                        <div className="flex justify-between items-center mb-3">
+                            <h4 className="font-bold text-white">Bonus Payouts</h4>
+                            <button
+                                onClick={addBonus}
+                                className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded font-bold"
+                                type="button"
+                            >
+                                + Add Bonus
+                            </button>
+                        </div>
+                        {formData.payouts.bonuses.length === 0 ? (
+                            <p className="text-sm text-slate-500 text-center py-4">No bonus payouts configured</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {formData.payouts.bonuses.map((bonus, i) => (
+                                    <div key={i} className="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-700">
+                                        <input
+                                            type="text"
+                                            value={bonus.name}
+                                            onChange={(e) => updateBonus(i, 'name', e.target.value)}
+                                            className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+                                            placeholder="Bonus Name"
+                                        />
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="50"
+                                            step="1"
+                                            value={bonus.percentage}
+                                            onChange={(e) => updateBonus(i, 'percentage', parseFloat(e.target.value))}
+                                            className="flex-1"
+                                        />
+                                        <input
+                                            type="number"
+                                            value={bonus.percentage}
+                                            onChange={(e) => updateBonus(i, 'percentage', parseFloat(e.target.value) || 0)}
+                                            className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm text-center"
+                                            min="0"
+                                            max="100"
+                                            step="0.1"
+                                        />
+                                        <span className="text-sm text-slate-400">%</span>
+                                        <button
+                                            onClick={() => removeBonus(i)}
+                                            className="text-rose-400 hover:text-rose-300 text-sm"
+                                            type="button"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
-    );
-}
+        );
+    }
+
+    function renderStep5() {
+        return (
+            <WizardStepBranding
+                branding={formData.branding}
+                onUpdate={(branding) => update({ branding: { ...formData.branding, ...branding } })}
+            />
+        );
+    }
+
+    function renderStep6() {
+        return (
+            <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                        <Calendar size={20} className="text-emerald-400" />
+                        Smart Reminders
+                    </h3>
+                    <p className="text-slate-400 text-sm mb-6">Automatically notify players at key moments.</p>
+
+                    <div className="space-y-4">
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition-colors">
+                            <div>
+                                <span className="font-bold text-slate-200 block">24-Hour Reminder</span>
+                                <span className="text-xs text-slate-500">Email all players 24h before lock</span>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={formData.reminders.auto24h}
+                                onChange={(e) => update({ reminders: { ...formData.reminders, auto24h: e.target.checked } })}
+                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500"
+                            />
+                        </label>
+
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition-colors">
+                            <div>
+                                <span className="font-bold text-slate-200 block">1-Hour Reminder</span>
+                                <span className="text-xs text-slate-500">Final reminder 1h before lock</span>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={formData.reminders.auto1h}
+                                onChange={(e) => update({ reminders: { ...formData.reminders, auto1h: e.target.checked } })}
+                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500"
+                            />
+                        </label>
+
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition-colors">
+                            <div>
+                                <span className="font-bold text-slate-200 block">Auto-Lock Pool</span>
+                                <span className="text-xs text-slate-500">Automatically lock at Wild Card start</span>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={formData.reminders.autoLock}
+                                onChange={(e) => update({ reminders: { ...formData.reminders, autoLock: e.target.checked } })}
+                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500"
+                            />
+                        </label>
+
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition-colors">
+                            <div>
+                                <span className="font-bold text-slate-200 block">Winner Announcements</span>
+                                <span className="text-xs text-slate-500">Auto-email when winners are finalized</span>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={formData.reminders.announceWinner}
+                                onChange={(e) => update({ reminders: { ...formData.reminders, announceWinner: e.target.checked } })}
+                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500"
+                            />
+                        </label>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    function renderStep7() {
+        return (
+            <WizardStepAdvanced
+                settings={{
+                    collectPhone: formData.collectPhone,
+                    collectAddress: formData.collectAddress,
+                    collectReferral: formData.collectReferral,
+                    collectNotes: formData.collectNotes,
+                    emailConfirmation: formData.emailConfirmation,
+                    emailNumbersGenerated: formData.emailNumbersGenerated,
+                    notifyAdminFull: formData.notifyAdminFull,
+                    gridPassword: formData.accessControl.password,
+                    isPublic: formData.isListedPublic
+                }}
+                poolUrl={`${window.location.origin}/#pool/${formData.slug || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                poolSlug={formData.slug}
+                onUpdate={(settings) => {
+                    const newData: any = {};
+                    if (settings.collectPhone !== undefined) newData.collectPhone = settings.collectPhone;
+                    if (settings.collectAddress !== undefined) newData.collectAddress = settings.collectAddress;
+                    if (settings.collectReferral !== undefined) newData.collectReferral = settings.collectReferral;
+                    if (settings.collectNotes !== undefined) newData.collectNotes = settings.collectNotes;
+                    if (settings.emailConfirmation !== undefined) newData.emailConfirmation = settings.emailConfirmation;
+                    if (settings.emailNumbersGenerated !== undefined) newData.emailNumbersGenerated = settings.emailNumbersGenerated;
+                    if (settings.notifyAdminFull !== undefined) newData.notifyAdminFull = settings.notifyAdminFull;
+                    if (settings.isPublic !== undefined) newData.isListedPublic = settings.isPublic;
+                    if (settings.gridPassword !== undefined) {
+                        newData.accessControl = { ...formData.accessControl, password: settings.gridPassword };
+                    }
+                    update(newData);
+                }}
+            />
+        );
+    }
+
+    function renderStep8() {
+        return (
+            <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-2">Review & Launch</h3>
+                    <p className="text-slate-400 text-sm mb-6">Double-check everything before publishing your pool.</p>
+
+                    <div className="space-y-4">
+                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
+                            <h4 className="font-bold text-white text-sm mb-2">Pool Details</h4>
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div className="text-slate-400">Name:</div>
+                                <div className="text-white font-mono">{formData.name}</div>
+                                <div className="text-slate-400">Slug:</div>
+                                <div className="text-white font-mono">/{formData.slug}</div>
+                                <div className="text-slate-400">Season:</div>
+                                <div className="text-white">{formData.season}-{parseInt(formData.season) + 1} NFL Playoffs</div>
+                                <div className="text-slate-400">Manager:</div>
+                                <div className="text-white">{formData.managerName}</div>
+                                <div className="text-slate-400">Email:</div>
+                                <div className="text-white">{formData.contactEmail}</div>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
+                            <h4 className="font-bold text-white text-sm mb-2">Rules</h4>
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div className="text-slate-400">Entry Fee:</div>
+                                <div className="text-emerald-400 font-bold">${formData.entryFee}</div>
+                                <div className="text-slate-400">Max Per User:</div>
+                                <div className="text-white">{formData.maxEntriesPerUser} entries</div>
+                                <div className="text-slate-400">Total Limit:</div>
+                                <div className="text-white">{formData.maxEntriesTotal === -1 ? 'Unlimited' : formData.maxEntriesTotal}</div>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
+                            <h4 className="font-bold text-white text-sm mb-2">Scoring Multipliers</h4>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-400">WC: ×{formData.multipliers.wc}</span>
+                                <span className="text-slate-400">Div: ×{formData.multipliers.div}</span>
+                                <span className="text-slate-400">Conf: ×{formData.multipliers.conf}</span>
+                                <span className="text-slate-400">SB: ×{formData.multipliers.sb}</span>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
+                            <h4 className="font-bold text-white text-sm mb-2">Payouts</h4>
+                            <div className="space-y-1 text-sm">
+                                {formData.payouts.places.map(p => (
+                                    <div key={p.rank} className="flex justify-between">
+                                        <span className="text-slate-400">#{p.rank}</span>
+                                        <span className="text-emerald-400 font-mono">{p.percentage}%</span>
+                                    </div>
+                                ))}
+                                {formData.payouts.bonuses.map((b, i) => (
+                                    <div key={i} className="flex justify-between">
+                                        <span className="text-amber-400">{b.name}</span>
+                                        <span className="text-amber-400 font-mono">{b.percentage}%</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 };
