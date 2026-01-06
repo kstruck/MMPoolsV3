@@ -1966,10 +1966,33 @@ export const SuperAdmin: React.FC = () => {
                                         ID: <span className="font-mono text-slate-500">{viewingPool.id}</span>
                                     </p>
                                 </div>
-                                <button onClick={() => setViewingPool(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors">
-                                    <span className="sr-only">Close</span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {(viewingPool.type === 'NFL_PLAYOFFS' || viewingPool.type === 'BRACKET') && (
+                                        <button
+                                            onClick={async () => {
+                                                if (!confirm(`Update Max Entries to 50 for pool: ${viewingPool.name}?`)) return;
+                                                try {
+                                                    const poolRef = doc(db, 'pools', viewingPool.id);
+                                                    await updateDoc(poolRef, {
+                                                        'settings.maxEntriesPerUser': 50,
+                                                        'settings.maxEntriesTotal': 500
+                                                    });
+                                                    alert('Success: Max entries updated to 50!');
+                                                } catch (err: any) {
+                                                    console.error(err);
+                                                    alert('Error: ' + err.message);
+                                                }
+                                            }}
+                                            className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/50 rounded-lg text-xs font-bold transition-all"
+                                        >
+                                            Fix Max Entries
+                                        </button>
+                                    )}
+                                    <button onClick={() => setViewingPool(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors">
+                                        <span className="sr-only">Close</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="p-6 space-y-6">
