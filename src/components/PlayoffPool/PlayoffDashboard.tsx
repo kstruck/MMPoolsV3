@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { PlayoffPool, User } from '../../types';
 import { Trophy, ListOrdered, FileText, Plus, Edit2, Settings } from 'lucide-react';
+import { PlayoffSettingsModal } from '../modals/PlayoffSettingsModal';
 import { RankingForm } from './RankingForm';
 
 interface PlayoffDashboardProps {
@@ -14,6 +15,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules'>('picks');
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const isManager = user?.id === pool.ownerId || user?.role === 'SUPER_ADMIN';
 
@@ -71,7 +73,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     </div>
                     <div className="flex gap-2">
                         {isManager && (
-                            <button onClick={() => alert("Pool Settings Management coming soon!")} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
+                            <button onClick={() => setIsSettingsOpen(true)} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
                                 <Settings size={16} /> Manage Pool
                             </button>
                         )}
@@ -289,6 +291,14 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     )}
                 </div>
             </div>
+            {/* Settings Modal */}
+            {isManager && (
+                <PlayoffSettingsModal
+                    isOpen={isSettingsOpen}
+                    onClose={() => setIsSettingsOpen(false)}
+                    pool={pool}
+                />
+            )}
         </div>
     );
 };
