@@ -271,7 +271,7 @@ const App: React.FC = () => {
       return pools.find(p => {
         if (p.id === route.id) return true;
         const slug = p.type === 'BRACKET' ? p.slug : (p as any).urlSlug || (p as any).id;
-        return slug && slug.toLowerCase() === route.id.toLowerCase();
+        return slug != null && route.id != null && slug.toLowerCase() === route.id.toLowerCase();
       }) || null;
     }
     return null;
