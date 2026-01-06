@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { User, GameState, Winner } from '../types';
+import type { User, GameState, Winner, Pool, PlayoffPool } from '../types';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
 import { LayoutGrid, User as UserIcon, Search, ChevronRight, Loader, Calendar, Shield, DollarSign, Trophy, TrendingUp } from 'lucide-react';
@@ -13,7 +13,7 @@ interface ParticipantDashboardProps {
 }
 
 export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user, onLogout, onCreatePool }) => {
-    const [myPools, setMyPools] = useState<GameState[]>([]);
+    const [myPools, setMyPools] = useState<Pool[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'all' | 'open' | 'live' | 'completed'>('live');
     const [searchQuery, setSearchQuery] = useState('');
@@ -28,15 +28,29 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         // Helper to process and filter pools
         const processPools = (allPools: GameState[]) => {
             const participating = allPools.filter(p => {
-                const isOwner = p.ownerId === user.id || p.managerName === user.name; // Basic check
-                const matchId = p.squares.some(s => s.reservedByUid === user.id);
-                const matchName = p.squares.some(s =>
-                    !s.reservedByUid && s.owner && (
-                        s.owner === user.name ||
-                        (user.email && (s.owner === user.email || s.owner.toLowerCase() === user.email.split('@')[0].toLowerCase()))
-                    )
-                );
-                return isOwner || matchId || matchName;
+                const isOwner = p.ownerId === user.id || p.managerName === user.name;
+
+                // Squares Logic
+                if (p.type === 'SQUARES') {
+                    const pool = p as GameState;
+                    return isOwner || pool.squares.some(s =>
+                        s.reservedByUid === user.id ||
+                        (!s.reservedByUid && s.owner && (
+                            s.owner === user.name ||
+                            (user.email && (s.owner === user.email || s.owner.toLowerCase() === user.email.split('@')[0].toLowerCase()))
+                        ))
+                    );
+                }
+
+                // Playoff Logic
+                if (p.type === 'NFL_PLAYOFFS') {
+                    const pool = p as unknown as PlayoffPool;
+                    const entries = pool.entries ? Object.values(pool.entries) : [];
+                    return isOwner || entries.some(e => e.userId === user.id);
+                }
+
+                // Bracket/Props etc (Future proofing)
+                return isOwner;
             });
 
             // Deduplicate by ID just in case
@@ -106,12 +120,21 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         let totalWins = 0;
 
         myPools.forEach(pool => {
-            const userSquares = pool.squares.filter(s =>
-                s.reservedByUid === user.id ||
-                s.owner === user.name ||
-                (emailPrefix && s.owner?.toLowerCase() === emailPrefix)
-            );
-            totalSquares += userSquares.length;
+            if (pool.type === 'SQUARES') {
+                const sPool = pool as GameState;
+                const userSquares = sPool.squares.filter(s =>
+                    s.reservedByUid === user.id ||
+                    s.owner === user.name ||
+                    (emailPrefix && s.owner?.toLowerCase() === emailPrefix)
+                );
+                totalSquares += userSquares.length;
+            } else if (pool.type === 'NFL_PLAYOFFS') {
+                const pPool = pool as unknown as PlayoffPool;
+                const entries = pPool.entries ? Object.values(pPool.entries) : [];
+                const myEntries = entries.filter(e => e.userId === user.id);
+                totalSquares += myEntries.length; // Count entries as "squares" for now
+            }
+
 
             // Check winners for this pool
             const winners = poolWinners[pool.id] || [];
@@ -296,12 +319,30 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredPools.map(pool => {
-                            const emailPrefix = user.email ? user.email.split('@')[0] : '';
-                            const userSquares = pool.squares.filter(s =>
-                                s.reservedByUid === user.id ||
-                                s.owner === user.name ||
-                                (emailPrefix && s.owner === emailPrefix)
-                            );
+                            const isSquares = pool.type === 'SQUARES';
+                            const isPlayoff = pool.type === 'NFL_PLAYOFFS';
+
+                            let userEntryCount = 0;
+                            let percentFull = 0;
+                            let costDisplay = '';
+
+                            if (isSquares) {
+                                const sPool = pool as GameState;
+                                const emailPrefix = user.email ? user.email.split('@')[0] : '';
+                                userEntryCount = sPool.squares.filter(s =>
+                                    s.reservedByUid === user.id ||
+                                    s.owner === user.name ||
+                                    (emailPrefix && s.owner === emailPrefix)
+                                ).length;
+                                percentFull = (sPool.squares.filter(s => s.owner).length / 100) * 100;
+                                costDisplay = `$${sPool.costPerSquare}/sq`;
+                            } else if (isPlayoff) {
+                                const pPool = pool as unknown as PlayoffPool;
+                                const entries = pPool.entries ? Object.values(pPool.entries) : [];
+                                userEntryCount = entries.filter(e => e.userId === user.id).length;
+                                percentFull = 0; // No "full" concept yet for bracket
+                                costDisplay = pPool.settings?.entryFee ? `$${pPool.settings.entryFee} Entry` : 'Free';
+                            }
 
                             return (
                                 <div
@@ -331,7 +372,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                 <h3 className="font-bold text-white group-hover:text-emerald-400 transition-colors line-clamp-1">{pool.name}</h3>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     {getStatusBadge(pool)}
-                                                    <span className="text-xs text-slate-500 font-mono">${pool.costPerSquare}/sq</span>
+                                                    {getStatusBadge(pool)}
+                                                    <span className="text-xs text-slate-500 font-mono">{costDisplay}</span>
                                                 </div>
                                                 {pool.scores.startTime && (
                                                     <div className="text-[10px] text-slate-400 mt-1 font-medium flex items-center gap-1">
@@ -345,16 +387,18 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
                                     <div className="space-y-2 mb-4">
                                         <div className="flex justify-between text-xs">
-                                            <span className="text-slate-400">Your Squares</span>
-                                            <span className="text-white font-bold">{userSquares.length}</span>
+                                            <span className="text-slate-400">{isSquares ? 'Your Squares' : 'Your Entries'}</span>
+                                            <span className="text-white font-bold">{userEntryCount}</span>
                                         </div>
-                                        {/* Progress Bar for Pool Fullness */}
-                                        <div className="h-1.5 w-full bg-slate-700 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-emerald-500 transition-all duration-500"
-                                                style={{ width: `${(pool.squares.filter(s => s.owner).length / 100) * 100}%` }}
-                                            />
-                                        </div>
+                                        {/* Progress Bar for Pool Fullness (Squares Only for now) */}
+                                        {isSquares && (
+                                            <div className="h-1.5 w-full bg-slate-700 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-emerald-500 transition-all duration-500"
+                                                    style={{ width: `${percentFull}%` }}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-700/50 pt-3">

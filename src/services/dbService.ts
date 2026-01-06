@@ -19,7 +19,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
 export { db };
-import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam } from "../types";
+import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool } from "../types";
 
 /** Global statistics tracked across all pools */
 export interface GlobalStats {
@@ -327,7 +327,8 @@ export const dbService = {
     },
 
     // Real-time listener for ALL public pools OR user's pools
-    subscribeToPools: (callback: (pools: GameState[]) => void, onError?: (error: Error) => void, ownerId?: string) => {
+    // Real-time listener for ALL public pools OR user's pools
+    subscribeToPools: (callback: (pools: Pool[]) => void, onError?: (error: Error) => void, ownerId?: string) => {
         let q;
         if (ownerId) {
             q = query(collection(db, "pools"), or(where("ownerId", "==", ownerId), where("managerUid", "==", ownerId)));
@@ -336,7 +337,7 @@ export const dbService = {
             q = query(collection(db, "pools"), where("isPublic", "==", true));
         }
         return onSnapshot(q, (snapshot) => {
-            const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GameState));
+            const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
             callback(pools);
         }, (error) => {
             console.error("Pool Subscription Error:", error);
@@ -345,10 +346,10 @@ export const dbService = {
     },
 
     // Admin: Fetch ALL pools (relies on SuperAdmin permissions)
-    subscribeToAllPools: (callback: (pools: GameState[]) => void, onError?: (error: Error) => void) => {
+    subscribeToAllPools: (callback: (pools: Pool[]) => void, onError?: (error: Error) => void) => {
         const q = query(collection(db, "pools"));
         return onSnapshot(q, (snapshot) => {
-            const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as GameState));
+            const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
             callback(pools);
         }, (error) => {
             console.error("Admin Pool Subscription Error:", error);
@@ -358,14 +359,14 @@ export const dbService = {
 
     // Real-time listener for a SINGLE pool (Robust deep-linking)
     // Real-time listener for a SINGLE pool (Robust deep-linking)
-    subscribeToPool: (identifier: string, callback: (pool: GameState | null) => void, onError?: (error: Error) => void) => {
+    subscribeToPool: (identifier: string, callback: (pool: Pool | null) => void, onError?: (error: Error) => void) => {
         // Heuristic: Documents IDs are 20 alphanumeric chars. Slugs are usually custom.
         const isLikelyDocId = identifier.length === 20;
 
         if (isLikelyDocId) {
             return onSnapshot(doc(db, "pools", identifier), (docSnap) => {
                 if (docSnap.exists()) {
-                    callback({ ...docSnap.data(), id: docSnap.id } as GameState);
+                    callback({ ...docSnap.data(), id: docSnap.id } as Pool);
                 } else {
                     // Fallback: It might be a 20-char slug, but for now assumption simplifies logic.
                     // If needed, we could chain a query here.
@@ -383,7 +384,7 @@ export const dbService = {
         return onSnapshot(q, (snap) => {
             if (!snap.empty) {
                 const d = snap.docs[0];
-                callback({ ...d.data(), id: d.id } as GameState);
+                callback({ ...d.data(), id: d.id } as Pool);
             } else {
                 callback(null);
             }
