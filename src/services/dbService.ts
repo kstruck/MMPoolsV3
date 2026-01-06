@@ -504,6 +504,28 @@ export const dbService = {
         }
     },
 
+    deleteUserAccount: async (targetUid: string): Promise<any> => {
+        try {
+            const fn = httpsCallable(functions, 'deleteUserAccount');
+            const result = await fn({ targetUid });
+            return result.data;
+        } catch (error) {
+            console.error("Error deleting user account:", error);
+            throw error;
+        }
+    },
+
+    sendAdminPasswordReset: async (email: string): Promise<any> => {
+        try {
+            const fn = httpsCallable(functions, 'sendAdminPasswordReset');
+            const result = await fn({ email });
+            return result.data;
+        } catch (error) {
+            console.error("Error sending admin password reset:", error);
+            throw error;
+        }
+    },
+
     // --- SYSTEM LOGS ---
     getSystemLogs: async (limitCount = 50): Promise<any[]> => {
         try {

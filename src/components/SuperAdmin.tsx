@@ -6,8 +6,9 @@ import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
-import { auth, db } from '../firebase';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { db } from '../firebase';
+import { signOut } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import { doc, updateDoc } from 'firebase/firestore';
 
 
@@ -217,9 +218,30 @@ export const SuperAdmin: React.FC = () => {
     };
 
     const handleDeleteUser = async (user: User) => {
-        if (confirm(`Are you sure you want to delete user ${user.name}? This only removes their database record, their login may still work.`)) {
-            await dbService.deleteUser(user.id);
-            fetchUsers();
+        if (confirm(`Are you sure you want to COMPLETELY DELETE user ${user.name}?\n\nThis will remove their Login Account AND Database Profile.\nThis action cannot be undone.`)) {
+            try {
+                await dbService.deleteUserAccount(user.id);
+                // Also try to delete from Firestore directly just in case the cloud function didn't catch edge cases or if we want faster UI feedback, 
+                // but the cloud function does it. We'll just refresh.
+                fetchUsers();
+                alert(`User ${user.name} deleted successfully.`);
+            } catch (e: any) {
+                console.error("Delete failed", e);
+                alert("Error deleting user: " + e.message);
+            }
+        }
+    };
+
+    const handleResetPassword = async (user: User) => {
+        if (!user.email) return;
+        if (confirm(`Send a Password Reset email to ${user.email}?`)) {
+            try {
+                await dbService.sendAdminPasswordReset(user.email);
+                alert(`Reset email sent to ${user.email}`);
+            } catch (e: any) {
+                console.error("Reset failed", e);
+                alert("Error sending reset email: " + e.message);
+            }
         }
     };
 
@@ -999,19 +1021,17 @@ export const SuperAdmin: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-slate-500 font-mono text-xs max-w-[100px] truncate" title={u.id}>{u.id}</td>
                                             <td className="p-4 flex gap-2">
-                                                <button onClick={async () => {
-                                                    if (!u.email) return alert("User has no email");
-                                                    if (confirm(`Send password reset email to ${u.email}?`)) {
-                                                        try {
-                                                            await sendPasswordResetEmail(auth, u.email);
-                                                            alert("Password reset email sent.");
-                                                        } catch (e: any) {
-                                                            alert("Error sending reset email: " + e.message);
-                                                        }
-                                                    }
-                                                }} className="text-amber-400 hover:text-amber-300 transition-colors" title="Send Password Reset"><Settings size={16} /></button>
+                                                <button
+                                                    onClick={() => handleResetPassword(u)}
+                                                    className="text-amber-400 hover:text-amber-300 transition-colors border border-amber-500/30 px-2 py-1 rounded text-xs font-bold"
+                                                    title="Send Password Reset (Admin API)"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <Settings size={14} /> Reset
+                                                    </div>
+                                                </button>
                                                 <button onClick={() => handleEditUser(u)} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Edit</button>
-                                                <button onClick={() => handleDeleteUser(u)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
+                                                <button onClick={() => handleDeleteUser(u)} className="text-rose-400 hover:text-rose-300 transition-colors border border-rose-500/30 px-2 py-1 rounded"><Trash2 size={16} /></button>
                                             </td>
                                         </tr>
                                     ))}
