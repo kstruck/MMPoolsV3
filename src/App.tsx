@@ -274,7 +274,7 @@ const App: React.FC = () => {
 
   const currentPool = useMemo(() => {
     // Priority 1: Directly fetched single pool (most robust for deep links)
-    if (singlePool && route.id && (singlePool.id === route.id || singlePool.urlSlug === route.id)) return singlePool;
+    if (singlePool && route.id && (singlePool.id === route.id || singlePool.urlSlug?.toLowerCase() === route.id.toLowerCase())) return singlePool;
 
     // Priority 2: Find in the global list (fallback if single fetch failed or is loading, but list has it)
     if (route.id) {

@@ -357,15 +357,38 @@ export const dbService = {
     },
 
     // Real-time listener for a SINGLE pool (Robust deep-linking)
-    subscribeToPool: (poolId: string, callback: (pool: GameState | null) => void, onError?: (error: Error) => void) => {
-        return onSnapshot(doc(db, "pools", poolId), (docSnap) => {
-            if (docSnap.exists()) {
-                callback({ ...docSnap.data(), id: docSnap.id } as GameState);
+    // Real-time listener for a SINGLE pool (Robust deep-linking)
+    subscribeToPool: (identifier: string, callback: (pool: GameState | null) => void, onError?: (error: Error) => void) => {
+        // Heuristic: Documents IDs are 20 alphanumeric chars. Slugs are usually custom.
+        const isLikelyDocId = identifier.length === 20;
+
+        if (isLikelyDocId) {
+            return onSnapshot(doc(db, "pools", identifier), (docSnap) => {
+                if (docSnap.exists()) {
+                    callback({ ...docSnap.data(), id: docSnap.id } as GameState);
+                } else {
+                    // Fallback: It might be a 20-char slug, but for now assumption simplifies logic.
+                    // If needed, we could chain a query here.
+                    callback(null);
+                }
+            }, (error) => {
+                console.error("Single Pool Subscription Error:", error);
+                if (onError) onError(error);
+                else callback(null);
+            });
+        }
+
+        // Treat as Slug Query
+        const q = query(collection(db, "pools"), where("urlSlug", "==", identifier), limit(1));
+        return onSnapshot(q, (snap) => {
+            if (!snap.empty) {
+                const d = snap.docs[0];
+                callback({ ...d.data(), id: d.id } as GameState);
             } else {
                 callback(null);
             }
         }, (error) => {
-            console.error("Single Pool Subscription Error:", error);
+            console.error("Slug Subscription Error:", error);
             if (onError) onError(error);
             else callback(null);
         });
