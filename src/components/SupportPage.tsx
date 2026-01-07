@@ -45,7 +45,9 @@ Sent via March Melee Pools Support Form
             await emailService.sendEmail(
                 'support@marchmeleepools.com',
                 `Support Request: ${formData.supportType}`,
-                emailBody
+                emailBody,
+                undefined,
+                { replyTo: formData.email }
             );
 
             // Send copy to user if requested
