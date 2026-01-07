@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { PlayoffPool, User } from '../../types';
 import { dbService } from '../../services/dbService';
-import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2, Share2 } from 'lucide-react';
+import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2, Share2, ExternalLink, Check, Copy } from 'lucide-react';
 import { RankingForm } from './RankingForm';
 import type { PlayoffEntry } from '../../types';
 
@@ -16,6 +16,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
+    const [gPayCopied, setGPayCopied] = useState(false);
     // const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
     // const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Deprecated
 
@@ -404,6 +405,38 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                 <span className="font-mono text-emerald-400">{p.percentage}%</span>
                                             </div>
                                         ))}
+                                    </div>
+                                </>
+                            )}
+
+                            {(pool.venmo || pool.googlePay) && (
+                                <>
+                                    <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payment Options</h3>
+                                    <div className="flex flex-col gap-2 max-w-sm">
+                                        {pool.venmo && (
+                                            <a href={`https://venmo.com/u/${pool.venmo.replace('@', '')}`} target="_blank" rel="noreferrer" className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-4 py-3 rounded-lg font-bold flex items-center gap-2 justify-center transition-colors shadow-lg shadow-[#008CFF]/20">
+                                                Venmo: {pool.venmo} <ExternalLink size={16} />
+                                            </a>
+                                        )}
+                                        {pool.googlePay && (
+                                            <div className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-lg font-bold flex items-center gap-2 justify-between group">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-slate-400 text-xs uppercase font-bold mr-1">GPay:</span>
+                                                    {pool.googlePay}
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(pool.googlePay || '');
+                                                        setGPayCopied(true);
+                                                        setTimeout(() => setGPayCopied(false), 2000);
+                                                    }}
+                                                    className="bg-slate-700 hover:bg-slate-600 p-2 rounded transition-all transform active:scale-95"
+                                                    title="Copy GPay Address"
+                                                >
+                                                    {gPayCopied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} className="text-slate-400 group-hover:text-white" />}
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </>
                             )}
