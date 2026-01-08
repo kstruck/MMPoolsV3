@@ -130,7 +130,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         onClick={() => setActiveTab('rules')}
                         className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'rules' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                     >
-                        <FileText size={16} /> Rules
+                        <FileText size={16} /> Rules & Payment Info
                     </button>
                 </div>
 
