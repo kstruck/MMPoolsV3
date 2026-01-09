@@ -4,6 +4,8 @@ import { dbService } from '../../services/dbService';
 import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2, Share2, ExternalLink, Check, Copy } from 'lucide-react';
 import { RankingForm } from './RankingForm';
 import type { PlayoffEntry } from '../../types';
+import { PlayoffPayoutCard } from './PlayoffPayoutCard'; // [NEW]
+import { AnnouncementManager } from '../AnnouncementManager'; // [NEW]
 
 interface PlayoffDashboardProps {
     pool: PlayoffPool;
@@ -12,7 +14,7 @@ interface PlayoffDashboardProps {
 }
 
 export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack }) => {
-    const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules'>('picks');
+    const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules' | 'commissioner'>('picks'); // [MODIFIED] Added 'commissioner'
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
@@ -29,6 +31,11 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
             .map(([id, entry]) => ({ ...entry, id }))
             .filter(e => e.userId === user.id);
     }, [pool.entries, user]);
+
+    // [NEW] Calculate Paid Entries Count
+    const paidEntriesCount = useMemo(() => {
+        return Object.values(pool.entries || {}).filter(e => e.paid).length;
+    }, [pool.entries]);
 
     // --- Score Calculation Logic ---
     const getRoundScore = (rankings: Record<string, number>, roundKey: 'WILD_CARD' | 'DIVISIONAL' | 'CONF_CHAMP' | 'SUPER_BOWL') => {
@@ -132,6 +139,14 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     >
                         <FileText size={16} /> Rules & Payment Info
                     </button>
+                    {isManager && (
+                        <button
+                            onClick={() => setActiveTab('commissioner')}
+                            className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'commissioner' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                        >
+                            <Settings size={16} /> Commissioner
+                        </button>
+                    )}
                 </div>
 
                 {/* Content */}
@@ -398,14 +413,12 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                             {pool.settings?.payouts && (
                                 <>
                                     <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payout Structure</h3>
-                                    <div className="grid gap-2 max-w-sm">
-                                        {pool.settings.payouts.places.map((p: any) => (
-                                            <div key={p.rank} className="flex justify-between p-3 bg-slate-950 rounded-lg">
-                                                <span className="font-bold text-slate-300">{p.rank === 1 ? '1st' : p.rank + 'th'} Place</span>
-                                                <span className="font-mono text-emerald-400">{p.percentage}%</span>
-                                            </div>
-                                        ))}
+                                    <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payout Structure</h3>
+                                    {/* [NEW] Use Payout Card */}
+                                    <div className="max-w-md">
+                                        <PlayoffPayoutCard pool={pool} paidEntriesCount={paidEntriesCount} />
                                     </div>
+                                    {/* Old list removed/replaced */}
                                 </>
                             )}
 
@@ -449,6 +462,18 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                     </div>
                                 </>
                             )}
+                        </div>
+                    )}
+                    {/* [NEW] Commissioner Tab */}
+                    {activeTab === 'commissioner' && isManager && user && (
+                        <div className="bg-slate-900 rounded-xl border border-slate-800 p-8">
+                            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                                <Settings className="text-indigo-400" /> Commissioner Tools
+                            </h2>
+                            <div className="max-w-2xl">
+                                <h3 className="text-lg font-bold text-slate-300 mb-4">Announcements</h3>
+                                <AnnouncementManager pool={pool as any} currentUser={user} />
+                            </div>
                         </div>
                     )}
                 </div>
