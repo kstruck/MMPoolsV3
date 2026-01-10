@@ -254,142 +254,152 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         </div>
                     )}
                     {activeTab === 'leaderboard' && (
-                        <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-slate-800 bg-slate-950/50">
-                                        <th className="p-4 text-slate-400 font-bold text-sm sticky left-0 bg-slate-950/90 backdrop-blur z-10 w-12">#</th>
-                                        <th className="p-4 text-slate-400 font-bold text-sm sticky left-12 bg-slate-950/90 backdrop-blur z-10 min-w-[180px]">Entry Name</th>
-                                        <th className="p-4 text-slate-400 font-bold text-sm bg-slate-950/50 backdrop-blur z-10 min-w-[150px]">Player Name</th>
-                                        <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Wild Cards</th>
-                                        <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Divisional</th>
-                                        <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Conf Champ</th>
-                                        <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Super Bowl</th>
-                                        <th className="p-4 text-emerald-400 font-bold text-sm text-right bg-emerald-500/5">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {Object.values(pool.entries || {})
-                                        .map(entry => {
-                                            // Calculate dynamic scores if not already persisted
-                                            const scoreWC = getRoundScore(entry.rankings, 'WILD_CARD');
-                                            const scoreDiv = getRoundScore(entry.rankings, 'DIVISIONAL');
-                                            const scoreConf = getRoundScore(entry.rankings, 'CONF_CHAMP');
-                                            const scoreSB = getRoundScore(entry.rankings, 'SUPER_BOWL');
-                                            const total = scoreWC + scoreDiv + scoreConf + scoreSB;
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Left Column: Table */}
+                            <div className="lg:col-span-2">
+                                <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-slate-800 bg-slate-950/50">
+                                                <th className="p-4 text-slate-400 font-bold text-sm sticky left-0 bg-slate-950/90 backdrop-blur z-10 w-12">#</th>
+                                                <th className="p-4 text-slate-400 font-bold text-sm sticky left-12 bg-slate-950/90 backdrop-blur z-10 min-w-[180px]">Entry Name</th>
+                                                <th className="p-4 text-slate-400 font-bold text-sm bg-slate-950/50 backdrop-blur z-10 min-w-[150px]">Player Name</th>
+                                                <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Wild Cards</th>
+                                                <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Divisional</th>
+                                                <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Conf Champ</th>
+                                                <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Super Bowl</th>
+                                                <th className="p-4 text-emerald-400 font-bold text-sm text-right bg-emerald-500/5">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {Object.values(pool.entries || {})
+                                                .map(entry => {
+                                                    // Calculate dynamic scores if not already persisted
+                                                    const scoreWC = getRoundScore(entry.rankings, 'WILD_CARD');
+                                                    const scoreDiv = getRoundScore(entry.rankings, 'DIVISIONAL');
+                                                    const scoreConf = getRoundScore(entry.rankings, 'CONF_CHAMP');
+                                                    const scoreSB = getRoundScore(entry.rankings, 'SUPER_BOWL');
+                                                    const total = scoreWC + scoreDiv + scoreConf + scoreSB;
 
-                                            // Fallback to persisted totalScore if needed, but calculated is better for real-time
-                                            return { ...entry, scoreWC, scoreDiv, scoreConf, scoreSB, calculatedTotal: total };
-                                        })
-                                        .sort((a, b) => {
-                                            if (b.calculatedTotal !== a.calculatedTotal) return b.calculatedTotal - a.calculatedTotal;
-                                            // Secondary: Alphabetical by Entry Name
-                                            const nameA = a.entryName || a.userName || '';
-                                            const nameB = b.entryName || b.userName || '';
-                                            return nameA.localeCompare(nameB);
-                                        })
-                                        .map((entry, index) => {
-                                            const isMe = user?.id === entry.userId;
-                                            return (
-                                                <tr key={entry.id || entry.userId} className={`border-b border-slate-800/50 ${isMe ? 'bg-indigo-900/20' : 'hover:bg-slate-800/50'}`}>
-                                                    <td className="p-4 font-bold text-slate-500 sticky left-0 bg-inherit border-r border-slate-800/50">
-                                                        {index + 1}
-                                                    </td>
-                                                    <td className="p-4 sticky left-12 bg-inherit border-r border-slate-800/50">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>
-                                                                {entry.entryName || entry.userName}
-                                                            </div>
-                                                            {pool.isLocked && (
-                                                                <button
-                                                                    onClick={() => setViewingEntry(entry)}
-                                                                    className="text-slate-500 hover:text-emerald-400 transition-colors"
-                                                                    title="View Picks"
-                                                                >
-                                                                    <Eye size={16} />
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                        {/* Status Indicators (Always Visible) */}
-                                                        <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                                                            {pool.isLocked && <span>Tiebreaker: {entry.tiebreaker}</span>}
-                                                            {entry.paid && (
-                                                                <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-500/20">
-                                                                    Paid
-                                                                </span>
-                                                            )}
-                                                            {!entry.paid && isManager && (
-                                                                <span className="bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-rose-500/20">
-                                                                    Unpaid
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-4 text-slate-400 border-r border-slate-800/50">
-                                                        <div className="flex justify-between items-center group/row">
-                                                            {entry.userName}
-                                                            {/* Manager Actions */}
-                                                            {isManager && (
-                                                                <div className="flex items-center gap-1">
-                                                                    <button
-                                                                        onClick={async (e) => {
-                                                                            e.stopPropagation();
-                                                                            if (!confirm(`Mark ${entry.entryName} as ${entry.paid ? 'Unpaid' : 'Paid'}?`)) return;
-                                                                            try {
-                                                                                await dbService.managePlayoffEntry(pool.id, entry.id || '', 'togglePaid', !entry.paid);
-                                                                                // Optimistic update handled by Firestore sub
-                                                                            } catch (err) {
-                                                                                alert('Failed to update payment status');
-                                                                            }
-                                                                        }}
-                                                                        className={`p-1.5 rounded hover:bg-slate-700 transition-colors ${entry.paid ? 'text-emerald-400' : 'text-slate-500'}`}
-                                                                        title={entry.paid ? "Mark Unpaid" : "Mark Paid"}
-                                                                    >
-                                                                        <span className="font-bold text-xs">$</span>
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            if (confirm('Are you sure you want to delete this entry?')) {
-                                                                                // alert('Deletion feature coming soon');
-                                                                                // TODO: Implement delete
-                                                                                dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
-                                                                            }
-                                                                        }}
-                                                                        className="p-1.5 rounded hover:bg-rose-900/50 text-slate-500 hover:text-rose-500 transition-colors"
-                                                                        title="Delete Entry"
-                                                                    >
-                                                                        <Trash2 size={14} />
-                                                                    </button>
+                                                    // Fallback to persisted totalScore if needed, but calculated is better for real-time
+                                                    return { ...entry, scoreWC, scoreDiv, scoreConf, scoreSB, calculatedTotal: total };
+                                                })
+                                                .sort((a, b) => {
+                                                    if (b.calculatedTotal !== a.calculatedTotal) return b.calculatedTotal - a.calculatedTotal;
+                                                    // Secondary: Alphabetical by Entry Name
+                                                    const nameA = a.entryName || a.userName || '';
+                                                    const nameB = b.entryName || b.userName || '';
+                                                    return nameA.localeCompare(nameB);
+                                                })
+                                                .map((entry, index) => {
+                                                    const isMe = user?.id === entry.userId;
+                                                    return (
+                                                        <tr key={entry.id || entry.userId} className={`border-b border-slate-800/50 ${isMe ? 'bg-indigo-900/20' : 'hover:bg-slate-800/50'}`}>
+                                                            <td className="p-4 font-bold text-slate-500 sticky left-0 bg-inherit border-r border-slate-800/50">
+                                                                {index + 1}
+                                                            </td>
+                                                            <td className="p-4 sticky left-12 bg-inherit border-r border-slate-800/50">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>
+                                                                        {entry.entryName || entry.userName}
+                                                                    </div>
+                                                                    {pool.isLocked && (
+                                                                        <button
+                                                                            onClick={() => setViewingEntry(entry)}
+                                                                            className="text-slate-500 hover:text-emerald-400 transition-colors"
+                                                                            title="View Picks"
+                                                                        >
+                                                                            <Eye size={16} />
+                                                                        </button>
+                                                                    )}
                                                                 </div>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-4 text-center font-mono text-slate-300">
-                                                        {entry.scoreWC > 0 ? entry.scoreWC : '-'}
-                                                    </td>
-                                                    <td className="p-4 text-center font-mono text-slate-300">
-                                                        {entry.scoreDiv > 0 ? entry.scoreDiv : '-'}
-                                                    </td>
-                                                    <td className="p-4 text-center font-mono text-slate-300">
-                                                        {entry.scoreConf > 0 ? entry.scoreConf : '-'}
-                                                    </td>
-                                                    <td className="p-4 text-center font-mono text-slate-300">
-                                                        {entry.scoreSB > 0 ? entry.scoreSB : '-'}
-                                                    </td>
-                                                    <td className="p-4 text-right font-black text-emerald-400 text-lg bg-emerald-500/5">
-                                                        {entry.calculatedTotal}
-                                                    </td>
+                                                                {/* Status Indicators (Always Visible) */}
+                                                                <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                                                                    {pool.isLocked && <span>Tiebreaker: {entry.tiebreaker}</span>}
+                                                                    {entry.paid && (
+                                                                        <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-500/20">
+                                                                            Paid
+                                                                        </span>
+                                                                    )}
+                                                                    {!entry.paid && isManager && (
+                                                                        <span className="bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-rose-500/20">
+                                                                            Unpaid
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-4 text-slate-400 border-r border-slate-800/50">
+                                                                <div className="flex justify-between items-center group/row">
+                                                                    {entry.userName}
+                                                                    {/* Manager Actions */}
+                                                                    {isManager && (
+                                                                        <div className="flex items-center gap-1">
+                                                                            <button
+                                                                                onClick={async (e) => {
+                                                                                    e.stopPropagation();
+                                                                                    if (!confirm(`Mark ${entry.entryName} as ${entry.paid ? 'Unpaid' : 'Paid'}?`)) return;
+                                                                                    try {
+                                                                                        await dbService.managePlayoffEntry(pool.id, entry.id || '', 'togglePaid', !entry.paid);
+                                                                                        // Optimistic update handled by Firestore sub
+                                                                                    } catch (err) {
+                                                                                        alert('Failed to update payment status');
+                                                                                    }
+                                                                                }}
+                                                                                className={`p-1.5 rounded hover:bg-slate-700 transition-colors ${entry.paid ? 'text-emerald-400' : 'text-slate-500'}`}
+                                                                                title={entry.paid ? "Mark Unpaid" : "Mark Paid"}
+                                                                            >
+                                                                                <span className="font-bold text-xs">$</span>
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    if (confirm('Are you sure you want to delete this entry?')) {
+                                                                                        // alert('Deletion feature coming soon');
+                                                                                        // TODO: Implement delete
+                                                                                        dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
+                                                                                    }
+                                                                                }}
+                                                                                className="p-1.5 rounded hover:bg-rose-900/50 text-slate-500 hover:text-rose-500 transition-colors"
+                                                                                title="Delete Entry"
+                                                                            >
+                                                                                <Trash2 size={14} />
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-4 text-center font-mono text-slate-300">
+                                                                {entry.scoreWC > 0 ? entry.scoreWC : '-'}
+                                                            </td>
+                                                            <td className="p-4 text-center font-mono text-slate-300">
+                                                                {entry.scoreDiv > 0 ? entry.scoreDiv : '-'}
+                                                            </td>
+                                                            <td className="p-4 text-center font-mono text-slate-300">
+                                                                {entry.scoreConf > 0 ? entry.scoreConf : '-'}
+                                                            </td>
+                                                            <td className="p-4 text-center font-mono text-slate-300">
+                                                                {entry.scoreSB > 0 ? entry.scoreSB : '-'}
+                                                            </td>
+                                                            <td className="p-4 text-right font-black text-emerald-400 text-lg bg-emerald-500/5">
+                                                                {entry.calculatedTotal}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            {(!pool.entries || Object.keys(pool.entries).length === 0) && (
+                                                <tr>
+                                                    <td colSpan={7} className="p-8 text-center text-slate-500 italic">No entries yet. Be the first!</td>
                                                 </tr>
-                                            );
-                                        })}
-                                    {(!pool.entries || Object.keys(pool.entries).length === 0) && (
-                                        <tr>
-                                            <td colSpan={7} className="p-8 text-center text-slate-500 italic">No entries yet. Be the first!</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* Right Column: Payouts */}
+                            <div className="lg:col-span-1">
+                                <PlayoffPayoutCard pool={pool} paidEntriesCount={paidEntriesCount} />
+                            </div>
                         </div>
                     )}
                     {activeTab === 'rules' && (
@@ -412,10 +422,8 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
 
                             {pool.settings?.payouts && (
                                 <>
-                                    <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payout Structure</h3>
-                                    <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payout Structure</h3>
                                     {/* [NEW] Use Payout Card */}
-                                    <div className="max-w-md">
+                                    <div className="max-w-md pt-4 border-t border-slate-800">
                                         <PlayoffPayoutCard pool={pool} paidEntriesCount={paidEntriesCount} />
                                     </div>
                                     {/* Old list removed/replaced */}
