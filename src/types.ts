@@ -61,6 +61,8 @@ export interface PlayoffPool {
     };
   };
 
+  isPublic: boolean; // Top-level for querying
+
   // NEW: Manager Contact Info
   managerName?: string;
   contactEmail?: string;

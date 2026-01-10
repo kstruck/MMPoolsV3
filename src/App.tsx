@@ -1058,7 +1058,12 @@ const App: React.FC = () => {
   }
 
   if (route.view === 'browse') {
-    return <BrowsePools user={user} pools={pools} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />;
+    return (
+      <>
+        <BrowsePools user={user} pools={pools} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} onCreatePool={handleCreatePool} />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </>
+    );
   }
 
   if (route.view === 'participant') {
@@ -1081,53 +1086,70 @@ const App: React.FC = () => {
   }
 
   if (route.view === 'features') {
-    return <FeaturesPage user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />;
+    return (
+      <>
+        <FeaturesPage user={user} onOpenAuth={() => setShowAuthModal(true)} onLogout={authService.logout} />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </>
+    );
   }
 
   if (route.view === 'privacy') {
     return (
-      <PrivacyPage
-        user={user}
-        isManager={isManager}
-        onOpenAuth={() => setShowAuthModal(true)}
-        onLogout={authService.logout}
-        onCreatePool={handleCreatePool}
-      />
+      <>
+        <PrivacyPage
+          user={user}
+          isManager={isManager}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
+        />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </>
     );
   }
 
   if (route.view === 'terms') {
     return (
-      <TermsPage
-        user={user}
-        isManager={isManager}
-        onOpenAuth={() => setShowAuthModal(true)}
-        onLogout={authService.logout}
-        onCreatePool={handleCreatePool}
-      />
+      <>
+        <TermsPage
+          user={user}
+          isManager={isManager}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
+        />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </>
     );
   }
 
   if (route.view === 'how-it-works') {
     return (
-      <HowItWorksPage
-        user={user}
-        isManager={isManager}
-        onOpenAuth={() => setShowAuthModal(true)}
-        onLogout={authService.logout}
-        onCreatePool={handleCreatePool}
-      />
+      <>
+        <HowItWorksPage
+          user={user}
+          isManager={isManager}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
+        />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </>
     );
   }
 
   if (route.view === 'scoreboard') {
     return (
-      <Scoreboard
-        user={user}
-        onOpenAuth={() => setShowAuthModal(true)}
-        onLogout={authService.logout}
-        onCreatePool={handleCreatePool}
-      />
+      <>
+        <Scoreboard
+          user={user}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
+        />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </>
     );
   }
 
@@ -1223,7 +1245,12 @@ const App: React.FC = () => {
   }
 
   if (route.view === 'support') {
-    return <SupportPage />;
+    return (
+      <>
+        <SupportPage />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </>
+    );
   }
 
   if (route.view === 'profile') {

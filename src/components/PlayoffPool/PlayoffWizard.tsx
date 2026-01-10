@@ -362,6 +362,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                 },
                 reminders: formData.reminders,
                 accessControl: formData.accessControl,
+                isPublic: formData.isListedPublic, // Root level for queries
 
                 settings: {
                     entryFee: formData.entryFee,

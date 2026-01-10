@@ -12,9 +12,10 @@ interface BrowsePoolsProps {
     pools: Pool[];
     onOpenAuth: () => void;
     onLogout: () => void;
+    onCreatePool: () => void;
 }
 
-export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAuth, onLogout }) => {
+export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAuth, onLogout, onCreatePool }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedLeague, setSelectedLeague] = useState<string>('all');
     const [filterCharity, setFilterCharity] = useState(false);
@@ -123,7 +124,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
-            <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} />
+            <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
 
             <main className="max-w-7xl mx-auto p-4 md:p-8 mt-6">
                 {/* Header Section */}
