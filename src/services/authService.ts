@@ -99,10 +99,10 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
     }
 
     await setDoc(userRef, {
-      name: user.name,
-      picture: user.picture || null,
-      emailVerified: user.emailVerified, // Sync Verification Status
-      welcomeEmailSent: welcomeSent || false
+      name: user.name || "Unknown",
+      picture: user.picture ?? null,
+      emailVerified: user.emailVerified ?? false, // Sync Verification Status
+      welcomeEmailSent: welcomeSent ?? false
     }, { merge: true });
 
     return {
