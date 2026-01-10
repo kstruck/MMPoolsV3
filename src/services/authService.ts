@@ -180,11 +180,9 @@ export const authService = {
   sendVerificationEmail: async (user: any) => {
     try {
       const { sendEmailVerification } = await import('firebase/auth');
-      const actionCodeSettings = {
-        url: window.location.origin, // Redirect back to home page
-        handleCodeInApp: true,
-      };
-      await sendEmailVerification(user, actionCodeSettings);
+      // [Reverted] Removed actionCodeSettings because it causes 'auth/unauthorized-continue-uri' 
+      // if the domain isn't whitelisted. Simpler to just send the basic email for now.
+      await sendEmailVerification(user);
     } catch (e) {
       console.error("Error sending verification email:", e);
       throw e;
