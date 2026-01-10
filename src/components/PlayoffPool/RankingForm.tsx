@@ -97,6 +97,21 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
         setRankedTeams(newItems);
     };
 
+    // [NEW] Dropdown Move Helper
+    const moveToRank = (currentIndex: number, newRank: number) => {
+        if (pool.isLocked) return;
+        const newItems = [...rankedTeams];
+        const targetIndex = 14 - newRank; // Rank 14 = Index 0, Rank 1 = Index 13
+
+        if (targetIndex < 0 || targetIndex >= newItems.length || targetIndex === currentIndex) return;
+
+        // Move item
+        const item = newItems.splice(currentIndex, 1)[0];
+        newItems.splice(targetIndex, 0, item);
+
+        setRankedTeams(newItems);
+    };
+
     const handleInitSave = () => {
         if (pool.isLocked) return;
 
@@ -179,7 +194,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                         <AlertTriangle className="text-indigo-400 shrink-0" size={24} />
                         <div className="text-sm text-slate-300">
                             <p className="font-bold text-indigo-400 mb-1">How to Rank</p>
-                            <p>Drag and drop teams <strong>OR use the arrows</strong> to set your rankings. The top team (Rank 14) earns the most points for wins.</p>
+                            <p>Drag and drop, use the arrows, or <strong>select a rank number</strong> to set your order. The top team (Rank 14) earns the most points.</p>
                         </div>
                     </div>
 
@@ -255,9 +270,31 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                                         </div>
                                     )}
 
-                                    {/* Rank Number */}
-                                    <div className={`text-xl font-black w-8 text-center ${rankColor}`}>
-                                        {rank}
+                                    {/* Rank Number / Dropdown */}
+                                    <div className="relative">
+                                        {!pool.isLocked ? (
+                                            <select
+                                                value={rank}
+                                                onChange={(e) => moveToRank(index, parseInt(e.target.value))}
+                                                className={`appearance-none bg-slate-900 border ${rank >= 11 ? 'border-emerald-500/50 text-emerald-400' : rank <= 4 ? 'border-rose-500/50 text-rose-400' : 'border-slate-700 text-slate-400'} rounded-lg py-1 pl-3 pr-8 font-black text-xl w-20 text-center outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer`}
+                                            >
+                                                {Array.from({ length: 14 }, (_, i) => 14 - i).map(r => (
+                                                    <option key={r} value={r} className="bg-slate-900 text-white font-bold">
+                                                        #{r}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <div className={`text-xl font-black w-20 text-center ${rankColor}`}>
+                                                {rank}
+                                            </div>
+                                        )}
+                                        {/* Custom Down Arrow for Select */}
+                                        {!pool.isLocked && (
+                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                                                <ChevronDown size={14} />
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Team Info + Logo */}
