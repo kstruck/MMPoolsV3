@@ -180,10 +180,22 @@ export const authService = {
   sendVerificationEmail: async (user: any) => {
     try {
       const { sendEmailVerification } = await import('firebase/auth');
-      await sendEmailVerification(user);
+      const actionCodeSettings = {
+        url: window.location.origin, // Redirect back to home page
+        handleCodeInApp: true,
+      };
+      await sendEmailVerification(user, actionCodeSettings);
     } catch (e) {
       console.error("Error sending verification email:", e);
       throw e;
+    }
+  },
+
+  resendVerification: async () => {
+    if (auth.currentUser) {
+      await authService.sendVerificationEmail(auth.currentUser);
+    } else {
+      throw new Error("No user logged in");
     }
   },
 

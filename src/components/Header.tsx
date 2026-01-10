@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Logo } from './Logo';
 import type { User } from '../types';
-import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy } from 'lucide-react';
+import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { authService } from '../services/authService';
 
 interface HeaderProps {
     user: User | null;
@@ -12,12 +13,47 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenAuth, onLogout, onCreatePool }) => {
+    const [isResending, setIsResending] = useState(false);
+    const [resendStatus, setResendStatus] = useState<'idle' | 'sent' | 'error'>('idle');
+
+    const handleResend = async () => {
+        setIsResending(true);
+        setResendStatus('idle');
+        try {
+            await authService.resendVerification();
+            setResendStatus('sent');
+            setTimeout(() => setResendStatus('idle'), 5000); // Reset after 5s
+        } catch (error) {
+            console.error(error);
+            setResendStatus('error');
+        } finally {
+            setIsResending(false);
+        }
+    };
+
     console.log('Header Rendered. User:', user, 'Role:', user?.role);
     return (
         <>
             {user && !user.emailVerified && user.provider === 'password' && (
-                <div className="bg-amber-500 text-white text-xs font-bold text-center py-1">
-                    Please verify your email address to access all features. Check your inbox.
+                <div className="bg-amber-500 text-white text-xs font-bold text-center py-1 flex justify-center items-center gap-2">
+                    <span>Please verify your email address to access all features. Check your inbox.</span>
+                    {resendStatus === 'sent' ? (
+                        <span className="flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded text-white">
+                            <CheckCircle size={12} /> Sent!
+                        </span>
+                    ) : resendStatus === 'error' ? (
+                        <span className="flex items-center gap-1 bg-red-600/50 px-2 py-0.5 rounded text-white">
+                            <AlertCircle size={12} /> Error
+                        </span>
+                    ) : (
+                        <button
+                            onClick={handleResend}
+                            disabled={isResending}
+                            className="underline hover:text-amber-100 flex items-center gap-1 disabled:opacity-50"
+                        >
+                            {isResending ? <RefreshCw size={12} className="animate-spin" /> : 'Resend Email'}
+                        </button>
+                    )}
                 </div>
             )}
             <header className="bg-slate-950 border-b border-slate-700 backdrop-blur-md sticky top-0 z-50 shadow-lg transition-colors duration-300">

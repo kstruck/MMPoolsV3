@@ -397,7 +397,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                             </div>
 
                             {/* Right Column: Payouts */}
-                            <div className="lg:col-span-1">
+                            <div className="lg:col-span-1 self-start">
                                 <PlayoffPayoutCard pool={pool} paidEntriesCount={paidEntriesCount} />
                             </div>
                         </div>
