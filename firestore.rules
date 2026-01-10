@@ -35,7 +35,12 @@ service cloud.firestore {
       allow list: if (resource.data.get('isPublic', false) == true) || 
                      (resource.data.get('settings', {}).get('isListedPublic', false) == true) ||
                      (resource.data.get('urlSlug', null) != null) ||
-                     (request.auth != null && (resource.data.ownerId == request.auth.uid || resource.data.managerUid == request.auth.uid || isSuperAdmin()));
+                     (request.auth != null && (
+                        resource.data.ownerId == request.auth.uid || 
+                        resource.data.managerUid == request.auth.uid || 
+                        resource.data.entries[request.auth.uid] != null ||
+                        isSuperAdmin()
+                     ));
 
       
       // Delete: Owner only OR SuperAdmin

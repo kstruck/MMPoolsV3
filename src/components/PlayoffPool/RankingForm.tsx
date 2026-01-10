@@ -113,21 +113,17 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
     };
 
     const handleInitSave = () => {
-        console.log("handleInitSave called");
         if (pool.isLocked) {
-            console.warn("Pool is locked");
             return;
         }
 
         if (!user) {
-            console.log("No user, opening auth modal");
             setShowAuthModal(true);
             return;
         }
 
         // VALIDATION: Require Tiebreaker
         if (!tiebreaker || tiebreaker <= 0) {
-            console.warn("Tiebreaker invalid:", tiebreaker);
             setError("Please enter a valid tiebreaker score (Total Points in Super Bowl).");
             // Scroll to bottom helper
             const el = document.getElementById('tiebreaker-input');
@@ -135,21 +131,18 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
             return;
         }
 
-        console.log("Validation passed, confirming...");
         setError(null);
         setLiabilityAccepted(false);
         setIsConfirming(true);
     };
 
     const handleFinalizeSubmission = async () => {
-        console.log("handleFinalizeSubmission called");
         if (!user) return;
         setIsSubmitting(true);
         setError(null);
         setSuccess(false);
 
         try {
-            console.log("Preparing submission...");
             // Convert list to map: { teamId: Rank }
             const rankingsMap: Record<string, number> = {};
             rankedTeams.forEach((team, index) => {
