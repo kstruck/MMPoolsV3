@@ -32,7 +32,7 @@ const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
     id: firebaseUser.uid,
     name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Unknown User",
     email: firebaseUser.email || "",
-    picture: firebaseUser.photoURL || undefined,
+    picture: firebaseUser.photoURL || null, // FIX: Use null, not undefined
     registrationMethod: method,
     role: 'PARTICIPANT', // Default, will be overwritten by Firestore data if exists
     provider: method === 'email' ? 'password' : 'google',
