@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GripVertical, Check, Save, Loader, AlertTriangle, Lock } from 'lucide-react';
+import { GripVertical, Check, Save, Loader, AlertTriangle, Lock, ChevronUp, ChevronDown } from 'lucide-react';
 import type { PlayoffPool, PlayoffTeam, User } from '../../types';
 import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -84,6 +84,19 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
         setDraggedIndex(null);
     };
 
+    // [NEW] Manual Move Helper
+    const moveTeam = (index: number, direction: 'up' | 'down') => {
+        if (pool.isLocked) return;
+        const newItems = [...rankedTeams];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+
+        if (targetIndex < 0 || targetIndex >= newItems.length) return;
+
+        // Swap
+        [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
+        setRankedTeams(newItems);
+    };
+
     const handleInitSave = () => {
         if (pool.isLocked) return;
 
@@ -166,7 +179,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                         <AlertTriangle className="text-indigo-400 shrink-0" size={24} />
                         <div className="text-sm text-slate-300">
                             <p className="font-bold text-indigo-400 mb-1">How to Rank</p>
-                            <p>Drag and drop teams to set your rankings. The top team (Rank 14) earns the most points for wins. The bottom team (Rank 1) earns the least.</p>
+                            <p>Drag and drop teams <strong>OR use the arrows</strong> to set your rankings. The top team (Rank 14) earns the most points for wins.</p>
                         </div>
                     </div>
 
@@ -210,14 +223,34 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                                     onDragOver={(e) => handleDragOver(e, index)}
                                     onDragEnd={handleDragEnd}
                                     className={`
-                                        flex items-center gap-4 p-4 rounded-lg border transition-all select-none
+                                        flex items-center gap-3 p-3 md:p-4 rounded-lg border transition-all select-none
                                         ${pool.isLocked ? 'bg-slate-900/50 border-slate-800 cursor-default opacity-75' : 'bg-slate-800 border-slate-700 hover:border-slate-500 cursor-grab active:cursor-grabbing hover:bg-slate-750'}
                                         ${draggedIndex === index ? 'opacity-50 ring-2 ring-indigo-500' : ''}
                                     `}
                                 >
-                                    {/* Grip Handle */}
+                                    {/* Mobile Sort Controls */}
                                     {!pool.isLocked && (
-                                        <div className="text-slate-500">
+                                        <div className="flex flex-col gap-1 md:mr-2">
+                                            <button
+                                                onClick={(e) => { e.preventDefault(); moveTeam(index, 'up'); }}
+                                                disabled={index === 0}
+                                                className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+                                            >
+                                                <ChevronUp size={20} />
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.preventDefault(); moveTeam(index, 'down'); }}
+                                                disabled={index === rankedTeams.length - 1}
+                                                className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+                                            >
+                                                <ChevronDown size={20} />
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Grip Handle (Hidden on small mobile, kept for desktop) */}
+                                    {!pool.isLocked && (
+                                        <div className="text-slate-600 hidden md:block" style={{ touchAction: 'none' }}>
                                             <GripVertical size={20} />
                                         </div>
                                     )}
@@ -228,19 +261,19 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                                     </div>
 
                                     {/* Team Info + Logo */}
-                                    <div className="flex items-center gap-4 flex-1">
+                                    <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
                                         {logoUrl && (
-                                            <img src={logoUrl} alt={team.name} className="w-12 h-12 object-contain drop-shadow-md bg-white/5 rounded-full p-1" />
+                                            <img src={logoUrl} alt={team.name} className="w-10 h-10 md:w-12 md:h-12 object-contain drop-shadow-md bg-white/5 rounded-full p-1 flex-shrink-0" />
                                         )}
-                                        <div>
-                                            <div className="font-bold text-white text-lg flex items-center gap-2">
-                                                {team.seed ? <span className="text-slate-400 text-sm">#{team.seed}</span> : ''}
-                                                {team.name}
+                                        <div className="min-w-0 flex-1">
+                                            <div className="font-bold text-white text-base md:text-lg flex items-center gap-2 truncate">
+                                                {team.seed ? <span className="text-slate-400 text-sm hidden sm:inline">#{team.seed}</span> : ''}
+                                                <span className="truncate">{team.name}</span>
                                                 {team.eliminated && (
-                                                    <span className="text-xs bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded uppercase ml-2">Eliminated</span>
+                                                    <span className="text-[10px] md:text-xs bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded uppercase ml-auto md:ml-2 flex-shrink-0">Eliminated</span>
                                                 )}
                                             </div>
-                                            <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">{team.conference}</div>
+                                            <div className="text-xs text-slate-500 font-bold uppercase tracking-wider truncate">{team.conference}</div>
                                         </div>
                                     </div>
                                 </div>
