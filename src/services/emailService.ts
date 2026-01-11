@@ -119,7 +119,7 @@ export const emailService = {
         rulesHtml += `<li><strong>Cost per Square:</strong> $${config.costPerSquare}</li>`;
 
         // Payout Method
-        const isEveryScorePays = config.payouts?.method === 'everyScore';
+        const isEveryScorePays = config.payouts?.method === 'everyScore' || config.ruleVariations?.scoreChangePayout === true;
         if (isEveryScorePays) {
             rulesHtml += `<li><strong>Payout Method:</strong> <span style="color: #10b981; font-weight: bold;">Every Score Pays</span> (Winner on every score change)</li>`;
         } else {
@@ -127,14 +127,15 @@ export const emailService = {
         }
 
         // Payout Strategy
-        const isHybrid = config.payouts?.strategy === 'hybrid';
-        if (isHybrid && config.payouts?.hybridWeights) {
-            const weights = config.payouts.hybridWeights;
+        const isHybrid = config.payouts?.strategy === 'hybrid' || config.ruleVariations?.scoreChangePayoutStrategy === 'hybrid';
+        const weights = config.payouts?.hybridWeights || config.ruleVariations?.scoreChangeHybridWeights;
+
+        if (isHybrid && weights) {
             rulesHtml += `<li><strong>Payout Strategy:</strong> <span style="color: #6366f1; font-weight: bold;">Hybrid</span>
                 <ul style="margin-top: 5px; padding-left: 20px; font-size: 13px;">
                     <li>Final Score: ${weights.final || 0}%</li>
                     <li>Halftime: ${weights.halftime || 0}%</li>
-                    <li>All Other Scores: ${weights.split || 0}%</li>
+                    <li>All Other Scores: ${weights.split || weights.other || 0}%</li>
                 </ul>
             </li>`;
         } else {
