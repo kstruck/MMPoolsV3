@@ -14,17 +14,13 @@ interface PayoutGalleryProps {
 export const PayoutGallery: React.FC<PayoutGalleryProps> = ({ gameState, winners, isManager, onUpdatePaidStatus }) => {
     const quarterlyPayouts = useMemo(() => calculateQuarterlyPayouts(gameState, winners), [gameState, winners]);
 
-    // Condition to show (from App.tsx)
-    if (gameState.ruleVariations.scoreChangePayout && gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split') {
-        return null;
-    }
-
     return (
         <div className="max-w-[1400px] mx-auto px-4 mb-10 w-full">
             <div className="flex flex-wrap justify-center gap-6">
                 {quarterlyPayouts
                     .filter(card => {
-                        if (gameState.ruleVariations.scoreChangePayout && gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid') {
+                        // For ESP pools (both hybrid and equal_split), only show Halftime and Final milestone cards
+                        if (gameState.ruleVariations.scoreChangePayout) {
                             return card.period === 'half' || card.period === 'final';
                         }
                         return true;

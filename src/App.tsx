@@ -2033,7 +2033,12 @@ const App: React.FC = () => {
                   {winners.length === 0 ? (
                     <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-500 italic">No score changes yet.</td></tr>
                   ) : (
-                    winners.map((win, idx) => (
+                    [...winners].sort((a, b) => {
+                      // Sort by timestamp for chronological order
+                      const timeA = a.timestamp?.toMillis?.() || a.timestamp || 0;
+                      const timeB = b.timestamp?.toMillis?.() || b.timestamp || 0;
+                      return timeA - timeB;
+                    }).map((win, idx) => (
                       <tr key={`${win.period}-${win.squareId}-${idx}`} className="hover:bg-slate-900/30 transition-colors">
                         <td className="px-4 py-3 font-medium text-slate-300">
                           {win.period === 'Event' || win.period === 'Bonus' ? (

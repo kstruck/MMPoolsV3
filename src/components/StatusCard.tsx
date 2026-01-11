@@ -165,15 +165,6 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
                                             {onOpenRules && <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors ml-auto" />}
                                         </button>
 
-                                        {gameState.ruleVariations.reverseWinners && (
-                                            <button onClick={() => onOpenRules?.()} disabled={!onOpenRules} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1 w-full">
-                                                <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
-                                                    <Zap size={12} className="fill-indigo-400" /> Reverse Winners Active
-                                                </div>
-                                                {onOpenRules && <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors ml-auto" />}
-                                            </button>
-                                        )}
-
                                         {gameState.numberSets === 4 && (
                                             <button onClick={() => onOpenRules?.()} disabled={!onOpenRules} title="New random numbers are generated for every quarter (4 sets total)." className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left mt-1 w-full">
                                                 <div className="bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1 ml-0.5">
