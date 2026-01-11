@@ -36,7 +36,10 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     if (data.results) {
-                        setResults(data.results);
+                        setResults(prev => ({
+                            ...prev,
+                            ...data.results
+                        }));
                     }
                 }
             } catch (error) {
@@ -64,7 +67,7 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
         setIsSaving(true);
         try {
             // Call Global Update Function
-            const updateGlobal = httpsCallable(functions, 'playoffPools-updateGlobalPlayoffResults');
+            const updateGlobal = httpsCallable(functions, 'updateGlobalPlayoffResults');
             await updateGlobal({ results });
 
             setTimeout(onClose, 1500);
@@ -88,7 +91,7 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
             };
 
             // Call Global Update with Empty Results
-            const updateGlobal = httpsCallable(functions, 'playoffPools-updateGlobalPlayoffResults');
+            const updateGlobal = httpsCallable(functions, 'updateGlobalPlayoffResults');
             await updateGlobal({ results: emptyResults });
 
             setResults(emptyResults);
@@ -128,7 +131,7 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
                             </h3>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 {teams.map(team => {
-                                    const isSelected = results[round.key as keyof typeof results].includes(team.id);
+                                    const isSelected = results[round.key as keyof typeof results]?.includes(team.id);
                                     return (
                                         <button
                                             key={team.id}

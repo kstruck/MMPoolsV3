@@ -39,6 +39,7 @@ service cloud.firestore {
                         resource.data.ownerId == request.auth.uid || 
                         resource.data.managerUid == request.auth.uid || 
                         resource.data.entries[request.auth.uid] != null ||
+                        (resource.data.participantIds != null && resource.data.participantIds.hasAny([request.auth.uid])) ||
                         isSuperAdmin()
                      ));
 
@@ -160,8 +161,8 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // SYSTEM SETTINGS (Feature Flags)
-    match /system/config {
+    // SYSTEM DOCUMENTS (Config, Playoff Results, etc.)
+    match /system/{docId} {
       allow read: if true;
       allow write: if isSuperAdmin();
     }
