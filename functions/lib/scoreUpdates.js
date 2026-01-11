@@ -517,10 +517,14 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
         if (deltaHome < 0 || deltaAway < 0) {
             steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Correction' });
         }
-        // If no steps were generated but score changed, add a fallback
-        if (steps.length === 0 && (deltaHome !== 0 || deltaAway !== 0)) {
+        // GUARANTEED FALLBACK: If the score changed, ensure the FINAL score is in the steps
+        // This catches any edge cases where ESPN data is missing or filtering is too aggressive
+        const hasFinalScore = steps.some(s => s.home === newCurrent.home && s.away === newCurrent.away);
+        if (!hasFinalScore && (deltaHome !== 0 || deltaAway !== 0)) {
+            console.log(`[ScoreSync] FALLBACK: Adding final score ${newCurrent.home}-${newCurrent.away} (not found in ${steps.length} ESPN-derived steps)`);
             steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
         }
+        console.log(`[ScoreSync] Total steps to process for ${doc.id}: ${steps.length}. Steps: ${JSON.stringify(steps)}`);
         // DEDUPE PRE-READ: Identify all keys we need to check
         const dedupeChecks = [];
         for (const step of steps) {
@@ -823,7 +827,7 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
     timeoutSeconds: 60,
     memory: "256MiB"
 }, async (event) => {
-    var _a, _b;
+    var _a, _b, _c, _d, _e;
     const db = admin.firestore();
     const startTime = Date.now();
     let processedCount = 0;
@@ -891,6 +895,9 @@ exports.syncGameStatus = (0, scheduler_1.onSchedule)({
                     errorCount++;
                     continue;
                 }
+                // Log pool+score details for debugging
+                const poolCurrentScore = ((_c = pool.scores) === null || _c === void 0 ? void 0 : _c.current) || { home: 0, away: 0 };
+                console.log(`[Sync] Pool ${doc.id}: ESPN=${(_d = espnScores.current) === null || _d === void 0 ? void 0 : _d.home}-${(_e = espnScores.current) === null || _e === void 0 ? void 0 : _e.away} vs Pool=${poolCurrentScore.home}-${poolCurrentScore.away}`);
                 let result = { updated: false };
                 await db.runTransaction(async (transaction) => {
                     const freshDoc = await transaction.get(doc.ref);

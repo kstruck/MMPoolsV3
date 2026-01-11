@@ -599,10 +599,15 @@ const processGameUpdate = async (
             steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Correction' });
         }
 
-        // If no steps were generated but score changed, add a fallback
-        if (steps.length === 0 && (deltaHome !== 0 || deltaAway !== 0)) {
+        // GUARANTEED FALLBACK: If the score changed, ensure the FINAL score is in the steps
+        // This catches any edge cases where ESPN data is missing or filtering is too aggressive
+        const hasFinalScore = steps.some(s => s.home === newCurrent.home && s.away === newCurrent.away);
+        if (!hasFinalScore && (deltaHome !== 0 || deltaAway !== 0)) {
+            console.log(`[ScoreSync] FALLBACK: Adding final score ${newCurrent.home}-${newCurrent.away} (not found in ${steps.length} ESPN-derived steps)`);
             steps.push({ home: newCurrent.home, away: newCurrent.away, desc: 'Score Change' });
         }
+
+        console.log(`[ScoreSync] Total steps to process for ${doc.id}: ${steps.length}. Steps: ${JSON.stringify(steps)}`);
 
         // DEDUPE PRE-READ: Identify all keys we need to check
         const dedupeChecks: string[] = [];
@@ -1025,6 +1030,10 @@ export const syncGameStatus = onSchedule({
                     errorCount++;
                     continue;
                 }
+
+                // Log pool+score details for debugging
+                const poolCurrentScore = pool.scores?.current || { home: 0, away: 0 };
+                console.log(`[Sync] Pool ${doc.id}: ESPN=${espnScores.current?.home}-${espnScores.current?.away} vs Pool=${poolCurrentScore.home}-${poolCurrentScore.away}`);
 
                 let result = { updated: false };
                 await db.runTransaction(async (transaction) => {
