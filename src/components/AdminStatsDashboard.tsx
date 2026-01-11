@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    LineChart, Line, PieChart, Pie, Cell, AreaChart, Area
+    PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
-import { Pool, User, GameState, FirestoreTimestamp } from '../types';
+import type { Pool, User } from '../types';
 import { Users, Database, Clock, Calendar } from 'lucide-react';
 
 interface AdminStatsDashboardProps {
@@ -101,6 +101,8 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
         return Object.entries(stats).map(([name, value]) => ({ name, value }));
     }, [pools]);
 
+    /* 
+    unused for now
     // D. User Provider Stats
     const userProviderStats = useMemo(() => {
         const stats: Record<string, number> = {};
@@ -112,6 +114,7 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
         });
         return Object.entries(stats).map(([name, value]) => ({ name, value }));
     }, [users]);
+    */
 
     // E. Monthly Trends (Last 12 Months)
     const monthlyTrends = useMemo(() => {
@@ -282,9 +285,9 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
                                     outerRadius={80}
                                     fill="#8884d8"
                                     dataKey="value"
-                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                    label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                                 >
-                                    {poolTypeStats.map((entry, index) => (
+                                    {poolTypeStats.map((_entry, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>
