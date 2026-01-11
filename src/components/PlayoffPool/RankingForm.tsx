@@ -309,7 +309,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                                                 {team.seed ? <span className="text-slate-400 text-sm hidden sm:inline">#{team.seed}</span> : ''}
                                                 <span className="truncate">{team.name}</span>
                                                 {team.eliminated && (
-                                                    <span className="text-[10px] md:text-xs bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded uppercase ml-auto md:ml-2 flex-shrink-0">Eliminated</span>
+                                                    <span className="text-[10px] md:text-xs bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded uppercase ml-auto md:ml-2 flex-shrink-0 border border-rose-500/30 font-bold">Eliminated</span>
                                                 )}
                                             </div>
                                             <div className="text-xs text-slate-500 font-bold uppercase tracking-wider truncate">{team.conference}</div>

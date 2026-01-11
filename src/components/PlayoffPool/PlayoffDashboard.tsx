@@ -227,7 +227,16 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-rose-400 text-xs font-bold bg-rose-500/10 px-2 py-1 rounded">Locked</span>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => setViewingEntry(entry)}
+                                                                className="text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 p-2 rounded-lg transition-colors"
+                                                                title="View Picks"
+                                                            >
+                                                                <Eye size={16} />
+                                                            </button>
+                                                            <span className="text-rose-400 text-xs font-bold bg-rose-500/10 px-2 py-2 rounded flex items-center">Locked</span>
+                                                        </div>
                                                     )}
                                                 </div>
 
@@ -240,7 +249,10 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                             .sort((a, b) => b.rank - a.rank)
                                                             .slice(0, 3)
                                                             .map(t => (
-                                                                <span key={t.id} className="bg-slate-900 border border-slate-700 px-2 py-1 rounded text-xs font-bold text-slate-300">
+                                                                <span key={t.id} className={`border px-2 py-1 rounded text-xs font-bold ${t.eliminated
+                                                                    ? 'bg-rose-950/30 border-rose-500/20 text-rose-400 opacity-75 decoration-rose-500/50'
+                                                                    : 'bg-slate-900 border-slate-700 text-slate-300'
+                                                                    }`}>
                                                                     #{t.seed} {t.name}
                                                                 </span>
                                                             ))
@@ -548,7 +560,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                     .map(t => ({ ...t, rank: viewingEntry.rankings[t.id] || 0 }))
                                     .sort((a, b) => b.rank - a.rank)
                                     .map((team, index) => (
-                                        <div key={team.id} className="flex items-center gap-4 bg-slate-800/50 p-3 rounded-lg border border-slate-800">
+                                        <div key={team.id} className={`flex items-center gap-4 bg-slate-800/50 p-3 rounded-lg border border-slate-800 ${team.eliminated ? 'opacity-50 grayscale' : ''}`}>
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${index < 3 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-700 text-slate-400'
                                                 }`}>
                                                 {team.rank}
@@ -559,6 +571,11 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                     <span className="text-xs font-normal text-slate-400 px-2 py-0.5 bg-slate-900 rounded border border-slate-700">
                                                         #{team.seed} {team.conference}
                                                     </span>
+                                                    {team.eliminated && (
+                                                        <span className="text-[10px] font-bold text-rose-400 uppercase border border-rose-500/30 px-1.5 py-0.5 rounded bg-rose-500/10">
+                                                            Eliminated
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                             {/* Show if they won any points yet */}
