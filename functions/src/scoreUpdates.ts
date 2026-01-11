@@ -416,6 +416,7 @@ const processGameUpdate = async (
 
     // Check if score changed
     if (deltaHome !== 0 || deltaAway !== 0) {
+        console.log(`[ScoreSync] SCORE DELTA DETECTED for ${doc.id}: Home +${deltaHome}, Away +${deltaAway} (${freshCurrent.home}-${freshCurrent.away} -> ${newCurrent.home}-${newCurrent.away})`);
 
         // Prepare list of sequential score states to process
         // Each entry is { home: number, away: number, type: 'TD' | 'XP' | 'FG' | 'SAFETY' | 'OTHER' }
@@ -517,13 +518,19 @@ const processGameUpdate = async (
                 const playHome = needsSwap ? play.awayScore : play.homeScore;
                 const playAway = needsSwap ? play.homeScore : play.awayScore;
 
-                // Only process plays beyond our current recorded score
-                if (playHome < freshCurrent.home || playAway < freshCurrent.away) {
+                // Only process plays that represent scores BEYOND our currently recorded score
+                // A play is "new" if it represents a score we haven't seen yet
+                // Skip plays that are STRICTLY LESS than current (already processed)
+                // Also skip plays that EXACTLY MATCH current (that's our starting point)
+                const isOldPlay = (playHome < freshCurrent.home && playAway <= freshCurrent.away) ||
+                    (playAway < freshCurrent.away && playHome <= freshCurrent.home);
+                const isCurrentScore = (playHome === freshCurrent.home && playAway === freshCurrent.away);
+
+                if (isOldPlay || isCurrentScore) {
                     continue;
                 }
-                if (playHome === freshCurrent.home && playAway === freshCurrent.away) {
-                    continue;
-                }
+
+                console.log(`[ScoreSync] Processing ESPN play: ${playHome}-${playAway} (desc: ${play.description})`);
 
                 // Calculate the point change from this play
                 const deltaH = playHome - prevHome;
@@ -616,6 +623,8 @@ const processGameUpdate = async (
             const snaps = await transaction.getAll(...refs);
             snaps.forEach(s => { if (s.exists) existingDedupes.add(s.id); });
         }
+
+        console.log(`[ScoreSync] Generated ${steps.length} steps for ${doc.id}. Existing dedupes: ${existingDedupes.size}`);
 
         // --- PROCESS SEQUENCE ---
         for (const step of steps) {
