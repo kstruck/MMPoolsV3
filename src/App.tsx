@@ -34,6 +34,7 @@ import { PrivacyPage } from './components/PrivacyPage';
 import { TermsPage } from './components/TermsPage';
 import { HowItWorksPage } from './components/HowItWorksPage'; // Added import
 import { SupportPage } from './components/SupportPage';
+import { ResourcesPage } from './components/ResourcesPage';
 import { ManagerDashboard } from './components/ManagerDashboard';
 import { Scoreboard } from './components/Scoreboard';
 import { ShareModal, AuthModal } from './components/modals';
@@ -250,6 +251,7 @@ const App: React.FC = () => {
     if (hash.startsWith('#scoreboard')) return { view: 'scoreboard', id: null };
     if (hash.startsWith('#support')) return { view: 'support', id: null };
     if (hash.startsWith('#support')) return { view: 'support', id: null };
+    if (hash.startsWith('#resources')) return { view: 'resources', id: null };
     if (hash.startsWith('#create-pool')) return { view: 'create-pool', id: null };
     if (hash.startsWith('#bracket-wizard')) return { view: 'bracket-wizard', id: null };
     if (hash.startsWith('#playoff-wizard')) {
@@ -1248,6 +1250,21 @@ const App: React.FC = () => {
     return (
       <>
         <SupportPage />
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      </>
+    );
+  }
+
+  if (route.view === 'resources') {
+    return (
+      <>
+        <ResourcesPage
+          user={user}
+          onLogin={() => setShowAuthModal(true)}
+          onSignup={() => { setAuthMode('register'); setShowAuthModal(true); }}
+          onLogout={authService.logout}
+          onCreatePool={handleCreatePool}
+        />
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
       </>
     );

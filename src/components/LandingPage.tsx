@@ -76,7 +76,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
 
           <h1 className="text-4xl md:text-7xl font-black text-white tracking-tight mb-6 md:mb-8 leading-tight animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ fontFamily: "'Montserrat', sans-serif" }}>
             The Ultimate Platform for <br />
-            <span style={{ color: BRAND.orange }}>Squares, Props & Brackets</span>
+            <span style={{ color: BRAND.orange }}>NFL Playoff Pools & Super Bowl Squares</span>
           </h1>
 
           {/* Stat Cards */}
@@ -105,7 +105,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           </div>
 
           <p className="text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-700 delay-100" style={{ color: BRAND.lightGray }}>
-            The professional platform for managing squares pools for <strong>any game, all season long</strong>. Automated scoring, real-time payouts, and a pre-loaded schedule of every NFL and College game.
+            The professional choice for <strong>office sports pools</strong>, squares contests, and bracket challenges. Fully automated scoring for NFL Playoffs, Super Bowl, and March Madness.
           </p>
 
 
@@ -152,7 +152,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <LayoutGrid size={14} /> The Main Event
               </div>
               <h3 className="text-3xl md:text-4xl font-black text-white leading-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>
-                Live, Interactive Grids. <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-400">Not Your Office Excel Sheet.</span>
+                Live, Interactive Grids for <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-400">Super Bowl Squares.</span>
               </h3>
               <p className="text-lg leading-relaxed text-slate-300">
                 Experience the classic 10x10 grid reimagined for the digital age. Track occupied squares, see who bought in, and watch winning squares light up in real-time as the score changes. No more squinting at handwriting.

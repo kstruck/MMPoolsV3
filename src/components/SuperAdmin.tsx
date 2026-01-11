@@ -11,6 +11,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 
 
 import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
+import { AdminStatsDashboard } from './AdminStatsDashboard';
 
 export const SuperAdmin: React.FC = () => {
     // --- STATE ---
@@ -19,7 +20,7 @@ export const SuperAdmin: React.FC = () => {
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
 
     // UI State
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'stats'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
@@ -545,6 +546,7 @@ export const SuperAdmin: React.FC = () => {
         { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
         { id: 'props', label: 'Global Props', icon: <List size={16} /> },
         { id: 'playoffs', label: 'Playoffs', icon: <Trophy size={16} /> },
+        { id: 'stats', label: 'Stats', icon: <Activity size={16} /> },
         { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
     ] as const;
 
@@ -709,6 +711,11 @@ export const SuperAdmin: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* ============ STATS TAB ============ */}
+            {activeTab === 'stats' && (
+                <AdminStatsDashboard pools={pools} users={users} />
             )}
 
             {/* ============ POOLS TAB ============ */}

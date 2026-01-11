@@ -37,6 +37,12 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://www.marchmeleepools.com/#resources</loc>
+    <lastmod>2026-01-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://www.marchmeleepools.com/#privacy</loc>
     <lastmod>2026-01-11</lastmod>
     <changefreq>monthly</changefreq>
