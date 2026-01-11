@@ -4,6 +4,8 @@ exports.markSquaresPaid = exports.reserveSquare = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const audit_1 = require("./audit");
+const reminders_1 = require("./reminders");
+const emailStyles_1 = require("./emailStyles");
 exports.reserveSquare = (0, https_1.onCall)(async (request) => {
     var _a;
     // 0. Ensure Admin Init (Lazy)
@@ -32,7 +34,7 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
     }
     const poolRef = db.collection("pools").doc(poolId);
     // 2. Transaction to prevent race conditions
-    await db.runTransaction(async (transaction) => {
+    const result = await db.runTransaction(async (transaction) => {
         const poolDoc = await transaction.get(poolRef);
         if (!poolDoc.exists) {
             throw new https_1.HttpsError("not-found", "Pool not found.");
@@ -86,7 +88,17 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
             actor: { uid: userId, role, label: userName },
             payload: { squareId, ownerName: userName, email: userEmail }
         }, transaction);
+        const isGridFull = updatedSquares.every(s => s.owner !== null);
+        console.log(`[reserveSquare] Grid Full Check - Pool: ${poolId}, IsFull: ${isGridFull}, Notify: ${pool.notifyAdminFull}, Email: ${pool.contactEmail}`);
+        return { isGridFull, poolName: pool.name, contactEmail: pool.contactEmail, notifyAdminFull: pool.notifyAdminFull };
     });
+    if (result && result.isGridFull && result.notifyAdminFull && result.contactEmail) {
+        console.log(`[reserveSquare] Sending Grid Full email to ${result.contactEmail}`);
+        const subject = `Grid Full: ${result.poolName}`;
+        const html = (0, emailStyles_1.renderEmailHtml)("Your Grid is Full!", `<p>Great news! All squares in your pool <strong>${result.poolName}</strong> have been reserved.</p>
+             <p>It's time to generate the numbers and lock the pool!</p>`, `https://www.marchmeleepools.com/#pool/${poolId}`, "Go to Pool");
+        (0, reminders_1.sendEmail)(result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));
+    }
     return { success: true };
 });
 exports.markSquaresPaid = (0, https_1.onCall)(async (request) => {

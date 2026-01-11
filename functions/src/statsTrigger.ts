@@ -2,6 +2,9 @@ import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
+import { sendEmail } from "./reminders";
+import { renderEmailHtml } from "./emailStyles";
+
 // Helper to calculate total pot for a pool
 const calculatePoolPot = (pool: any): number => {
     let squaresSold = 0;
@@ -42,6 +45,39 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
                 }, { merge: true });
 
                 console.log(`[Stats] Added $${prizeAmount} to global prizes for newly locked pool ${event.params.poolId}`);
+            }
+
+            // --- EMAIL NOTIFICATION LOGIC ---
+            // If email enabled, numbers generated, and NOT already sent
+            if (after.emailNumbersGenerated && after.axisNumbers && !after.numbersEmailSent) {
+                console.log(`[onPoolLocked] Triggering 'Numbers Set' emails for pool ${event.params.poolId}`);
+
+                // Mark as sent immediately to prevent re-entry (idempotency)
+                await event.data.after.ref.update({ numbersEmailSent: true });
+
+                const homeNums = after.axisNumbers.home.join(", ");
+                const awayNums = after.axisNumbers.away.join(", ");
+                const subject = `Numbers Generated: ${after.name}`;
+
+                const html = renderEmailHtml(
+                    "The Numbers Are Set!",
+                    `<p>The pool <strong>${after.name}</strong> has been locked and the numbers have been generated.</p>
+                     <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <p style="margin: 5px 0;"><strong>${after.homeTeam} (Row):</strong> ${homeNums}</p>
+                        <p style="margin: 5px 0;"><strong>${after.awayTeam} (Col):</strong> ${awayNums}</p>
+                     </div>
+                     <p>Good luck!</p>`,
+                    `https://www.marchmeleepools.com/#pool/${event.params.poolId}`,
+                    "View Your Squares"
+                );
+
+                // Collect unique emails
+                const uniqueEmails = Array.from(new Set((after.squares || []).map((s: any) => s.playerDetails?.email).filter(Boolean))) as string[];
+                console.log(`[onPoolLocked] Sending to ${uniqueEmails.length} recipients`);
+
+                await Promise.all(uniqueEmails.map(email =>
+                    sendEmail(email, subject, html, { poolId: event.params.poolId, reason: 'NUMBERS_GENERATED_TRIGGER' })
+                ));
             }
         }
     } catch (e) {

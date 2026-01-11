@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.onWinnerComputed = exports.runReminders = void 0;
+exports.sendEmail = sendEmail;
 const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const audit_1 = require("./audit");

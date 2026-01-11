@@ -2,8 +2,6 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
-import { sendEmail } from "./reminders";
-import { renderEmailHtml } from "./emailStyles";
 
 
 export const lockPool = onCall(async (request) => {
@@ -113,34 +111,8 @@ export const lockPool = onCall(async (request) => {
             dedupeKey: `DIGITS_GENERATED:${poolId}:initial:${digitsHash}`
         });
 
-        // 3. Send Email Notifications (if enabled)
-        console.log(`[lockPool] Email check - Pool: ${poolId}, Enabled: ${poolData.emailNumbersGenerated}`);
-        if (poolData.emailNumbersGenerated) {
-            const homeNums = axisNumbers.home.join(", ");
-            const awayNums = axisNumbers.away.join(", ");
-            const subject = `Numbers Generated: ${poolData.name}`;
-
-            const html = renderEmailHtml(
-                "The Numbers Are Set!",
-                `<p>The pool <strong>${poolData.name}</strong> has been locked and the numbers have been generated.</p>
-                 <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>${poolData.homeTeam} (Row):</strong> ${homeNums}</p>
-                    <p style="margin: 5px 0;"><strong>${poolData.awayTeam} (Col):</strong> ${awayNums}</p>
-                 </div>
-                 <p>Good luck!</p>`,
-                `https://www.marchmeleepools.com/#pool/${poolId}`,
-                "View Your Squares"
-            );
-
-            // Collect unique emails
-            const uniqueEmails = Array.from(new Set((poolData.squares || []).map((s: any) => s.playerDetails?.email).filter(Boolean))) as string[];
-            console.log(`[lockPool] Sending Numbers Set emails to ${uniqueEmails.length} recipients`);
-
-            // Send asynchronously
-            Promise.all(uniqueEmails.map(email =>
-                sendEmail(email, subject, html, { poolId, reason: 'NUMBERS_GENERATED' })
-            )).catch(err => console.error("Failed to send numbers generated emails", err));
-        }
+        // 3. Email Notifications are now handled by onPoolLocked trigger (statsTrigger.ts)
+        // to ensure they fire even if lock is toggled via UI directly.
     }
 
     return { success: true, axisNumbers };
