@@ -26,7 +26,7 @@ const CFB_CONFERENCES = [
 
 export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updateConfig, onNext }) => {
     // --- Game Finder State ---
-    const [seasonType, setSeasonType] = useState('2');
+    const [seasonType, setSeasonType] = useState('3'); // Default to Postseason per user request
     const [week, setWeek] = useState('1'); // Default to Week 1 or calculate dynamically
     const [scheduleGames, setScheduleGames] = useState<any[]>([]);
     const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
@@ -124,12 +124,9 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                             if (nextState) {
                                 // Smart defaults on open
                                 const isCollege = (gameState as any).league === 'college';
-                                const month = new Date().getMonth();
-                                if (isCollege && (month === 11 || month === 0)) {
-                                    setSeasonType('3'); setWeek('1');
-                                } else {
-                                    setWeek(currentEstimatedWeek.toString());
-                                }
+                                // Always default to Postseason now as regular season is over
+                                setSeasonType('3');
+                                setWeek('1');
                             }
                         }}
                         className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${showSchedule ? 'bg-slate-800 text-slate-400' : 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:scale-105'}`}
@@ -161,8 +158,8 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                 }}
                                 className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
                             >
-                                <option value="1">Preseason</option>
-                                <option value="2">Regular</option>
+                                <option value="1" disabled>Preseason</option>
+                                <option value="2" disabled>Regular</option>
                                 <option value="3">Postseason</option>
                             </select>
 
