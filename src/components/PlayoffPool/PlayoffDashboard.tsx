@@ -23,6 +23,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     // const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Deprecated
 
     const isManager = user?.id === pool.ownerId || user?.role === 'SUPER_ADMIN';
+    const canViewPicks = pool.isLocked || (pool.results && Object.values(pool.results).some(r => r && r.length > 0)) || isManager;
 
     // --- My Entries Logic ---
     const myEntries = useMemo(() => {
@@ -303,7 +304,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                     <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>
                                                                         {entry.entryName || entry.userName}
                                                                     </div>
-                                                                    {pool.isLocked && (
+                                                                    {canViewPicks && (
                                                                         <button
                                                                             onClick={() => setViewingEntry(entry)}
                                                                             className="text-slate-500 hover:text-emerald-400 transition-colors"
@@ -315,7 +316,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                 </div>
                                                                 {/* Status Indicators (Always Visible) */}
                                                                 <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                                                                    {pool.isLocked && <span>Tiebreaker: {entry.tiebreaker}</span>}
+                                                                    {canViewPicks && <span>Tiebreaker: {entry.tiebreaker}</span>}
                                                                     {entry.paid && (
                                                                         <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-500/20">
                                                                             Paid
@@ -474,10 +475,47 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     )}
                     {/* [NEW] Commissioner Tab */}
                     {activeTab === 'commissioner' && isManager && user && (
-                        <div className="bg-slate-900 rounded-xl border border-slate-800 p-8">
+                        <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 space-y-8">
                             <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
                                 <Settings className="text-indigo-400" /> Commissioner Tools
                             </h2>
+
+                            {/* [NEW] Pool Status Control */}
+                            <div className="bg-slate-950/50 p-6 rounded-xl border border-slate-800">
+                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                    Pool Status
+                                    <span className={`text-xs px-2 py-0.5 rounded uppercase ${pool.isLocked ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                        {pool.isLocked ? 'Locked' : 'Open'}
+                                    </span>
+                                </h3>
+                                <div className="flex items-center justify-between gap-4">
+                                    <p className="text-sm text-slate-400">
+                                        {pool.isLocked
+                                            ? "Pool is locked. New entries cannot be added and picks are visible to everyone."
+                                            : "Pool is open. Users can add/edit entries and picks are hidden."
+                                        }
+                                    </p>
+                                    <button
+                                        onClick={async () => {
+                                            const newStatus = !pool.isLocked;
+                                            if (confirm(`Are you sure you want to ${newStatus ? 'LOCK' : 'UNLOCK'} the pool?`)) {
+                                                try {
+                                                    await dbService.updatePool(pool.id, { isLocked: newStatus });
+                                                } catch (err) {
+                                                    alert('Failed to update pool status');
+                                                }
+                                            }
+                                        }}
+                                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${pool.isLocked
+                                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                            : 'bg-rose-600 hover:bg-rose-500 text-white'
+                                            }`}
+                                    >
+                                        {pool.isLocked ? 'Unlock Pool' : 'Lock Pool'}
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="max-w-2xl">
                                 <h3 className="text-lg font-bold text-slate-300 mb-4">Announcements</h3>
                                 <AnnouncementManager pool={pool as any} currentUser={user} />
