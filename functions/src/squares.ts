@@ -2,6 +2,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
 import { writeAuditEvent } from "./audit";
+import { sendEmail } from "./reminders";
+import { renderEmailHtml } from "./emailStyles";
 
 
 export const reserveSquare = onCall(async (request) => {
@@ -40,7 +42,7 @@ export const reserveSquare = onCall(async (request) => {
     const poolRef = db.collection("pools").doc(poolId);
 
     // 2. Transaction to prevent race conditions
-    await db.runTransaction(async (transaction) => {
+    const result = await db.runTransaction(async (transaction) => {
         const poolDoc = await transaction.get(poolRef);
         if (!poolDoc.exists) {
             throw new HttpsError("not-found", "Pool not found.");
@@ -112,7 +114,22 @@ export const reserveSquare = onCall(async (request) => {
             actor: { uid: userId, role, label: userName },
             payload: { squareId, ownerName: userName, email: userEmail }
         }, transaction);
+
+        const isGridFull = updatedSquares.every(s => s.owner !== null);
+        return { isGridFull, poolName: pool.name, contactEmail: pool.contactEmail, notifyAdminFull: pool.notifyAdminFull };
     });
+
+    if (result && result.isGridFull && result.notifyAdminFull && result.contactEmail) {
+        const subject = `Grid Full: ${result.poolName}`;
+        const html = renderEmailHtml(
+            "Your Grid is Full!",
+            `<p>Great news! All squares in your pool <strong>${result.poolName}</strong> have been reserved.</p>
+             <p>It's time to generate the numbers and lock the pool!</p>`,
+            `https://www.marchmeleepools.com/#pool/${poolId}`,
+            "Go to Pool"
+        );
+        sendEmail(result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));
+    }
 
     return { success: true };
 });

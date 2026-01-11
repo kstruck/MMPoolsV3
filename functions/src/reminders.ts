@@ -12,7 +12,7 @@ import { renderEmailHtml, BASE_URL } from "./emailStyles";
 /**
  * Sends an email by writing to the /mail collection (triggered by EmailJS or other service).
  */
-async function sendEmail(to: string, subject: string, html: string, context?: any) {
+export async function sendEmail(to: string, subject: string, html: string, context?: any) {
     const db = admin.firestore();
     if (!to || !to.includes('@')) {
         console.warn(`Skipping email to invalid address: ${to}`);
