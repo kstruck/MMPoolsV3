@@ -202,7 +202,7 @@ export interface ClaimCode {
 export interface Square {
   id: number; // 0-99
   owner: string | null; // Name of owner
-  playerDetails?: PlayerDetails;
+  playerDetails?: PlayerDetails | null;
   isPaid?: boolean;
   pickedAsName?: string;
   guestDeviceKey?: string | null;

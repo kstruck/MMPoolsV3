@@ -6,10 +6,6 @@ const scheduler_1 = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const emailStyles_1 = require("./emailStyles");
-if (!admin.apps.length) {
-    admin.initializeApp();
-}
-const db = admin.firestore();
 // Helper: Normalize team ID or Name for matching
 const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 const TEAM_MAPPING = {
@@ -67,6 +63,7 @@ const getTeamId = (espnTeam) => {
 // Extracted Logic to Propagate Results
 const saveAndPropagateResults = async (results) => {
     var _a, _b, _c, _d, _e, _f;
+    const db = admin.firestore();
     // 1. Save to Global Doc
     await db.collection('system').doc('playoff_results').set({ results, updatedAt: Date.now() });
     // 2. Query all Playoff Pools
@@ -131,6 +128,7 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
     const { poolId, rankings, tiebreaker, entryId, entryName } = request.data;
     const uid = request.auth.uid;
     const userName = request.auth.token.name || 'Anonymous';
+    const db = admin.firestore();
     const poolRef = db.collection('pools').doc(poolId);
     const poolSnap = await poolRef.get();
     if (!poolSnap.exists)
@@ -217,6 +215,7 @@ exports.managePlayoffEntry = (0, https_1.onCall)(async (request) => {
     const { poolId, entryId, action, value } = request.data; // action: 'togglePaid' | 'delete'
     const uid = request.auth.uid;
     const isAdmin = request.auth.token.role === 'SUPER_ADMIN';
+    const db = admin.firestore();
     const poolRef = db.collection('pools').doc(poolId);
     const poolSnap = await poolRef.get();
     if (!poolSnap.exists)
@@ -293,6 +292,7 @@ exports.calculatePlayoffScores = (0, https_1.onCall)(async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     const { poolId } = request.data;
+    const db = admin.firestore();
     const poolRef = db.collection('pools').doc(poolId);
     const poolSnap = await poolRef.get();
     if (!poolSnap.exists)
@@ -306,6 +306,7 @@ exports.updateGlobalPlayoffResults = (0, https_1.onCall)(async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     // Check SuperAdmin
+    const db = admin.firestore();
     const userSnap = await db.collection('users').doc(request.auth.uid).get();
     if (!userSnap.exists || ((_a = userSnap.data()) === null || _a === void 0 ? void 0 : _a.role) !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError('permission-denied', 'Super Admin only');
@@ -326,6 +327,7 @@ exports.checkPlayoffScores = (0, scheduler_1.onSchedule)("every 30 minutes", asy
             return;
         const data = await resp.json();
         // 1. Get Current Global Results
+        const db = admin.firestore();
         const docRef = db.collection('system').doc('playoff_results');
         const docSnap = await docRef.get();
         let currentResults = docSnap.exists ? (_a = docSnap.data()) === null || _a === void 0 ? void 0 : _a.results : {};
@@ -396,6 +398,7 @@ exports.onPlayoffConfigUpdate = (0, firestore_1.onDocumentWritten)("config/playo
     // If teams array changed, propagate to all Playoff Pools
     const teams = after.teams;
     logger.info("Playoff Config Sync: Detected change in config/playoffs. Syncing to all pools...");
+    const db = admin.firestore();
     const poolsSnap = await db.collection('pools').where('type', '==', 'NFL_PLAYOFFS').get();
     if (poolsSnap.empty) {
         logger.info("Playoff Config Sync: No pools found to update.");
@@ -417,6 +420,7 @@ exports.onPlayoffConfigUpdate = (0, firestore_1.onDocumentWritten)("config/playo
 exports.syncPlayoffPools = (0, https_1.onCall)(async (request) => {
     // Ensure admin only (optional, but good practice)
     // if (!request.auth?.token.admin) throw new HttpsError('permission-denied', 'Admins only');
+    const db = admin.firestore();
     const configSnap = await db.doc("config/playoffs").get();
     if (!configSnap.exists) {
         throw new https_1.HttpsError('not-found', 'Global Playoff Config not found');

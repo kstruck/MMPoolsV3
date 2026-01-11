@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.joinWaitlist = void 0;
 const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
-const db = admin.firestore();
 exports.joinWaitlist = functions.https.onCall(async (request) => {
+    const db = admin.firestore();
     const { poolId, name, email } = request.data;
     if (!poolId || !name || !email) {
         throw new functions.https.HttpsError("invalid-argument", "Missing poolId, name, or email.");

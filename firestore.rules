@@ -51,7 +51,7 @@ service cloud.firestore {
       // Prevent CLIENTS from writing to 'squares', 'axisNumbers', 'participants' directly
       // They must use Cloud Functions (reserveSquare, lockPool, etc.)
       allow update: if request.auth != null && (
-        ((request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers', 'squares']))) 
+        ((request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers']))) 
         || isSuperAdmin()
       );
                     

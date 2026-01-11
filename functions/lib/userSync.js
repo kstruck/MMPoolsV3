@@ -4,8 +4,8 @@ exports.syncAllUsers = exports.onUserCreated = void 0;
 const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 const https_1 = require("firebase-functions/v2/https");
-const db = admin.firestore();
 exports.onUserCreated = functions.auth.user().onCreate(async (user) => {
+    const db = admin.firestore();
     const { uid, email, displayName, photoURL } = user;
     // Determine registration method
     let method = 'unknown';
@@ -48,6 +48,7 @@ exports.onUserCreated = functions.auth.user().onCreate(async (user) => {
 // Force Sync All Users (Callable)
 exports.syncAllUsers = (0, https_1.onCall)(async (request) => {
     var _a;
+    const db = admin.firestore();
     if (!request.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Must be logged in.');
     }

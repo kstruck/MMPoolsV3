@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.computeDigitsHash = exports.writeAuditEvent = void 0;
 const admin = require("firebase-admin");
 const crypto = require("crypto");
-const db = admin.firestore();
 const writeAuditEvent = async (options, existingTransaction) => {
+    const db = admin.firestore();
     const { poolId, type, message, severity, actor, payload, dedupeKey, forceWriteDedupe } = options;
     const auditRef = db.collection("pools").doc(poolId).collection("audit");
     const eventId = auditRef.doc().id;

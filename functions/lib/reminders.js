@@ -5,12 +5,12 @@ const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const audit_1 = require("./audit");
 const emailStyles_1 = require("./emailStyles");
-const db = admin.firestore();
 // --- HELPERS ---
 /**
  * Sends an email by writing to the /mail collection (triggered by EmailJS or other service).
  */
 async function sendEmail(to, subject, html, context) {
+    const db = admin.firestore();
     if (!to || !to.includes('@')) {
         console.warn(`Skipping email to invalid address: ${to}`);
         return;
@@ -31,6 +31,7 @@ async function sendEmail(to, subject, html, context) {
  * Returns true if created (should send), false if already exists (skip).
  */
 async function createNotificationOnce(dedupeKey, logData) {
+    const db = admin.firestore();
     const ref = db.collection("notifications").doc(dedupeKey);
     try {
         await db.runTransaction(async (t) => {
@@ -50,6 +51,7 @@ async function createNotificationOnce(dedupeKey, logData) {
     }
 }
 async function logAudit(poolId, message, type, payload) {
+    const db = admin.firestore();
     const auditRef = db.collection("pools").doc(poolId).collection("audit").doc();
     const event = {
         id: auditRef.id,
@@ -67,6 +69,7 @@ async function logAudit(poolId, message, type, payload) {
 // --- SCHEDULED REMINDER LOGIC ---
 exports.runReminders = functions.scheduler.onSchedule("every 15 minutes", async (event) => {
     var _a, _b;
+    const db = admin.firestore();
     const now = Date.now();
     console.log(`[runReminders] Starting reminder check at ${new Date(now).toISOString()}`);
     const poolsSnapshot = await db.collection("pools").get();
@@ -122,6 +125,7 @@ async function checkPlayoffReminders(pool, now) {
             // Wait - we can't fetch individual users inside this loop efficiently if there are many.
             // But usually pools are small (10-50 ppl).
             if (entry.userId) {
+                const db = admin.firestore();
                 const userSnap = await db.collection('users').doc(entry.userId).get();
                 if (userSnap.exists) {
                     const email = (_a = userSnap.data()) === null || _a === void 0 ? void 0 : _a.email;
@@ -153,12 +157,14 @@ async function checkPlayoffReminders(pool, now) {
             `;
             const html = (0, emailStyles_1.renderEmailHtml)('Payment Reminder', body, `${emailStyles_1.BASE_URL}/#pool/${pool.id}`, 'View Pool');
             // Queue Email
+            const db = admin.firestore();
             await db.collection("mail").add({
                 to: recipient.email,
                 message: { subject, html }
             });
         }
         // Apply Updates (mark as sent)
+        const db = admin.firestore();
         await db.collection('pools').doc(pool.id).update(updates);
     }
 }
@@ -241,6 +247,7 @@ async function checkPaymentReminders(pool, now) {
             return (now - s.reservedAt) > releaseThresholdMs;
         });
         if (squaresToRelease.length > 0) {
+            const db = admin.firestore();
             const poolRef = db.collection("pools").doc(pool.id);
             try {
                 await db.runTransaction(async (t) => {
@@ -360,6 +367,7 @@ async function checkLockReminders(pool, now) {
 // --- WINNER ANNOUNCEMENT TRIGGER ---
 exports.onWinnerComputed = functions.firestore.onDocumentCreated("pools/{poolId}/winners/{period}", async (event) => {
     var _a, _b;
+    const db = admin.firestore();
     const snapshot = event.data;
     if (!snapshot)
         return;

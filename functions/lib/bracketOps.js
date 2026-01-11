@@ -4,7 +4,6 @@ exports.updateTournamentData = exports.markEntryPaidStatus = void 0;
 const admin = require("firebase-admin");
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-admin/firestore");
-const db = admin.firestore();
 // ----------------------------------------------------------------------------
 // Mark Entry Paid Status
 // ----------------------------------------------------------------------------
@@ -17,6 +16,7 @@ exports.markEntryPaidStatus = (0, https_1.onCall)(async (request) => {
     if (!poolId || !entryId) {
         throw new https_1.HttpsError("invalid-argument", "Missing poolId or entryId.");
     }
+    const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
     const entryRef = poolRef.collection("entries").doc(entryId);
     // Verify Ownership/Managership
@@ -44,6 +44,7 @@ exports.updateTournamentData = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError("unauthenticated", "User must be logged in.");
     }
     // Role check: Only SuperAdmin should call this
+    const db = admin.firestore();
     const userDoc = await db.collection("users").doc(request.auth.uid).get();
     if (((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError("permission-denied", "Admin only.");

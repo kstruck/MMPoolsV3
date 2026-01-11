@@ -4,13 +4,13 @@ exports.onGameComplete = void 0;
 const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const emailStyles_1 = require("./emailStyles");
-const db = admin.firestore();
 /**
  * Trigger when pool document is updated
  * Sends post-game summary email when game status changes to 'post'
  */
 exports.onGameComplete = functions.firestore.onDocumentUpdated("pools/{poolId}", async (event) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+    const db = admin.firestore();
     const poolId = event.params.poolId;
     const before = (_a = event.data) === null || _a === void 0 ? void 0 : _a.before.data();
     const after = (_b = event.data) === null || _b === void 0 ? void 0 : _b.after.data();

@@ -5,7 +5,6 @@ const admin = require("firebase-admin");
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-admin/firestore");
 const crypto = require("crypto");
-const db = admin.firestore();
 // ----------------------------------------------------------------------------
 // Create Bracket Pool (Draft)
 // ----------------------------------------------------------------------------
@@ -26,6 +25,7 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
     // Create a base slug suggestion
     const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     const slug = `${baseSlug}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const db = admin.firestore();
     const poolRef = db.collection("pools").doc();
     const now = firestore_1.Timestamp.now().toMillis();
     console.log("Constructing new pool object...");
@@ -86,6 +86,7 @@ exports.publishBracketPool = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError("invalid-argument", "Invalid slug format.");
     }
     // Run transaction to reserve slug
+    const db = admin.firestore();
     await db.runTransaction(async (transaction) => {
         var _a;
         const poolRef = db.collection("pools").doc(poolId);
@@ -147,6 +148,7 @@ exports.joinBracketPool = (0, https_1.onCall)(async (request) => {
     if (!poolId) {
         throw new https_1.HttpsError("invalid-argument", "Missing poolId.");
     }
+    const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
     const poolDoc = await poolRef.get();
     if (!poolDoc.exists) {

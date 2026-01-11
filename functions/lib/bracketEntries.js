@@ -4,7 +4,6 @@ exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketE
 const admin = require("firebase-admin");
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-admin/firestore");
-const db = admin.firestore();
 // ----------------------------------------------------------------------------
 // Create Bracket Entry (Draft)
 // ----------------------------------------------------------------------------
@@ -17,6 +16,7 @@ exports.createBracketEntry = (0, https_1.onCall)(async (request) => {
     if (!poolId || !name) {
         throw new https_1.HttpsError("invalid-argument", "Missing poolId or entry name.");
     }
+    const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
     // Check constraints in Transaction
     const entryId = await db.runTransaction(async (transaction) => {
@@ -83,6 +83,7 @@ exports.updateBracketEntry = (0, https_1.onCall)(async (request) => {
     if (!poolId || !entryId || !picks) {
         throw new https_1.HttpsError("invalid-argument", "Missing data.");
     }
+    const db = admin.firestore();
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
     const poolRef = db.collection("pools").doc(poolId);
     await db.runTransaction(async (transaction) => {
@@ -125,6 +126,7 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
     }
     const { poolId, entryId } = request.data;
     const uid = request.auth.uid;
+    const db = admin.firestore();
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
     const poolRef = db.collection("pools").doc(poolId);
     await db.runTransaction(async (transaction) => {

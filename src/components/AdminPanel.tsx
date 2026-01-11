@@ -451,7 +451,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const releasePlayer = (ownerName: string) => {
     // Sandbox fix: Remove window.confirm
     const newSquares = gameState.squares.map(sq =>
-      sq.owner === ownerName ? { ...sq, owner: null, playerDetails: undefined, isPaid: false } : sq
+      sq.owner === ownerName ? { ...sq, owner: null, playerDetails: null, isPaid: false } : sq
     );
     updateConfig({ squares: newSquares });
   };
@@ -2056,7 +2056,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                         {sq.isPaid ? 'PAID' : 'UNPAID'}
                                       </button>
                                       <button
-                                        onClick={() => { updateSquare(sq.id, { owner: null, playerDetails: undefined, isPaid: false }); }}
+                                        onClick={() => { updateSquare(sq.id, { owner: null, playerDetails: null, isPaid: false }); }}
                                         className="text-slate-600 hover:text-rose-500 transition-colors"
                                         title="Release Square"
                                       >
