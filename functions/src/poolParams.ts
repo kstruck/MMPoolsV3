@@ -114,6 +114,7 @@ export const lockPool = onCall(async (request) => {
         });
 
         // 3. Send Email Notifications (if enabled)
+        console.log(`[lockPool] Email check - Pool: ${poolId}, Enabled: ${poolData.emailNumbersGenerated}`);
         if (poolData.emailNumbersGenerated) {
             const homeNums = axisNumbers.home.join(", ");
             const awayNums = axisNumbers.away.join(", ");
@@ -133,6 +134,7 @@ export const lockPool = onCall(async (request) => {
 
             // Collect unique emails
             const uniqueEmails = Array.from(new Set((poolData.squares || []).map((s: any) => s.playerDetails?.email).filter(Boolean))) as string[];
+            console.log(`[lockPool] Sending Numbers Set emails to ${uniqueEmails.length} recipients`);
 
             // Send asynchronously
             Promise.all(uniqueEmails.map(email =>

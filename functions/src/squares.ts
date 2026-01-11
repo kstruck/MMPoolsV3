@@ -116,10 +116,12 @@ export const reserveSquare = onCall(async (request) => {
         }, transaction);
 
         const isGridFull = updatedSquares.every(s => s.owner !== null);
+        console.log(`[reserveSquare] Grid Full Check - Pool: ${poolId}, IsFull: ${isGridFull}, Notify: ${pool.notifyAdminFull}, Email: ${pool.contactEmail}`);
         return { isGridFull, poolName: pool.name, contactEmail: pool.contactEmail, notifyAdminFull: pool.notifyAdminFull };
     });
 
     if (result && result.isGridFull && result.notifyAdminFull && result.contactEmail) {
+        console.log(`[reserveSquare] Sending Grid Full email to ${result.contactEmail}`);
         const subject = `Grid Full: ${result.poolName}`;
         const html = renderEmailHtml(
             "Your Grid is Full!",
