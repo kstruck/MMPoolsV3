@@ -1462,6 +1462,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
+          {/* Debug & Repair (Admin Only) */}
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-700 border-l-4 border-l-amber-500">
+            <h4 className="font-bold text-white mb-3 text-sm uppercase flex items-center gap-2"><Hammer size={14} className="text-amber-400" /> Debug & Repair</h4>
+            <p className="text-xs text-slate-500 mb-4">Advanced tools to fix stuck states or missing scores.</p>
+
+            <button
+              onClick={handleFixSync}
+              disabled={isFixing}
+              className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 py-2 px-4 rounded text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2"
+            >
+              {isFixing ? <div className="animate-spin rounded-full h-3 w-3 border-2 border-slate-400 border-t-transparent" /> : <RefreshCw size={14} />}
+              Recalculate Scores from ESPN
+            </button>
+            <p className="text-[10px] text-slate-600 mt-2 text-center">Forces a full re-sync and re-processes all winners.</p>
+          </div>
+
           {/* QR Code Sharing */}
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-700">
             <h4 className="font-bold text-white mb-4 flex items-center gap-2"><QrCode size={16} className="text-emerald-400" /> Share via QR Code</h4>

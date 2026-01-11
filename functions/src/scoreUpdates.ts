@@ -603,6 +603,9 @@ const processGameUpdate = async (
             dedupeChecks.push(`SCORE_STEP:${doc.id}:${step.home}:${step.away}`);
             if (freshPool.ruleVariations?.scoreChangePayout) {
                 dedupeChecks.push(`WINNER_EVENT:${doc.id}:${step.home}:${step.away}`);
+                if (freshPool.ruleVariations?.reverseWinners) {
+                    dedupeChecks.push(`WINNER_EVENT_REV:${doc.id}:${step.home}:${step.away}`);
+                }
             }
         }
 
@@ -697,6 +700,72 @@ const processGameUpdate = async (
                             db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`),
                             winnerDoc
                         );
+                    }
+
+                    // --- REVERSE WINNER LOGIC FOR ESP ---
+                    if (freshPool.ruleVariations?.reverseWinners) {
+                        const revKey = `WINNER_EVENT_REV:${doc.id}:${step.home}:${step.away}`;
+                        if (!existingDedupes.has(revKey)) {
+                            // Reverse Logic: Swap digits for lookup
+                            // Regular: Away(row/y) maps to aDigit, Home(col/x) maps to hDigit
+                            // Reverse: Away(row/y) maps to hDigit, Home(col/x) maps to aDigit
+
+                            const rRow = axis.away.indexOf(hDigit);
+                            const rCol = axis.home.indexOf(aDigit);
+
+                            if (rRow !== -1 && rCol !== -1) {
+                                const rSqIndex = rRow * 10 + rCol;
+                                const regularIndex = (row !== -1 && col !== -1) ? (row * 10 + col) : -999;
+
+                                // Only award if different from regular (or if same square wins both ways, that's fine too, but usually distinct)
+                                // Actually, same square CAN win both if digits match (e.g. 3-3), so we don't strictly exclude unless needed.
+                                // But `processWinners` does check rSqIndex !== regularIndex. Let's keep consistency?
+                                // "Double Dip" is allowed usually. But let's follow `processWinners` pattern if possible.
+                                // In `processWinners`, it says `if (rSqIndex !== regularIndex)`. 
+                                // Let's stick to that to avoid double-payout for 0-0 etc if intended.
+
+                                if (rSqIndex !== regularIndex) {
+                                    const rSquare = freshPool.squares[rSqIndex];
+                                    const rWinnerName = rSquare?.owner || 'Unsold';
+
+                                    await writeAuditEvent({
+                                        poolId: doc.id,
+                                        type: 'WINNER_COMPUTED',
+                                        message: `Event Reverse Winner: ${rWinnerName} (${step.home}-${step.away})`,
+                                        severity: 'INFO',
+                                        actor: actor,
+                                        payload: {
+                                            period: 'Event',
+                                            type: 'REVERSE',
+                                            homeScore: step.home,
+                                            awayScore: step.away,
+                                            homeDigit: aDigit, // Swapped
+                                            awayDigit: hDigit, // Swapped
+                                            winner: rWinnerName,
+                                            squareId: rSqIndex
+                                        },
+                                        dedupeKey: revKey,
+                                        forceWriteDedupe: true
+                                    }, transaction);
+
+                                    const rWinnerDoc: Winner = {
+                                        period: 'Event',
+                                        squareId: rSqIndex,
+                                        owner: rWinnerName,
+                                        amount: 0,
+                                        homeDigit: aDigit,
+                                        awayDigit: hDigit,
+                                        isReverse: true,
+                                        description: `${step.desc} Reverse (${step.home}-${step.away})`
+                                    };
+
+                                    transaction.set(
+                                        db.collection('pools').doc(doc.id).collection('winners').doc(`event_rev_${step.home}_${step.away}`),
+                                        rWinnerDoc
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
             }
