@@ -622,88 +622,90 @@ const processGameUpdate = async (
             const stepQText = state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th');
             const scoreKey = `SCORE_STEP:${doc.id}:${step.home}:${step.away}`;
 
-            if (existingDedupes.has(scoreKey)) continue;
+            if (!existingDedupes.has(scoreKey)) {
+                // 1. Log Score Change Audit
+                // Use forceWriteDedupe to skip the read check inside writeAuditEvent
+                await writeAuditEvent({
+                    poolId: doc.id,
+                    type: 'SCORE_FINALIZED',
+                    message: `${step.desc}: ${step.home}-${step.away} (${stepQText})`,
+                    severity: 'INFO',
+                    actor: actor,
+                    payload: { home: step.home, away: step.away, clock: espnScores.clock || "0:00" },
+                    dedupeKey: scoreKey,
+                    forceWriteDedupe: true
+                }, transaction);
 
-            // 1. Log Score Change Audit
-            // Use forceWriteDedupe to skip the read check inside writeAuditEvent
-            await writeAuditEvent({
-                poolId: doc.id,
-                type: 'SCORE_FINALIZED',
-                message: `${step.desc}: ${step.home}-${step.away} (${stepQText})`,
-                severity: 'INFO',
-                actor: actor,
-                payload: { home: step.home, away: step.away, clock: espnScores.clock || "0:00" },
-                dedupeKey: scoreKey,
-                forceWriteDedupe: true
-            }, transaction);
-
-            // 2. Add to Score History
-            const newEvent = {
-                id: db.collection("_").doc().id,
-                home: step.home,
-                away: step.away,
-                description: `${step.desc} (${state === 'pre' ? 'Pre' : 'Q' + period})`,
-                timestamp: Date.now()
-            };
-            transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
-            shouldUpdate = true;
+                // 2. Add to Score History
+                const newEvent = {
+                    id: db.collection("_").doc().id,
+                    home: step.home,
+                    away: step.away,
+                    description: `${step.desc} (${state === 'pre' ? 'Pre' : 'Q' + period})`,
+                    timestamp: Date.now()
+                };
+                transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
+                shouldUpdate = true;
+            }
 
             // 3. Handle "Score Change Payouts"
+            // Ensure this runs even if scoreKey exists (backfill scenario)
             if (freshPool.ruleVariations?.scoreChangePayout) {
                 const winnerKey = `WINNER_EVENT:${doc.id}:${step.home}:${step.away}`;
-
-                if (existingDedupes.has(winnerKey)) continue;
 
                 const hDigit = getLastDigit(step.home);
                 const aDigit = getLastDigit(step.away);
                 const axis = freshPool.axisNumbers;
 
-                if (axis) {
-                    const row = axis.away.indexOf(aDigit);
-                    const col = axis.home.indexOf(hDigit);
+                // Check Regular Winner
+                if (!existingDedupes.has(winnerKey)) {
 
-                    if (row !== -1 && col !== -1) {
-                        const squareIndex = row * 10 + col;
-                        const square = freshPool.squares[squareIndex];
-                        const winnerName = square?.owner || 'Unsold';
+                    if (axis) {
+                        const row = axis.away.indexOf(aDigit);
+                        const col = axis.home.indexOf(hDigit);
 
-                        await writeAuditEvent({
-                            poolId: doc.id,
-                            type: 'WINNER_COMPUTED',
-                            message: `Event Winner: ${winnerName} (${step.home}-${step.away})`,
-                            severity: 'INFO',
-                            actor: actor,
-                            payload: {
+                        if (row !== -1 && col !== -1) {
+                            const squareIndex = row * 10 + col;
+                            const square = freshPool.squares[squareIndex];
+                            const winnerName = square?.owner || 'Unsold';
+
+                            await writeAuditEvent({
+                                poolId: doc.id,
+                                type: 'WINNER_COMPUTED',
+                                message: `Event Winner: ${winnerName} (${step.home}-${step.away})`,
+                                severity: 'INFO',
+                                actor: actor,
+                                payload: {
+                                    period: 'Event',
+                                    homeScore: step.home,
+                                    awayScore: step.away,
+                                    homeDigit: hDigit,
+                                    awayDigit: aDigit,
+                                    winner: winnerName,
+                                    squareId: squareIndex
+                                },
+                                dedupeKey: winnerKey,
+                                forceWriteDedupe: true
+                            }, transaction);
+
+                            const winnerDoc: Winner = {
                                 period: 'Event',
-                                homeScore: step.home,
-                                awayScore: step.away,
+                                squareId: squareIndex,
+                                owner: winnerName,
+                                amount: 0,
                                 homeDigit: hDigit,
                                 awayDigit: aDigit,
-                                winner: winnerName,
-                                squareId: squareIndex
-                            },
-                            dedupeKey: winnerKey,
-                            forceWriteDedupe: true
-                        }, transaction);
-
-                        const winnerDoc: Winner = {
-                            period: 'Event',
-                            squareId: squareIndex,
-                            owner: winnerName,
-                            amount: 0,
-                            homeDigit: hDigit,
-                            awayDigit: aDigit,
-                            isReverse: false,
-                            description: `${step.desc} (${step.home}-${step.away})`
-                        };
-                        transaction.set(
-                            db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`),
-                            winnerDoc
-                        );
+                                isReverse: false,
+                                description: `${step.desc} (${step.home}-${step.away})`
+                            };
+                            transaction.set(
+                                db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`),
+                                winnerDoc
+                            );
+                        }
                     }
-
                     // --- REVERSE WINNER LOGIC FOR ESP ---
-                    if (freshPool.ruleVariations?.reverseWinners) {
+                    if (freshPool.ruleVariations?.reverseWinners && axis) {
                         const revKey = `WINNER_EVENT_REV:${doc.id}:${step.home}:${step.away}`;
                         if (!existingDedupes.has(revKey)) {
                             // Reverse Logic: Swap digits for lookup
@@ -715,7 +717,9 @@ const processGameUpdate = async (
 
                             if (rRow !== -1 && rCol !== -1) {
                                 const rSqIndex = rRow * 10 + rCol;
-                                const regularIndex = (row !== -1 && col !== -1) ? (row * 10 + col) : -999;
+                                const regRow = axis.away.indexOf(aDigit);
+                                const regCol = axis.home.indexOf(hDigit);
+                                const regularIndex = (regRow !== -1 && regCol !== -1) ? (regRow * 10 + regCol) : -999;
 
                                 // Only award if different from regular (or if same square wins both ways, that's fine too, but usually distinct)
                                 // Actually, same square CAN win both if digits match (e.g. 3-3), so we don't strictly exclude unless needed.
@@ -771,6 +775,7 @@ const processGameUpdate = async (
             }
         }
     }
+
 
     if (freshPool.numberSets === 4) {
         let qNums = freshPool.quarterlyNumbers || {};
@@ -867,14 +872,14 @@ const processGameUpdate = async (
 
 // Helper to calculate and backfill amounts for all score events when game is over
 // IMPORTANT: eventWinners must be PRE-READ before any writes to avoid transaction errors
-const finalizeEventPayouts = async (
+async function finalizeEventPayouts(
     transaction: admin.firestore.Transaction,
     db: admin.firestore.Firestore,
     poolId: string,
     pool: GameState,
     actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string },
     eventWinners: admin.firestore.QueryDocumentSnapshot[]
-) => {
+) {
     // 1. Calculate Pot Logic
     const soldSquares = pool.squares ? pool.squares.filter((s: any) => s.owner).length : 0;
     const totalPot = soldSquares * (pool.costPerSquare || 0);
