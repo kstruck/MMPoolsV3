@@ -2,14 +2,15 @@ import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { renderEmailHtml } from "./emailStyles";
 
-const db = admin.firestore();
-const auth = admin.auth();
+
 
 /**
  * Completely delete a user account (Auth + Firestore)
  * Callable by SUPER_ADMIN only.
  */
 export const deleteUserAccount = functions.https.onCall(async (request) => {
+    const db = admin.firestore();
+    const auth = admin.auth();
     // 1. Verify Authentication & Permissions
     if (!request.auth) {
         throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
@@ -56,6 +57,8 @@ export const deleteUserAccount = functions.https.onCall(async (request) => {
  * Callable by SUPER_ADMIN only.
  */
 export const sendAdminPasswordReset = functions.https.onCall(async (request) => {
+    const db = admin.firestore();
+    const auth = admin.auth();
     // 1. Verify Authentication & Permissions
     if (!request.auth) {
         throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");

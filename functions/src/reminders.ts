@@ -5,7 +5,7 @@ import { GameState, NotificationLog, Square, AuditLogEvent } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 
-const db = admin.firestore();
+
 
 // --- HELPERS ---
 
@@ -13,6 +13,7 @@ const db = admin.firestore();
  * Sends an email by writing to the /mail collection (triggered by EmailJS or other service).
  */
 async function sendEmail(to: string, subject: string, html: string, context?: any) {
+    const db = admin.firestore();
     if (!to || !to.includes('@')) {
         console.warn(`Skipping email to invalid address: ${to}`);
         return;
@@ -39,6 +40,7 @@ async function sendEmail(to: string, subject: string, html: string, context?: an
  * Returns true if created (should send), false if already exists (skip).
  */
 async function createNotificationOnce(dedupeKey: string, logData: Omit<NotificationLog, 'id'>): Promise<boolean> {
+    const db = admin.firestore();
     const ref = db.collection("notifications").doc(dedupeKey);
 
     try {
@@ -59,6 +61,7 @@ async function createNotificationOnce(dedupeKey: string, logData: Omit<Notificat
 }
 
 async function logAudit(poolId: string, message: string, type: string, payload?: any) {
+    const db = admin.firestore();
     const auditRef = db.collection("pools").doc(poolId).collection("audit").doc();
     const event: AuditLogEvent = {
         id: auditRef.id,
@@ -77,6 +80,7 @@ async function logAudit(poolId: string, message: string, type: string, payload?:
 // --- SCHEDULED REMINDER LOGIC ---
 
 export const runReminders = functions.scheduler.onSchedule("every 15 minutes", async (event) => {
+    const db = admin.firestore();
     const now = Date.now();
     console.log(`[runReminders] Starting reminder check at ${new Date(now).toISOString()}`);
     const poolsSnapshot = await db.collection("pools").get();
@@ -135,6 +139,7 @@ async function checkPlayoffReminders(pool: any, now: number) {
             // Wait - we can't fetch individual users inside this loop efficiently if there are many.
             // But usually pools are small (10-50 ppl).
             if (entry.userId) {
+                const db = admin.firestore();
                 const userSnap = await db.collection('users').doc(entry.userId).get();
                 if (userSnap.exists) {
                     const email = userSnap.data()?.email;
@@ -169,6 +174,7 @@ async function checkPlayoffReminders(pool: any, now: number) {
             const html = renderEmailHtml('Payment Reminder', body, `${BASE_URL}/#pool/${pool.id}`, 'View Pool');
 
             // Queue Email
+            const db = admin.firestore();
             await db.collection("mail").add({
                 to: recipient.email,
                 message: { subject, html }
@@ -176,6 +182,7 @@ async function checkPlayoffReminders(pool: any, now: number) {
         }
 
         // Apply Updates (mark as sent)
+        const db = admin.firestore();
         await db.collection('pools').doc(pool.id).update(updates);
     }
 }
@@ -264,6 +271,7 @@ async function checkPaymentReminders(pool: GameState, now: number) {
         });
 
         if (squaresToRelease.length > 0) {
+            const db = admin.firestore();
             const poolRef = db.collection("pools").doc(pool.id);
 
             try {
@@ -407,6 +415,7 @@ async function checkLockReminders(pool: GameState, now: number) {
 // --- WINNER ANNOUNCEMENT TRIGGER ---
 
 export const onWinnerComputed = functions.firestore.onDocumentCreated("pools/{poolId}/winners/{period}", async (event) => {
+    const db = admin.firestore();
     const snapshot = event.data;
     if (!snapshot) return;
 

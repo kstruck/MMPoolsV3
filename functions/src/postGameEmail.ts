@@ -2,7 +2,7 @@ import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 
-const db = admin.firestore();
+
 
 interface PoolData {
     homeTeam?: string;
@@ -34,6 +34,7 @@ interface WinnerDoc {
 export const onGameComplete = functions.firestore.onDocumentUpdated(
     "pools/{poolId}",
     async (event) => {
+        const db = admin.firestore();
         const poolId = event.params.poolId;
         const before = event.data?.before.data() as PoolData | undefined;
         const after = event.data?.after.data() as PoolData | undefined;

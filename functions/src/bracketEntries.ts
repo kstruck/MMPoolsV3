@@ -4,7 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { BracketPool, BracketEntry } from "./types";
 import { Timestamp } from "firebase-admin/firestore";
 
-const db = admin.firestore();
+
 
 // ----------------------------------------------------------------------------
 // Create Bracket Entry (Draft)
@@ -21,6 +21,7 @@ export const createBracketEntry = onCall(async (request) => {
         throw new HttpsError("invalid-argument", "Missing poolId or entry name.");
     }
 
+    const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
 
     // Check constraints in Transaction
@@ -104,6 +105,7 @@ export const updateBracketEntry = onCall(async (request) => {
         throw new HttpsError("invalid-argument", "Missing data.");
     }
 
+    const db = admin.firestore();
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
     const poolRef = db.collection("pools").doc(poolId);
 
@@ -155,6 +157,7 @@ export const submitBracketEntry = onCall(async (request) => {
     const { poolId, entryId } = request.data;
     const uid = request.auth.uid;
 
+    const db = admin.firestore();
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
     const poolRef = db.collection("pools").doc(poolId);
 

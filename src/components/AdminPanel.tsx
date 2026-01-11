@@ -440,12 +440,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
 
-  const updatePlayerSquares = (ownerName: string, updates: Partial<Square>) => {
-    const newSquares = gameState.squares.map(sq =>
-      sq.owner === ownerName ? { ...sq, ...updates } : sq
-    );
-    updateConfig({ squares: newSquares });
-  };
+
 
   const updateSquare = (id: number, updates: Partial<Square>) => {
     const newSquares = [...gameState.squares];
@@ -1805,14 +1800,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 )}
                               </div>
                               <button
-                                onClick={() => {
-                                  const newSquares = [...gameState.squares];
-                                  newSquares[win.squareId] = {
-                                    ...newSquares[win.squareId],
-                                    isPaid: !win.isPaid,
-                                    paidAt: !win.isPaid ? Date.now() : undefined
-                                  };
-                                  updateConfig({ squares: newSquares });
+                                onClick={async () => {
+                                  await dbService.markSquarePaid(gameState.id, [win.squareId], !win.isPaid);
                                 }}
                                 className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${win.isPaid
                                   ? 'bg-emerald-600 text-white'
@@ -1987,7 +1976,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="flex gap-2">
                   <button onClick={handleExportUsers} className="text-xs bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1"><Download size={12} /> Export CSV</button>
                   {playerTab === 'grid' && (
-                    <button onClick={() => { updateConfig({ squares: gameState.squares.map(s => s.owner ? { ...s, isPaid: true } : s) }); }} className="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded font-bold transition-colors">Mark All Paid</button>
+                    <button onClick={async () => {
+                      const ids = gameState.squares.filter(s => s.owner && !s.isPaid).map(s => s.id);
+                      if (ids.length) await dbService.markSquarePaid(gameState.id, ids, true);
+                    }} className="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded font-bold transition-colors">Mark All Paid</button>
                   )}
                 </div>
               </div>
@@ -2048,14 +2040,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <div className="space-y-2">
                                 <div className="flex justify-between items-center mb-2">
                                   <span className="text-xs font-bold text-slate-500 uppercase">Squares Owned</span>
-                                  <button onClick={() => updatePlayerSquares(player.name, { isPaid: true })} className="text-xs text-emerald-400 hover:text-emerald-300 font-bold">Mark All Paid</button>
+                                  <button onClick={async () => {
+                                    const ids = player.squares.map((s: any) => s.id);
+                                    if (ids.length) await dbService.markSquarePaid(gameState.id, ids, true);
+                                  }} className="text-xs text-emerald-400 hover:text-emerald-300 font-bold">Mark All Paid</button>
                                 </div>
                                 {player.squares.map((sq: any) => (
                                   <div key={sq.id} className="flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-800">
                                     <span className="text-sm font-mono text-slate-300">Square #{sq.id}</span>
                                     <div className="flex items-center gap-3">
                                       <button
-                                        onClick={() => updateSquare(sq.id, { isPaid: !sq.isPaid })}
+                                        onClick={async () => await dbService.markSquarePaid(gameState.id, [sq.id], !sq.isPaid)}
                                         className={`text-xs px-2 py-1 rounded font-bold border transition-colors ${sq.isPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}
                                       >
                                         {sq.isPaid ? 'PAID' : 'UNPAID'}

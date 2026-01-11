@@ -2,8 +2,6 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import { AuditLogEvent, AuditEventType } from "./types";
 
-const db = admin.firestore();
-
 export interface AuditOptions {
     poolId: string;
     type: AuditEventType;
@@ -20,6 +18,7 @@ export interface AuditOptions {
 }
 
 export const writeAuditEvent = async (options: AuditOptions, existingTransaction?: admin.firestore.Transaction) => {
+    const db = admin.firestore();
     const { poolId, type, message, severity, actor, payload, dedupeKey, forceWriteDedupe } = options;
 
     const auditRef = db.collection("pools").doc(poolId).collection("audit");

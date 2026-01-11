@@ -5,7 +5,7 @@ import { BracketPool } from "./types";
 import { Timestamp } from "firebase-admin/firestore";
 import * as crypto from "crypto";
 
-const db = admin.firestore();
+
 
 // ----------------------------------------------------------------------------
 // Create Bracket Pool (Draft)
@@ -31,6 +31,7 @@ export const createBracketPool = onCall(async (request) => {
     const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     const slug = `${baseSlug}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const db = admin.firestore();
     const poolRef = db.collection("pools").doc();
     const now = Timestamp.now().toMillis();
 
@@ -109,6 +110,7 @@ export const publishBracketPool = onCall(async (request) => {
     }
 
     // Run transaction to reserve slug
+    const db = admin.firestore();
     await db.runTransaction(async (transaction) => {
         const poolRef = db.collection("pools").doc(poolId);
         const slugRef = db.collection("slugs").doc(slugLower);
@@ -181,6 +183,7 @@ export const joinBracketPool = onCall(async (request) => {
         throw new HttpsError("invalid-argument", "Missing poolId.");
     }
 
+    const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
     const poolDoc = await poolRef.get();
 

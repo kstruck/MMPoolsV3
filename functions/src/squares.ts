@@ -116,3 +116,66 @@ export const reserveSquare = onCall(async (request) => {
 
     return { success: true };
 });
+
+export const markSquaresPaid = onCall(async (request) => {
+    const db = admin.firestore();
+    const { poolId, squareIds, isPaid } = request.data;
+
+    // Auth Check
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Must be logged in.");
+    }
+    const userId = request.auth.uid;
+
+    if (!poolId || !squareIds || !Array.isArray(squareIds)) {
+        throw new HttpsError("invalid-argument", "Missing required fields.");
+    }
+
+    const poolRef = db.collection("pools").doc(poolId);
+
+    await db.runTransaction(async (transaction) => {
+        const poolDoc = await transaction.get(poolRef);
+        if (!poolDoc.exists) throw new HttpsError("not-found", "Pool not found.");
+
+        const pool = poolDoc.data() as GameState;
+
+        // Permission Check: Owner or Manager only
+        // SuperAdmin check via user document optional but recommended if we follow rules
+        let isAuthorized = pool.ownerId === userId || pool.managerUid === userId;
+
+        if (!isAuthorized) {
+            const userDoc = await transaction.get(db.collection("users").doc(userId));
+            if (userDoc.exists && userDoc.data()?.role === 'SUPER_ADMIN') {
+                isAuthorized = true;
+            }
+        }
+
+        if (!isAuthorized) {
+            throw new HttpsError("permission-denied", "Only the pool manager can mark squares as paid.");
+        }
+
+        const newSquares = pool.squares.map(s => {
+            if (squareIds.includes(s.id)) {
+                return { ...s, isPaid: isPaid };
+            }
+            return s;
+        });
+
+        transaction.update(poolRef, {
+            squares: newSquares,
+            updatedAt: admin.firestore.Timestamp.now()
+        });
+
+        // Audit
+        await writeAuditEvent({
+            poolId,
+            type: 'SQUARE_MARKED_PAID',
+            message: `Marked ${squareIds.length} squares as ${isPaid ? 'PAID' : 'UNPAID'}`,
+            severity: 'INFO',
+            actor: { uid: userId, role: 'ADMIN', label: 'Manager' },
+            payload: { squareIds, isPaid }
+        }, transaction);
+    });
+
+    return { success: true };
+});

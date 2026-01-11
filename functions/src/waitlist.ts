@@ -1,8 +1,6 @@
 import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 
-const db = admin.firestore();
-
 interface JoinWaitlistData {
     poolId: string;
     name: string;
@@ -10,6 +8,7 @@ interface JoinWaitlistData {
 }
 
 export const joinWaitlist = functions.https.onCall(async (request) => {
+    const db = admin.firestore();
     const { poolId, name, email } = request.data as JoinWaitlistData;
 
     if (!poolId || !name || !email) {

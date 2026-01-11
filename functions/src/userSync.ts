@@ -4,9 +4,10 @@ import * as admin from "firebase-admin";
 import { UserRecord } from "firebase-functions/v1/auth";
 import { onCall, CallableRequest } from "firebase-functions/v2/https";
 
-const db = admin.firestore();
+
 
 export const onUserCreated = functions.auth.user().onCreate(async (user: UserRecord) => {
+    const db = admin.firestore();
     const { uid, email, displayName, photoURL } = user;
 
     // Determine registration method
@@ -50,6 +51,7 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
 
 // Force Sync All Users (Callable)
 export const syncAllUsers = onCall(async (request: CallableRequest) => {
+    const db = admin.firestore();
     if (!request.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Must be logged in.');
     }

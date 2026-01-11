@@ -5,10 +5,7 @@ import * as admin from "firebase-admin";
 import { PlayoffPool, PlayoffEntry } from "./types";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 
-if (!admin.apps.length) {
-    admin.initializeApp();
-}
-const db = admin.firestore();
+
 
 // Helper: Normalize team ID or Name for matching
 const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -65,6 +62,7 @@ const getTeamId = (espnTeam: any): string | null => {
 
 // Extracted Logic to Propagate Results
 const saveAndPropagateResults = async (results: any) => {
+    const db = admin.firestore();
     // 1. Save to Global Doc
     await db.collection('system').doc('playoff_results').set({ results, updatedAt: Date.now() });
 
@@ -138,6 +136,7 @@ export const submitPlayoffPicks = onCall(async (request) => {
     const { poolId, rankings, tiebreaker, entryId, entryName } = request.data;
     const uid = request.auth.uid;
     const userName = request.auth.token.name || 'Anonymous';
+    const db = admin.firestore();
 
     const poolRef = db.collection('pools').doc(poolId);
     const poolSnap = await poolRef.get();
@@ -234,6 +233,7 @@ export const managePlayoffEntry = onCall(async (request) => {
     const { poolId, entryId, action, value } = request.data; // action: 'togglePaid' | 'delete'
     const uid = request.auth.uid;
     const isAdmin = request.auth.token.role === 'SUPER_ADMIN';
+    const db = admin.firestore();
 
     const poolRef = db.collection('pools').doc(poolId);
     const poolSnap = await poolRef.get();
@@ -318,6 +318,7 @@ export const managePlayoffEntry = onCall(async (request) => {
 export const calculatePlayoffScores = onCall(async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
     const { poolId } = request.data;
+    const db = admin.firestore();
 
     const poolRef = db.collection('pools').doc(poolId);
     const poolSnap = await poolRef.get();
@@ -332,6 +333,7 @@ export const updateGlobalPlayoffResults = onCall(async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
 
     // Check SuperAdmin
+    const db = admin.firestore();
     const userSnap = await db.collection('users').doc(request.auth.uid).get();
     if (!userSnap.exists || userSnap.data()?.role !== 'SUPER_ADMIN') {
         throw new HttpsError('permission-denied', 'Super Admin only');
@@ -354,6 +356,7 @@ export const checkPlayoffScores = onSchedule("every 30 minutes", async (event) =
         const data = await resp.json();
 
         // 1. Get Current Global Results
+        const db = admin.firestore();
         const docRef = db.collection('system').doc('playoff_results');
         const docSnap = await docRef.get();
         let currentResults = docSnap.exists ? docSnap.data()?.results : {};
@@ -427,6 +430,7 @@ export const onPlayoffConfigUpdate = onDocumentWritten("config/playoffs", async 
 
     logger.info("Playoff Config Sync: Detected change in config/playoffs. Syncing to all pools...");
 
+    const db = admin.firestore();
     const poolsSnap = await db.collection('pools').where('type', '==', 'NFL_PLAYOFFS').get();
 
     if (poolsSnap.empty) {
@@ -454,6 +458,7 @@ export const syncPlayoffPools = onCall(async (request) => {
     // Ensure admin only (optional, but good practice)
     // if (!request.auth?.token.admin) throw new HttpsError('permission-denied', 'Admins only');
 
+    const db = admin.firestore();
     const configSnap = await db.doc("config/playoffs").get();
     if (!configSnap.exists) {
         throw new HttpsError('not-found', 'Global Playoff Config not found');

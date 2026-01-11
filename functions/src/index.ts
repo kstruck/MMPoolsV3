@@ -6,7 +6,7 @@ if (!admin.apps.length) {
 
 // Exported Cloud Functions
 export { lockPool } from "./poolParams";
-export { reserveSquare } from './squares';
+export { reserveSquare, markSquaresPaid } from './squares';
 export { confirmPayment } from './confirmPayment';
 export { purchasePropCard, gradeProp, updatePropCard } from './propBets';
 export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdates";

@@ -721,5 +721,16 @@ export const dbService = {
             console.error("Error managing playoff entry:", error);
             throw error;
         }
+    },
+
+    markSquarePaid: async (poolId: string, squareIds: number[], isPaid: boolean): Promise<{ success: boolean }> => {
+        try {
+            const fn = httpsCallable(functions, 'markSquaresPaid');
+            const result = await fn({ poolId, squareIds, isPaid });
+            return result.data as { success: boolean };
+        } catch (error) {
+            console.error("Error marking squares paid:", error);
+            throw error;
+        }
     }
 };

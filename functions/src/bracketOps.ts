@@ -4,7 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 
 import { Timestamp } from "firebase-admin/firestore";
 
-const db = admin.firestore();
+
 
 // ----------------------------------------------------------------------------
 // Mark Entry Paid Status
@@ -21,6 +21,7 @@ export const markEntryPaidStatus = onCall(async (request) => {
         throw new HttpsError("invalid-argument", "Missing poolId or entryId.");
     }
 
+    const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
     const entryRef = poolRef.collection("entries").doc(entryId);
 
@@ -54,6 +55,7 @@ export const updateTournamentData = onCall(async (request) => {
     }
 
     // Role check: Only SuperAdmin should call this
+    const db = admin.firestore();
     const userDoc = await db.collection("users").doc(request.auth.uid).get();
     if (userDoc.data()?.role !== 'SUPER_ADMIN') {
         throw new HttpsError("permission-denied", "Admin only.");
