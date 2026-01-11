@@ -123,7 +123,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                             setShowSchedule(nextState);
                             if (nextState) {
                                 // Smart defaults on open
-                                const isCollege = (gameState as any).league === 'college';
+
                                 // Always default to Postseason now as regular season is over
                                 setSeasonType('3');
                                 setWeek('1');
