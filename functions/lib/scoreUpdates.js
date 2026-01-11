@@ -823,7 +823,7 @@ async function finalizeEventPayouts(transaction, db, poolId, pool, actor, eventW
 }
 ;
 exports.syncGameStatus = (0, scheduler_1.onSchedule)({
-    schedule: "every 5 minutes",
+    schedule: "every 1 minutes",
     timeoutSeconds: 60,
     memory: "256MiB"
 }, async (event) => {

@@ -951,7 +951,7 @@ async function finalizeEventPayouts(
 };
 
 export const syncGameStatus = onSchedule({
-    schedule: "every 5 minutes",
+    schedule: "every 1 minutes",
     timeoutSeconds: 60,
     memory: "256MiB"
 }, async (event) => {
