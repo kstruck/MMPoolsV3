@@ -61,6 +61,46 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
         return types.includes(e.type);
     });
 
+    // Deduplicate winner entries - keep only the most recent entry for each unique winner
+    // This prevents recalculate runs from creating noise in the audit log
+    const deduplicatedEvents = filteredEvents.reduce((acc, event) => {
+        // For WINNER_COMPUTED events, deduplicate by message content
+        if (event.type === 'WINNER_COMPUTED') {
+            // Create a key based on the winner info (period, home/away scores)
+            const payload = event.payload || {};
+            const key = `WINNER:${payload.period}:${payload.homeScore}:${payload.awayScore}:${payload.type || 'REGULAR'}`;
+
+            // Check if we already have this winner logged
+            const existingIdx = acc.findIndex(e => {
+                if (e.type !== 'WINNER_COMPUTED') return false;
+                const p = e.payload || {};
+                const existingKey = `WINNER:${p.period}:${p.homeScore}:${p.awayScore}:${p.type || 'REGULAR'}`;
+                return existingKey === key;
+            });
+
+            if (existingIdx === -1) {
+                // No duplicate, add it
+                acc.push(event);
+            } else {
+                // Replace with newer entry (events are sorted asc, so current is newer)
+                acc[existingIdx] = event;
+            }
+        } else if (event.message?.includes('Finalized Event Payouts')) {
+            // Deduplicate "Finalized Event Payouts" entries - keep only the latest
+            const existingIdx = acc.findIndex(e => e.message?.includes('Finalized Event Payouts'));
+            if (existingIdx === -1) {
+                acc.push(event);
+            } else {
+                // Replace with newer (current event is newer since sorted asc)
+                acc[existingIdx] = event;
+            }
+        } else {
+            // Not a deduplicatable event, add normally
+            acc.push(event);
+        }
+        return acc;
+    }, [] as AuditLogEvent[]);
+
     const toggleExpand = (id: string) => {
         const newSet = new Set(expandedIds);
         if (newSet.has(id)) newSet.delete(id);
@@ -138,9 +178,9 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
                 {/* Feed */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                     {loading && <div className="text-slate-500 text-center py-10">Loading audit history...</div>}
-                    {!loading && filteredEvents.length === 0 && <div className="text-slate-500 text-center py-10">No events found matching this filter.</div>}
+                    {!loading && deduplicatedEvents.length === 0 && <div className="text-slate-500 text-center py-10">No events found matching this filter.</div>}
 
-                    {filteredEvents.map((event) => (
+                    {deduplicatedEvents.map((event) => (
                         <div key={event.id} className={`bg-slate-950 border rounded-lg p-4 transition-all ${event.severity === 'CRITICAL' ? 'border-rose-500/50 bg-rose-900/10' : 'border-slate-800'}`}>
                             <div className="flex items-start gap-4">
                                 <div className={`mt-1 p-2 rounded-full bg-slate-900 border border-slate-700`}>
