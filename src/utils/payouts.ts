@@ -25,6 +25,9 @@ const sanitize = (n: any) => {
 };
 
 export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winner[]): PeriodCard[] => {
+    // DEBUG: ENTRY LOG
+    console.error(`[PayoutCalc] ENTRY. PoolId: ${squaresPool?.id}`);
+
     if (!squaresPool || (squaresPool.type && squaresPool.type !== 'SQUARES' && squaresPool.type !== 'PROPS')) return []; // Allow PROPS if they use this structure?
     // Note: If PROPS pool uses this, ensure logic valid. 
     // Usually PROPS pools don't have quarterly payouts based on squares.

@@ -12,6 +12,7 @@ interface PayoutGalleryProps {
 }
 
 export const PayoutGallery: React.FC<PayoutGalleryProps> = ({ gameState, winners, isManager, onUpdatePaidStatus }) => {
+    console.error('[PayoutGallery] Rendering. GameState:', gameState?.id, 'Weights:', gameState?.ruleVariations?.scoreChangeHybridWeights);
     const quarterlyPayouts = useMemo(() => calculateQuarterlyPayouts(gameState, winners), [gameState, winners]);
 
     return (
