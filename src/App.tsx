@@ -17,6 +17,7 @@ import { calculateScenarioWinners, getLastDigit } from './services/gameLogic';
 import { authService } from './services/authService';
 import { fetchGameScore } from './services/scoreService';
 import { dbService } from './services/dbService';
+import { calculateQuarterlyPayouts } from './utils/payouts';
 import { HelpCircle, Lock, ExternalLink, Unlock, X, Loader, Shield, Zap, Heart, ChevronDown, ChevronUp, Trophy, Edit2, Check, Copy, Shuffle, ArrowRight } from 'lucide-react';
 
 import { AuditLog } from './components/AuditLog'; // Standard import
@@ -723,120 +724,9 @@ const App: React.FC = () => {
 
   const quarterlyPayouts = useMemo(() => {
     // Only calculate for Squares pools (legacy undefined type or explicit SQUARES)
-    if (!currentPool || (currentPool.type && currentPool.type !== 'SQUARES')) return [];
+    if (!currentPool || ((currentPool.type && currentPool.type !== 'SQUARES') && currentPool.type !== 'PROPS')) return [];
 
-    const squaresPool = currentPool as GameState;
-    const periods = ['q1', 'half', 'q3', 'final'] as const;
-    let accumulatedRollover = 0;
-
-    const totalPot = squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare;
-    const charityDeduction = squaresPool.charity?.enabled ? Math.floor(totalPot * (squaresPool.charity.percentage / 100)) : 0;
-    const netPot = totalPot - charityDeduction;
-
-    return periods.map(period => {
-      const percent = squaresPool.payouts[period];
-      const baseAmount = Math.floor(netPot * (percent / 100));
-      let currentAmount = baseAmount;
-      let rolloverContribution = 0;
-
-      // Score Logic
-      const isFinal = !!squaresPool.scores[period];
-      const lockedScore = squaresPool.scores[period];
-      const liveScore = squaresPool.scores.current;
-      const home = lockedScore ? sanitize(lockedScore.home) : sanitize(liveScore?.home);
-      const away = lockedScore ? sanitize(lockedScore.away) : sanitize(liveScore?.away);
-
-      // Previous Score
-      let prevHome = 0, prevAway = 0;
-      if (period === 'half') { prevHome = sanitize(squaresPool.scores.q1?.home); prevAway = sanitize(squaresPool.scores.q1?.away); }
-      else if (period === 'q3') { prevHome = sanitize(squaresPool.scores.half?.home); prevAway = sanitize(squaresPool.scores.half?.away); }
-      else if (period === 'final') { prevHome = sanitize(squaresPool.scores.q3?.home); prevAway = sanitize(squaresPool.scores.q3?.away); }
-
-      const qPointsHome = home - prevHome;
-      const qPointsAway = away - prevAway;
-
-      // Winner Logic
-      let winnerName = "TBD";
-      let reverseWinnerName: string | null = null;
-      let hasWinner = false;
-
-      // Check for Official Winner (Backend Authoritative)
-      const officialWinner = winners.find(w => (w.period === period && !w.isReverse));
-      // Also check for reverse winner from backend
-      const officialReverseWinner = winners.find(w => (w.period === period && w.isReverse === true));
-
-      if (officialWinner) {
-        winnerName = officialWinner.owner;
-        hasWinner = true;
-        // Use reverse winner from backend if available
-        if (officialReverseWinner) {
-          reverseWinnerName = officialReverseWinner.owner;
-        }
-      } else if (squaresPool.axisNumbers) {
-        const hD = getLastDigit(home);
-        const aD = getLastDigit(away);
-        // Standard Winner
-        // Only calculate if scores exist (game started)
-        if (squaresPool.scores?.gameStatus === 'in' || squaresPool.scores?.gameStatus === 'post' || isFinal) {
-          const row = squaresPool.axisNumbers.away.indexOf(aD);
-          const col = squaresPool.axisNumbers.home.indexOf(hD);
-          if (row !== -1 && col !== -1) {
-            const owner = squaresPool.squares[row * 10 + col].owner;
-            if (owner) {
-              winnerName = owner;
-              hasWinner = true;
-            } else {
-              winnerName = squaresPool.ruleVariations.quarterlyRollover ? "Rollover" : "Unsold";
-            }
-          }
-        }
-
-        // Reverse Winner
-        if (squaresPool.ruleVariations.reverseWinners && hasWinner) {
-          // ... keep existing reverse logic ...
-          // Re-calc for reverse
-          const row = squaresPool.axisNumbers.away.indexOf(aD);
-          const col = squaresPool.axisNumbers.home.indexOf(hD);
-          const rRow = squaresPool.axisNumbers.away.indexOf(hD);
-          const rCol = squaresPool.axisNumbers.home.indexOf(aD);
-          if (rRow !== -1 && rCol !== -1) {
-            const rSqId = rRow * 10 + rCol;
-            if (rSqId !== (row * 10 + col)) {
-              const rOwner = squaresPool.squares[rSqId].owner;
-              if (rOwner) reverseWinnerName = rOwner;
-            }
-          }
-        }
-      }
-
-      // Rollover Calculation
-      const isRollover = winnerName === "Rollover";
-      if (isRollover) {
-        accumulatedRollover += baseAmount;
-        currentAmount = 0;
-      } else if (hasWinner) {
-        rolloverContribution = accumulatedRollover;
-        currentAmount += accumulatedRollover;
-        accumulatedRollover = 0;
-      }
-
-      // Split for Reverse
-      let finalAmount = currentAmount;
-      if (reverseWinnerName) finalAmount = finalAmount / 2;
-
-      return {
-        period,
-        label: PERIOD_LABELS[period] || period,
-        home, away, qPointsHome, qPointsAway,
-        winnerName, reverseWinnerName,
-        amount: finalAmount,
-        baseAmount,
-        rolloverAdded: rolloverContribution,
-        isLocked: isFinal,
-        isRollover,
-        isPaid: officialWinner?.isPaid
-      };
-    });
+    return calculateQuarterlyPayouts(currentPool as GameState, winners);
   }, [currentPool, winners]);
 
   // Calculate Total Charity
