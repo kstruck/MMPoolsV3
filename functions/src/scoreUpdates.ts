@@ -213,14 +213,25 @@ const processWinners = async (
     // Check Strategy
     const strategy = poolData.ruleVariations?.scoreChangePayoutStrategy;
     if (poolData.ruleVariations?.scoreChangePayout && strategy === 'hybrid') {
-        // Use Hybrid Weights
+        // Use Hybrid Weights with robust defaults
         const weights = poolData.ruleVariations.scoreChangeHybridWeights;
-        if (periodKey === 'final') payoutPct = weights?.final || 40;
-        else if (periodKey === 'half') payoutPct = weights?.halftime || 20;
-        else payoutPct = 0; // Q1/Q3 are 0 in hybrid
-    } else {
-        // Standard (or Standard Quarterly if scoreChangePayout is false)
+        if (periodKey === 'final') {
+            payoutPct = (weights?.final && weights.final > 0) ? weights.final : 40;
+        } else if (periodKey === 'half') {
+            payoutPct = (weights?.halftime && weights.halftime > 0) ? weights.halftime : 20;
+        } else {
+            payoutPct = 0; // Q1/Q3 are 0 in hybrid
+        }
+    } else if (!poolData.ruleVariations?.scoreChangePayout) {
+        // Standard (no ESP) - use standard quarterly payouts
         payoutPct = getSafePayout(poolData.payouts, periodKey);
+    }
+
+    // FINAL ENFORCEMENT: For Hybrid pools, Halftime and Final MUST have payouts
+    if (poolData.ruleVariations?.scoreChangePayout &&
+        (poolData.ruleVariations?.scoreChangePayoutStrategy === 'hybrid' || !poolData.ruleVariations?.scoreChangePayoutStrategy)) {
+        if (periodKey === 'half' && payoutPct === 0) payoutPct = 20;
+        if (periodKey === 'final' && payoutPct === 0) payoutPct = 40;
     }
 
     let amount = (totalPot * payoutPct) / 100;
@@ -1290,6 +1301,24 @@ export const fixPoolScores = onCall({
                 espnScores.scoringPlays.slice(0, 3).forEach((p: any) => {
                     console.log(`  - ${p.awayScore}-${p.homeScore}: ${p.description}`);
                 });
+            }
+
+            // CRITICAL FIX: Repair missing scoreChangeHybridWeights for Hybrid pools
+            // This fixes pools created before the wizard was fixed
+            if (pool.ruleVariations?.scoreChangePayout &&
+                (pool.ruleVariations?.scoreChangePayoutStrategy === 'hybrid' || !pool.ruleVariations?.scoreChangePayoutStrategy)) {
+                const weights = pool.ruleVariations.scoreChangeHybridWeights;
+                // Check if weights are missing or invalid (all zeros)
+                if (!weights || (!weights.halftime && !weights.final && !weights.other)) {
+                    console.log(`[FixPool] Repairing missing scoreChangeHybridWeights for ${doc.id}`);
+                    await doc.ref.update({
+                        'ruleVariations.scoreChangeHybridWeights': {
+                            final: 40,
+                            halftime: 20,
+                            other: 40
+                        }
+                    });
+                }
             }
 
             // CRITICAL FIX: For Every Score Pays pools, ALWAYS reset scores to force full decomposition

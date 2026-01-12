@@ -171,7 +171,7 @@ async function fetchESPNScores(gameId, league) {
 }
 // Helper to handle winner logging and computation (Shared between sync and fix)
 const processWinners = async (transaction, db, poolId, poolData, periodKey, homeScore, awayScore, skipDedupe = false) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
     // Safety check for axis numbers
     if (!poolData.axisNumbers || !poolData.axisNumbers.home || !poolData.axisNumbers.away)
         return;
@@ -197,21 +197,32 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
     // Check Strategy
     const strategy = (_e = poolData.ruleVariations) === null || _e === void 0 ? void 0 : _e.scoreChangePayoutStrategy;
     if (((_f = poolData.ruleVariations) === null || _f === void 0 ? void 0 : _f.scoreChangePayout) && strategy === 'hybrid') {
-        // Use Hybrid Weights
+        // Use Hybrid Weights with robust defaults
         const weights = poolData.ruleVariations.scoreChangeHybridWeights;
-        if (periodKey === 'final')
-            payoutPct = (weights === null || weights === void 0 ? void 0 : weights.final) || 40;
-        else if (periodKey === 'half')
-            payoutPct = (weights === null || weights === void 0 ? void 0 : weights.halftime) || 20;
-        else
+        if (periodKey === 'final') {
+            payoutPct = ((weights === null || weights === void 0 ? void 0 : weights.final) && weights.final > 0) ? weights.final : 40;
+        }
+        else if (periodKey === 'half') {
+            payoutPct = ((weights === null || weights === void 0 ? void 0 : weights.halftime) && weights.halftime > 0) ? weights.halftime : 20;
+        }
+        else {
             payoutPct = 0; // Q1/Q3 are 0 in hybrid
+        }
     }
-    else {
-        // Standard (or Standard Quarterly if scoreChangePayout is false)
+    else if (!((_g = poolData.ruleVariations) === null || _g === void 0 ? void 0 : _g.scoreChangePayout)) {
+        // Standard (no ESP) - use standard quarterly payouts
         payoutPct = getSafePayout(poolData.payouts, periodKey);
     }
+    // FINAL ENFORCEMENT: For Hybrid pools, Halftime and Final MUST have payouts
+    if (((_h = poolData.ruleVariations) === null || _h === void 0 ? void 0 : _h.scoreChangePayout) &&
+        (((_j = poolData.ruleVariations) === null || _j === void 0 ? void 0 : _j.scoreChangePayoutStrategy) === 'hybrid' || !((_k = poolData.ruleVariations) === null || _k === void 0 ? void 0 : _k.scoreChangePayoutStrategy))) {
+        if (periodKey === 'half' && payoutPct === 0)
+            payoutPct = 20;
+        if (periodKey === 'final' && payoutPct === 0)
+            payoutPct = 40;
+    }
     let amount = (totalPot * payoutPct) / 100;
-    if ((_g = poolData.ruleVariations) === null || _g === void 0 ? void 0 : _g.reverseWinners)
+    if ((_l = poolData.ruleVariations) === null || _l === void 0 ? void 0 : _l.reverseWinners)
         amount /= 2;
     const label = periodKey === 'q1' ? 'Q1' : periodKey === 'half' ? 'Halftime' : periodKey === 'q3' ? 'Q3' : 'Final';
     const axis = poolData.axisNumbers;
@@ -235,7 +246,7 @@ const processWinners = async (transaction, db, poolId, poolData, periodKey, home
             };
             transaction.set(db.collection('pools').doc(poolId).collection('winners').doc(periodKey), winnerDoc);
         }
-        if ((_h = poolData.ruleVariations) === null || _h === void 0 ? void 0 : _h.reverseWinners) {
+        if ((_m = poolData.ruleVariations) === null || _m === void 0 ? void 0 : _m.reverseWinners) {
             const rRow = axis.away.indexOf(hDigit);
             const rCol = axis.home.indexOf(aDigit);
             if (rRow !== -1 && rCol !== -1) {
@@ -1086,7 +1097,7 @@ exports.fixPoolScores = (0, https_1.onCall)({
         }
     }
     */
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     const db = admin.firestore();
     const targetPoolId = (_a = request.data) === null || _a === void 0 ? void 0 : _a.poolId;
     let poolsSnap;
@@ -1127,10 +1138,27 @@ exports.fixPoolScores = (0, https_1.onCall)({
                     console.log(`  - ${p.awayScore}-${p.homeScore}: ${p.description}`);
                 });
             }
+            // CRITICAL FIX: Repair missing scoreChangeHybridWeights for Hybrid pools
+            // This fixes pools created before the wizard was fixed
+            if (((_c = pool.ruleVariations) === null || _c === void 0 ? void 0 : _c.scoreChangePayout) &&
+                (((_d = pool.ruleVariations) === null || _d === void 0 ? void 0 : _d.scoreChangePayoutStrategy) === 'hybrid' || !((_e = pool.ruleVariations) === null || _e === void 0 ? void 0 : _e.scoreChangePayoutStrategy))) {
+                const weights = pool.ruleVariations.scoreChangeHybridWeights;
+                // Check if weights are missing or invalid (all zeros)
+                if (!weights || (!weights.halftime && !weights.final && !weights.other)) {
+                    console.log(`[FixPool] Repairing missing scoreChangeHybridWeights for ${doc.id}`);
+                    await doc.ref.update({
+                        'ruleVariations.scoreChangeHybridWeights': {
+                            final: 40,
+                            halftime: 20,
+                            other: 40
+                        }
+                    });
+                }
+            }
             // CRITICAL FIX: For Every Score Pays pools, ALWAYS reset scores to force full decomposition
-            if ((_c = pool.ruleVariations) === null || _c === void 0 ? void 0 : _c.scoreChangePayout) {
-                const currentH = ((_e = (_d = pool.scores) === null || _d === void 0 ? void 0 : _d.current) === null || _e === void 0 ? void 0 : _e.home) || 0;
-                const currentA = ((_g = (_f = pool.scores) === null || _f === void 0 ? void 0 : _f.current) === null || _g === void 0 ? void 0 : _g.away) || 0;
+            if ((_f = pool.ruleVariations) === null || _f === void 0 ? void 0 : _f.scoreChangePayout) {
+                const currentH = ((_h = (_g = pool.scores) === null || _g === void 0 ? void 0 : _g.current) === null || _h === void 0 ? void 0 : _h.home) || 0;
+                const currentA = ((_k = (_j = pool.scores) === null || _j === void 0 ? void 0 : _j.current) === null || _k === void 0 ? void 0 : _k.away) || 0;
                 console.log(`[FixPool] Resetting ${doc.id} from ${currentH}-${currentA} to 0-0`);
                 await doc.ref.update({
                     'scores.current': { home: 0, away: 0 },

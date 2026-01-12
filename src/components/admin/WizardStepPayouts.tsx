@@ -67,7 +67,14 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                             ruleVariations: {
                                 ...gameState.ruleVariations,
                                 scoreChangePayout: true,
-                                combineTDandXP: false // Separate TD and 2PT conversions for maximum scoring events
+                                combineTDandXP: false, // Separate TD and 2PT conversions for maximum scoring events
+                                // CRITICAL: Always initialize hybrid weights with defaults
+                                // This ensures pools have the correct payout percentages even if user doesn't touch sliders
+                                scoreChangeHybridWeights: gameState.ruleVariations.scoreChangeHybridWeights || {
+                                    final: 40,
+                                    halftime: 20,
+                                    other: 40
+                                }
                             }
                         })}
                         className={`relative p-6 rounded-2xl border-2 text-left transition-all group ${gameState.ruleVariations.scoreChangePayout
