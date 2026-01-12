@@ -41,6 +41,12 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
     const netPot = totalPot - charityDeduction;
 
     return periods.map(period => {
+        // DEBUG: Logging to trace $0 payout issue
+        if (period === 'half' || period === 'final') {
+            console.log(`[PayoutCalc] Processing ${period}. Strategy: ${squaresPool.ruleVariations?.scoreChangePayoutStrategy}`);
+            console.log(`[PayoutCalc] Weights:`, squaresPool.ruleVariations?.scoreChangeHybridWeights);
+        }
+
         // CRITICAL FIX: For hybrid strategy, use hybrid weights instead of payouts
         let percent = 0;
         if (squaresPool.ruleVariations?.scoreChangePayout) {
@@ -72,6 +78,10 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
             (squaresPool.ruleVariations?.scoreChangePayoutStrategy === 'hybrid' || !squaresPool.ruleVariations?.scoreChangePayoutStrategy)) {
             if (period === 'half' && percent === 0) percent = 20;
             if (period === 'final' && percent === 0) percent = 40;
+        }
+
+        if (period === 'half' || period === 'final') {
+            console.log(`[PayoutCalc] ${period} -> FINISHING Percent: ${percent}, NetPot: ${netPot}`);
         }
 
         const baseAmount = Math.floor(netPot * (percent / 100));
