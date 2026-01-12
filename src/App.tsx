@@ -2033,48 +2033,57 @@ const App: React.FC = () => {
                   {winners.length === 0 ? (
                     <tr><td colSpan={3} className="px-4 py-8 text-center text-slate-500 italic">No score changes yet.</td></tr>
                   ) : (
-                    [...winners].sort((a, b) => {
-                      // Sort by timestamp for chronological order
-                      const timeA = a.timestamp?.toMillis?.() || a.timestamp || 0;
-                      const timeB = b.timestamp?.toMillis?.() || b.timestamp || 0;
-                      return timeA - timeB;
-                    }).map((win, idx) => (
-                      <tr key={`${win.period}-${win.squareId}-${idx}`} className="hover:bg-slate-900/30 transition-colors">
-                        <td className="px-4 py-3 font-medium text-slate-300">
-                          {win.period === 'Event' || win.period === 'Bonus' ? (
-                            <div className="flex flex-col">
-                              <span className="text-emerald-400 font-bold text-xs uppercase">{win.description?.split(':')[0]}</span>
-                              <span className="text-[10px] text-slate-500 truncate">{win.description?.split(':')[1] || win.description}</span>
-                            </div>
-                          ) : (
-                            <span className="text-white font-bold">{PERIOD_LABELS[win.period] || win.period}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {win.isRollover ? (
-                            <span className="text-emerald-400 font-bold italic flex items-center gap-1">Rollover</span>
-                          ) : win.owner === 'Unsold' || win.owner === 'Unsold (House)' ? (
-                            <span className="text-slate-500">{win.owner}</span>
-                          ) : (
-                            <span className="text-white font-bold">{win.owner}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono">
-                          <span className="text-emerald-400 font-bold">${(win.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
-                        </td>
-                        {isManager && (
-                          <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => dbService.updateWinnerPaidStatus(currentPool.id, win.id, !win.isPaid, user?.id)}
-                              className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${win.isPaid ? 'bg-emerald-500 border-emerald-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-emerald-500'}`}
-                              title={win.isPaid ? `Paid on ${new Date(win.paidAt).toLocaleDateString()}` : 'Mark as paid'}
-                            >
-                              {win.isPaid && <Check size={14} />}
-                            </button>
+                    [...winners]
+                      // For ESP pools, filter out quarterly winners (they're shown in PayoutGallery cards)
+                      .filter(w => {
+                        if ((squaresPool as GameState).ruleVariations?.scoreChangePayout) {
+                          // Only show Event and Bonus winners in Score Change History
+                          return w.period === 'Event' || w.period === 'Bonus';
+                        }
+                        return true;
+                      })
+                      .sort((a, b) => {
+                        // Sort by timestamp for chronological order
+                        const timeA = a.timestamp?.toMillis?.() || a.timestamp || 0;
+                        const timeB = b.timestamp?.toMillis?.() || b.timestamp || 0;
+                        return timeA - timeB;
+                      }).map((win, idx) => (
+                        <tr key={`${win.period}-${win.squareId}-${idx}`} className="hover:bg-slate-900/30 transition-colors">
+                          <td className="px-4 py-3 font-medium text-slate-300">
+                            {win.period === 'Event' || win.period === 'Bonus' ? (
+                              <div className="flex flex-col">
+                                <span className="text-emerald-400 font-bold text-xs uppercase">{win.description?.split(':')[0]}</span>
+                                <span className="text-[10px] text-slate-500 truncate">{win.description?.split(':')[1] || win.description}</span>
+                              </div>
+                            ) : (
+                              <span className="text-white font-bold">{PERIOD_LABELS[win.period] || win.period}</span>
+                            )}
                           </td>
-                        )}
-                      </tr>
-                    )))}
+                          <td className="px-4 py-3">
+                            {win.isRollover ? (
+                              <span className="text-emerald-400 font-bold italic flex items-center gap-1">Rollover</span>
+                            ) : win.owner === 'Unsold' || win.owner === 'Unsold (House)' ? (
+                              <span className="text-slate-500">{win.owner}</span>
+                            ) : (
+                              <span className="text-white font-bold">{win.owner}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono">
+                            <span className="text-emerald-400 font-bold">${(win.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                          </td>
+                          {isManager && (
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => dbService.updateWinnerPaidStatus(currentPool.id, win.id, !win.isPaid, user?.id)}
+                                className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${win.isPaid ? 'bg-emerald-500 border-emerald-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-emerald-500'}`}
+                                title={win.isPaid ? `Paid on ${new Date(win.paidAt).toLocaleDateString()}` : 'Mark as paid'}
+                              >
+                                {win.isPaid && <Check size={14} />}
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      )))}
                 </tbody>
               </table>
             </div>
