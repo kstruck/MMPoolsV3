@@ -70,6 +70,9 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => window.location.hash = '#how-it-works'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     How it Works
                                 </button>
+                                <button onClick={() => window.location.hash = '#super-bowl-squares-odds'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                    Odds & Stats
+                                </button>
                                 <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Public Pools
                                 </button>
@@ -84,6 +87,9 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                             <div className="flex items-center gap-4">
                                 <button onClick={() => window.location.hash = '#how-it-works'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     How it Works
+                                </button>
+                                <button onClick={() => window.location.hash = '#super-bowl-squares-odds'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                    Odds & Stats
                                 </button>
                                 <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     Public Pools

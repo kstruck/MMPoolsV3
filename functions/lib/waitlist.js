@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.joinWaitlist = void 0;
 const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
+const reminders_1 = require("./reminders");
+const emailStyles_1 = require("./emailStyles");
 exports.joinWaitlist = functions.https.onCall(async (request) => {
     const db = admin.firestore();
     const { poolId, name, email } = request.data;
@@ -10,6 +12,7 @@ exports.joinWaitlist = functions.https.onCall(async (request) => {
         throw new functions.https.HttpsError("invalid-argument", "Missing poolId, name, or email.");
     }
     const poolRef = db.collection("pools").doc(poolId);
+    let poolName = "March Melee Pool"; // Default
     try {
         await db.runTransaction(async (t) => {
             var _a;
@@ -18,6 +21,7 @@ exports.joinWaitlist = functions.https.onCall(async (request) => {
                 throw new functions.https.HttpsError("not-found", "Pool not found.");
             }
             const poolData = doc.data();
+            poolName = (poolData === null || poolData === void 0 ? void 0 : poolData.name) || poolName;
             const waitlist = (poolData === null || poolData === void 0 ? void 0 : poolData.waitlist) || [];
             // Check if already on waitlist
             const isAlreadyOnList = waitlist.some((entry) => entry.email.toLowerCase() === email.toLowerCase());
@@ -35,6 +39,17 @@ exports.joinWaitlist = functions.https.onCall(async (request) => {
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
         });
+        // Send Confirmation Email
+        const subject = `You're on the Waitlist: ${poolName}`;
+        const body = `
+            <p>Hi ${name},</p>
+            <p>You have successfully joined the waitlist for <strong>${poolName}</strong>.</p>
+            <p>If a square becomes available, we will notify you immediately via email.</p>
+        `;
+        const html = (0, emailStyles_1.renderEmailHtml)("Waitlist Confirmed", body, `${emailStyles_1.BASE_URL}/#pool/${poolId}`, "View Pool");
+        // Fire and forget email (don't block response) - checking promise for clean logs though
+        (0, reminders_1.sendEmail)(email, subject, html, { poolId, reason: 'WAITLIST_JOIN' })
+            .catch(err => console.error("Failed to send waitlist confirmation email:", err));
         return { success: true };
     }
     catch (error) {

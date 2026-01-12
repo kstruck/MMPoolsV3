@@ -67,7 +67,7 @@ export interface PlayoffPool {
   managerName?: string;
   contactEmail?: string;
   venmo?: string;
-  googlePay?: string;
+  zelle?: string;
   cashapp?: string;
   paypal?: string;
 
@@ -162,7 +162,7 @@ export interface PropsPool {
     venmo?: string;
     cashapp?: string;
     paypal?: string;
-    googlePay?: string;
+    zelle?: string;
   };
   // New fields for wizard
   collectPhone?: boolean;
@@ -307,7 +307,7 @@ export interface GameState {
   gridPassword?: string;
   paymentHandles?: {
     venmo?: string;
-    googlePay?: string;
+    zelle?: string;
   };
   contactEmail: string;
   managerName: string; // Name of the pool manager
@@ -595,7 +595,7 @@ export interface BracketPool {
   managerName?: string;
   contactEmail?: string;
   venmo?: string;
-  googlePay?: string;
+  zelle?: string;
   cashapp?: string;
   paypal?: string;
 

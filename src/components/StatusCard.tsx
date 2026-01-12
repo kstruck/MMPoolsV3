@@ -12,7 +12,7 @@ interface StatusCardProps {
 
 export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, mode = 'squares', totalEntries = 0 }) => {
     const [statusTab, setStatusTab] = useState<'overview' | 'rules' | 'payment'>('overview');
-    const [gPayCopied, setGPayCopied] = useState(false);
+    const [zelleCopied, setZelleCopied] = useState(false);
 
     // Helper to calculate winner? Not needed for Overview.
     const squaresRemaining = gameState.squares ? 100 - gameState.squares.filter(s => s && s.owner).length : 0;
@@ -182,7 +182,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
 
                 {statusTab === 'payment' && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300 w-full">
-                        {(gameState.paymentHandles?.venmo || gameState.paymentHandles?.googlePay) ? (
+                        {(gameState.paymentHandles?.venmo || gameState.paymentHandles?.zelle) ? (
                             <div>
                                 <h3 className="text-slate-500 font-bold uppercase text-xs mb-2">Payment Options:</h3>
                                 <div className="flex flex-col gap-2">
@@ -191,19 +191,19 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
                                             Venmo: {gameState.paymentHandles.venmo} <ExternalLink size={14} />
                                         </a>
                                     )}
-                                    {gameState.paymentHandles?.googlePay && (
+                                    {gameState.paymentHandles?.zelle && (
                                         <div className="bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center w-full">
-                                            <span className="text-slate-400 text-xs uppercase mr-1">GPay:</span> {gameState.paymentHandles.googlePay}
+                                            <span className="text-slate-400 text-xs uppercase mr-1">Zelle:</span> {gameState.paymentHandles.zelle}
                                             <button
                                                 onClick={() => {
-                                                    navigator.clipboard.writeText(gameState.paymentHandles?.googlePay || '');
-                                                    setGPayCopied(true);
-                                                    setTimeout(() => setGPayCopied(false), 2000);
+                                                    navigator.clipboard.writeText(gameState.paymentHandles?.zelle || '');
+                                                    setZelleCopied(true);
+                                                    setTimeout(() => setZelleCopied(false), 2000);
                                                 }}
                                                 className="ml-2 bg-slate-700 hover:bg-slate-600 p-1.5 rounded transition-colors"
-                                                title="Copy GPay Address"
+                                                title="Copy Zelle Info"
                                             >
-                                                {gPayCopied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-slate-400 opacity-80" />}
+                                                {zelleCopied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-slate-400 opacity-80" />}
                                             </button>
                                         </div>
                                     )}

@@ -103,7 +103,7 @@ export const emailService = {
             payouts: any
         },
         ownerReferralCode?: string,
-        paymentHandles?: { venmo?: string, googlePay?: string }
+        paymentHandles?: { venmo?: string, zelle?: string }
     ) => {
         const link = `${window.location.origin}/#pool/${poolId}`;
         const logoUrl = `${window.location.origin}/email-logo.png`;
@@ -184,7 +184,7 @@ export const emailService = {
 
         // --- Payment Section ---
         let paymentHtml = '';
-        if (paymentHandles?.venmo || paymentHandles?.googlePay) {
+        if (paymentHandles?.venmo || paymentHandles?.zelle) {
             paymentHtml += '<div style="margin-top: 20px; padding: 20px; background-color: #f0f9ff; border-radius: 8px; border: 1px solid #bae6fd;">';
             paymentHtml += '<h3 style="margin-top: 0; color: #0369a1; font-size: 16px; margin-bottom: 10px;">Payment Options</h3>';
 
@@ -194,9 +194,9 @@ export const emailService = {
                     <a href="https://venmo.com/u/${vUser}" style="background-color: #008CFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Pay $${totalCost} on Venmo (@${vUser})</a>
                 </div>`;
             }
-            if (paymentHandles.googlePay) {
+            if (paymentHandles.zelle) {
                 paymentHtml += `<div style="color: #334155; font-size: 14px;">
-                    <strong>Google Pay:</strong> ${paymentHandles.googlePay}
+                    <strong>Zelle:</strong> ${paymentHandles.zelle}
                 </div>`;
             }
             paymentHtml += '</div>';

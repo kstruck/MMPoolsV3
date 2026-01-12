@@ -27,7 +27,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         managerName: string;
         contactEmail: string;
         venmo: string;
-        googlePay: string;
+        zelle: string;
         cashapp: string;
         paypal: string;
         paymentInstructions: string;
@@ -85,7 +85,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         managerName: user.name || '',
         contactEmail: user.email || '',
         venmo: '',
-        googlePay: '',
+        zelle: '',
         cashapp: '',
         paypal: '',
         paymentInstructions: '',
@@ -234,7 +234,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                 managerName: formData.managerName,
                 contactEmail: formData.contactEmail,
                 venmo: formData.venmo,
-                googlePay: formData.googlePay,
+                zelle: formData.zelle,
                 cashapp: formData.cashapp,
                 paypal: formData.paypal,
                 branding: formData.branding,
@@ -509,13 +509,13 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                         </div>
 
                         <div className="md:col-span-1">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Google Pay / Other</label>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Zelle (@username/phone)</label>
                             <input
                                 type="text"
-                                value={formData.googlePay}
-                                onChange={(e) => update({ googlePay: e.target.value })}
+                                value={formData.zelle}
+                                onChange={(e) => update({ zelle: e.target.value })}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
-                                placeholder="Email or Phone"
+                                placeholder="Enter Zelle Info"
                             />
                         </div>
 

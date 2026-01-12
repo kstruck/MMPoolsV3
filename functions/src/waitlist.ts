@@ -7,6 +7,9 @@ interface JoinWaitlistData {
     email: string;
 }
 
+import { sendEmail } from "./reminders";
+import { renderEmailHtml, BASE_URL } from "./emailStyles";
+
 export const joinWaitlist = functions.https.onCall(async (request) => {
     const db = admin.firestore();
     const { poolId, name, email } = request.data as JoinWaitlistData;
@@ -19,6 +22,7 @@ export const joinWaitlist = functions.https.onCall(async (request) => {
     }
 
     const poolRef = db.collection("pools").doc(poolId);
+    let poolName = "March Melee Pool"; // Default
 
     try {
         await db.runTransaction(async (t) => {
@@ -28,6 +32,7 @@ export const joinWaitlist = functions.https.onCall(async (request) => {
             }
 
             const poolData = doc.data();
+            poolName = poolData?.name || poolName;
             const waitlist = poolData?.waitlist || [];
 
             // Check if already on waitlist
@@ -51,6 +56,19 @@ export const joinWaitlist = functions.https.onCall(async (request) => {
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
         });
+
+        // Send Confirmation Email
+        const subject = `You're on the Waitlist: ${poolName}`;
+        const body = `
+            <p>Hi ${name},</p>
+            <p>You have successfully joined the waitlist for <strong>${poolName}</strong>.</p>
+            <p>If a square becomes available, we will notify you immediately via email.</p>
+        `;
+        const html = renderEmailHtml("Waitlist Confirmed", body, `${BASE_URL}/#pool/${poolId}`, "View Pool");
+
+        // Fire and forget email (don't block response) - checking promise for clean logs though
+        sendEmail(email, subject, html, { poolId, reason: 'WAITLIST_JOIN' })
+            .catch(err => console.error("Failed to send waitlist confirmation email:", err));
 
         return { success: true };
     } catch (error: any) {

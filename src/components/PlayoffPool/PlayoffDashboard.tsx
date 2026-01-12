@@ -18,7 +18,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
-    const [gPayCopied, setGPayCopied] = useState(false);
+    const [zelleCopied, setZelleCopied] = useState(false);
     // const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
     // const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Deprecated
 
@@ -443,7 +443,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                 </>
                             )}
 
-                            {(pool.venmo || pool.googlePay) && (
+                            {(pool.venmo || pool.zelle) && (
                                 <>
                                     <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payment Options</h3>
                                     <div className="flex flex-col gap-2 max-w-sm">
@@ -452,22 +452,22 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                 Venmo: {pool.venmo} <ExternalLink size={16} />
                                             </a>
                                         )}
-                                        {pool.googlePay && (
+                                        {pool.zelle && (
                                             <div className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-lg font-bold flex items-center gap-2 justify-between group">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-slate-400 text-xs uppercase font-bold mr-1">GPay:</span>
-                                                    {pool.googlePay}
+                                                    <span className="text-slate-400 text-xs uppercase font-bold mr-1">Zelle:</span>
+                                                    {pool.zelle}
                                                 </div>
                                                 <button
                                                     onClick={() => {
-                                                        navigator.clipboard.writeText(pool.googlePay || '');
-                                                        setGPayCopied(true);
-                                                        setTimeout(() => setGPayCopied(false), 2000);
+                                                        navigator.clipboard.writeText(pool.zelle || '');
+                                                        setZelleCopied(true);
+                                                        setTimeout(() => setZelleCopied(false), 2000);
                                                     }}
                                                     className="bg-slate-700 hover:bg-slate-600 p-2 rounded transition-all transform active:scale-95"
-                                                    title="Copy GPay Address"
+                                                    title="Copy Zelle Info"
                                                 >
-                                                    {gPayCopied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} className="text-slate-400 group-hover:text-white" />}
+                                                    {zelleCopied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} className="text-slate-400 group-hover:text-white" />}
                                                 </button>
                                             </div>
                                         )}
