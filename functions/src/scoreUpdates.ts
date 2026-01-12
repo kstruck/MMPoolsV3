@@ -714,9 +714,38 @@ const processGameUpdate = async (
                             };
                             transaction.set(
                                 db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`),
-                                winnerDoc
+                                winnerDoc,
+                                { merge: true }
                             );
                         }
+                    }
+                    // ALWAYS write the winner doc even if audit was deduped
+                    // This ensures frontend has the data even if event was already logged
+                } else if (axis) {
+                    // Dedupe hit but we still need to ensure winner doc exists
+                    const hDigit = getLastDigit(step.home);
+                    const aDigit = getLastDigit(step.away);
+                    const row = axis.away.indexOf(aDigit);
+                    const col = axis.home.indexOf(hDigit);
+                    if (row !== -1 && col !== -1) {
+                        const squareIndex = row * 10 + col;
+                        const square = freshPool.squares[squareIndex];
+                        const winnerName = square?.owner || 'Unsold';
+                        const winnerDoc: Winner = {
+                            period: 'Event',
+                            squareId: squareIndex,
+                            owner: winnerName,
+                            amount: 0,
+                            homeDigit: hDigit,
+                            awayDigit: aDigit,
+                            isReverse: false,
+                            description: `${step.desc} (${step.home}-${step.away})`
+                        };
+                        transaction.set(
+                            db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`),
+                            winnerDoc,
+                            { merge: true }
+                        );
                     }
                 }
 
@@ -782,7 +811,37 @@ const processGameUpdate = async (
 
                                 transaction.set(
                                     db.collection('pools').doc(doc.id).collection('winners').doc(`event_rev_${step.home}_${step.away}`),
-                                    rWinnerDoc
+                                    rWinnerDoc,
+                                    { merge: true }
+                                );
+                            }
+                        }
+                    } else if (axis) {
+                        // Dedupe hit but ensure reverse winner doc exists
+                        const rRow = axis.away.indexOf(hDigit);
+                        const rCol = axis.home.indexOf(aDigit);
+                        if (rRow !== -1 && rCol !== -1) {
+                            const rSqIndex = rRow * 10 + rCol;
+                            const regRow = axis.away.indexOf(aDigit);
+                            const regCol = axis.home.indexOf(hDigit);
+                            const regularIndex = (regRow !== -1 && regCol !== -1) ? (regRow * 10 + regCol) : -999;
+                            if (rSqIndex !== regularIndex) {
+                                const rSquare = freshPool.squares[rSqIndex];
+                                const rWinnerName = rSquare?.owner || 'Unsold';
+                                const rWinnerDoc: Winner = {
+                                    period: 'Event',
+                                    squareId: rSqIndex,
+                                    owner: rWinnerName,
+                                    amount: 0,
+                                    homeDigit: aDigit,
+                                    awayDigit: hDigit,
+                                    isReverse: true,
+                                    description: `${step.desc} Reverse (${step.home}-${step.away})`
+                                };
+                                transaction.set(
+                                    db.collection('pools').doc(doc.id).collection('winners').doc(`event_rev_${step.home}_${step.away}`),
+                                    rWinnerDoc,
+                                    { merge: true }
                                 );
                             }
                         }
