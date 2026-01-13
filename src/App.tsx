@@ -92,15 +92,62 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Handle root path slugs (e.g. /my-slug -> /#pool/my-slug)
-    const path = window.location.pathname;
-    if (path.length > 1 && path !== '/index.html') {
-      // Remove leading slash
-      const slug = path.substring(1);
-      // Redirect to hash route
-      window.history.replaceState(null, '', `/#pool/${slug}`);
-      setHash(`#pool/${slug}`);
-    }
+    // --- DEEP LINK HANDLER ---
+    // Handle Instagram/External links that strip hash or use path/query
+    const handleDeepLinks = () => {
+      const path = window.location.pathname;
+      const search = window.location.search;
+      const urlParams = new URLSearchParams(search);
+      const poolParam = urlParams.get('pool');
+
+      // 1. Query Param Strategy: ?pool=game123
+      if (poolParam) {
+        window.history.replaceState(null, '', `/#pool/${poolParam}`);
+        setHash(`#pool/${poolParam}`);
+        return;
+      }
+
+      // 2. Path Strategy: /pool/game123
+      if (path.startsWith('/pool/')) {
+        const poolId = path.split('/pool/')[1];
+        if (poolId) {
+          window.history.replaceState(null, '', `/#pool/${poolId}`);
+          setHash(`#pool/${poolId}`);
+          return;
+        }
+      }
+
+      // 3. Root Slug Strategy: /game123 vs /resources
+      // Only redirect if path is NOT index.html and has length
+      if (path.length > 1 && path !== '/index.html') {
+        const slug = path.substring(1); // Remove leading slash
+
+        // List of known non-pool routes to preserve as-is (but with hash)
+        const KNOWN_VIEWS = [
+          'how-it-works',
+          'super-bowl-squares-odds',
+          'privacy',
+          'terms',
+          'scoreboard',
+          'features',
+          'resources',
+          'browse',
+          'support'
+        ];
+
+        // If it's a known view, just hash it (e.g. /resources -> /#resources)
+        if (KNOWN_VIEWS.includes(slug)) {
+          window.history.replaceState(null, '', `/#${slug}`);
+          setHash(`#${slug}`);
+        } else {
+          // Otherwise, assume it's a pool ID (Vanity URL support)
+          window.history.replaceState(null, '', `/#pool/${slug}`);
+          setHash(`#pool/${slug}`);
+        }
+      }
+    };
+
+    handleDeepLinks();
 
     const handleHashChange = () => setHash(window.location.hash);
     window.addEventListener('hashchange', handleHashChange);
