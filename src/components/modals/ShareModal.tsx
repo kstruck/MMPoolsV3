@@ -10,8 +10,9 @@ interface ShareModalProps {
 export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUrl }) => {
     if (!isOpen) return null;
 
-    // Clean the URL: Remove '/#' to make it cleaner /pool/ID
-    const cleanUrl = shareUrl.replace('/#', '');
+    // Clean the URL: Replace '/#' with '/' to strictly switch from Hash to Path strategy
+    // e.g. .com/#pool/123 -> .com/pool/123
+    const cleanUrl = shareUrl.replace('/#', '/');
     const encodedUrl = encodeURIComponent(cleanUrl);
     const text = "Join my Game Day Squares pool! Pick your winning squares now.";
 
