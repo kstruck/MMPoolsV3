@@ -37,42 +37,31 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     const [showShareModal, setShowShareModal] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
 
-    // Fallback fetching state
-    const [fetchedPool, setFetchedPool] = useState<Pool | null>(null);
+    // Real-time subscription to pool data
+    const [subscribedPool, setSubscribedPool] = useState<Pool | null>(null);
     const [isFetchingPool, setIsFetchingPool] = useState(false);
 
-    // Memoize the pool lookup to combine global pools and fetched pool
-    const currentPool = React.useMemo(() => {
-        if (!id) return null;
-        const found = pools.find(p => p.id === id || (p as any).slug === id || (p as any).urlSlug === id);
-        return found || fetchedPool;
-    }, [pools, id, fetchedPool]);
-
-    // Fetch pool if not found
+    // Subscribe to real-time pool updates (similar to PoolRoute.tsx)
     React.useEffect(() => {
-        if (id && !currentPool && !isFetchingPool) {
-            const fetchPool = async () => {
-                setIsFetchingPool(true);
-                try {
-                    // 1. Try by ID
-                    let p = await dbService.getPoolById(id);
-                    // 2. Try by Slug
-                    if (!p) {
-                        p = (await dbService.getPoolBySlug(id)) as any;
-                    }
-                    if (p) {
-                        setFetchedPool({ ...p, id: p.id || id } as Pool);
-                    }
-                } catch (err) {
-                    console.error("Error fetching pool for admin:", err);
-                } finally {
-                    setIsFetchingPool(false);
-                }
-            };
-            fetchPool();
-        }
-    }, [id, currentPool, isFetchingPool]);
+        if (!id) return;
 
+        // Use first from props as optimistic initial value
+        const initial = pools.find(p => p.id === id || (p as any).slug === id || (p as any).urlSlug === id);
+        if (initial) setSubscribedPool(initial);
+
+        setIsFetchingPool(true);
+        const unsubscribe = dbService.subscribeToPool(id, (poolData) => {
+            setIsFetchingPool(false);
+            if (poolData) {
+                setSubscribedPool(poolData as Pool);
+            }
+        });
+
+        return () => unsubscribe();
+    }, [id, pools]);
+
+    // Use subscribed pool as primary, falling back to initial from props list
+    const currentPool = subscribedPool;
 
     if (isFetchingPool) {
         return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader className="animate-spin text-indigo-500" /> Loading Pool...</div>;
