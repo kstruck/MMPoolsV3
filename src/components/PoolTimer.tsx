@@ -44,8 +44,12 @@ export const PoolTimer: React.FC<PoolTimerProps> = ({ targetDate, gameStatus, is
         return <span className="text-rose-500 font-black uppercase tracking-widest text-lg animate-[pulse_2s_infinite]">LIVE</span>;
     }
 
+    if (isLocked) {
+        return <span className="text-amber-500 font-black uppercase tracking-widest text-lg">LOCKED</span>;
+    }
+
     if (!timeLeft) {
-        return <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">{isLocked ? "Pool Locked" : "Waiting for Schedule"}</span>;
+        return <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">Waiting for Schedule</span>;
     }
 
     // Determine color based on time remaining

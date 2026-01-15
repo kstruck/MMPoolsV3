@@ -127,8 +127,13 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
     // Quarterly Payouts (Moved to top)
     const quarterlyPayouts = useMemo(() => {
-        if (!pool || pool.type !== 'SQUARES') return [];
-        return calculateQuarterlyPayouts(pool as GameState, winners);
+        if (!pool || pool.type !== 'SQUARES') {
+            console.log('[PoolRoute] Quarterly Payouts: Pool not SQUARES or null', pool?.type);
+            return [];
+        }
+        const res = calculateQuarterlyPayouts(pool as GameState, winners);
+        console.log('[PoolRoute] Quarterly Payouts Calculated:', res.length, 'First:', res[0]?.amount);
+        return res;
     }, [pool, winners]);
 
     if (isLoading || isFetchingPool) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
