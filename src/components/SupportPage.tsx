@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Mail, CheckCircle, AlertCircle } from 'lucide-react';
-import { Footer } from './Footer';
+import { Mail, CheckCircle, AlertCircle } from 'lucide-react';
 import { emailService } from '../services/emailService';
-import { useNavigate } from 'react-router-dom';
 
 export const SupportPage: React.FC = () => {
-    const navigate = useNavigate();
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -73,19 +70,6 @@ Sent via March Melee Pools Support Form
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-            {/* Header */}
-            <nav className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-                    <button
-                        onClick={() => navigate('/')}
-                        className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-                    >
-                        <ArrowLeft size={20} />
-                        <span className="font-bold">Back to Home</span>
-                    </button>
-                </div>
-            </nav>
-
             {/* Content */}
             <div className="max-w-3xl mx-auto px-6 py-16">
                 <div className="text-center mb-12">
@@ -230,8 +214,6 @@ Sent via March Melee Pools Support Form
                     </button>
                 </form>
             </div>
-
-            <Footer />
         </div>
     );
 };
