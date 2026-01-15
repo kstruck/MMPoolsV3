@@ -27,6 +27,7 @@ export interface GlobalStats {
     totalSquaresSold: number;
     totalRevenue: number;
     totalUsers: number;
+    totalDonated?: number;
     lastUpdated?: number;
 }
 

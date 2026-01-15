@@ -32,7 +32,7 @@ import { SuperAdmin } from './components/SuperAdmin';
 
 // Services & Objects
 import { authService } from './services/authService';
-import { dbService } from './services/dbService';
+import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
 
 // Legacy Hash Handler
@@ -108,6 +108,15 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  // Global Stats Subscription
+  const [stats, setStats] = useState<GlobalStats | null>(null);
+  useEffect(() => {
+    const unsubscribe = dbService.onGlobalStatsUpdate((newStats) => {
+      setStats(newStats);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Auth Helpers
   const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
     setAuthMode(mode);
@@ -155,6 +164,8 @@ const App: React.FC = () => {
               onLogout={handleLogout}
               onCreatePool={handleCreatePoolClick}
               onBrowse={() => navigate('/browse')}
+              totalPrizes={stats?.totalRevenue || 0}
+              totalDonated={stats?.totalDonated || 0}
             />
           </>
         } />
