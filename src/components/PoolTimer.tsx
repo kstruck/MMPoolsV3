@@ -37,11 +37,11 @@ export const PoolTimer: React.FC<PoolTimerProps> = ({ targetDate, gameStatus, is
     }, [targetDate, gameStatus]);
 
     if (gameStatus === 'post' || gameStatus === 'final') {
-        return <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">Game Complete</span>;
+        return <span className="text-blue-400 font-black uppercase tracking-widest text-lg">GAME FINAL</span>;
     }
 
     if (gameStatus === 'in') {
-        return <span className="text-emerald-400 font-bold uppercase tracking-wider text-xs animate-pulse">Game In Progress</span>;
+        return <span className="text-rose-500 font-black uppercase tracking-widest text-lg animate-[pulse_2s_infinite]">LIVE</span>;
     }
 
     if (!timeLeft) {

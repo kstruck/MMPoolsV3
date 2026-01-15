@@ -431,24 +431,52 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                         {/* Simplified Rule Buttons */}
                                         <div>
                                             <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Active Rules:</h3>
-                                            <div className="flex flex-col gap-3 items-start w-full">
-                                                <div className="flex flex-wrap gap-2">
-                                                    {/* Rollover */}
-                                                    {squaresPool.ruleVariations.quarterlyRollover && <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1"><Zap size={12} className="fill-emerald-400" /> Rollover Active</div>}
+                                            <div className="flex flex-wrap gap-2">
+                                                {/* Rollover */}
+                                                {squaresPool.ruleVariations.quarterlyRollover && (
+                                                    <div className="group relative cursor-help">
+                                                        <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1"><Zap size={12} className="fill-emerald-400" /> Rollover Active</div>
+                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-slate-800 text-slate-200 text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                                                            Unsold squares roll their prize money to the next quarter.
+                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+                                                        </div>
+                                                    </div>
+                                                )}
 
-                                                    {/* Number Sets */}
+                                                {/* Number Sets */}
+                                                <div className="group relative cursor-help">
                                                     <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Number Sets: {squaresPool.numberSets || '1'}</div>
-
-                                                    {/* Reverse Payouts */}
-                                                    {squaresPool.ruleVariations.reverseWinners && <div className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Reverse Numbers</div>}
-
-                                                    {/* Every Score Pays */}
-                                                    {squaresPool.ruleVariations.scoreChangePayout && <div className="bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Every Score Pays</div>}
+                                                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-slate-800 text-slate-200 text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                                                        {squaresPool.numberSets === 4 ? "New numbers generated for each quarter." : "Same numbers used for the entire game."}
+                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+                                                    </div>
                                                 </div>
-                                                <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:text-white transition-colors text-slate-500 text-xs font-bold uppercase tracking-wider">
-                                                    <HelpCircle size={14} className="text-slate-500 group-hover:text-indigo-400 transition-colors" /> View Full Rules
-                                                </button>
+
+                                                {/* Reverse Payouts */}
+                                                {squaresPool.ruleVariations.reverseWinners && (
+                                                    <div className="group relative cursor-help">
+                                                        <div className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Reverse Numbers</div>
+                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-slate-800 text-slate-200 text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                                                            Winners split the pot 50/50 with the reverse number combination.
+                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Every Score Pays */}
+                                                {squaresPool.ruleVariations.scoreChangePayout && (
+                                                    <div className="group relative cursor-help">
+                                                        <div className="bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Every Score Pays</div>
+                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-slate-800 text-slate-200 text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                                                            Payouts awarded for every score change, not just at quarter ends.
+                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
+                                            <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:text-white transition-colors text-slate-500 text-xs font-bold uppercase tracking-wider">
+                                                <HelpCircle size={14} className="text-slate-500 group-hover:text-indigo-400 transition-colors" /> View Full Rules
+                                            </button>
                                         </div>
                                     </div>
                                 )}
