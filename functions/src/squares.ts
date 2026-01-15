@@ -158,9 +158,8 @@ export const markSquaresPaid = onCall(async (request) => {
 
         const pool = poolDoc.data() as GameState;
 
-        // Permission Check: Owner or Manager only
-        // SuperAdmin check via user document optional but recommended if we follow rules
-        let isAuthorized = pool.ownerId === userId || pool.managerUid === userId;
+        // Permission Check: Owner only for now (managerUid is for BracketPool, not GameState)
+        let isAuthorized = pool.ownerId === userId;
 
         if (!isAuthorized) {
             const userDoc = await transaction.get(db.collection("users").doc(userId));

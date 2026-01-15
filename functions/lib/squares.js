@@ -119,9 +119,8 @@ exports.markSquaresPaid = (0, https_1.onCall)(async (request) => {
         if (!poolDoc.exists)
             throw new https_1.HttpsError("not-found", "Pool not found.");
         const pool = poolDoc.data();
-        // Permission Check: Owner or Manager only
-        // SuperAdmin check via user document optional but recommended if we follow rules
-        let isAuthorized = pool.ownerId === userId || pool.managerUid === userId;
+        // Permission Check: Owner only for now (managerUid is for BracketPool, not GameState)
+        let isAuthorized = pool.ownerId === userId;
         if (!isAuthorized) {
             const userDoc = await transaction.get(db.collection("users").doc(userId));
             if (userDoc.exists && ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) === 'SUPER_ADMIN') {
