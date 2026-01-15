@@ -2,62 +2,62 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://www.marchmeleepools.com/</loc>
-    <lastmod>2026-01-11</lastmod>
+    <lastmod>2026-01-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://www.marchmeleepools.com/#features</loc>
-    <lastmod>2026-01-11</lastmod>
+    <loc>https://www.marchmeleepools.com/features</loc>
+    <lastmod>2026-01-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.marchmeleepools.com/#browse</loc>
-    <lastmod>2026-01-11</lastmod>
+    <loc>https://www.marchmeleepools.com/browse</loc>
+    <lastmod>2026-01-15</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.marchmeleepools.com/#how-it-works</loc>
-    <lastmod>2026-01-11</lastmod>
+    <loc>https://www.marchmeleepools.com/how-it-works</loc>
+    <lastmod>2026-01-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.marchmeleepools.com/#scoreboard</loc>
-    <lastmod>2026-01-11</lastmod>
+    <loc>https://www.marchmeleepools.com/scoreboard</loc>
+    <lastmod>2026-01-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.marchmeleepools.com/#support</loc>
-    <lastmod>2026-01-11</lastmod>
+    <loc>https://www.marchmeleepools.com/support</loc>
+    <lastmod>2026-01-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://www.marchmeleepools.com/#resources</loc>
-    <lastmod>2026-01-11</lastmod>
+    <loc>https://www.marchmeleepools.com/privacy</loc>
+    <lastmod>2026-01-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.marchmeleepools.com/terms</loc>
+    <lastmod>2026-01-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.marchmeleepools.com/odds/super-bowl-squares</loc>
+    <lastmod>2026-01-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.marchmeleepools.com/create-pool</loc>
+    <lastmod>2026-01-15</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.marchmeleepools.com/#privacy</loc>
-    <lastmod>2026-01-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://www.marchmeleepools.com/#terms</loc>
-    <lastmod>2026-01-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://www.marchmeleepools.com/#super-bowl-squares-odds</loc>
-    <lastmod>2026-01-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <priority>0.9</priority>
   </url>
 </urlset>
