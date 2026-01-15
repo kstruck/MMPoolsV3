@@ -614,12 +614,10 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             </div>
 
             {/* Quarter Winner Cards */}
-            <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8 border-4 border-red-500 p-2 z-50 relative">
-                <div className="col-span-full text-white">DEBUG: {quarterlyPayouts.length} cards found.</div>
+            <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
                 {quarterlyPayouts.map((card) => {
                     const homeDigit = getLastDigit(card.home);
                     const awayDigit = getLastDigit(card.away);
-                    console.log('Rendering Card:', card.period, '$', card.amount);
 
                     return (
                         <div key={card.period} className="bg-black border border-slate-800 rounded-xl p-6 flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
