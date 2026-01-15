@@ -72,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     How it Works
                                 </button>
-                                <button onClick={() => navigate('/super-bowl-squares-odds')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                <button onClick={() => navigate('/odds/super-bowl-squares')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Odds & Stats
                                 </button>
                                 <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
@@ -90,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     How it Works
                                 </button>
-                                <button onClick={() => navigate('/super-bowl-squares-odds')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                <button onClick={() => navigate('/odds/super-bowl-squares')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     Odds & Stats
                                 </button>
                                 <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
@@ -110,7 +110,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
 
                                 {(isManager || user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') && (
                                     <button
-                                        onClick={() => navigate('/admin')}
+                                        onClick={() => navigate('/participant')}
                                         className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
                                         title="Pools you created and control"
                                     >

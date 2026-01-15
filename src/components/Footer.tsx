@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Logo } from './Logo';
 
 export const Footer: React.FC = () => {
@@ -13,10 +14,10 @@ export const Footer: React.FC = () => {
                         © 2026 MarchMeleePools. All rights reserved.
                     </div>
                     <div className="flex gap-6 text-sm text-white font-bold">
-                        <a href="#privacy" className="hover:text-orange-400 transition-colors">Privacy</a>
-                        <a href="#terms" className="hover:text-orange-400 transition-colors">Terms</a>
-                        <a href="#resources" className="hover:text-orange-400 transition-colors">Resources</a>
-                        <a href="#support" className="hover:text-orange-400 transition-colors">Support</a>
+                        <Link to="/privacy" className="hover:text-orange-400 transition-colors">Privacy</Link>
+                        <Link to="/terms" className="hover:text-orange-400 transition-colors">Terms</Link>
+                        <Link to="/how-it-works" className="hover:text-orange-400 transition-colors">Resources</Link>
+                        <Link to="/how-it-works" className="hover:text-orange-400 transition-colors">Support</Link>
                     </div>
                 </div>
             </div>

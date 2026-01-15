@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { User, GameState, Winner, Pool, PlayoffPool } from '../types';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
@@ -13,6 +14,7 @@ interface ParticipantDashboardProps {
 }
 
 export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user, onLogout, onCreatePool }) => {
+    const navigate = useNavigate();
     const [myPools, setMyPools] = useState<Pool[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'all' | 'open' | 'live' | 'completed'>('live');
@@ -318,7 +320,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 <p className="text-slate-500 max-w-md mx-auto mb-6">
                                     You don't have any {activeTab !== 'all' && activeTab} pools yet.
                                 </p>
-                                <button onClick={() => window.location.hash = '#browse'} className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-full font-bold transition-transform hover:scale-105 shadow-lg shadow-emerald-900/20">
+                                <button onClick={() => navigate('/browse')} className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-full font-bold transition-transform hover:scale-105 shadow-lg shadow-emerald-900/20">
                                     Browse Available Pools
                                 </button>
                             </>
@@ -355,7 +357,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             return (
                                 <div
                                     key={pool.id}
-                                    onClick={() => window.location.hash = `#pool/${(pool as any).urlSlug || pool.id}`}
+                                    onClick={() => navigate(`/pool/${(pool as any).urlSlug || pool.id}`)}
                                     className="group bg-slate-800/50 border border-slate-700 hover:border-emerald-500/50 hover:bg-slate-800 rounded-xl p-5 transition-all cursor-pointer relative overflow-hidden"
                                 >
                                     <div className="flex justify-between items-start mb-4">

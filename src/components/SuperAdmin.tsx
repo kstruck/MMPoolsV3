@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam } from '../types';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
@@ -14,6 +15,7 @@ import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
 import { AdminStatsDashboard } from './AdminStatsDashboard';
 
 export const SuperAdmin: React.FC = () => {
+    const navigate = useNavigate();
     // --- STATE ---
     const [pools, setPools] = useState<Pool[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -915,7 +917,7 @@ export const SuperAdmin: React.FC = () => {
                                                                 </div>
                                                             </td>
                                                             <td className="p-4 flex gap-2">
-                                                                <a href={`#admin/${pool.id}`} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</a>
+                                                                <button onClick={() => navigate(`/admin/${pool.id}`)} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</button>
                                                                 {!isBracket && (
                                                                     <button onClick={() => handleRunSim(pool as GameState)} className="text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 px-2 py-1 rounded">Sim</button>
                                                                 )}
