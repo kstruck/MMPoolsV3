@@ -43,44 +43,30 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     const { id } = useParams();
 
     // Find pool logic
-    // Find pool logic (Local or Fetch)
-    const [fetchedPool, setFetchedPool] = useState<Pool | null>(null);
-    const [isFetchingPool, setIsFetchingPool] = useState(false);
+    // Find pool logic
+    // We now subscribe to the pool directly to ensure real-time updates (Issue #FixReservation)
+    const [pool, setPool] = useState<Pool | null>(null);
+    const [isFetchingPool, setIsFetchingPool] = useState(true);
 
-    const pool = useMemo(() => {
-        if (!id) return null;
-        // 1. Try finding in global pools (props)
-        const found = pools.find(p => p.id === id || (p as any).slug === id || (p as any).urlSlug === id);
-        if (found) return found;
-        // 2. Fallback to fetched pool
-        return fetchedPool;
-    }, [id, pools, fetchedPool]);
-
-    // Fetch pool if not found in global state
     useEffect(() => {
-        if (id && !pool && !isLoading && !isFetchingPool) {
-            const fetchPool = async () => {
-                setIsFetchingPool(true);
-                try {
-                    // Try by ID first
-                    let p = await dbService.getPoolById(id);
-                    // If not found, try by Slug
-                    if (!p) {
-                        p = (await dbService.getPoolBySlug(id)) as any;
-                    }
+        if (!id) return;
 
-                    if (p) {
-                        setFetchedPool({ ...p, id: p.id || id } as Pool); // Ensure ID is set
-                    }
-                } catch (err) {
-                    console.error("Error fetching pool:", err);
-                } finally {
-                    setIsFetchingPool(false);
-                }
-            };
-            fetchPool();
+        // Optimistically set from global cache if available to prevent flash
+        // We do not add pools to default dependency to avoid re-subscribing on every global update
+        const cached = pools.find(p => p.id === id || (p as any).slug === id || (p as any).urlSlug === id);
+        if (cached) {
+            setPool(cached);
+            setIsFetchingPool(false);
+        } else {
+            setIsFetchingPool(true);
         }
-    }, [id, pool, isLoading]);
+
+        const unsubscribe = dbService.subscribeToPool(id, (p) => {
+            setPool(p);
+            setIsFetchingPool(false);
+        });
+        return () => unsubscribe();
+    }, [id]);
 
     // State for winners
     const [winners, setWinners] = useState<Winner[]>([]);
