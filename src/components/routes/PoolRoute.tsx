@@ -8,6 +8,7 @@ import { ShareModal, AuthModal } from '../modals';
 import { PoolTimer } from '../PoolTimer';
 import { Grid } from '../Grid';
 import { AuditLog } from '../AuditLog';
+import { AICommissioner } from '../AICommissioner';
 
 
 import { BracketPoolDashboard } from '../BracketPoolDashboard/BracketPoolDashboard';
@@ -430,10 +431,22 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                         {/* Simplified Rule Buttons */}
                                         <div>
                                             <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Active Rules:</h3>
-                                            <div className="flex flex-col gap-2 items-start">
-                                                <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:bg-slate-800 p-1.5 rounded-lg -ml-1.5 transition-colors text-left">
-                                                    {squaresPool.ruleVariations.quarterlyRollover ? <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1"><Zap size={12} className="fill-emerald-400" /> Rollover Active</div> : <div className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-xs font-bold">Standard Payouts</div>}
-                                                    <HelpCircle size={16} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
+                                            <div className="flex flex-col gap-3 items-start w-full">
+                                                <div className="flex flex-wrap gap-2">
+                                                    {/* Rollover */}
+                                                    {squaresPool.ruleVariations.quarterlyRollover && <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1"><Zap size={12} className="fill-emerald-400" /> Rollover Active</div>}
+
+                                                    {/* Number Sets */}
+                                                    <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Number Sets: {squaresPool.numberSets || '1'}</div>
+
+                                                    {/* Reverse Payouts */}
+                                                    {squaresPool.ruleVariations.reverseWinners && <div className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Reverse Numbers</div>}
+
+                                                    {/* Every Score Pays */}
+                                                    {squaresPool.ruleVariations.scoreChangePayout && <div className="bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Every Score Pays</div>}
+                                                </div>
+                                                <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:text-white transition-colors text-slate-500 text-xs font-bold uppercase tracking-wider">
+                                                    <HelpCircle size={14} className="text-slate-500 group-hover:text-indigo-400 transition-colors" /> View Full Rules
                                                 </button>
                                             </div>
                                         </div>
@@ -498,12 +511,37 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         <p className="text-sm text-slate-500 font-bold uppercase tracking-wider">{squaresPool.scores.gameStatus === 'in' ? 'LIVE' : squaresPool.scores.gameStatus === 'post' ? 'FINAL' : 'PENDING'}</p>
                     </div>
                     {/* Simple Scoreboard Grid */}
-                    <div className="p-6">
-                        <div className="flex justify-center items-center gap-8">
-                            <div className="text-center"><div className="text-3xl font-bold text-white mb-1">{squaresPool.awayTeam}</div><div className="text-4xl font-black text-indigo-400">{squaresPool.scores.current?.away || 0}</div></div>
-                            <div className="text-slate-600 font-bold text-xl">VS</div>
-                            <div className="text-center"><div className="text-3xl font-bold text-white mb-1">{squaresPool.homeTeam}</div><div className="text-4xl font-black text-rose-400">{squaresPool.scores.current?.home || 0}</div></div>
-                        </div>
+                    <div className="p-0 overflow-x-auto">
+                        <table className="w-full text-center">
+                            <thead>
+                                <tr className="border-b border-slate-800 bg-slate-900/50">
+                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-left">Team</th>
+                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Q1</th>
+                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Q2</th>
+                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Q3</th>
+                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Q4</th>
+                                    <th className="py-3 px-4 text-xs font-bold text-white uppercase tracking-wider bg-slate-800">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800">
+                                <tr>
+                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2">{awayLogo ? <img src={awayLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.awayTeam}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q1?.away ?? '-'}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.half?.away ?? '-'}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q3?.away ?? '-'}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.final?.away ?? '-'}</td>
+                                    <td className="py-4 px-4 font-black text-indigo-400 text-lg bg-slate-900/50">{squaresPool.scores.current?.away ?? 0}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2">{homeLogo ? <img src={homeLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.homeTeam}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q1?.home ?? '-'}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.half?.home ?? '-'}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q3?.home ?? '-'}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.final?.home ?? '-'}</td>
+                                    <td className="py-4 px-4 font-black text-rose-400 text-lg bg-slate-900/50">{squaresPool.scores.current?.home ?? 0}</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -549,6 +587,54 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
                     <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2"><h3 className="text-amber-400 font-medium text-sm">If {squaresPool.homeTeam} scores next...</h3></div>
                     <div className="bg-slate-950 p-4 space-y-4">{homePredictions.map(pred => <div key={pred.points} className="flex justify-between items-center border-b border-slate-800/50 pb-2"><div><span className="block text-slate-300 font-bold text-sm">+{pred.points}</span><span className="text-[10px] text-slate-500">Digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>)}</div>
+                </div>
+            </div>
+
+            {/* Score Change History (Only for Every Score Pays) */}
+            {squaresPool.ruleVariations.scoreChangePayout && (
+                <div className="max-w-[1600px] mx-auto px-4 mb-8">
+                    <div className="bg-black border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+                        <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between">
+                            <h3 className="font-bold text-white flex items-center gap-2"><Zap size={18} className="text-amber-400" /> Score Change History</h3>
+                            <span className="text-xs font-bold text-slate-500 uppercase">{winners.filter(w => w.period === 'Event').length} Events</span>
+                        </div>
+                        <div className="max-h-[400px] overflow-y-auto">
+                            <table className="w-full">
+                                <thead className="bg-slate-900 sticky top-0 z-10">
+                                    <tr>
+                                        <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase">Time</th>
+                                        <th className="py-3 px-4 text-center text-xs font-bold text-slate-500 uppercase">Score</th>
+                                        <th className="py-3 px-4 text-center text-xs font-bold text-slate-500 uppercase">Digits</th>
+                                        <th className="py-3 px-4 text-right text-xs font-bold text-slate-500 uppercase">Winner</th>
+                                        <th className="py-3 px-4 text-right text-xs font-bold text-slate-500 uppercase">Prize</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800">
+                                    {winners.filter(w => w.period === 'Event').length === 0 ? (
+                                        <tr><td colSpan={5} className="py-8 text-center text-slate-500 italic">No score changes yet.</td></tr>
+                                    ) : (
+                                        winners.filter(w => w.period === 'Event').map((win, i) => (
+                                            <tr key={i} className="hover:bg-slate-900/30 transition-colors">
+                                                <td className="py-3 px-4 text-slate-400 text-sm">{win.description || 'Score Update'}</td>
+                                                <td className="py-3 px-4 text-center font-mono text-white text-sm">{(win as any).homeScore} - {(win as any).awayScore}</td>
+                                                <td className="py-3 px-4 text-center"><span className="bg-slate-800 px-2 py-1 rounded text-xs font-mono text-slate-300">{getLastDigit((win as any).homeScore)}-{getLastDigit((win as any).awayScore)}</span></td>
+                                                <td className="py-3 px-4 text-right font-bold text-emerald-400">{win.owner}</td>
+                                                <td className="py-3 px-4 text-right font-mono text-white">${win.amount}</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* AI Commissioner */}
+            <div className="max-w-[1600px] mx-auto px-4 mb-20">
+                <AICommissioner poolId={squaresPool.id} userId={user?.id} />
+                <div className="flex justify-center mt-8">
+                    <p className="text-slate-600 text-xs italic">All pool activities are automated and verified.</p>
                 </div>
             </div>
 
