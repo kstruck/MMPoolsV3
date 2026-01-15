@@ -512,10 +512,9 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2 mt-2"><span className="text-white font-bold">Net Prize Pool</span><span className="text-emerald-400 font-mono font-bold text-lg">${(Math.floor((squaresPool.squares.filter((s: any) => s.owner).length * squaresPool.costPerSquare * (1 - (squaresPool.charity?.enabled ? squaresPool.charity.percentage / 100 : 0))))).toLocaleString()}</span></div>
                                 <div className="space-y-1 mt-2">
                                     {quarterlyPayouts.map((card) => {
-                                        if (!card.amount && !(squaresPool as GameState).ruleVariations.scoreChangePayout) return null;
                                         return (
-                                            <div key={card.period} className="flex justify-between items-center text-sm">
-                                                <span className="text-slate-400 font-bold">{card.label} <span className="text-slate-600 font-normal">({squaresPool.payouts[card.period as keyof typeof squaresPool.payouts]}%)</span></span>
+                                            <div key={card.period} className="flex justify-between items-center text-sm border-b border-slate-800/50 pb-2 last:border-0">
+                                                <span className="text-slate-400 font-bold">{card.label} <span className="text-slate-600 font-normal">({(squaresPool as GameState).payouts[card.period as keyof typeof squaresPool.payouts]}%)</span></span>
                                                 <div className="flex flex-col items-end"><span className="text-white font-mono font-bold">${(card.amount || 0).toLocaleString()}</span></div>
                                             </div>
                                         );
