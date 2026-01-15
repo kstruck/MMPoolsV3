@@ -3,6 +3,7 @@ import { Logo } from './Logo';
 import type { User } from '../types';
 import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { authService } from '../services/authService';
+import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
     user: User | null;
@@ -13,6 +14,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenAuth, onLogout, onCreatePool }) => {
+    const navigate = useNavigate();
     const [isResending, setIsResending] = useState(false);
     const [resendStatus, setResendStatus] = useState<'idle' | 'sent' | 'error'>('idle');
 
@@ -58,25 +60,25 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
             )}
             <header className="bg-slate-950 border-b border-slate-700 backdrop-blur-md sticky top-0 z-50 shadow-lg transition-colors duration-300">
                 <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.hash = '#'}>
+                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
                         <Logo height="h-20" />
                     </div>
                     <div className="flex items-center gap-4 flex-wrap justify-center">
                         {!user ? (
                             <>
-                                <button onClick={() => window.location.hash = '#features'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                <button onClick={() => navigate('/features')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Features
                                 </button>
-                                <button onClick={() => window.location.hash = '#how-it-works'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     How it Works
                                 </button>
-                                <button onClick={() => window.location.hash = '#super-bowl-squares-odds'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                <button onClick={() => navigate('/super-bowl-squares-odds')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Odds & Stats
                                 </button>
-                                <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Public Pools
                                 </button>
-                                <button onClick={() => window.location.hash = '#scoreboard'} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors mr-2">
+                                <button onClick={() => navigate('/scoreboard')} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors mr-2">
                                     <Trophy size={14} /> Live Scores
                                 </button>
                                 <div className="flex gap-2">
@@ -85,21 +87,21 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                             </>
                         ) : (
                             <div className="flex items-center gap-4">
-                                <button onClick={() => window.location.hash = '#how-it-works'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     How it Works
                                 </button>
-                                <button onClick={() => window.location.hash = '#super-bowl-squares-odds'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                <button onClick={() => navigate('/super-bowl-squares-odds')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     Odds & Stats
                                 </button>
-                                <button onClick={() => window.location.hash = '#browse'} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     Public Pools
                                 </button>
-                                <button onClick={() => window.location.hash = '#scoreboard'} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors">
+                                <button onClick={() => navigate('/scoreboard')} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors">
                                     <Trophy size={14} /> Live Scores
                                 </button>
 
                                 <button
-                                    onClick={() => window.location.hash = '#participant'}
+                                    onClick={() => navigate('/participant')}
                                     className="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
                                     title="Pools you have joined as a participant"
                                 >
@@ -108,7 +110,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
 
                                 {(isManager || user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') && (
                                     <button
-                                        onClick={() => window.location.hash = '#admin'}
+                                        onClick={() => navigate('/admin')}
                                         className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
                                         title="Pools you created and control"
                                     >
@@ -125,12 +127,12 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 </button>
 
                                 {user.role === 'SUPER_ADMIN' && (
-                                    <button onClick={() => window.location.hash = '#super-admin'} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold">
+                                    <button onClick={() => navigate('/super-admin')} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold">
                                         <Shield size={12} /> SuperAdmin Dashboard
                                     </button>
                                 )}
 
-                                <button onClick={() => window.location.hash = '#profile'} className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-bold">
+                                <button onClick={() => navigate('/profile')} className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-bold">
                                     <UserIcon size={14} /> {user.name.split(' ')[0]} <span className="text-[10px] text-slate-400">({user.role})</span>
                                 </button>
 
