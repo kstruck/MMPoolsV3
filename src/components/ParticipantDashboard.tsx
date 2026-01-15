@@ -32,16 +32,24 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             const participating = allPools.filter(p => {
                 const isOwner = p.ownerId === user.id || (p as any).managerName === user.name;
 
-                // Squares Logic
+                // Squares Logic - Only show if user currently owns at least one square
                 if (p.type === 'SQUARES') {
                     const pool = p as GameState;
-                    return isOwner || pool.squares.some(s =>
-                        s.reservedByUid === user.id ||
-                        (!s.reservedByUid && s.owner && (
+                    const ownsActiveSquare = pool.squares.some(s => {
+                        // Square must have an owner (not released)
+                        if (!s.owner) return false;
+
+                        // Check if this user owns it
+                        return (
+                            s.reservedByUid === user.id ||
                             s.owner === user.name ||
-                            (user.email && (s.owner === user.email || s.owner.toLowerCase() === user.email.split('@')[0].toLowerCase()))
-                        ))
-                    );
+                            (user.email && (
+                                s.owner === user.email ||
+                                s.owner.toLowerCase() === user.email.split('@')[0].toLowerCase()
+                            ))
+                        );
+                    });
+                    return isOwner || ownsActiveSquare;
                 }
 
                 // Playoff Logic
