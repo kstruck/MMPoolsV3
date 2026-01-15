@@ -715,14 +715,165 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
             {/* Rule Modal */}
             {showRulesModal && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                    <div className="bg-slate-900 p-6 rounded-xl max-w-md w-full relative">
-                        <h3 className="text-xl font-bold text-white mb-4">Pool Rules</h3>
-                        <button onClick={() => setShowRulesModal(false)} className="absolute top-4 right-4 text-slate-400">Close</button>
-                        <p className="text-slate-400">Rules details pending...</p>
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full relative shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-slate-800 bg-slate-950 flex justify-between items-center shrink-0">
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <HelpCircle className="text-indigo-400" /> Pool Rules & Payouts
+                            </h3>
+                            <button onClick={() => setShowRulesModal(false)} className="text-slate-500 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 p-2 rounded-lg">
+                                <span className="sr-only">Close</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                            </button>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto space-y-8">
+                            {/* General Stats */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center">
+                                    <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Cost Per Square</div>
+                                    <div className="text-xl font-mono font-bold text-white">${squaresPool.costPerSquare}</div>
+                                </div>
+                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center">
+                                    <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Max Per Player</div>
+                                    <div className="text-xl font-mono font-bold text-white">{squaresPool.maxSquaresPerPlayer || '∞'}</div>
+                                </div>
+                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center">
+                                    <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Number Sets</div>
+                                    <div className="text-xl font-mono font-bold text-white">{squaresPool.numberSets}</div>
+                                </div>
+                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center">
+                                    <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Winners</div>
+                                    <div className="text-xl font-mono font-bold text-white">{Object.keys(squaresPool.payouts).length + (squaresPool.ruleVariations.reverseWinners ? Object.keys(squaresPool.payouts).length : 0)}</div>
+                                </div>
+                            </div>
+
+                            {/* Payout Structure */}
+                            <div>
+                                <h4 className="text-slate-400 font-bold uppercase text-xs mb-3 flex items-center gap-2">
+                                    <Zap size={14} /> Payout Breakdown
+                                </h4>
+                                <div className="bg-black rounded-lg overflow-hidden border border-slate-800">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-900 text-slate-500 font-bold uppercase text-xs">
+                                            <tr>
+                                                <th className="py-2 px-4 text-left">Period</th>
+                                                <th className="py-2 px-4 text-right">Percentage</th>
+                                                <th className="py-2 px-4 text-right">Est. Prize</th>
+                                                {squaresPool.ruleVariations.reverseWinners && <th className="py-2 px-4 text-right text-amber-500">Reverse</th>}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-800 text-slate-300">
+                                            {[
+                                                { label: '1st Quarter', pct: squaresPool.payouts.q1 },
+                                                { label: 'Halftime', pct: squaresPool.payouts.half },
+                                                { label: '3rd Quarter', pct: squaresPool.payouts.q3 },
+                                                { label: 'Final Score', pct: squaresPool.payouts.final },
+                                            ].map((r, i) => {
+                                                // Calculate raw pot based on FULL grid (projected)
+                                                // Adjust for charity
+                                                const charityCut = squaresPool.charity?.enabled ? (squaresPool.charity.percentage / 100) : 0;
+                                                const totalPot = 100 * squaresPool.costPerSquare;
+                                                const netPot = totalPot * (1 - charityCut);
+                                                const prize = Math.floor(netPot * (r.pct / 100));
+                                                // If reverse winners, prize is split? Usually reverse is separate calc or split.
+                                                // Assumption: If reverse is on, standard prize is halved? Or defined separately?
+                                                // Implementation Plan: Reverse usually splits the pot for that quarter.
+                                                // We'll show the base calculation.
+                                                return (
+                                                    <tr key={i}>
+                                                        <td className="py-3 px-4 font-bold text-white">{r.label}</td>
+                                                        <td className="py-3 px-4 text-right font-mono text-slate-400">{r.pct}%</td>
+                                                        <td className="py-3 px-4 text-right font-mono text-emerald-400">${prize.toLocaleString()}*</td>
+                                                        {squaresPool.ruleVariations.reverseWinners && <td className="py-3 px-4 text-right font-mono text-amber-500">Active</td>}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p className="text-[10px] text-slate-600 mt-2 italic">* Estimated prizes assuming all 100 squares are sold. Actual prizes depend on total sales.</p>
+                            </div>
+
+                            {/* Special Rules */}
+                            <div>
+                                <h4 className="text-slate-400 font-bold uppercase text-xs mb-3 flex items-center gap-2">
+                                    <Shield size={14} /> Active Rules
+                                </h4>
+                                <div className="space-y-3">
+                                    {squaresPool.numberSets === 4 ? (
+                                        <div className="flex gap-3">
+                                            <div className="shrink-0 w-1 bg-indigo-500 rounded-full"></div>
+                                            <div>
+                                                <p className="font-bold text-indigo-400 text-sm">4 Number Sets</p>
+                                                <p className="text-slate-400 text-xs">New numbers are generated for each quarter (Q1, Half, Q3, Final). This increases randomness and fairness.</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex gap-3">
+                                            <div className="shrink-0 w-1 bg-slate-600 rounded-full"></div>
+                                            <div>
+                                                <p className="font-bold text-slate-400 text-sm">Standard Numbers</p>
+                                                <p className="text-slate-500 text-xs">The same numbers (row/column) apply for the entire game.</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {squaresPool.ruleVariations.quarterlyRollover && (
+                                        <div className="flex gap-3">
+                                            <div className="shrink-0 w-1 bg-emerald-500 rounded-full"></div>
+                                            <div>
+                                                <p className="font-bold text-emerald-400 text-sm">Quarterly Rollover</p>
+                                                <p className="text-slate-400 text-xs">If a winning square is unsold, the prize money rolls over and is added to the NEXT quarter's pot.</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {squaresPool.ruleVariations.reverseWinners && (
+                                        <div className="flex gap-3">
+                                            <div className="shrink-0 w-1 bg-amber-500 rounded-full"></div>
+                                            <div>
+                                                <p className="font-bold text-amber-400 text-sm">Reverse Winners</p>
+                                                <p className="text-slate-400 text-xs">The square matching the REVERSE of the score digits also wins (e.g., if ending in 3-7, then 7-3 also wins). The quarter's pot is split.</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {squaresPool.ruleVariations.scoreChangePayout && (
+                                        <div className="flex gap-3">
+                                            <div className="shrink-0 w-1 bg-fuchsia-500 rounded-full"></div>
+                                            <div>
+                                                <p className="font-bold text-fuchsia-400 text-sm">Every Score Pays</p>
+                                                <p className="text-slate-400 text-xs">Payouts are awarded for EVERY score change (Touchdown, Field Goal, Safety, etc.), not just end of quarters.</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Charity Info */}
+                            {squaresPool.charity?.enabled && (
+                                <div className="bg-rose-900/10 border border-rose-500/20 p-4 rounded-xl flex gap-4 items-start">
+                                    <div className="bg-rose-500/20 p-2 rounded-lg shrink-0"><Heart className="text-rose-400" size={24} /></div>
+                                    <div>
+                                        <h4 className="text-rose-400 font-bold text-sm uppercase">Fundraiser Pool</h4>
+                                        <p className="text-slate-300 text-sm mb-1"><span className="font-bold text-white">{squaresPool.charity.percentage}%</span> of all proceeds go directly to <span className="font-bold text-white">{squaresPool.charity.name}</span>.</p>
+                                        {squaresPool.charity.url && <a href={squaresPool.charity.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 underline">Learn more about this cause</a>}
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+
+                        <div className="p-4 border-t border-slate-800 bg-slate-950 text-center">
+                            <p className="text-[10px] text-slate-600">
+                                This pool is hosted on MarchMelee. Prize distribution is managed by the pool host: <span className="text-slate-500">{squaresPool.contactEmail}</span>
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}
         </div>
     );
 };
+
