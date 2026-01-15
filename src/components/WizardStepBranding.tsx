@@ -98,7 +98,7 @@ export const WizardStepBranding: React.FC<WizardStepBrandingProps> = ({ gameStat
                 <div className="flex justify-between pt-8 border-t border-slate-800 mt-8">
                     <button onClick={onBack} className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:bg-slate-800 transition-colors">Back</button>
                     <button onClick={onNext} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
-                        Next: Props Setup
+                        Next: Review & Payment
                     </button>
                 </div>
             </div>

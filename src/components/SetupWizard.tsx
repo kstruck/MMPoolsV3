@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WizardStepGame } from './WizardStepGame';
 import { WizardStepSquaresDetails } from './WizardStepSquaresDetails';
+import { WizardStepDetails } from './WizardStepDetails';
 import { WizardStepBranding } from './WizardStepBranding';
 import { WizardStepReminders } from './WizardStepReminders';
 import { ArrowLeft, Check } from 'lucide-react';
@@ -80,15 +81,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
 
                 <div className="mb-8">
                     <div className="flex items-center gap-4 mb-2">
-                        {[1, 2, 3, 4].map(s => (
+                        {[1, 2, 3, 4, 5].map(s => (
                             <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${step >= s ? 'bg-indigo-500' : 'bg-slate-800'}`}></div>
                         ))}
                     </div>
                     <h1 className="text-2xl font-bold text-white transition-all">
                         {step === 1 && 'Game Selection'}
-                        {step === 2 && 'Grid Settings'}
-                        {step === 3 && 'Branding'}
-                        {step === 4 && 'Review & Payment'}
+                        {step === 2 && 'Pool Details'}
+                        {step === 3 && 'Grid Settings'}
+                        {step === 4 && 'Branding'}
+                        {step === 5 && 'Review & Payment'}
                     </h1>
                 </div>
 
@@ -101,7 +103,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                 )}
 
                 {step === 2 && (
-                    <WizardStepSquaresDetails
+                    <WizardStepDetails
                         gameState={gameState as GameState}
                         updateConfig={updateConfig}
                         onNext={() => setStep(3)}
@@ -110,7 +112,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                 )}
 
                 {step === 3 && (
-                    <WizardStepBranding
+                    <WizardStepSquaresDetails
                         gameState={gameState as GameState}
                         updateConfig={updateConfig}
                         onNext={() => setStep(4)}
@@ -119,6 +121,15 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                 )}
 
                 {step === 4 && (
+                    <WizardStepBranding
+                        gameState={gameState as GameState}
+                        updateConfig={updateConfig}
+                        onNext={() => setStep(5)}
+                        onBack={() => setStep(3)}
+                    />
+                )}
+
+                {step === 5 && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-300">
                         <WizardStepReminders
                             gameState={gameState as GameState}
@@ -127,7 +138,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                         />
 
                         <div className="flex justify-between pt-6 border-t border-slate-800">
-                            <button onClick={() => setStep(3)} className="text-slate-400 hover:text-white font-bold text-sm">Back</button>
+                            <button onClick={() => setStep(4)} className="text-slate-400 hover:text-white font-bold text-sm">Back</button>
                             <button
                                 onClick={handleCreate}
                                 disabled={isCreating}

@@ -292,7 +292,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                         disabled={!gameState.name || !(gameState as any).lockDate}
                         className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105"
                     >
-                        Next: Branding
+                        Next: Grid Settings
                     </button>
                 </div>
             </div>

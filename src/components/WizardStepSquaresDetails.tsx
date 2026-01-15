@@ -48,6 +48,30 @@ export const WizardStepSquaresDetails: React.FC<WizardStepSquaresDetailsProps> =
                         />
                         <p className="text-xs text-slate-500 mt-1">Set to 100 for unlimited.</p>
                     </div>
+
+                    {/* NEW FIELDS MATCHING ADMIN PANEL */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Number Sets</label>
+                        <select
+                            value={gameState.numberSets}
+                            onChange={(e) => updateConfig({ numberSets: parseInt(e.target.value) || 1 })}
+                            className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                        >
+                            <option value="1">Single Set (Same numbers all game)</option>
+                            <option value="4">4 Sets (New numbers every quarter)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Show "Paid" Status</label>
+                        <select
+                            value={gameState.showPaid ? 'Yes' : 'No'}
+                            onChange={(e) => updateConfig({ showPaid: e.target.value === 'Yes' })}
+                            className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                        >
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
