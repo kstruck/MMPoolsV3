@@ -590,6 +590,54 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 </div>
             </div>
 
+            {/* Quarter Winner Cards */}
+            <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+                {quarterlyPayouts.map((card) => {
+                    const homeDigit = getLastDigit(card.home);
+                    const awayDigit = getLastDigit(card.away);
+
+                    return (
+                        <div key={card.period} className="bg-black border border-slate-800 rounded-xl p-6 flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
+                            {/* Top Bar Color Indicator (Optional) */}
+                            {card.isLocked && <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400"></div>}
+
+                            <h3 className="text-slate-500 font-bold uppercase tracking-widest text-xs mb-4 mt-2">{card.label}</h3>
+
+                            <div className="text-4xl font-black text-white mb-6 flex gap-4 items-center">
+                                <span>{card.home}</span>
+                                <span className="text-slate-700 text-2xl">-</span>
+                                <span>{card.away}</span>
+                            </div>
+
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3 w-full mb-4 grid grid-cols-2 gap-4">
+                                <div className="flex flex-col items-center border-r border-slate-800 border-dashed pr-2">
+                                    <span className="text-[10px] font-bold text-rose-400 uppercase mb-1">{squaresPool.homeTeam ? "Home Digit" : "Row Digit"}</span>
+                                    <span className="text-2xl font-black text-white font-mono">{homeDigit}</span>
+                                </div>
+                                <div className="flex flex-col items-center pl-2">
+                                    <span className="text-[10px] font-bold text-indigo-400 uppercase mb-1">{squaresPool.awayTeam ? "Away Digit" : "Col Digit"}</span>
+                                    <span className="text-2xl font-black text-white font-mono">{awayDigit}</span>
+                                </div>
+                            </div>
+
+                            <div className="text-slate-500 text-xs font-mono mb-6">
+                                This Quarter: {card.qPointsHome} - {card.qPointsAway}
+                            </div>
+
+                            <div className="mt-auto flex flex-col items-center w-full">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">IN THE MONEY:</span>
+                                <div className="text-lg font-bold text-white mb-1 truncate w-full px-2" title={card.winnerName}>{card.winnerName}</div>
+                                <div className="text-3xl font-black text-emerald-400 font-mono tracking-tight">${card.amount}</div>
+                            </div>
+
+                            <div className="mt-6">
+                                {card.isLocked ? <Lock size={18} className="text-emerald-500/30" /> : <Lock size={18} className="text-slate-800/50" />}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
             {/* Score Change History (Only for Every Score Pays) */}
             {squaresPool.ruleVariations.scoreChangePayout && (
                 <div className="max-w-[1600px] mx-auto px-4 mb-8">
