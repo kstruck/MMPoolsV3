@@ -14,6 +14,7 @@ import { FeaturesPage } from './components/FeaturesPage';
 import { PrivacyPage } from './components/PrivacyPage';
 import { TermsPage } from './components/TermsPage';
 import { HowItWorksPage } from './components/HowItWorksPage';
+import { SupportPage } from './components/SupportPage';
 import { Scoreboard } from './components/Scoreboard';
 import { SuperBowlOddsArticle } from './components/articles/SuperBowlOddsArticle';
 
@@ -179,6 +180,7 @@ const App: React.FC = () => {
         <Route path="/how-it-works" element={<HowItWorksPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
         <Route path="/privacy" element={<PrivacyPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
         <Route path="/terms" element={<TermsPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+        <Route path="/support" element={<SupportPage />} />
         <Route path="/scoreboard" element={<Scoreboard user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
         <Route path="/odds/super-bowl-squares" element={
           <>
