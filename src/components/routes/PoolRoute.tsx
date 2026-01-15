@@ -119,6 +119,17 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         setShowAuthModalLocal(true);
     };
 
+    // Password Gate (Local) moved to top
+    const [enteredPassword, setEnteredPassword] = useState('');
+    const [passwordError, setPasswordError] = useState(false);
+    const [isUnlocked, setIsUnlocked] = useState(false);
+
+    // Quarterly Payouts (Moved to top)
+    const quarterlyPayouts = useMemo(() => {
+        if (!pool || pool.type !== 'SQUARES') return [];
+        return calculateQuarterlyPayouts(pool as GameState, winners);
+    }, [pool, winners]);
+
     if (isLoading || isFetchingPool) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
 
     if (!pool) {
@@ -223,13 +234,6 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
     // Helper Functions
 
-
-
-
-    const quarterlyPayouts = useMemo(() => {
-        return calculateQuarterlyPayouts(squaresPool, winners);
-    }, [squaresPool, winners]);
-
     // Claim Logic
     const handleClaimSquares = async (ids: number[], name: string, details: { email?: string, phone?: string }, guestKey?: string) => {
         if (!ids.length && !name) return { success: false, message: 'Invalid data' };
@@ -295,11 +299,6 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             return { success: false, message: error.message || 'Failed to join waitlist.' };
         }
     };
-
-    // Password Gate (Local)
-    const [enteredPassword, setEnteredPassword] = useState('');
-    const [passwordError, setPasswordError] = useState(false);
-    const [isUnlocked, setIsUnlocked] = useState(false);
 
     const handlePasswordSubmit = () => {
         if (enteredPassword === squaresPool.gridPassword) {
