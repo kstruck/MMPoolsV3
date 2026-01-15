@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
-import type { PoolTheme, GameState, PropsPool, Scores, Square } from '../types';
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, Calendar, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User as UserIcon, Shield, Heart, Bell, Clock, Download, Globe, QrCode, TrendingUp, Plus, Hammer } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import type { PoolTheme, GameState, Scores, Square } from '../types';
+import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User as UserIcon, Heart, Clock, Download, TrendingUp, Hammer } from 'lucide-react';
 
-import { getTeamLogo } from '../constants';
+
+
 import { fetchGameScore } from '../services/scoreService';
 import { AnnouncementManager } from './AnnouncementManager';
-import { PropsManager } from './Props/PropsManager';
+
 import { PropGradingDashboard } from './Props/PropGradingDashboard';
 import { PoolStatistics } from './PoolStatistics';
-import { DebouncedInput, DebouncedTextarea, WizardStepPayouts } from './admin';
+import {
+
+  WizardStepMatchup, WizardStepBasics, WizardStepRules, WizardStepPayouts,
+  WizardStepSideHustle, WizardStepBrandingAdmin, WizardStepReminders, WizardStepFinish
+} from './admin';
 
 interface AdminPanelProps {
   gameState: GameState;
@@ -40,12 +44,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [aiIdea, setAiIdea] = useState<string>('');
   const [isThinking, setIsThinking] = useState(false);
   */
-  const [slugError, setSlugError] = useState<string | null>(null);
+
 
   // Updated Tab Order and Default
   const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats' | 'props' | 'grading'>('settings');
-
-  /* handleSlugChange removed in favor of inline DebouncedInput handler */
 
   const [wizardStep, setWizardStep] = useState(1);
   const TOTAL_STEPS = 8;
@@ -65,7 +67,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [editingPlayer, setEditingPlayer] = useState<{ originalName: string, name: string, email: string, phone: string, notes: string } | null>(null);
 
   // Email Broadcast State removed (replaced by AnnouncementManager)
-  const [showQRCode, setShowQRCode] = useState(false);
+
 
   // Theme State
   const [availableThemes, setAvailableThemes] = useState<PoolTheme[]>([]);
@@ -490,21 +492,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const [cfbConference, setCfbConference] = useState('80'); // Default to All FBS
 
-  const CFB_CONFERENCES = [
-    { id: '80', name: 'All FBS (Div I-A)' },
-    { id: '81', name: 'All FCS (Div I-AA)' },
-    { id: '1', name: 'ACC' },
-    { id: '4', name: 'Big 12' },
-    { id: '5', name: 'Big Ten' },
-    { id: '8', name: 'SEC' },
-    { id: '9', name: 'Pac-12' },
-    { id: '151', name: 'American' },
-    { id: '12', name: 'C-USA' },
-    { id: '15', name: 'MAC' },
-    { id: '17', name: 'Mountain West' },
-    { id: '37', name: 'Sun Belt' },
-  ];
-
   /* Helper to estimate current NFL week */
   /* Helper to estimate current NFL week */
   const getEstimatedWeek = () => {
@@ -530,1009 +517,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const currentEstimatedWeek = getEstimatedWeek();
 
-  const renderWizardReminders = () => {
-    // Safe access with defaults to prevent crashes
-    const defaultReminders = {
-      payment: { enabled: false, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false },
-      lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: undefined as number | undefined },
-      winner: { enabled: true, channels: ['email'] as ('email' | 'in-app')[], includeDigits: true, includeCharityImpact: true }
-    };
 
-    const safeReminders = {
-      payment: { ...defaultReminders.payment, ...(gameState.reminders?.payment || {}) },
-      lock: { ...defaultReminders.lock, ...(gameState.reminders?.lock || {}) },
-      winner: { ...defaultReminders.winner, ...(gameState.reminders?.winner || {}) }
-    };
-
-    return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-            <Bell size={20} className="text-amber-400" /> Payment Reminders
-          </h3>
-          <p className="text-slate-400 text-sm mb-6">Automate follow-ups for unpaid squares.</p>
-
-          <div className="space-y-4">
-            <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
-              <div>
-                <span className="font-bold text-slate-200 block">Enable Auto-Reminders</span>
-                <span className="text-xs text-slate-500">System checks every 15 mins for unpaid reservations.</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={safeReminders.payment.enabled}
-                onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, enabled: e.target.checked } } })}
-                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-              />
-            </label>
-
-            {safeReminders.payment.enabled && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Grace Period (Minutes)</label>
-                  <input
-                    type="number"
-                    value={safeReminders.payment.graceMinutes}
-                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, graceMinutes: parseInt(e.target.value) || 0 } } })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">Wait time after reservation before detailed reminder.</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Repeat Every (Hours)</label>
-                  <input
-                    type="number"
-                    value={safeReminders.payment.repeatEveryHours}
-                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, repeatEveryHours: parseInt(e.target.value) || 0 } } })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">Frequency of follow-up emails.</p>
-                </div>
-
-                {/* Notify Users Toggle */}
-                <label className="md:col-span-2 flex items-center gap-3 cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800">
-                  <input
-                    type="checkbox"
-                    checked={safeReminders.payment.notifyUsers}
-                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, notifyUsers: e.target.checked } } })}
-                    className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600"
-                  />
-                  <span className="text-sm text-slate-300">Also email the <strong>Participants</strong> directly (not just Host summary)</span>
-                </label>
-
-                {/* Auto-Release Configuration */}
-                <div className="md:col-span-2 pt-4 border-t border-slate-800 mt-2">
-                  <label className="flex items-center justify-between cursor-pointer p-2 mb-2">
-                    <div>
-                      <span className="font-bold text-rose-400 block flex items-center gap-2">
-                        <Trash2 size={14} /> Auto-Release Unpaid Squares
-                      </span>
-                      <span className="text-xs text-slate-500">Automatically remove reservation if not paid in time.</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={safeReminders.payment.autoRelease}
-                      onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, autoRelease: e.target.checked } } })}
-                      className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-rose-600 focus:ring-rose-500"
-                    />
-                  </label>
-
-                  {safeReminders.payment.autoRelease && (
-                    <div className="pl-4 animate-in fade-in">
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Release After (Hours)</label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="number"
-                          value={safeReminders.payment.autoReleaseHours || 24}
-                          onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, autoReleaseHours: parseInt(e.target.value) || 0 } } })}
-                          className="w-24 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-rose-500"
-                        />
-                        <span className="text-xs text-slate-500">hours from reservation time.</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-            <Clock size={20} className="text-rose-400" /> Auto-Lock & Number Generation
-          </h3>
-          <p className="text-slate-400 text-sm mb-6">Automatically lock the grid and reveal numbers.</p>
-
-          <div className="space-y-4">
-            <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-slate-900 rounded mb-2 border border-transparent hover:border-slate-700 transition-all">
-              <input
-                type="checkbox"
-                checked={safeReminders.lock.enabled}
-                onChange={(e) => updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: e.target.checked } } })}
-                className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-              />
-              <div>
-                <span className="text-sm font-bold text-slate-200 block">Enable Auto-Lock System</span>
-                <span className="text-xs text-slate-500">If disabled, the pool will NEVER auto-lock.</span>
-              </div>
-            </label>
-
-            <div className={`bg-slate-950 p-4 rounded-lg border border-slate-800 ${!safeReminders.lock.enabled ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Trigger Time</label>
-              <select
-                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white mb-4 outline-none focus:border-indigo-500"
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === 'manual') {
-                    updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: undefined } } });
-                  } else if (val === 'custom') {
-                    // Default to Game Start Time if available, otherwise Now + 1 Hour
-                    let defaultTime = new Date();
-                    if (gameState.scores.startTime) {
-                      defaultTime = new Date(gameState.scores.startTime);
-                    } else {
-                      defaultTime.setMinutes(defaultTime.getMinutes() + 60);
-                    }
-                    updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: defaultTime.getTime() } } });
-                  } else {
-                    const offsetMins = parseInt(val);
-                    if (gameState.scores.startTime) {
-                      const start = new Date(gameState.scores.startTime).getTime();
-                      updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: true, lockAt: start - (offsetMins * 60 * 1000) } } });
-                    }
-                  }
-                }}
-                value={
-                  !safeReminders.lock.lockAt ? 'manual' :
-                    gameState.scores.startTime && Math.abs(safeReminders.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 3600000)) < 10000 ? '60' :
-                      gameState.scores.startTime && Math.abs(safeReminders.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 1800000)) < 10000 ? '30' :
-                        gameState.scores.startTime && Math.abs(safeReminders.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 900000)) < 10000 ? '15' :
-                          gameState.scores.startTime && Math.abs(safeReminders.lock.lockAt - (new Date(gameState.scores.startTime).getTime() - 300000)) < 10000 ? '5' :
-                            'custom'
-                }
-              >
-                <option value="manual">Manual (I will click 'Lock')</option>
-                <option value="60" disabled={!gameState.scores.startTime}>1 Hour Before Kickoff</option>
-                <option value="30" disabled={!gameState.scores.startTime}>30 Minutes Before Kickoff</option>
-                <option value="15" disabled={!gameState.scores.startTime}>15 Minutes Before Kickoff</option>
-                <option value="5" disabled={!gameState.scores.startTime}>5 Minutes Before Kickoff</option>
-                <option value="custom">Custom Date & Time...</option>
-              </select>
-
-              {safeReminders.lock.lockAt && (
-                <div className="animate-in fade-in slide-in-from-top-2 border-t border-slate-800 pt-4 mt-2">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Date</label>
-                      <input
-                        type="date"
-                        value={(() => {
-                          // Fix: Use LOCAL date, not UTC (toISOString uses UTC)
-                          const d = new Date(safeReminders.lock.lockAt);
-                          const year = d.getFullYear();
-                          const month = String(d.getMonth() + 1).padStart(2, '0');
-                          const day = String(d.getDate()).padStart(2, '0');
-                          return `${year}-${month}-${day}`;
-                        })()}
-                        onChange={(e) => {
-                          if (!e.target.value) return;
-                          const [y, m, d] = e.target.value.split('-').map(Number);
-                          const current = new Date(safeReminders.lock.lockAt!);
-                          current.setFullYear(y);
-                          current.setMonth(m - 1);
-                          current.setDate(d);
-                          updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
-                        }}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Time</label>
-                      <div className="flex bg-slate-900 border border-slate-700 rounded px-1">
-                        <select
-                          className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
-                          value={(() => {
-                            let h = new Date(safeReminders.lock.lockAt!).getHours();
-                            if (h === 0) h = 12;
-                            else if (h > 12) h -= 12;
-                            return h;
-                          })()}
-                          onChange={(e) => {
-                            const newH = parseInt(e.target.value);
-                            const current = new Date(safeReminders.lock.lockAt!);
-                            const isPM = current.getHours() >= 12;
-                            let h = newH;
-                            if (isPM && newH !== 12) h += 12;
-                            if (!isPM && newH === 12) h = 0;
-                            current.setHours(h);
-                            updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
-                          }}
-                        >
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h} className="bg-slate-900 text-white">{h}</option>)}
-                        </select>
-                        <span className="py-2 text-slate-500">:</span>
-                        <select
-                          className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
-                          value={Math.floor(new Date(safeReminders.lock.lockAt).getMinutes() / 5) * 5}
-                          onChange={(e) => {
-                            const m = parseInt(e.target.value);
-                            const current = new Date(safeReminders.lock.lockAt!);
-                            current.setMinutes(m);
-                            updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
-                          }}
-                        >
-                          {Array.from({ length: 12 }, (_, i) => i * 5).map(m => <option key={m} value={m} className="bg-slate-900 text-white">{m.toString().padStart(2, '0')}</option>)}
-                        </select>
-                        <select
-                          className="bg-transparent text-indigo-400 outline-none font-bold py-2 pl-2"
-                          value={new Date(safeReminders.lock.lockAt).getHours() >= 12 ? 'PM' : 'AM'}
-                          onChange={(e) => {
-                            const isPM = e.target.value === 'PM';
-                            const current = new Date(safeReminders.lock.lockAt!);
-                            let h = current.getHours();
-                            if (isPM && h < 12) h += 12;
-                            if (!isPM && h >= 12) h -= 12;
-                            current.setHours(h);
-                            updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
-                          }}
-                        >
-                          <option value="AM" className="bg-slate-900 text-white">AM</option>
-                          <option value="PM" className="bg-slate-900 text-white">PM</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
-                    <CheckCircle size={10} /> Grid will automatically lock and numbers will be generated at this time.
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
-                    📍 Times shown in your local timezone: <span className="font-mono text-slate-400">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span> <br />
-                    (Server Time: {new Date().toLocaleTimeString([], { timeZoneName: 'short' })})
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-            <Sparkles size={20} className="text-emerald-400" /> Winner Announcements
-          </h3>
-          <p className="text-slate-400 text-sm mb-6">Instant alerts when a quarter closes.</p>
-          <div className="space-y-4">
-            <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
-              <div>
-                <span className="font-bold text-slate-200 block">Enable Winner Emails</span>
-                <span className="text-xs text-slate-500">Auto-email all participants when a winner is calculated.</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={safeReminders.winner.enabled}
-                onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, enabled: e.target.checked } } })}
-                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-              />
-            </label>
-            {safeReminders.winner.enabled && (
-              <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={safeReminders.winner.includeDigits}
-                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, includeDigits: e.target.checked } } })}
-                    className="w-5 h-5 rounded bg-slate-800 border-slate-600"
-                  />
-                  <span className="text-sm text-slate-300">Include Winning Digits</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={safeReminders.winner.includeCharityImpact}
-                    onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, includeCharityImpact: e.target.checked } } })}
-                    className="w-5 h-5 rounded bg-slate-800 border-slate-600"
-                  />
-                  <span className="text-sm text-slate-300">Include Charity Impact</span>
-                </label>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   // Render Wizard STep 1 (Now Matchup)
-  const renderWizardStep1 = () => {
-    // Prefer API logos, fallback to local map
-    const homeLogo = gameState.homeTeamLogo || getTeamLogo(gameState.homeTeam);
-    const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam);
-    return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <div className="flex justify-between items-start mb-6">
-            <div><h3 className="text-xl font-bold text-white mb-2">The Matchup</h3><p className="text-slate-400 text-sm">Select the teams. Import from the schedule to auto-fetch logos.</p></div>
-            <button onClick={() => {
-              setShowSchedule(!showSchedule);
-              if (!showSchedule) {
-                // Smart Defaults
-                const isCollege = gameState.league === 'college' || gameState.league === 'ncaa';
-                const month = new Date().getMonth();
-                if (isCollege && (month === 11 || month === 0)) {
-                  setSeasonType('3'); // Postseason
-                  setWeek('1');
-                } else {
-                  setWeek(currentEstimatedWeek.toString());
-                }
-              }
-            }} className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${showSchedule ? 'bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.6)] border border-indigo-400 hover:scale-105 ring-2 ring-indigo-500/30'}`}>
-              <Calendar size={18} className={!showSchedule ? 'animate-pulse' : ''} />
-              {showSchedule ? 'Hide Schedule' : 'Find Game'}
-            </button>
-          </div>
-          {showSchedule && (
-            <div className="mb-6 bg-slate-950 border border-slate-700 rounded-xl p-4 animate-in fade-in">
-              <div className="flex flex-wrap items-center gap-2 mb-4">
-                <select value={gameState.league || 'nfl'} onChange={(e) => updateConfig({ league: e.target.value as any })} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none font-bold">
-                  <option value="nfl">NFL (Pro)</option>
-                  <option value="college">College (NCAA)</option>
-                </select>
 
-                <select value={seasonType} onChange={(e) => {
-                  const newType = e.target.value;
-                  setSeasonType(newType);
-                  // Reset week logic
-                  if (newType === '2') {
-                    setWeek(currentEstimatedWeek.toString());
-                  } else {
-                    setWeek('1');
-                  }
-                }} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none">
-                  <option value="1">Preseason</option>
-                  <option value="2">Regular Season</option>
-                  <option value="3">Postseason</option>
-                </select>
-
-                <span className="text-slate-500 text-sm">Week</span>
-                <select value={week} onChange={(e) => setWeek(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none">
-                  {seasonType === '2' ? (
-                    Array.from({ length: 18 }).map((_, i) => {
-                      const w = i + 1;
-                      if (w < currentEstimatedWeek) return null;
-                      return <option key={i} value={w}>Week {w}</option>;
-                    })
-                  ) : (
-                    seasonType === '1' ? Array.from({ length: 4 }).map((_, i) => <option key={i} value={i + 1}>Week {i + 1}</option>) : null
-                  )}
-                  {seasonType === '3' && (
-                    <>
-                      <option value="1">Wild Card</option>
-                      <option value="2">Divisional</option>
-                      <option value="3">Conf. Champ</option>
-                      <option value="4">Pro Bowl</option>
-                      <option value="5">Super Bowl</option>
-                    </>
-                  )}
-                </select>
-
-                {(gameState.league === 'college' || gameState.league === 'ncaa') && (
-                  <select value={cfbConference} onChange={(e) => setCfbConference(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none max-w-[150px]">
-                    {CFB_CONFERENCES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                )}
-
-                <button onClick={fetchSchedule} disabled={isLoadingSchedule} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-sm font-bold ml-auto flex items-center gap-2">
-                  {isLoadingSchedule ? 'Loading...' : <><RefreshCw size={14} /> Find Games</>}
-                </button>
-              </div>
-              <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                {scheduleGames.length === 0 && !isLoadingSchedule && (
-                  <div className="text-slate-500 text-sm text-center py-4">No future games found for this week.</div>
-                )}
-                {scheduleGames.map((game: any) => {
-                  const comp = game.competitions[0];
-                  const home = comp.competitors.find((c: any) => c.homeAway === 'home').team;
-                  const away = comp.competitors.find((c: any) => c.homeAway === 'away').team;
-                  const dateStr = new Date(game.date).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-                  return (
-                    <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-slate-800 cursor-pointer border border-transparent hover:border-indigo-500/30 group transition-all">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-slate-500 w-24">{dateStr}</span>
-                        <div className="flex items-center gap-2">
-                          <img src={away.logo} className="w-5 h-5 object-contain" />
-                          <span className="text-sm text-slate-300 font-bold">{away.abbreviation}</span>
-                        </div>
-                        <span className="text-xs text-slate-600">@</span>
-                        <div className="flex items-center gap-2">
-                          <img src={home.logo} className="w-5 h-5 object-contain" />
-                          <span className="text-sm text-slate-300 font-bold">{home.abbreviation}</span>
-                        </div>
-                      </div>
-                      <span className="text-xs text-indigo-400 opacity-0 group-hover:opacity-100 font-bold transition-opacity">Select</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-indigo-500/50 transition-colors"><label className="block text-xs font-bold text-indigo-400 uppercase mb-4 text-center">Column Team (Top)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div>
-              <DebouncedInput
-                value={gameState.awayTeam}
-                onChange={(val) => {
-                  updateConfig({ awayTeam: val });
-                  if (!gameState.name || gameState.name === 'New Pool') {
-                    updateConfig({ name: `${val} vs ${gameState.homeTeam || 'Home'} Squares` });
-                  }
-                }}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Select a game above"
-                disabled={true}
-              />
-            </div></div>
-            <div className="bg-slate-950 border border-slate-700 rounded-xl p-6 relative group hover:border-rose-500/50 transition-colors"><label className="block text-xs font-bold text-rose-400 uppercase mb-4 text-center">Row Team (Left)</label><div className="flex flex-col items-center gap-4"><div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center border-2 border-slate-800 p-4 shadow-xl">{homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <Shield size={40} className="text-slate-600" />}</div>
-              <DebouncedInput
-                value={gameState.homeTeam}
-                onChange={(val) => {
-                  updateConfig({ homeTeam: val });
-                  if (!gameState.name || gameState.name === 'New Pool') {
-                    updateConfig({ name: `${gameState.awayTeam || 'Away'} vs ${val} Squares` });
-                  }
-                }}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-2 text-white text-center font-bold text-lg focus:ring-1 focus:ring-indigo-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Select a game above"
-                disabled={true}
-              />
-            </div></div>
-          </div>
-        </div>
-      </div >
-    )
-  };
-
-  // Step 2 is now Basic Information
-  const renderWizardStep2 = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-2">Basic Information</h3>
-        <p className="text-slate-400 text-sm mb-6">Let's verify the core details of your pool.</p>
-
-        {/* Public Visibility Toggle */}
-        <div className="mb-6 bg-slate-950 border border-slate-800 rounded-lg p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${gameState.isPublic ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
-              <Globe size={24} />
-            </div>
-            <div>
-              <h4 className={`font-bold ${gameState.isPublic ? 'text-white' : 'text-slate-400'}`}>Public Visibility</h4>
-              <p className="text-xs text-slate-500">
-                {gameState.isPublic
-                  ? "Your pool is listed in the 'Browse Pools' directory."
-                  : "Only people with the link can access this pool."}
-              </p>
-            </div>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!gameState.isPublic}
-              onChange={(e) => updateConfig({ isPublic: e.target.checked })}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-          </label>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label><DebouncedInput value={gameState.name} onChange={(val) => updateConfig({ name: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Enter Pool Name" /></div>
-
-          {/* League Selector Moved to Step 1 */}
-
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">URL Slug</label>
-            <div className="relative">
-              <span className="absolute left-3 top-3 text-slate-600 font-mono text-sm">/</span>
-              <DebouncedInput value={gameState.urlSlug || ''} onChange={(val) => {
-                const safe = val.toLowerCase().replace(/[^a-z0-9-]/g, '');
-                if (safe && !checkSlugAvailable(safe)) setSlugError("Slug is already taken");
-                else setSlugError(null);
-                updateConfig({ urlSlug: safe });
-              }} className={`w-full bg-slate-950 border ${slugError ? 'border-rose-500 focus:ring-rose-500' : 'border-slate-700 focus:ring-indigo-500'} rounded pl-6 pr-4 py-3 text-white focus:ring-1 outline-none`} placeholder="unique-id" />
-            </div>
-            {slugError && <p className="text-rose-500 text-xs mt-1 font-bold">{slugError}</p>}
-            <p className="text-slate-500 text-[10px] mt-1">Lowercase letters, numbers, and dashes only.</p>
-          </div>
-          <div className="md:col-span-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Manager Name</label><DebouncedInput value={gameState.managerName || ''} onChange={(val) => updateConfig({ managerName: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Your Name" /></div>
-          <div className="md:col-span-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contact Email</label><DebouncedInput value={gameState.contactEmail} onChange={(val) => updateConfig({ contactEmail: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="admin@example.com" /></div>
-          <div className="md:col-span-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Venmo Handle (@username)</label><DebouncedInput value={gameState.paymentHandles?.venmo || ''} onChange={(val) => updateConfig({ paymentHandles: { ...gameState.paymentHandles, venmo: val } })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="@YourVenmo" /></div>
-          <div className="md:col-span-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Zelle (@username/phone)</label><DebouncedInput value={gameState.paymentHandles?.zelle || ''} onChange={(val) => updateConfig({ paymentHandles: { ...gameState.paymentHandles, zelle: val } })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none" placeholder="Enter Zelle Info" /></div>
-          <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payment Instructions</label><DebouncedTextarea value={gameState.paymentInstructions} onChange={(val) => updateConfig({ paymentInstructions: val })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-24 resize-none" /></div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderWizardStep3 = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-2">Grid Rules</h3>
-        <p className="text-slate-400 text-sm mb-6">Set the pricing and limitations for your players.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-slate-950 p-4 rounded-lg border border-slate-700"><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Cost Per Square</label><div className="flex items-center gap-3"><div className="bg-emerald-500/20 p-3 rounded-lg text-emerald-400"><DollarSign size={24} /></div><input type="number" value={gameState.costPerSquare} onChange={(e) => updateConfig({ costPerSquare: parseInt(e.target.value) || 0 })} className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-emerald-500 py-1" /></div></div>
-          <div className="bg-slate-950 p-4 rounded-lg border border-slate-700"><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Max Squares / Player</label><div className="flex items-center gap-3"><div className="bg-indigo-500/20 p-3 rounded-lg text-indigo-400"><Shield size={24} /></div><input type="number" value={gameState.maxSquaresPerPlayer} onChange={(e) => updateConfig({ maxSquaresPerPlayer: parseInt(e.target.value) || 0 })} className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-indigo-500 py-1" /></div></div>
-          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Number Sets</label><select value={gameState.numberSets} onChange={(e) => updateConfig({ numberSets: parseInt(e.target.value) || 1 })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"><option value="1">Single Set (Same numbers all game)</option><option value="4">4 Sets (New numbers every quarter)</option></select></div>
-          <div><label className="block text-xs font-bold text-slate-400 uppercase mb-1">Show "Paid" Status</label><select value={gameState.showPaid ? 'Yes' : 'No'} onChange={(e) => updateConfig({ showPaid: e.target.value === 'Yes' })} className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"><option>Yes</option><option>No</option></select></div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderWizardStep4 = () => (
-    <WizardStepPayouts
-      gameState={gameState}
-      updateConfig={updateConfig}
-      totalPayout={totalPayout}
-    />
-  );
-
-  const renderWizardStep5 = () => {
-    // Default props structure for SQUARES pools
-    const sideHustle = gameState.props || {
-      enabled: false,
-      cost: 10,
-      maxCards: 1,
-      payouts: [100],
-      questions: []
-    };
-
-    const toggleSideHustle = (enabled: boolean) => {
-      updateConfig({
-        props: {
-          ...sideHustle,
-          enabled
-        }
-      });
-    };
-
-    const updateSideHustle = (updates: Partial<typeof sideHustle>) => {
-      updateConfig({
-        props: {
-          ...sideHustle,
-          ...updates
-        }
-      });
-    };
-
-    const payoutTotal = sideHustle.payouts?.reduce((a, b) => a + b, 0) || 0;
-
-    return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
-                <Sparkles size={20} className="text-amber-400" /> Side Hustle Props
-              </h3>
-              <p className="text-slate-400 text-sm">Add a bonus prop bet game alongside your squares pool.</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sideHustle.enabled}
-                onChange={(e) => toggleSideHustle(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-            </label>
-          </div>
-
-          {sideHustle.enabled && (
-            <div className="animate-in fade-in slide-in-from-top-2 space-y-6">
-              {/* Basic Settings */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                  <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Entry Fee ($)</label>
-                  <div className="flex items-center gap-3">
-                    <div className="bg-emerald-500/20 p-3 rounded-lg text-emerald-400">
-                      <DollarSign size={24} />
-                    </div>
-                    <input
-                      type="number"
-                      min="0"
-                      value={sideHustle.cost}
-                      onChange={(e) => updateSideHustle({ cost: Number(e.target.value) })}
-                      className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-emerald-500 py-1"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                  <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Max Cards Per Player</label>
-                  <div className="flex items-center gap-3">
-                    <div className="bg-indigo-500/20 p-3 rounded-lg text-indigo-400">
-                      <Users size={24} />
-                    </div>
-                    <input
-                      type="number"
-                      min="1"
-                      value={sideHustle.maxCards}
-                      onChange={(e) => updateSideHustle({ maxCards: Number(e.target.value) })}
-                      className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-indigo-500 py-1"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Payout Structure */}
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <h4 className="font-bold text-white mb-4 flex items-center justify-between">
-                  <span>Payout Structure (Percentages)</span>
-                  <span className={`text-sm ${payoutTotal === 100 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    Total: {payoutTotal}%
-                  </span>
-                </h4>
-
-                <div className="space-y-3">
-                  {sideHustle.payouts?.map((p, idx) => (
-                    <div key={idx} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-400 text-sm">
-                        {idx + 1}
-                      </div>
-                      <div className="flex-grow relative">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={p}
-                          onChange={(e) => {
-                            const newPayouts = [...(sideHustle.payouts || [])];
-                            newPayouts[idx] = Number(e.target.value);
-                            updateSideHustle({ payouts: newPayouts });
-                          }}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white pr-8 focus:border-indigo-500 outline-none"
-                        />
-                        <span className="absolute right-3 top-2 text-slate-500">%</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          const newPayouts = sideHustle.payouts?.filter((_, i) => i !== idx);
-                          updateSideHustle({ payouts: newPayouts });
-                        }}
-                        className="p-2 text-slate-500 hover:text-rose-400 transition-colors"
-                        disabled={(sideHustle.payouts?.length || 0) <= 1}
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  ))}
-
-                  <button
-                    onClick={() => {
-                      const currentTotal = sideHustle.payouts?.reduce((a, b) => a + b, 0) || 0;
-                      if (currentTotal < 100) {
-                        updateSideHustle({ payouts: [...(sideHustle.payouts || []), 100 - currentTotal] });
-                      }
-                    }}
-                    className="w-full py-2 border border-dashed border-slate-700 rounded-lg text-slate-400 hover:text-white hover:border-slate-500 transition-colors flex items-center justify-center gap-2 text-sm"
-                  >
-                    <Plus size={16} /> Add Place
-                  </button>
-                </div>
-              </div>
-
-              {/* Props Questions Manager */}
-              <div className="border-t border-slate-800 pt-6">
-                <h4 className="font-bold text-white mb-4 flex items-center gap-2">
-                  <span className="text-lg">❓</span> Prop Questions
-                </h4>
-                <PropsManager
-                  gameState={gameState as unknown as PropsPool}
-                  updateConfig={updateConfig as any}
-                  isWizardMode={true}
-                />
-              </div>
-            </div>
-          )}
-
-          {!sideHustle.enabled && (
-            <div className="text-center py-8 text-slate-500">
-              <Sparkles size={48} className="mx-auto mb-4 opacity-30" />
-              <p>Enable Side Hustle to add a bonus prop bet game to your pool.</p>
-              <p className="text-xs mt-2">Players can pick answers to fun prop questions for a chance to win extra prizes!</p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderWizardStep6 = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      {/* Theme Selector */}
-      {availableThemes.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-            <Sparkles size={20} className="text-amber-400" /> Pool Theme
-          </h3>
-          <p className="text-slate-400 text-sm mb-6">Select a color theme for your pool. This changes the overall look and feel.</p>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {/* No Theme Option */}
-            <button
-              onClick={() => updateConfig({ themeId: undefined })}
-              className={`p-4 rounded-xl border transition-all text-left relative z-10 cursor-pointer ${!gameState.themeId ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-500/10' : 'border-slate-700 hover:border-slate-500 bg-slate-950'}`}
-            >
-              <div className="h-12 rounded-lg bg-slate-800 mb-3 flex items-center justify-center">
-                <span className="text-slate-500 text-xs">Default</span>
-              </div>
-              <span className="font-bold text-white text-sm">Classic Dark</span>
-              <span className="text-xs text-slate-400 block">Original theme</span>
-            </button>
-
-            {availableThemes.map((theme) => (
-              <button
-                key={theme.id || theme.name}
-                onClick={() => handleThemeSelect(theme)}
-                className={`p-4 rounded-xl border transition-all text-left relative z-10 cursor-pointer ${gameState.themeId === theme.id ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-700 hover:border-slate-500'}`}
-              >
-                {/* Theme Preview */}
-                <div
-                  className="h-12 rounded-lg mb-3 flex items-center justify-center"
-                  style={{ background: theme.colors?.background }}
-                >
-                  {/* Mini grid preview */}
-                  <div className="flex gap-0.5">
-                    {[0, 1, 2, 3].map(i => (
-                      <div
-                        key={i}
-                        className="w-2 h-2 rounded-sm"
-                        style={{
-                          background: i % 2 === 0 ? theme.grid?.cellBackground : theme.grid?.cellBackgroundAlt,
-                          border: `1px solid ${theme.grid?.cellBorder}`
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <span className="font-bold text-white text-sm">{theme.name}</span>
-                <span className="text-xs text-slate-400 block truncate">{theme.description}</span>
-                {/* Color dots */}
-                <div className="flex gap-1 mt-2">
-                  {['primary', 'secondary', 'success'].map(key => (
-                    <div
-                      key={key}
-                      className="w-3 h-3 rounded-full border border-slate-600"
-                      style={{ background: (theme.colors as any)?.[key] }}
-                    />
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-2">Customization</h3>
-        <p className="text-slate-400 text-sm mb-6">Make the pool your own with a custom logo and background.</p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Logo Upload */}
-          <div className="bg-slate-950 p-6 rounded-xl border border-slate-700">
-            <h4 className="font-bold text-white mb-4 flex items-center gap-2">
-              <Sparkles size={16} className="text-amber-400" /> Pool Logo
-            </h4>
-
-            <div className="flex flex-col items-center gap-4">
-              {gameState.branding?.logoUrl ? (
-                <div className="relative group">
-                  <div className="w-32 h-32 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-600 p-2">
-                    <img src={gameState.branding.logoUrl} className="max-w-full max-h-full object-contain" />
-                  </div>
-                  <button
-                    onClick={() => updateConfig({ branding: { ...gameState.branding, logoUrl: undefined } })}
-                    className="absolute -top-2 -right-2 bg-rose-500 text-white p-1 rounded-full shadow-lg hover:bg-rose-600 transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ) : (
-                <div className="w-32 h-32 bg-slate-900/50 rounded-lg border-2 border-dashed border-slate-700 flex flex-col items-center justify-center text-slate-500 gap-2">
-                  <div className="p-2 bg-slate-800 rounded-full"><Sparkles size={20} /></div>
-                  <span className="text-xs">No Logo</span>
-                </div>
-              )}
-
-              <div className="w-full">
-                <label className="block text-center cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">
-                  Upload Logo (Max 2MB)
-                  <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-                </label>
-                <p className="text-[10px] text-slate-500 text-center mt-2">Recommended: Square PNG with transparent background.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Background Color */}
-          <div className="bg-slate-950 p-6 rounded-xl border border-slate-700">
-            <h4 className="font-bold text-white mb-4 flex items-center gap-2">
-              <Settings size={16} className="text-emerald-400" /> Background color
-            </h4>
-            <p className="text-xs text-slate-400 mb-4">Choose a background color for your pool page.</p>
-
-            <div className="flex items-center gap-4">
-              <input
-                type="color"
-                value={gameState.branding?.backgroundColor || '#0f172a'} // Default Slate-900
-                onChange={(e) => updateConfig({ branding: { ...gameState.branding, backgroundColor: e.target.value } })}
-                className="w-16 h-16 rounded cursor-pointer border-none p-0 bg-transparent"
-              />
-              <div className="flex-1">
-                <div className="font-mono text-white mb-1">{gameState.branding?.backgroundColor || '#0f172a'}</div>
-                <button
-                  onClick={() => updateConfig({ branding: { ...gameState.branding, backgroundColor: '#0f172a' } })}
-                  className="text-xs text-slate-500 hover:text-white underline"
-                >
-                  Reset to Default
-                </button>
-              </div>
-            </div>
-
-            {/* Mini Preview */}
-            <div className="mt-8">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-2">Live Preview</p>
-              <div
-                className="w-full h-24 rounded-lg flex items-center justify-center border border-slate-600 relative overflow-hidden"
-                style={{ backgroundColor: gameState.branding?.backgroundColor || '#0f172a' }}
-              >
-                {gameState.branding?.logoUrl && (
-                  <img src={gameState.branding.logoUrl} className="h-12 w-12 object-contain drop-shadow-lg" />
-                )}
-                <div className="absolute bottom-2 left-0 w-full text-center">
-                  <span className="text-[10px] text-white/50 font-bold uppercase tracking-widest">Your Pool</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderWizardStep7 = () => renderWizardReminders();
-
-  const renderWizardStep8 = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-2">Final Preferences</h3>
-        <p className="text-slate-400 text-sm mb-6">Customize data collection, notifications, and advanced rules.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Player Data */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-700">
-            <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Users size={16} className="text-indigo-400" /> Player Data Collection</h4>
-            <div className="space-y-3">
-              {['collectPhone', 'collectAddress', 'collectReferral', 'collectNotes'].map((field) => (
-                <label key={field} className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded">
-                  <span className="text-sm text-slate-300 capitalize">{field.replace('collect', '').replace(/([A-Z])/g, ' $1').trim()}</span>
-                  <input type="checkbox" checked={(gameState as any)[field]} onChange={(e) => updateConfig({ [field]: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Email Notifications - NEW */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-700">
-            <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Mail size={16} className="text-sky-400" /> Email Notifications</h4>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs text-slate-500 uppercase font-bold mb-1">User Picks Confirmation</label>
-                <select
-                  value={gameState.emailConfirmation}
-                  onChange={(e) => updateConfig({ emailConfirmation: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white text-sm outline-none focus:border-indigo-500"
-                >
-                  <option value="No Email Confirmation">Don't Send</option>
-                  <option value="Email Confirmation">Send Email Receipt</option>
-                </select>
-              </div>
-
-              <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded">
-                <span className="text-sm text-slate-300">Email Players when Numbers Set</span>
-                <input type="checkbox" checked={gameState.emailNumbersGenerated} onChange={(e) => updateConfig({ emailNumbersGenerated: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
-              </label>
-
-              <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded border-t border-slate-800 pt-3">
-                <span className="text-sm text-slate-300">Alert Admin when Grid Full</span>
-                <input type="checkbox" checked={gameState.notifyAdminFull} onChange={(e) => updateConfig({ notifyAdminFull: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
-              </label>
-            </div>
-          </div>
-
-          {/* Access Control */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-700">
-            <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Lock size={16} className="text-amber-400" /> Access Control</h4>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Grid Password</label>
-                <input type="text" value={gameState.gridPassword} onChange={(e) => updateConfig({ gridPassword: e.target.value })} className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white outline-none" placeholder="Optional" />
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer pt-2">
-                <input type="checkbox" checked={gameState.isPublic} onChange={(e) => updateConfig({ isPublic: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
-                <span className="text-sm text-slate-300">List in Public Directory</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Debug & Repair (Admin Only) */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-700 border-l-4 border-l-amber-500">
-            <h4 className="font-bold text-white mb-3 text-sm uppercase flex items-center gap-2"><Hammer size={14} className="text-amber-400" /> Debug & Repair</h4>
-            <p className="text-xs text-slate-500 mb-4">Advanced tools to fix stuck states or missing scores.</p>
-
-            <button
-              onClick={handleFixSync}
-              disabled={isFixing}
-              className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 py-2 px-4 rounded text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2"
-            >
-              {isFixing ? <div className="animate-spin rounded-full h-3 w-3 border-2 border-slate-400 border-t-transparent" /> : <RefreshCw size={14} />}
-              Recalculate Scores from ESPN
-            </button>
-            <p className="text-[10px] text-slate-600 mt-2 text-center">Forces a full re-sync and re-processes all winners.</p>
-          </div>
-
-          {/* QR Code Sharing */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-700">
-            <h4 className="font-bold text-white mb-4 flex items-center gap-2"><QrCode size={16} className="text-emerald-400" /> Share via QR Code</h4>
-            <div className="text-center">
-              <button
-                onClick={() => setShowQRCode(!showQRCode)}
-                className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 mx-auto"
-              >
-                <QrCode size={16} />
-                {showQRCode ? 'Hide QR Code' : 'Generate QR Code'}
-              </button>
-              {showQRCode && (
-                <div className="mt-4 animate-in fade-in slide-in-from-top-2">
-                  <div className="bg-white p-4 rounded-xl inline-block">
-                    <QRCodeSVG
-                      id="pool-qr-code"
-                      value={`${window.location.origin}/#pool/${gameState.urlSlug || gameState.id}`}
-                      size={180}
-                      level="H"
-                      includeMargin
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400 mt-3">Scan to join pool</p>
-                  <button
-                    onClick={() => {
-                      const svg = document.getElementById('pool-qr-code');
-                      if (!svg) return;
-                      const svgData = new XMLSerializer().serializeToString(svg);
-                      const canvas = document.createElement('canvas');
-                      const ctx = canvas.getContext('2d');
-                      const img = new Image();
-                      img.onload = () => {
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        ctx?.drawImage(img, 0, 0);
-                        const pngUrl = canvas.toDataURL('image/png');
-                        const a = document.createElement('a');
-                        a.href = pngUrl;
-                        a.download = `${gameState.urlSlug || 'pool'}_qr.png`;
-                        a.click();
-                      };
-                      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
-                    }}
-                    className="mt-3 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors inline-flex items-center gap-2"
-                  >
-                    <Download size={14} /> Download PNG
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-20">
@@ -1594,14 +582,74 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
 
-            {wizardStep === 1 && renderWizardStep1()}
-            {wizardStep === 2 && renderWizardStep2()}
-            {wizardStep === 3 && renderWizardStep3()}
-            {wizardStep === 4 && renderWizardStep4()}
-            {wizardStep === 5 && renderWizardStep5()}
-            {wizardStep === 6 && renderWizardStep6()}
-            {wizardStep === 7 && renderWizardStep7()}
-            {wizardStep === 8 && renderWizardStep8()}
+            {wizardStep === 1 && (
+              <WizardStepMatchup
+                gameState={gameState}
+                updateConfig={updateConfig}
+                seasonType={seasonType}
+                setSeasonType={setSeasonType}
+                week={week}
+                setWeek={setWeek}
+                scheduleGames={scheduleGames}
+                isLoadingSchedule={isLoadingSchedule}
+                showSchedule={showSchedule}
+                setShowSchedule={setShowSchedule}
+                fetchSchedule={fetchSchedule}
+                selectGame={selectGame}
+                currentEstimatedWeek={currentEstimatedWeek}
+                cfbConference={cfbConference}
+                setCfbConference={setCfbConference}
+              />
+            )}
+            {wizardStep === 2 && (
+              <WizardStepBasics
+                gameState={gameState}
+                updateConfig={updateConfig}
+                checkSlugAvailable={checkSlugAvailable}
+              />
+            )}
+            {wizardStep === 3 && (
+              <WizardStepRules
+                gameState={gameState}
+                updateConfig={updateConfig}
+              />
+            )}
+            {wizardStep === 4 && (
+              <WizardStepPayouts
+                gameState={gameState}
+                updateConfig={updateConfig}
+                totalPayout={totalPayout}
+              />
+            )}
+            {wizardStep === 5 && (
+              <WizardStepSideHustle
+                gameState={gameState}
+                updateConfig={updateConfig}
+              />
+            )}
+            {wizardStep === 6 && (
+              <WizardStepBrandingAdmin
+                gameState={gameState}
+                updateConfig={updateConfig}
+                availableThemes={availableThemes}
+                handleThemeSelect={handleThemeSelect}
+                handleLogoUpload={handleLogoUpload}
+              />
+            )}
+            {wizardStep === 7 && (
+              <WizardStepReminders
+                gameState={gameState}
+                updateConfig={updateConfig}
+              />
+            )}
+            {wizardStep === 8 && (
+              <WizardStepFinish
+                gameState={gameState}
+                updateConfig={updateConfig}
+                handleFixSync={handleFixSync}
+                isFixing={isFixing}
+              />
+            )}
 
             <div className="flex justify-between pt-6 border-t border-slate-800">
               <button onClick={() => setWizardStep(Math.max(1, wizardStep - 1))} disabled={wizardStep === 1} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all"><ArrowLeft size={18} /> Previous</button>
@@ -1848,7 +896,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {activeTab === 'props' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {renderWizardStep5()}
+            <WizardStepSideHustle
+              gameState={gameState}
+              updateConfig={updateConfig}
+            />
           </div>
         )}
 
@@ -1897,7 +948,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* REMINDERS TAB */}
         {activeTab === 'reminders' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {renderWizardReminders()}
+            <WizardStepReminders
+              gameState={gameState}
+              updateConfig={updateConfig}
+            />
           </div>
         )}
 
