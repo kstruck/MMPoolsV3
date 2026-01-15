@@ -171,7 +171,7 @@ async function checkPlayoffReminders(pool: any, now: number) {
 
                 ${pool.settings?.paymentInstructions ? `<p><strong>Instructions:</strong> ${pool.settings.paymentInstructions}</p>` : ''}
             `;
-            const html = renderEmailHtml('Payment Reminder', body, `${BASE_URL}/#pool/${pool.id}`, 'View Pool');
+            const html = renderEmailHtml('Payment Reminder', body, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
 
             // Queue Email
             const db = admin.firestore();
@@ -220,7 +220,7 @@ async function checkPaymentReminders(pool: GameState, now: number) {
             <p>Hi ${pool.managerName},</p>
             <p>You have ${unpaidSquares.length} squares that are reserved but unpaid.</p>
         `;
-        const html = renderEmailHtml(`Action Needed: Unpaid Squares`, emailBody, `${BASE_URL}/#pool/${pool.id}`, 'Manage Pool');
+        const html = renderEmailHtml(`Action Needed: Unpaid Squares`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
         await sendEmail(pool.contactEmail, `Action Needed: ${unpaidSquares.length} Unpaid Squares`, html);
         await logAudit(pool.id, `Sent payment reminder to host (${unpaidSquares.length} unpaid)`, 'NOTIFICATION_SENT', { dedupeKey: hostKey });
     }
@@ -252,7 +252,7 @@ async function checkPaymentReminders(pool: GameState, now: number) {
                     <p>You have ${squares.length} squares pending payment in <strong>${pool.name}</strong>.</p>
                     <p>Please pay the host: ${pool.paymentInstructions || 'See pool details'}</p>
                 `;
-                    const html = renderEmailHtml(`Payment Reminder`, emailBody, `${BASE_URL}/#pool/${pool.id}`, 'View Pool');
+                    const html = renderEmailHtml(`Payment Reminder`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
                     await sendEmail(email, `Reminder: ${squares.length} Squares Pending Payment`, html);
                 }
             }
@@ -319,7 +319,7 @@ async function checkPaymentReminders(pool: GameState, now: number) {
                     <p><strong>${squaresToRelease.length} squares</strong> have been automatically released due to non-payment after ${settings.autoReleaseHours} hours.</p>
                     <p>Released squares: ${squaresToRelease.map(s => `#${s.id}`).join(', ')}</p>
                 `;
-                const html = renderEmailHtml(`Squares Auto-Released`, emailBody, `${BASE_URL}/#pool/${pool.id}`, 'View Pool');
+                const html = renderEmailHtml(`Squares Auto-Released`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
                 await sendEmail(pool.contactEmail, `${squaresToRelease.length} Squares Auto-Released: ${pool.name}`, html);
 
                 console.log(`[AutoRelease] Released ${squaresToRelease.length} squares from pool ${pool.id}`);
@@ -339,7 +339,7 @@ async function notifyWaitlist(pool: GameState, releasedCount: number) {
         <p>Good news! <strong>${releasedCount} squares</strong> have just become available in ${pool.name}.</p>
         <p>First come, first served! Click below to claim your squares now.</p>
     `;
-    const html = renderEmailHtml(`Squares Available!`, emailBody, `${BASE_URL}/#pool/${pool.id}`, 'Claim Squares Now');
+    const html = renderEmailHtml(`Squares Available!`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'Claim Squares Now');
 
     for (const entry of pool.waitlist) {
         await sendEmail(entry.email, emailSubject, html);
@@ -393,7 +393,7 @@ async function checkLockReminders(pool: GameState, now: number) {
             if (sent) {
                 // Email Host
                 const hostBody = `<p>Your pool <strong>${pool.name}</strong> locks soon.</p>`;
-                const hostHtml = renderEmailHtml(`Pool Locking Soon`, hostBody, `${BASE_URL}/#pool/${pool.id}`, 'Manage Pool');
+                const hostHtml = renderEmailHtml(`Pool Locking Soon`, hostBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
                 await sendEmail(pool.contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
 
                 // Start: Email all participants if needed (expensive for free tier, maybe limit or skip for MVP if list huge)
@@ -402,7 +402,7 @@ async function checkLockReminders(pool: GameState, now: number) {
                 const uniqueEmails = Array.from(new Set(pool.squares.map(s => s.playerDetails?.email).filter(Boolean))) as string[];
                 for (const email of uniqueEmails) {
                     const userBody = `<p>The pool locks in approximately ${Math.round(minutesUntilLock / 60)} hours.</p>`;
-                    const userHtml = renderEmailHtml(`Grid Locking Soon: ${pool.name}`, userBody, `${BASE_URL}/#pool/${pool.id}`, 'Check Your Squares');
+                    const userHtml = renderEmailHtml(`Grid Locking Soon: ${pool.name}`, userBody, `${BASE_URL}/pool/${pool.id}`, 'Check Your Squares');
                     await sendEmail(email, `Grid Locking Soon: ${pool.name}`, userHtml);
                 }
 
@@ -461,7 +461,7 @@ export const onWinnerComputed = functions.firestore.onDocumentCreated("pools/{po
                 ${settings.includeDigits ? `<p><strong>Winning Digits:</strong> Home ${winnerData.homeDigit} - Away ${winnerData.awayDigit}</p>` : ''}
             `;
 
-        const html = renderEmailHtml(`${pool.name} Winner Alert`, bodyContent, `${BASE_URL}/#pool/${pool.id}`, 'View Full Grid');
+        const html = renderEmailHtml(`${pool.name} Winner Alert`, bodyContent, `${BASE_URL}/pool/${pool.id}`, 'View Full Grid');
 
         // Batch send (naive loop for MVP)
         for (const email of uniqueEmails) {

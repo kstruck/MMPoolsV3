@@ -127,10 +127,28 @@ export const reserveSquare = onCall(async (request) => {
             "Your Grid is Full!",
             `<p>Great news! All squares in your pool <strong>${result.poolName}</strong> have been reserved.</p>
              <p>It's time to generate the numbers and lock the pool!</p>`,
-            `https://www.marchmeleepools.com/#pool/${poolId}`,
+            `https://www.marchmeleepools.com/pool/${poolId}`,
             "Go to Pool"
         );
         sendEmail(result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));
+    }
+
+    // Send confirmation email to user who reserved the square
+    if (userEmail && userEmail !== 'Unknown') {
+        const poolRef = db.collection("pools").doc(poolId);
+        const poolDoc = await poolRef.get();
+        const poolData = poolDoc.data() as GameState;
+        const confirmSubject = `Square Reserved: ${poolData.name}`;
+        const confirmHtml = renderEmailHtml(
+            "Square Reserved!",
+            `<p>Hi ${userName}!</p>
+             <p>You have successfully reserved <strong>Square #${squareId}</strong> in the pool <strong>${poolData.name}</strong>.</p>
+             <p>Cost per square: <strong>$${poolData.costPerSquare}</strong></p>
+             <p>Check the pool for payment instructions and updates.</p>`,
+            `https://www.marchmeleepools.com/pool/${poolId}`,
+            "View Pool"
+        );
+        sendEmail(userEmail, confirmSubject, confirmHtml, { poolId, reason: 'SQUARE_RESERVED' }).catch(err => console.error("Failed to send reservation confirmation email", err));
     }
 
     return { success: true };

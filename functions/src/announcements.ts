@@ -59,7 +59,7 @@ export const onAnnouncementCreated = functions.firestore
         const emailHtml = renderEmailHtml(
             announcement.subject,
             bodyContent,
-            `${BASE_URL}/#pool/${pool.id}`,
+            `${BASE_URL}/pool/${pool.id}`,
             'View Pool'
         );
 

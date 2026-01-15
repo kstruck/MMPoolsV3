@@ -189,7 +189,7 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
                 </div>
             `;
             // Render Standard Template
-            const poolUrl = `${emailStyles_1.BASE_URL}/#pool/${poolId}`;
+            const poolUrl = `${emailStyles_1.BASE_URL}/pool/${poolId}`;
             const emailHtml = (0, emailStyles_1.renderEmailHtml)('Entry Confirmed! ✅', bodyContent, poolUrl, 'View Your Entry');
             // Send via Firestore Trigger
             await db.collection('mail').add({
@@ -257,7 +257,7 @@ exports.managePlayoffEntry = (0, https_1.onCall)(async (request) => {
 
                         <p>You are all set! Good luck in the playoffs.</p>
                     `;
-                    const html = (0, emailStyles_1.renderEmailHtml)('Payment Receipt', body, `${emailStyles_1.BASE_URL}/#pool/${poolId}`, 'View Pool');
+                    const html = (0, emailStyles_1.renderEmailHtml)('Payment Receipt', body, `${emailStyles_1.BASE_URL}/pool/${poolId}`, 'View Pool');
                     await db.collection('mail').add({
                         to: recipientEmail,
                         message: { subject, html }

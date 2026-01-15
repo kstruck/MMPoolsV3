@@ -64,7 +64,7 @@ export const joinWaitlist = functions.https.onCall(async (request) => {
             <p>You have successfully joined the waitlist for <strong>${poolName}</strong>.</p>
             <p>If a square becomes available, we will notify you immediately via email.</p>
         `;
-        const html = renderEmailHtml("Waitlist Confirmed", body, `${BASE_URL}/#pool/${poolId}`, "View Pool");
+        const html = renderEmailHtml("Waitlist Confirmed", body, `${BASE_URL}/pool/${poolId}`, "View Pool");
 
         // Fire and forget email (don't block response) - checking promise for clean logs though
         sendEmail(email, subject, html, { poolId, reason: 'WAITLIST_JOIN' })

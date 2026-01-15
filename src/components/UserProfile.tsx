@@ -5,6 +5,7 @@ import { auth } from '../firebase';
 import { authService } from '../services/authService';
 
 import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface UserProfileProps {
     user: User;
@@ -12,6 +13,7 @@ interface UserProfileProps {
 }
 
 export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState<Partial<User>>({
         name: user.name,
         phone: user.phone || '',
@@ -154,7 +156,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                         <h3 className="font-bold text-white text-lg">My Entries</h3>
                         <p className="text-slate-400 text-sm">View all pools you have joined.</p>
                     </div>
-                    <button onClick={() => window.location.hash = '#participant'} className="bg-slate-700 hover:bg-slate-600 text-white px-5 py-2 rounded-lg font-bold text-sm transition-colors border border-slate-600">
+                    <button onClick={() => navigate('/participant')} className="bg-slate-700 hover:bg-slate-600 text-white px-5 py-2 rounded-lg font-bold text-sm transition-colors border border-slate-600">
                         View Entries
                     </button>
                 </div>
@@ -278,7 +280,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                         <div className="pt-4 flex justify-end gap-3">
                             <button
                                 type="button"
-                                onClick={() => window.location.hash = '#admin'}
+                                onClick={() => navigate('/')}
                                 className="px-6 py-2.5 rounded-lg text-slate-400 font-bold hover:text-white transition-colors"
                             >
                                 Cancel

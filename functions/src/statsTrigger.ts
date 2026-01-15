@@ -72,7 +72,7 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
                         <p style="margin: 5px 0;"><strong>${after.awayTeam} (Col):</strong> ${awayNums}</p>
                      </div>
                      <p>Good luck!</p>`,
-                    `https://www.marchmeleepools.com/#pool/${event.params.poolId}`,
+                    `https://www.marchmeleepools.com/pool/${event.params.poolId}`,
                     "View Your Squares"
                 );
 

@@ -207,7 +207,7 @@ export const submitPlayoffPicks = onCall(async (request) => {
             `;
 
             // Render Standard Template
-            const poolUrl = `${BASE_URL}/#pool/${poolId}`;
+            const poolUrl = `${BASE_URL}/pool/${poolId}`;
             const emailHtml = renderEmailHtml('Entry Confirmed! ✅', bodyContent, poolUrl, 'View Your Entry');
 
             // Send via Firestore Trigger
@@ -278,7 +278,7 @@ export const managePlayoffEntry = onCall(async (request) => {
 
                         <p>You are all set! Good luck in the playoffs.</p>
                     `;
-                    const html = renderEmailHtml('Payment Receipt', body, `${BASE_URL}/#pool/${poolId}`, 'View Pool');
+                    const html = renderEmailHtml('Payment Receipt', body, `${BASE_URL}/pool/${poolId}`, 'View Pool');
                     await db.collection('mail').add({
                         to: recipientEmail,
                         message: { subject, html }

@@ -95,7 +95,7 @@ exports.onGameComplete = functions.firestore.onDocumentUpdated("pools/{poolId}",
                     <p style="margin: 8px 0 0 0; color: #334155;"><strong>Squares Sold:</strong> ${soldSquares}/100</p>
                 </div>
             `;
-        const emailHtml = (0, emailStyles_1.renderEmailHtml)('Game Complete!', emailBody, `${emailStyles_1.BASE_URL}/#pool/${after.urlSlug || poolId}`, 'View Pool Result');
+        const emailHtml = (0, emailStyles_1.renderEmailHtml)('Game Complete!', emailBody, `${emailStyles_1.BASE_URL}/pool/${after.urlSlug || poolId}`, 'View Pool Result');
         // Store email request for EmailJS or other email service to process
         await db.collection('mail').add({
             to: Array.from(recipientEmails),

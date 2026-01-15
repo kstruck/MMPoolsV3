@@ -48,7 +48,7 @@ exports.onAnnouncementCreated = functions.firestore
                 <div style="color: #334155; font-size: 16px; line-height: 1.6; white-space: pre-wrap;">${announcement.message}</div>
             </div>
         `;
-    const emailHtml = (0, emailStyles_1.renderEmailHtml)(announcement.subject, bodyContent, `${emailStyles_1.BASE_URL}/#pool/${pool.id}`, 'View Pool');
+    const emailHtml = (0, emailStyles_1.renderEmailHtml)(announcement.subject, bodyContent, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'View Pool');
     const emailPromises = recipientList.map(email => {
         return db.collection('mail').add({
             to: email,

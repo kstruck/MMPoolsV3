@@ -58,7 +58,7 @@ exports.onPoolLocked = (0, firestore_1.onDocumentUpdated)("pools/{poolId}", asyn
                         <p style="margin: 5px 0;"><strong>${after.homeTeam} (Row):</strong> ${homeNums}</p>
                         <p style="margin: 5px 0;"><strong>${after.awayTeam} (Col):</strong> ${awayNums}</p>
                      </div>
-                     <p>Good luck!</p>`, `https://www.marchmeleepools.com/#pool/${event.params.poolId}`, "View Your Squares");
+                     <p>Good luck!</p>`, `https://www.marchmeleepools.com/pool/${event.params.poolId}`, "View Your Squares");
                 // Collect unique emails
                 const uniqueEmails = Array.from(new Set((after.squares || []).map((s) => { var _a; return (_a = s.playerDetails) === null || _a === void 0 ? void 0 : _a.email; }).filter(Boolean)));
                 console.log(`[onPoolLocked] Sending to ${uniqueEmails.length} recipients`);
