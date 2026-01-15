@@ -42,10 +42,44 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     const { id } = useParams();
 
     // Find pool logic
+    // Find pool logic (Local or Fetch)
+    const [fetchedPool, setFetchedPool] = useState<Pool | null>(null);
+    const [isFetchingPool, setIsFetchingPool] = useState(false);
+
     const pool = useMemo(() => {
-        if (!id || !pools.length) return null;
-        return pools.find(p => p.id === id || (p as any).slug === id || (p as any).urlSlug === id) || null;
-    }, [id, pools]);
+        if (!id) return null;
+        // 1. Try finding in global pools (props)
+        const found = pools.find(p => p.id === id || (p as any).slug === id || (p as any).urlSlug === id);
+        if (found) return found;
+        // 2. Fallback to fetched pool
+        return fetchedPool;
+    }, [id, pools, fetchedPool]);
+
+    // Fetch pool if not found in global state
+    useEffect(() => {
+        if (id && !pool && !isLoading && !isFetchingPool) {
+            const fetchPool = async () => {
+                setIsFetchingPool(true);
+                try {
+                    // Try by ID first
+                    let p = await dbService.getPoolById(id);
+                    // If not found, try by Slug
+                    if (!p) {
+                        p = (await dbService.getPoolBySlug(id)) as any;
+                    }
+
+                    if (p) {
+                        setFetchedPool({ ...p, id: p.id || id } as Pool); // Ensure ID is set
+                    }
+                } catch (err) {
+                    console.error("Error fetching pool:", err);
+                } finally {
+                    setIsFetchingPool(false);
+                }
+            };
+            fetchPool();
+        }
+    }, [id, pool, isLoading]);
 
     // State for winners
     const [winners, setWinners] = useState<Winner[]>([]);
@@ -85,7 +119,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         setShowAuthModalLocal(true);
     };
 
-    if (isLoading) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
+    if (isLoading || isFetchingPool) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
 
     if (!pool) {
         return (

@@ -36,6 +36,16 @@ export const dbService = {
         const d = await getDoc(doc(db, "pools", poolId));
         return d.exists() ? (d.data() as GameState) : null;
     },
+
+    async getPoolBySlug(slug: string): Promise<Pool | null> {
+        const q = query(collection(db, "pools"), where("urlSlug", "==", slug), limit(1));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+            const doc = snapshot.docs[0];
+            return { ...doc.data(), id: doc.id } as Pool;
+        }
+        return null;
+    },
     onGlobalStatsUpdate: (callback: (stats: GlobalStats | null) => void, onError?: (error: Error) => void) => {
         return onSnapshot(doc(db, 'stats', 'global'), (doc) => {
             callback(doc.exists() ? doc.data() as GlobalStats : null);
