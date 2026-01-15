@@ -245,7 +245,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
 
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center py-10 px-4">
+        <div className="flex-grow bg-slate-950 text-slate-100 flex flex-col items-center py-10 px-4">
             <div className="max-w-4xl w-full">
                 <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-white mb-6 transition-colors font-bold text-sm">
                     <ArrowLeft size={16} /> Back to Selection

@@ -276,7 +276,11 @@ const App: React.FC = () => {
 
         <Route path="/grid-wizard" element={
           user ? (
-            <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
+            <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+              <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+              <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
+              <Footer />
+            </div>
           ) : <Navigate to="/create-pool" />
         } />
 

@@ -81,17 +81,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
 
           {/* Stat Cards */}
           <div className="flex flex-wrap justify-center gap-4 mb-8">
-            {totalDonated > 0 && (
-              <div className="inline-flex items-center gap-4 rounded-2xl p-3 pr-6 shadow-xl animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
-                <div className="p-3 rounded-xl" style={{ backgroundColor: '#EF444420' }}>
-                  <Heart className="fill-current" size={24} style={{ color: '#EF4444' }} />
-                </div>
-                <div className="text-left">
-                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: BRAND.lightGray }}>Total Raised for Charity</p>
-                  <p className="text-2xl font-black text-white">${totalDonated.toLocaleString()}</p>
-                </div>
+            <div className="inline-flex items-center gap-4 rounded-2xl p-3 pr-6 shadow-xl animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
+              <div className="p-3 rounded-xl" style={{ backgroundColor: '#EF444420' }}>
+                <Heart className="fill-current" size={24} style={{ color: '#EF4444' }} />
               </div>
-            )}
+              <div className="text-left">
+                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: BRAND.lightGray }}>Total Raised for Charity</p>
+                <p className="text-2xl font-black text-white">${totalDonated.toLocaleString()}</p>
+              </div>
+            </div>
 
             <div className="inline-flex items-center gap-4 rounded-2xl p-3 pr-6 shadow-xl animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
               <div className="p-3 rounded-xl" style={{ backgroundColor: '#10B98120' }}>
