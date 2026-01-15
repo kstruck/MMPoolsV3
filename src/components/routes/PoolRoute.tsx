@@ -430,7 +430,11 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 {statusTab === 'rules' && (
                                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                                         <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-center">
-                                            <PoolTimer targetDate={squaresPool.scores.startTime} gameStatus={squaresPool.scores.gameStatus} isLocked={squaresPool.isLocked} />
+                                            <PoolTimer
+                                                targetDate={squaresPool.scores.startTime}
+                                                gameStatus={squaresPool.scores.gameStatus}
+                                                isLocked={squaresPool.isLocked || (squaresRemaining === 0 && !!squaresPool.axisNumbers)}
+                                            />
                                         </div>
                                         <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {squaresPool.maxSquaresPerPlayer || 'N/A'} squares per player</p></div>
                                         {/* Simplified Rule Buttons */}
@@ -624,10 +628,12 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             </div>
 
             {/* Quarter Winner Cards */}
-            <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+            <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8 border-4 border-red-500 p-2 z-50 relative">
+                <div className="col-span-full text-white">DEBUG: {quarterlyPayouts.length} cards found.</div>
                 {quarterlyPayouts.map((card) => {
                     const homeDigit = getLastDigit(card.home);
                     const awayDigit = getLastDigit(card.away);
+                    console.log('Rendering Card:', card.period, '$', card.amount);
 
                     return (
                         <div key={card.period} className="bg-black border border-slate-800 rounded-xl p-6 flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
