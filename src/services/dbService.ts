@@ -394,6 +394,8 @@ export const dbService = {
         });
     },
 
+
+
     // Real-time listener for a SINGLE pool (Robust deep-linking)
     // Real-time listener for a SINGLE pool (Robust deep-linking)
     subscribeToPool: (identifier: string, callback: (pool: Pool | null) => void, onError?: (error: Error) => void) => {

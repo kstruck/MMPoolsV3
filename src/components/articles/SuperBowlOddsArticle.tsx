@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 export const SuperBowlOddsArticle: React.FC = () => {
 
@@ -194,13 +195,13 @@ export const SuperBowlOddsArticle: React.FC = () => {
                         Create a free Squares or Props pool for your friends, office, or party.
                         No paper sheets, no math—just fun.
                     </p>
-                    <a
-                        href="/#create-pool"
+                    <Link
+                        to="/create-pool"
                         className="relative z-10 inline-flex items-center gap-2 bg-white text-indigo-900 hover:bg-indigo-50 px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-xl shadow-indigo-900/20"
                     >
                         Create Your Pool Now
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-right"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
-                    </a>
+                    </Link>
                 </div>
             </div>
         </div>

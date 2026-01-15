@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { authService } from '../services/authService';
 import { Mail, Lock, User, ArrowRight, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
@@ -252,7 +253,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
 
           <div className="mt-6 pt-6 border-t border-slate-700/50 text-center">
             <p className="text-xs text-slate-500">
-              By continuing, you agree to our <a href="#terms" className="underline hover:text-slate-400">Terms</a> and acknowledge our <a href="#privacy" className="underline hover:text-slate-400">Privacy Policy</a>.
+              By continuing, you agree to our <Link to="/terms" className="underline hover:text-slate-400">Terms</Link> and acknowledge our <Link to="/privacy" className="underline hover:text-slate-400">Privacy Policy</Link>.
             </p>
           </div>
         </div>

@@ -6,8 +6,6 @@ import { PropsManager } from '../Props/PropsManager';
 import { dbService } from '../../services/dbService';
 import { Loader, ArrowLeft, Check, AlertTriangle, Mail, Lock, Users, QrCode, Plus, Trash2 } from 'lucide-react';
 import type { GameState, PropsPool } from '../../types';
-import { Header } from '../Header';
-import { Footer } from '../Footer';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface PropsWizardProps {
@@ -152,15 +150,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
 
     return (
         <div className={`min-h-screen bg-slate-950 flex flex-col ${embedded ? 'min-h-0 bg-transparent' : ''}`}>
-            {!embedded && (
-                <Header
-                    user={user}
-                    isManager={user?.role === 'POOL_MANAGER' || user?.role === 'SUPER_ADMIN'}
-                    onOpenAuth={() => { }}
-                    onLogout={() => { }}
-                    onCreatePool={() => { }}
-                />
-            )}
+            {/* Header handled by Layout */}
 
             <main className={`flex-grow ${embedded ? 'p-0' : 'p-4 md:p-8'}`}>
                 <div className="max-w-4xl mx-auto">
@@ -535,7 +525,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                     </div>
                 </div>
             </main>
-            {!embedded && <Footer />}
+            {/* Footer handled by Layout */}
         </div>
     );
 };

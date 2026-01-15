@@ -169,8 +169,16 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                     Array.from({ length: 18 }).map((_, i) => {
                                         const w = i + 1;
                                         if (w < currentEstimatedWeek) return null; // Hide past weeks
-                                        return <option key={i} value={w}>{w}</option>;
+                                        return <option key={i} value={w}>Week {w}</option>;
                                     })
+                                ) : seasonType === '3' ? (
+                                    <>
+                                        <option value="1">Wild Card</option>
+                                        <option value="2">Divisional</option>
+                                        <option value="3">Conf. Champ</option>
+                                        <option value="4">Pro Bowl</option>
+                                        <option value="5">Super Bowl</option>
+                                    </>
                                 ) : (
                                     Array.from({ length: 5 }).map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)
                                 )}

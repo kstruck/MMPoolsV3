@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import type { Pool, User } from '../types';
-import { Users, Database, Clock, Calendar } from 'lucide-react';
+import { Users, Database, Clock, Calendar, RefreshCw } from 'lucide-react';
+import { dbService } from '../services/dbService';
 
 interface AdminStatsDashboardProps {
     pools: Pool[];
@@ -23,6 +24,25 @@ const getTimestamp = (createdAt: any): number => {
 };
 
 export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools, users }) => {
+    const [isRecalculating, setIsRecalculating] = useState(false);
+
+    const handleRecalculate = async () => {
+        if (!confirm("Recalculate Global Stats? This will scan all locked pools and update the global totals.")) return;
+        setIsRecalculating(true);
+        try {
+            const result = await dbService.recalculateGlobalStats();
+            if (result.success) {
+                alert(`Success! Updated Stats:\nPrizes: $${result.totalPrizes}\nDonated: $${result.totalDonated}`);
+            } else {
+                alert(`Failed: ${result.message}`);
+            }
+        } catch (error: any) {
+            console.error("Recalc failed", error);
+            alert(`Error: ${error.message}`);
+        } finally {
+            setIsRecalculating(false);
+        }
+    };
 
     // --- 1. DATA PROCESSING ---
 
@@ -153,6 +173,16 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
         <div className="space-y-8 animate-in fade-in duration-500">
 
             {/* KPIS */}
+            <div className="flex justify-end mb-4">
+                <button
+                    onClick={handleRecalculate}
+                    disabled={isRecalculating}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition-colors disabled:opacity-50"
+                >
+                    <RefreshCw size={16} className={isRecalculating ? 'animate-spin' : ''} />
+                    {isRecalculating ? 'Recalculating...' : 'Recalculate Global Stats'}
+                </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
                     <div className="flex items-center gap-3 mb-2">

@@ -5,25 +5,29 @@ import * as admin from "firebase-admin";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml } from "./emailStyles";
 
-// Helper to calculate total pot for a pool
-const calculatePoolPot = (pool: any): number => {
+// Helper to calculate total pot and charity for a pool
+const calculatePoolPot = (pool: any): { prizePot: number; charityAmount: number } => {
     let squaresSold = 0;
     if (pool.squares && Array.isArray(pool.squares)) {
         squaresSold = pool.squares.filter((s: any) => s.owner).length;
     }
 
-    // Pot is squares * cost
-    const totalPot = squaresSold * (pool.costPerSquare || 0);
+    // Gross Pot is squares * cost
+    const grossPot = squaresSold * (pool.costPerSquare || 0);
 
-    // Calculate total payout percentage (usually 1st Q + 2nd Q + 3rd Q + Final)
-    // If charity is involved, payouts usually sum to < 100%. 
-    // The prize amount is Total Pot * Total Payout %.
-    let totalPayoutPct = 0;
-    if (pool.payouts) {
-        totalPayoutPct = (pool.payouts.q1 || 0) + (pool.payouts.half || 0) + (pool.payouts.q3 || 0) + (pool.payouts.final || 0);
+    // Charity
+    let charityAmount = 0;
+    if (pool.charity && pool.charity.enabled && pool.charity.percentage) {
+        charityAmount = grossPot * (pool.charity.percentage / 100);
     }
 
-    return totalPot * (totalPayoutPct / 100);
+    // Prize Pot defaults to Gross - Charity
+    let prizePot = grossPot - charityAmount;
+
+    // Check strict payouts if defined
+    // ... logic simplifies to just using the calculated net pot usually, but let's trust gross - charity.
+
+    return { prizePot: Math.floor(prizePot), charityAmount: Math.floor(charityAmount) };
 };
 
 // Trigger: When a pool is LOCKED, add its pot to the global "Total Prizes"
@@ -36,15 +40,16 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
         // Trigger only when transitioning from unlocked -> locked
         if (!before.isLocked && after.isLocked) {
             const db = admin.firestore();
-            const prizeAmount = calculatePoolPot(after);
+            const { prizePot, charityAmount } = calculatePoolPot(after);
 
-            if (prizeAmount > 0) {
+            if (prizePot > 0 || charityAmount > 0) {
                 await db.doc("stats/global").set({
-                    totalPrizes: admin.firestore.FieldValue.increment(prizeAmount),
+                    totalPrizes: admin.firestore.FieldValue.increment(prizePot),
+                    totalDonated: admin.firestore.FieldValue.increment(charityAmount),
                     lastUpdated: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
 
-                console.log(`[Stats] Added $${prizeAmount} to global prizes for newly locked pool ${event.params.poolId}`);
+                console.log(`[Stats] Added $${prizePot} prizes / $${charityAmount} charity for pool ${event.params.poolId}`);
             }
 
             // --- EMAIL NOTIFICATION LOGIC ---
@@ -105,6 +110,7 @@ export const recalculateGlobalStats = onCall({
             .get();
 
         let totalAllTimePrizes = 0;
+        let totalAllTimeCharity = 0;
         let count = 0;
         let errors = 0;
 
@@ -113,9 +119,10 @@ export const recalculateGlobalStats = onCall({
                 const pool = doc.data();
                 if (!pool) continue; // Safety check
 
-                const pot = calculatePoolPot(pool);
-                if (!isNaN(pot)) {
-                    totalAllTimePrizes += pot;
+                const { prizePot, charityAmount } = calculatePoolPot(pool);
+                if (!isNaN(prizePot)) {
+                    totalAllTimePrizes += prizePot;
+                    totalAllTimeCharity += charityAmount;
                     count++;
                 } else {
                     console.warn(`Pool ${doc.id} returned NaN pot`);
@@ -129,6 +136,8 @@ export const recalculateGlobalStats = onCall({
         // Overwrite the global stat with the recalculated total
         await db.doc("stats/global").set({
             totalPrizes: totalAllTimePrizes,
+            totalRevenue: totalAllTimePrizes, // Backwards compat or Total Volume? Let's treat Revenue as Prizes for now or sum? Let's just track Prizes and Donated separately.
+            totalDonated: totalAllTimeCharity,
             lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
             recalculatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
@@ -136,7 +145,8 @@ export const recalculateGlobalStats = onCall({
         return {
             success: true,
             message: `Recalculated from ${count} pools. Skipped ${errors} errors.`,
-            totalPrizes: totalAllTimePrizes
+            totalPrizes: totalAllTimePrizes,
+            totalDonated: totalAllTimeCharity
         };
     } catch (e: any) {
         console.error("Recalculate Error:", e);

@@ -27,7 +27,7 @@ const BRAND = {
   lightGray: '#E5E7EB',
 };
 
-export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0, isLoggedIn }) => {
   const [activeTab, setActiveTab] = React.useState<'squares' | 'props' | 'playoff' | 'bracket' | 'survivor' | 'pickem'>('squares');
 
   return (
@@ -250,7 +250,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 Ready to host? Our intuitive Setup Wizard guides you through every step: selecting the game matchup, configuring payout percentages, setting reminder limits, and more. Creating a professional sports pool has never been easier.
               </p>
               <button
-                onClick={onSignup}
+                onClick={isLoggedIn ? onCreatePool : onSignup}
                 className="mt-4 px-8 py-3 rounded-full font-bold text-white transition-transform hover:scale-105 shadow-lg shadow-pink-500/25"
                 style={{ backgroundColor: '#DB2777' }} // Pink-600
               >
@@ -656,7 +656,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-5xl font-black text-white mb-8" style={{ fontFamily: "'Montserrat', sans-serif" }}>Ready to Start Your Pool?</h2>
           <button
-            onClick={onSignup}
+            onClick={isLoggedIn ? onCreatePool : onSignup}
             className="text-white px-10 py-5 rounded-full text-xl font-black transition-all transform hover:scale-105 mb-4 hover:brightness-110"
             style={{ backgroundColor: BRAND.orange, boxShadow: `0 0 40px ${BRAND.orange}50` }}
           >
