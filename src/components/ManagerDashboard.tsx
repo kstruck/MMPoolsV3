@@ -452,7 +452,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                     </div>
                                                 )}
 
-                                                <div className="cursor-pointer flex-1" onClick={() => window.location.hash = `#admin/${pool.id}`}>
+                                                <div className="cursor-pointer flex-1" onClick={() => window.location.href = `/admin/${pool.id}`}>
                                                     <div className="flex justify-between items-start mb-4 relative z-10">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-lg font-bold text-indigo-400 group-hover:scale-105 transition-transform">
@@ -524,8 +524,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                 </div>
 
                                                 <div className="grid grid-cols-12 gap-2 relative z-20 pt-4 border-t border-slate-800/50 mt-auto">
-                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#admin/${pool.id}`; }} className="col-span-4 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); window.location.hash = `#pool/${pool.id}`; }} className="col-span-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.href = `/admin/${pool.id}`; }} className="col-span-4 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-bold text-xs transition-colors shadow-lg shadow-indigo-500/20">Manage</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.href = `/pool/${pool.id}`; }} className="col-span-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2 rounded-lg font-bold text-xs transition-colors border border-slate-700">View</button>
                                                     {onDuplicatePool && (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); onDuplicatePool(pool.id); }}

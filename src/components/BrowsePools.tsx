@@ -332,7 +332,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
 
                                 return (
                                     <div key={pool.id}
-                                        onClick={() => window.location.hash = `#pool/${pool.id}`}
+                                        onClick={() => window.location.href = `/pool/${pool.id}`}
                                         className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 rounded-xl p-5 cursor-pointer transition-all relative overflow-hidden flex flex-col"
                                     >
                                         {charityEnabled && (

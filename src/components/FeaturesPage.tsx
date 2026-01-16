@@ -36,7 +36,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                             <button onClick={onOpenAuth} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-transform hover:scale-105 shadow-lg shadow-indigo-500/20 flex items-center gap-2">
                                 <Trophy size={20} /> Create Your Pool
                             </button>
-                            <button onClick={() => window.location.hash = '#browse'} className="bg-white hover:bg-slate-50 text-slate-900 px-8 py-4 rounded-xl font-bold text-lg border border-slate-200 transition-colors flex items-center gap-2">
+                            <button onClick={() => window.location.href = '/browse'} className="bg-white hover:bg-slate-50 text-slate-900 px-8 py-4 rounded-xl font-bold text-lg border border-slate-200 transition-colors flex items-center gap-2">
                                 <Layout size={20} /> Find a Pool
                             </button>
                         </div>

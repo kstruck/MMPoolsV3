@@ -138,7 +138,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                 const newPoolId = await dbService.createPool(payload);
 
                 // Redirect to the new pool page
-                window.location.hash = `#pool/${payload.urlSlug || newPoolId}`;
+                window.location.href = `/pool/${payload.urlSlug || newPoolId}`;
                 onComplete(newPoolId);
             }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Loader } from 'lucide-react';
 
 // Components
@@ -37,48 +37,55 @@ import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
 
-// Legacy Hash Handler
+// Legacy Hash Handler - redirects old hash-based URLs to clean URLs
 const LegacyHashHandler = () => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     const hash = window.location.hash;
     if (hash && hash.length > 1) {
       console.log('Migrating legacy hash:', hash);
       const cleanHash = hash.substring(1); // remove #
+      let targetPath: string | null = null;
 
       // Routes mapping
-      if (cleanHash === 'home') navigate('/', { replace: true });
-      else if (cleanHash === 'browse') navigate('/browse', { replace: true });
-      else if (cleanHash === 'participant' || cleanHash === 'dashboard') navigate('/participant', { replace: true });
-      else if (cleanHash === 'create-pool') navigate('/create-pool', { replace: true });
-      else if (cleanHash === 'features') navigate('/features', { replace: true });
-      else if (cleanHash === 'how-it-works') navigate('/how-it-works', { replace: true });
-      else if (cleanHash === 'terms') navigate('/terms', { replace: true });
-      else if (cleanHash === 'privacy') navigate('/privacy', { replace: true });
-      else if (cleanHash === 'scoreboard') navigate('/scoreboard', { replace: true });
-      else if (cleanHash === 'super-bowl-squares-odds') navigate('/odds/super-bowl-squares', { replace: true });
-      else if (cleanHash === 'super-admin') navigate('/super-admin', { replace: true });
+      if (cleanHash === 'home') targetPath = '/';
+      else if (cleanHash === 'browse') targetPath = '/browse';
+      else if (cleanHash === 'participant' || cleanHash === 'dashboard') targetPath = '/participant';
+      else if (cleanHash === 'create-pool') targetPath = '/create-pool';
+      else if (cleanHash === 'features') targetPath = '/features';
+      else if (cleanHash === 'how-it-works') targetPath = '/how-it-works';
+      else if (cleanHash === 'terms') targetPath = '/terms';
+      else if (cleanHash === 'privacy') targetPath = '/privacy';
+      else if (cleanHash === 'scoreboard') targetPath = '/scoreboard';
+      else if (cleanHash === 'super-bowl-squares-odds') targetPath = '/odds/super-bowl-squares';
+      else if (cleanHash === 'super-admin') targetPath = '/super-admin';
 
       // Dynamic Routes
       else if (cleanHash.startsWith('pool/')) {
         const id = cleanHash.split('/')[1];
-        navigate(`/pool/${id}`, { replace: true });
+        targetPath = `/pool/${id}`;
       } else if (cleanHash.startsWith('admin/')) {
         const id = cleanHash.split('/')[1];
-        navigate(`/admin/${id}`, { replace: true });
+        targetPath = `/admin/${id}`;
       } else if (cleanHash === 'admin') {
-        navigate('/admin', { replace: true });
+        targetPath = '/admin';
       }
 
       // Wizards
-      else if (cleanHash === 'bracket-wizard') navigate('/bracket-wizard', { replace: true });
-      else if (cleanHash === 'props-wizard') navigate('/props-wizard', { replace: true });
-      else if (cleanHash === 'playoff-wizard') navigate('/playoff-wizard', { replace: true });
-      else if (cleanHash === 'grid-wizard' || cleanHash === 'wizard') navigate('/grid-wizard', { replace: true });
+      else if (cleanHash === 'bracket-wizard') targetPath = '/bracket-wizard';
+      else if (cleanHash === 'props-wizard') targetPath = '/props-wizard';
+      else if (cleanHash === 'playoff-wizard') targetPath = '/playoff-wizard';
+      else if (cleanHash === 'grid-wizard' || cleanHash === 'wizard') targetPath = '/grid-wizard';
+
+      // Navigate and clear the hash
+      if (targetPath) {
+        // Clear the hash from the URL first, then navigate
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        navigate(targetPath, { replace: true });
+      }
     }
-  }, [location, navigate]);
+  }, []); // Run once on mount - eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
 };

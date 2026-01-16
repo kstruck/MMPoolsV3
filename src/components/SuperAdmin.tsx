@@ -2121,7 +2121,7 @@ export const SuperAdmin: React.FC = () => {
 
                                 {/* Actions */}
                                 <div className="flex gap-3 pt-4 border-t border-slate-700">
-                                    <button onClick={() => window.location.hash = `#admin/${viewingPool.id}`} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20">
+                                    <button onClick={() => window.location.href = `/admin/${viewingPool.id}`} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20">
                                         Manage Settings
                                     </button>
                                     <a href={`#pool/${viewingPool.id}`} target="_blank" className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-2">
@@ -2227,7 +2227,7 @@ export const SuperAdmin: React.FC = () => {
                                                     <div className="flex gap-2">
                                                         <button
                                                             onClick={() => {
-                                                                window.location.hash = `#admin/${pool.id}`;
+                                                                window.location.href = `/admin/${pool.id}`;
                                                                 setViewingUser(null);
                                                             }}
                                                             className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded font-bold text-sm transition-colors text-center"

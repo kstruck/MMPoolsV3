@@ -141,7 +141,7 @@ export const HowItWorksPage: React.FC<Props> = (props) => {
                             <button onClick={props.onCreatePool} className="px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all hover:scale-105 shadow-xl shadow-indigo-900/20">
                                 Create a Squares Pool
                             </button>
-                            <button onClick={() => window.location.hash = '#browse'} className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all backdrop-blur-sm border border-white/10">
+                            <button onClick={() => window.location.href = '/browse'} className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all backdrop-blur-sm border border-white/10">
                                 Join a Public Pool
                             </button>
                         </div>

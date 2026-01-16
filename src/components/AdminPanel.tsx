@@ -171,7 +171,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSaveMessage('Settings Saved Successfully!');
     setTimeout(() => {
       setSaveMessage(null);
-      window.location.hash = `#pool/${gameState.id}`;
+      window.location.href = `/pool/${gameState.id}`;
     }, 1500);
   };
 
@@ -532,7 +532,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
           <div className="flex gap-2">
             <button onClick={onShare} className="text-xs bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-600 px-3 py-2 rounded font-bold cursor-pointer flex items-center gap-2"><Share2 size={14} /> Share</button>
-            <button onClick={() => window.location.hash = `#pool/${gameState.id}`} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded font-bold cursor-pointer">Open Public View</button>
+            <button onClick={() => window.location.href = `/pool/${gameState.id}`} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded font-bold cursor-pointer">Open Public View</button>
           </div>
         </div>
         <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm">
