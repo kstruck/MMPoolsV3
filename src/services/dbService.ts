@@ -397,7 +397,6 @@ export const dbService = {
 
 
     // Real-time listener for a SINGLE pool (Robust deep-linking)
-    // Real-time listener for a SINGLE pool (Robust deep-linking)
     subscribeToPool: (identifier: string, callback: (pool: Pool | null) => void, onError?: (error: Error) => void) => {
         // Heuristic: Documents IDs are 20 alphanumeric chars. Slugs are usually custom.
         const isLikelyDocId = identifier.length === 20;
@@ -418,14 +417,30 @@ export const dbService = {
             });
         }
 
-        // Treat as Slug Query
-        const q = query(collection(db, "pools"), where("urlSlug", "==", identifier), limit(1));
+        // Treat as Slug Query - check both urlSlug and slug fields
+        const q = query(
+            collection(db, "pools"),
+            or(
+                where("urlSlug", "==", identifier),
+                where("slug", "==", identifier)
+            ),
+            limit(1)
+        );
         return onSnapshot(q, (snap) => {
             if (!snap.empty) {
                 const d = snap.docs[0];
                 callback({ ...d.data(), id: d.id } as Pool);
             } else {
-                callback(null);
+                // Fallback: try direct document lookup in case identifier IS the document ID despite length
+                getDoc(doc(db, "pools", identifier)).then((docSnap) => {
+                    if (docSnap.exists()) {
+                        callback({ ...docSnap.data(), id: docSnap.id } as Pool);
+                    } else {
+                        callback(null);
+                    }
+                }).catch(() => {
+                    callback(null);
+                });
             }
         }, (error) => {
             console.error("Slug Subscription Error:", error);
