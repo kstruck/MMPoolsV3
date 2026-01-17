@@ -99,18 +99,9 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
              <p>It's time to generate the numbers and lock the pool!</p>`, `https://www.marchmeleepools.com/pool/${poolId}`, "Go to Pool");
         (0, reminders_1.sendEmail)(result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));
     }
-    // Send confirmation email to user who reserved the square
-    if (userEmail && userEmail !== 'Unknown') {
-        const poolRef = db.collection("pools").doc(poolId);
-        const poolDoc = await poolRef.get();
-        const poolData = poolDoc.data();
-        const confirmSubject = `Square Reserved: ${poolData.name}`;
-        const confirmHtml = (0, emailStyles_1.renderEmailHtml)("Square Reserved!", `<p>Hi ${userName}!</p>
-             <p>You have successfully reserved <strong>Square #${squareId}</strong> in the pool <strong>${poolData.name}</strong>.</p>
-             <p>Cost per square: <strong>$${poolData.costPerSquare}</strong></p>
-             <p>Check the pool for payment instructions and updates.</p>`, `https://www.marchmeleepools.com/pool/${poolId}`, "View Pool");
-        (0, reminders_1.sendEmail)(userEmail, confirmSubject, confirmHtml, { poolId, reason: 'SQUARE_RESERVED' }).catch(err => console.error("Failed to send reservation confirmation email", err));
-    }
+    // NOTE: Confirmation emails are sent by the frontend (PoolRoute.tsx) AFTER the batch reservation
+    // completes. This allows for a summary email with all squares instead of one email per square,
+    // and respects the pool's emailConfirmation setting. Do NOT send emails here.
     return { success: true };
 });
 exports.markSquaresPaid = (0, https_1.onCall)(async (request) => {

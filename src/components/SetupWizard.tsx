@@ -45,7 +45,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
         },
         charity: { enabled: false, name: '', percentage: 0 },
         branding: { backgroundColor: '#0f172a' }, // Default slate-900
-        emailConfirmation: 'false',
+        emailConfirmation: 'Email Confirmation',
         paymentHandles: {},
         paymentInstructions: '',
         waitlist: [],
