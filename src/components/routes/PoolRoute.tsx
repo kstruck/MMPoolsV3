@@ -672,8 +672,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                             <table className="w-full">
                                 <thead className="bg-slate-900 sticky top-0 z-10">
                                     <tr>
-                                        <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase">Time</th>
-                                        <th className="py-3 px-4 text-center text-xs font-bold text-slate-500 uppercase">Score</th>
+                                        <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase">Event</th>
                                         <th className="py-3 px-4 text-center text-xs font-bold text-slate-500 uppercase">Digits</th>
                                         <th className="py-3 px-4 text-right text-xs font-bold text-slate-500 uppercase">Winner</th>
                                         <th className="py-3 px-4 text-right text-xs font-bold text-slate-500 uppercase">Prize</th>
@@ -681,23 +680,16 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 </thead>
                                 <tbody className="divide-y divide-slate-800">
                                     {winners.filter(w => w.period === 'Event').length === 0 ? (
-                                        <tr><td colSpan={5} className="py-8 text-center text-slate-500 italic">No score changes yet.</td></tr>
+                                        <tr><td colSpan={4} className="py-8 text-center text-slate-500 italic">No score changes yet.</td></tr>
                                     ) : (
-                                        winners.filter(w => w.period === 'Event').map((win, i) => {
-                                            // Find matching scoreEvent by description to get the actual score
-                                            const matchingEvent = squaresPool.scoreEvents?.find(e => e.description === win.description);
-                                            const homeScore = matchingEvent?.home ?? null;
-                                            const awayScore = matchingEvent?.away ?? null;
-                                            return (
-                                                <tr key={i} className="hover:bg-slate-900/30 transition-colors">
-                                                    <td className="py-3 px-4 text-slate-400 text-sm">{win.description || 'Score Update'}</td>
-                                                    <td className="py-3 px-4 text-center font-mono text-white text-sm">{homeScore !== null && awayScore !== null ? `${homeScore} - ${awayScore}` : '-'}</td>
-                                                    <td className="py-3 px-4 text-center"><span className="bg-slate-800 px-2 py-1 rounded text-xs font-mono text-slate-300">{win.homeDigit}-{win.awayDigit}</span></td>
-                                                    <td className="py-3 px-4 text-right font-bold text-emerald-400">{win.owner}</td>
-                                                    <td className="py-3 px-4 text-right font-mono text-white">${win.amount}</td>
-                                                </tr>
-                                            );
-                                        })
+                                        winners.filter(w => w.period === 'Event').map((win, i) => (
+                                            <tr key={i} className="hover:bg-slate-900/30 transition-colors">
+                                                <td className="py-3 px-4 text-slate-400 text-sm">{win.description || 'Score Update'}</td>
+                                                <td className="py-3 px-4 text-center"><span className="bg-slate-800 px-2 py-1 rounded text-xs font-mono text-slate-300">{win.homeDigit}-{win.awayDigit}</span></td>
+                                                <td className="py-3 px-4 text-right font-bold text-emerald-400">{win.owner}</td>
+                                                <td className="py-3 px-4 text-right font-mono text-white">${win.amount}</td>
+                                            </tr>
+                                        ))
                                     )}
                                 </tbody>
                             </table>
