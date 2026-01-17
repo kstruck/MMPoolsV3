@@ -549,17 +549,17 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 <tr>
                                     <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2">{awayLogo ? <img src={awayLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.awayTeam}</td>
                                     <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q1?.away ?? '-'}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.half?.away ?? '-'}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q3?.away ?? '-'}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.final?.away ?? '-'}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.away - squaresPool.scores.q1.away) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.q1.away) : '-')}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.away - squaresPool.scores.half.away) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.half.away) : '-')}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.final && squaresPool.scores.q3 ? (squaresPool.scores.final.away - squaresPool.scores.q3.away) : (squaresPool.scores.period && squaresPool.scores.period >= 4 && squaresPool.scores.q3 ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.q3.away) : '-')}</td>
                                     <td className="py-4 px-4 font-black text-indigo-400 text-lg bg-slate-900/50">{squaresPool.scores.current?.away ?? 0}</td>
                                 </tr>
                                 <tr>
                                     <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2">{homeLogo ? <img src={homeLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.homeTeam}</td>
                                     <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q1?.home ?? '-'}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.half?.home ?? '-'}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q3?.home ?? '-'}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.final?.home ?? '-'}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.home - squaresPool.scores.q1.home) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.q1.home) : '-')}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.home - squaresPool.scores.half.home) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.half.home) : '-')}</td>
+                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.final && squaresPool.scores.q3 ? (squaresPool.scores.final.home - squaresPool.scores.q3.home) : (squaresPool.scores.period && squaresPool.scores.period >= 4 && squaresPool.scores.q3 ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.q3.home) : '-')}</td>
                                     <td className="py-4 px-4 font-black text-rose-400 text-lg bg-slate-900/50">{squaresPool.scores.current?.home ?? 0}</td>
                                 </tr>
                             </tbody>
@@ -683,15 +683,21 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                     {winners.filter(w => w.period === 'Event').length === 0 ? (
                                         <tr><td colSpan={5} className="py-8 text-center text-slate-500 italic">No score changes yet.</td></tr>
                                     ) : (
-                                        winners.filter(w => w.period === 'Event').map((win, i) => (
-                                            <tr key={i} className="hover:bg-slate-900/30 transition-colors">
-                                                <td className="py-3 px-4 text-slate-400 text-sm">{win.description || 'Score Update'}</td>
-                                                <td className="py-3 px-4 text-center font-mono text-white text-sm">{(win as any).homeScore} - {(win as any).awayScore}</td>
-                                                <td className="py-3 px-4 text-center"><span className="bg-slate-800 px-2 py-1 rounded text-xs font-mono text-slate-300">{getLastDigit((win as any).homeScore)}-{getLastDigit((win as any).awayScore)}</span></td>
-                                                <td className="py-3 px-4 text-right font-bold text-emerald-400">{win.owner}</td>
-                                                <td className="py-3 px-4 text-right font-mono text-white">${win.amount}</td>
-                                            </tr>
-                                        ))
+                                        winners.filter(w => w.period === 'Event').map((win, i) => {
+                                            // Find matching scoreEvent by description to get the actual score
+                                            const matchingEvent = squaresPool.scoreEvents?.find(e => e.description === win.description);
+                                            const homeScore = matchingEvent?.home ?? null;
+                                            const awayScore = matchingEvent?.away ?? null;
+                                            return (
+                                                <tr key={i} className="hover:bg-slate-900/30 transition-colors">
+                                                    <td className="py-3 px-4 text-slate-400 text-sm">{win.description || 'Score Update'}</td>
+                                                    <td className="py-3 px-4 text-center font-mono text-white text-sm">{homeScore !== null && awayScore !== null ? `${homeScore} - ${awayScore}` : '-'}</td>
+                                                    <td className="py-3 px-4 text-center"><span className="bg-slate-800 px-2 py-1 rounded text-xs font-mono text-slate-300">{win.homeDigit}-{win.awayDigit}</span></td>
+                                                    <td className="py-3 px-4 text-right font-bold text-emerald-400">{win.owner}</td>
+                                                    <td className="py-3 px-4 text-right font-mono text-white">${win.amount}</td>
+                                                </tr>
+                                            );
+                                        })
                                     )}
                                 </tbody>
                             </table>
