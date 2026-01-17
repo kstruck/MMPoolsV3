@@ -38,13 +38,16 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
         contactEmail: user.email || '',
         costPerSquare: 10,
         maxSquaresPerPlayer: 100, // Default unlimited
+        showPaid: true, // Default to showing paid status
         payouts: { q1: 10, half: 20, q3: 10, final: 60 },
         ruleVariations: {
-            quarterlyRollover: false,
+            quarterlyRollover: true, // Default to rollover winnings
             reverseWinners: false,
             scoreChangePayout: false,
             unclaimedFinalPrizeStrategy: 'random',
         },
+        emailNumbersGenerated: true, // Default to email players when numbers set
+        notifyAdminFull: true, // Default to alert admin when grid full
         charity: { enabled: false, name: '', percentage: 0 },
         branding: { backgroundColor: '#0f172a' }, // Default slate-900
         emailConfirmation: 'Email Confirmation',
