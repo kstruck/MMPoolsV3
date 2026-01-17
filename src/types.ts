@@ -455,6 +455,10 @@ export interface User {
     linkedin?: string;
     other?: string;
   };
+  paymentHandles?: {
+    venmo?: string;
+    zelle?: string;
+  };
   // Referral System
   referralCode?: string; // Unique code for referral link (typically same as user ID)
   referredBy?: string; // UID of the user who referred this user

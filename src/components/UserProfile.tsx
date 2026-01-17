@@ -23,6 +23,10 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
             facebook: user.socialLinks?.facebook || '',
             linkedin: user.socialLinks?.linkedin || '',
             other: user.socialLinks?.other || '',
+        },
+        paymentHandles: {
+            venmo: user.paymentHandles?.venmo || '',
+            zelle: user.paymentHandles?.zelle || '',
         }
     });
 
@@ -41,6 +45,10 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                 facebook: user.socialLinks?.facebook || '',
                 linkedin: user.socialLinks?.linkedin || '',
                 other: user.socialLinks?.other || '',
+            },
+            paymentHandles: {
+                venmo: user.paymentHandles?.venmo || '',
+                zelle: user.paymentHandles?.zelle || '',
             }
         });
     }, [user]);
@@ -65,7 +73,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                 ...user,
                 name: formData.name || user.name,
                 phone: formData.phone || '',
-                socialLinks: formData.socialLinks
+                socialLinks: formData.socialLinks,
+                paymentHandles: formData.paymentHandles
             };
 
             await dbService.saveUser(updatedUser);
@@ -216,6 +225,39 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                                     placeholder="+1 (555) 000-0000"
                                 />
+                            </div>
+                        </div>
+
+                        {/* Payment Info */}
+                        <div className="pt-4">
+                            <h2 className="text-slate-500 text-xs font-bold uppercase mb-6 tracking-wider border-b border-slate-700 pb-2">Payment Info <span className="text-slate-600 font-normal normal-case">(Pre-fills when you create pools)</span></h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-slate-300 flex items-center gap-2">
+                                        <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#008CFF]" fill="currentColor"><path d="M19.424 3.27c.663 0 1.194.585 1.194 1.302 0 .716-.536 1.218-1.194 1.218h-4.456c-.557 0-1.097.494-1.207 1.086l-1.9 9.674c-.11.592-.65 1.086-1.207 1.086H7.18c-.663 0-1.194-.586-1.194-1.303s.531-1.218 1.194-1.218h3.474c.557 0 1.097-.494 1.207-1.086l1.9-9.673c.11-.592.65-1.086 1.207-1.086h4.456z" /></svg>
+                                        Venmo Handle
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.paymentHandles?.venmo || ''}
+                                        onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, venmo: e.target.value } })}
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                                        placeholder="@YourVenmoHandle"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-slate-300 flex items-center gap-2">
+                                        <svg viewBox="0 0 24 24" className="w-4 h-4 text-purple-500" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
+                                        Zelle Email/Phone
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.paymentHandles?.zelle || ''}
+                                        onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, zelle: e.target.value } })}
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                                        placeholder="your@email.com or phone"
+                                    />
+                                </div>
                             </div>
                         </div>
 

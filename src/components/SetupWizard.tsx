@@ -34,6 +34,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
         name: 'New Pool',
         ownerId: user.id,
         type: 'SQUARES',
+        managerName: user.name || '',
+        contactEmail: user.email || '',
         costPerSquare: 10,
         maxSquaresPerPlayer: 100, // Default unlimited
         payouts: { q1: 10, half: 20, q3: 10, final: 60 },
@@ -46,7 +48,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
         charity: { enabled: false, name: '', percentage: 0 },
         branding: { backgroundColor: '#0f172a' }, // Default slate-900
         emailConfirmation: 'Email Confirmation',
-        paymentHandles: {},
+        paymentHandles: {
+            venmo: user.paymentHandles?.venmo || '',
+            zelle: user.paymentHandles?.zelle || '',
+        },
         paymentInstructions: '',
         waitlist: [],
         reminders: {
