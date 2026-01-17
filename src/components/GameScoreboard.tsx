@@ -36,20 +36,37 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
         // Q2
         if (period === 2) {
             if (currentPeriod < 2) return '-';
-            if (currentPeriod > 2 || isPost) return (half !== null && q1 !== null) ? half - q1 : '-';
-            return (half !== null && q1 !== null) ? cur - q1 : (cur - (q1 ?? 0));
+            // If we're past Q2 or game is final, use stored half score
+            if (currentPeriod > 2 || isPost) {
+                if (half !== null && q1 !== null) return half - q1;
+                return '-';
+            }
+            // Currently in Q2 - calculate from current score minus Q1
+            // Use q1 score if available, otherwise assume 0
+            const q1Score = q1 ?? 0;
+            return cur - q1Score;
         }
         // Q3
         if (period === 3) {
             if (currentPeriod < 3) return '-';
-            if (currentPeriod > 3 || isPost) return (q3 !== null && half !== null) ? q3 - half : '-';
-            return (q3 !== null && half !== null) ? cur - half : (cur - (half ?? 0));
+            if (currentPeriod > 3 || isPost) {
+                if (q3 !== null && half !== null) return q3 - half;
+                return '-';
+            }
+            // Currently in Q3 - calculate from current minus half
+            const halfScore = half ?? 0;
+            return cur - halfScore;
         }
         // Q4
         if (period === 4) {
             if (currentPeriod < 4) return '-';
-            if (isPost) return (final !== null && q3 !== null) ? final - q3 : '-';
-            return (final !== null && q3 !== null) ? cur - q3 : (cur - (q3 ?? 0));
+            if (isPost) {
+                if (final !== null && q3 !== null) return final - q3;
+                return '-';
+            }
+            // Currently in Q4 - calculate from current minus Q3
+            const q3Score = q3 ?? 0;
+            return cur - q3Score;
         }
         return 0;
     };
