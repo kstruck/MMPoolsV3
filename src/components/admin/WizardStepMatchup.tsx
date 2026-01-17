@@ -95,32 +95,16 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({
                             <select value={seasonType} onChange={(e) => {
                                 const newType = e.target.value;
                                 setSeasonType(newType);
-                                // Reset week logic
-                                if (newType === '2') {
-                                    setWeek(currentEstimatedWeek.toString());
-                                } else {
-                                    setWeek('1');
-                                }
+                                // Default to Divisional for postseason
+                                setWeek('2');
                             }} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none">
-                                <option value="1">Preseason</option>
-                                <option value="2">Regular Season</option>
                                 <option value="3">Postseason</option>
                             </select>
 
-                            <span className="text-slate-500 text-sm">Week</span>
+                            <span className="text-slate-500 text-sm">Round</span>
                             <select value={week} onChange={(e) => setWeek(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none">
-                                {seasonType === '2' ? (
-                                    Array.from({ length: 18 }).map((_, i) => {
-                                        const w = i + 1;
-                                        if (w < currentEstimatedWeek) return null;
-                                        return <option key={i} value={w}>Week {w}</option>;
-                                    })
-                                ) : (
-                                    seasonType === '1' ? Array.from({ length: 4 }).map((_, i) => <option key={i} value={i + 1}>Week {i + 1}</option>) : null
-                                )}
                                 {seasonType === '3' && (
                                     <>
-                                        <option value="1">Wild Card</option>
                                         <option value="2">Divisional</option>
                                         <option value="3">Conf. Champ</option>
                                         <option value="4">Pro Bowl</option>

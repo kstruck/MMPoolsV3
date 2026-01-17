@@ -68,9 +68,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
         }
     });
 
-    // Schedule State (for Step 1)
-    const [seasonType, setSeasonType] = useState('2');
-    const [week, setWeek] = useState('1');
+    // Schedule State (for Step 1) - Defaults to Postseason Divisional Round
+    const [seasonType, setSeasonType] = useState('3');
+    const [week, setWeek] = useState('2');
     const [scheduleGames, setScheduleGames] = useState<any[]>([]);
     const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
     const [showSchedule, setShowSchedule] = useState(false);
