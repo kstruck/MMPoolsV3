@@ -14,6 +14,7 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
         return isNaN(val) ? 0 : val;
     };
     /* ... existing sanitize and getScoreboardVal ... */
+    // VERSION: 2026-01-17-v2 - Individual quarter scores fix
 
     const getScoreboardVal = (period: 1 | 2 | 3 | 4, team: 'home' | 'away') => {
         if (!gameState || !gameState.scores) return 0;
