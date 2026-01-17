@@ -28,6 +28,8 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
         const currentPeriod = s.period || 1;
         const isPost = s.gameStatus === 'post';
 
+        console.log(`[Scoreboard] period=${period}, team=${team}, currentPeriod=${currentPeriod}, isPost=${isPost}, cur=${cur}, q1=${q1}, half=${half}`);
+
         // Q1
         if (period === 1) {
             if (currentPeriod > 1 || isPost) return q1 ?? 0;
@@ -35,6 +37,7 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
         }
         // Q2
         if (period === 2) {
+            console.log(`[Scoreboard Q2] currentPeriod < 2: ${currentPeriod < 2}, currentPeriod > 2: ${currentPeriod > 2}`);
             if (currentPeriod < 2) return '-';
             // If we're past Q2 or game is final, use stored half score
             if (currentPeriod > 2 || isPost) {
@@ -44,6 +47,7 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
             // Currently in Q2 - calculate from current score minus Q1
             // Use q1 score if available, otherwise assume 0
             const q1Score = q1 ?? 0;
+            console.log(`[Scoreboard Q2] Calculating: cur(${cur}) - q1Score(${q1Score}) = ${cur - q1Score}`);
             return cur - q1Score;
         }
         // Q3
