@@ -774,7 +774,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 const periods = ['q1', 'half', 'q3', 'final'] as const;
                 const periodLabels = { q1: 'Q1', half: 'Halftime', q3: 'Q3', final: 'Final' };
 
-                if (gameState.axisNumbers) {
+                // Helper to get the correct axis numbers for a period (4-set mode support)
+                const getAxisForPeriod = (period: typeof periods[number]) => {
+                  if (gameState.numberSets === 4 && gameState.quarterlyNumbers) {
+                    const periodToQuarter = { q1: 'q1', half: 'q2', q3: 'q3', final: 'q4' } as const;
+                    const quarterKey = periodToQuarter[period];
+                    return gameState.quarterlyNumbers[quarterKey] || gameState.axisNumbers;
+                  }
+                  return gameState.axisNumbers;
+                };
+
+                // Check if we have any axis numbers (single set or quarterly)
+                const hasAxisNumbers = gameState.axisNumbers ||
+                  (gameState.numberSets === 4 && gameState.quarterlyNumbers &&
+                    (gameState.quarterlyNumbers.q1 || gameState.quarterlyNumbers.q2 ||
+                      gameState.quarterlyNumbers.q3 || gameState.quarterlyNumbers.q4));
+
+                if (hasAxisNumbers) {
                   const totalPot = gameState.costPerSquare * gameState.squares.filter(s => s.owner).length;
                   const charityDeduction = gameState.charity?.enabled ? (totalPot * (gameState.charity.percentage / 100)) : 0;
                   const netPot = totalPot - charityDeduction;
@@ -782,10 +798,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   periods.forEach((period) => {
                     const score = gameState.scores[period];
                     if (score) {
+                      const currentAxis = getAxisForPeriod(period);
+                      if (!currentAxis) return; // Skip if no axis for this period
+
                       const homeDigit = score.home % 10;
                       const awayDigit = score.away % 10;
-                      const homeIdx = gameState.axisNumbers!.home.indexOf(homeDigit);
-                      const awayIdx = gameState.axisNumbers!.away.indexOf(awayDigit);
+                      const homeIdx = currentAxis.home.indexOf(homeDigit);
+                      const awayIdx = currentAxis.away.indexOf(awayDigit);
                       const squareId = homeIdx * 10 + awayIdx;
                       const square = gameState.squares[squareId];
                       const payoutPct = gameState.payouts[period as keyof typeof gameState.payouts] || 0;
