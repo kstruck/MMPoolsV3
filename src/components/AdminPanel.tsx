@@ -13,7 +13,7 @@ import { PoolStatistics } from './PoolStatistics';
 import {
 
   WizardStepMatchup, WizardStepBasics, WizardStepRules, WizardStepPayouts,
-  WizardStepSideHustle, WizardStepBrandingAdmin, WizardStepReminders, WizardStepFinish
+  WizardStepSideHustle, WizardStepBrandingAdmin, WizardStepReminders, WizardStepFinish, WizardStepSummary
 } from './admin';
 
 interface AdminPanelProps {
@@ -50,7 +50,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats' | 'props' | 'grading'>('settings');
 
   const [wizardStep, setWizardStep] = useState(1);
-  const TOTAL_STEPS = 8;
+  const TOTAL_STEPS = 9;
 
   const [isFetchingScores, setIsFetchingScores] = useState(false);
   const [fetchStatus, setFetchStatus] = useState<{ type: 'success' | 'error' | 'neutral', msg: string } | null>(null);
@@ -648,6 +648,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 updateConfig={updateConfig}
                 handleFixSync={handleFixSync}
                 isFixing={isFixing}
+                currentUser={currentUser}
+              />
+            )}
+            {wizardStep === 9 && (
+              <WizardStepSummary
+                gameState={gameState}
+                onEditStep={(step) => setWizardStep(step)}
               />
             )}
 

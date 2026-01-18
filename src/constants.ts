@@ -42,9 +42,9 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
   notifyAdminFull: true,
   emailNumbersGenerated: true,
 
-  collectReferral: false,
+  collectReferral: true,
   collectPhone: false,
-  collectNotes: false,
+  collectNotes: true,
   collectAddress: false,
 
   additionalLinks: [],
@@ -86,6 +86,7 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
     reverseWinners: false,
     quarterlyRollover: true,
     scoreChangePayout: false,
+    unclaimedFinalPrizeStrategy: 'last_winner',
   },
   ownerId
 });

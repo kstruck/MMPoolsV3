@@ -7,3 +7,5 @@ export * from './WizardStepSideHustle';
 export * from './WizardStepBrandingAdmin';
 export * from './WizardStepReminders';
 export * from './WizardStepFinish';
+export * from './WizardStepSummary';
+

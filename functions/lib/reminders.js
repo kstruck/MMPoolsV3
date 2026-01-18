@@ -68,7 +68,7 @@ async function logAudit(poolId, message, type, payload) {
     await auditRef.set(event);
 }
 // --- SCHEDULED REMINDER LOGIC ---
-exports.runReminders = functions.scheduler.onSchedule("every 15 minutes", async (event) => {
+exports.runReminders = functions.scheduler.onSchedule("every 5 minutes", async (event) => {
     var _a, _b;
     const db = admin.firestore();
     const now = Date.now();

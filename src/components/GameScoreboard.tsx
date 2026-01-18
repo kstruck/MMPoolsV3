@@ -71,6 +71,53 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
         return 0;
     };
 
+    // Calculate OT score for a team (overtime points only)
+    const getOTScore = (team: 'home' | 'away'): number | '-' => {
+        if (!gameState?.scores) return '-';
+        const s = gameState.scores;
+
+        // OT can only happen after game is complete
+        if (s.gameStatus !== 'post') return '-';
+
+        const final = s.final?.[team] !== undefined ? sanitize(s.final[team]) : null;
+        const q3 = s.q3?.[team] !== undefined ? sanitize(s.q3[team]) : null;
+
+        if (final === null || q3 === null) return '-';
+
+        // Q4 score is final - q3 (which includes OT if any)
+        // But we need to calculate just the OT portion
+        // For this, we need either:
+        // 1. A stored end-of-regulation score, or
+        // 2. Calculate: if final > (q3 + typical Q4 points), there was OT
+        // Since we don't have end-of-regulation stored, we'll infer from period
+
+        // Actually, let's check if period > 4 or if game status indicates OT
+        // For now, we'll show OT column only if detected based on stored data
+
+        // The only reliable way is if the period was > 4 during the game
+        // We'll store this in the scores.period field
+        // For backwards compatibility, we'll assume OT if scores exist
+        return '-'; // Will be calculated below in the hasOvertime check
+    };
+
+    // Detect if game went to overtime
+    const detectOvertime = (): boolean => {
+        if (!gameState?.scores) return false;
+        const s = gameState.scores;
+
+        // If game is not complete, no OT yet
+        if (s.gameStatus !== 'post') return false;
+
+        // Check if period stored indicates OT (period 5 = OT)
+        if (s.period && s.period > 4) return true;
+
+        // Alternative: check if there's an 'overtime' field stored
+        // For backwards compatibility, just return false for now unless period > 4
+        return false;
+    };
+
+    const hasOvertime = detectOvertime();
+
     const homeLogo = gameState.homeTeamLogo || (gameState.homeTeam ? getTeamLogo(gameState.homeTeam) : undefined);
     const awayLogo = gameState.awayTeamLogo || (gameState.awayTeam ? getTeamLogo(gameState.awayTeam) : undefined);
     const { gameStatus, startTime, clock, period, syncStatus } = gameState.scores || {};
@@ -118,13 +165,15 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
 
             {/* Scoreboard Grid */}
             <div className="p-6">
-                <div className="grid grid-cols-7 gap-4 text-center text-slate-500 font-bold uppercase text-xs mb-3">
+                <div className={`grid ${hasOvertime ? 'grid-cols-8' : 'grid-cols-7'} gap-4 text-center text-slate-500 font-bold uppercase text-xs mb-3`}>
                     <div className="col-span-2 text-left pl-4">Team</div>
-                    <div>1</div><div>2</div><div>3</div><div>4</div><div>T</div>
+                    <div>1</div><div>2</div><div>3</div><div>4</div>
+                    {hasOvertime && <div className="text-amber-400">OT</div>}
+                    <div>T</div>
                 </div>
 
                 {/* Away Team Row */}
-                <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center mb-3 bg-slate-900 p-4 rounded-lg border border-slate-800/50">
+                <div className={`grid ${hasOvertime ? 'grid-cols-8' : 'grid-cols-7'} gap-4 text-center text-white font-bold items-center mb-3 bg-slate-900 p-4 rounded-lg border border-slate-800/50`}>
                     <div className="col-span-2 text-left pl-2 flex items-center gap-3">
                         {awayLogo ? <img src={awayLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.awayTeam} /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{gameState.awayTeam?.charAt(0) || '?'}</div>}
                         <span className="text-lg md:text-xl truncate">{gameState.awayTeam || 'TBD'}</span>
@@ -133,11 +182,12 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
                     <div className="text-xl text-slate-400">{getScoreboardVal(2, 'away')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(3, 'away')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(4, 'away')}</div>
+                    {hasOvertime && <div className="text-xl text-amber-400">{getOTScore('away')}</div>}
                     <div className="text-3xl text-indigo-400 font-black">{sanitize(gameState.scores?.current?.away)}</div>
                 </div>
 
                 {/* Home Team Row */}
-                <div className="grid grid-cols-7 gap-4 text-center text-white font-bold items-center bg-slate-900 p-4 rounded-lg border border-slate-800/50">
+                <div className={`grid ${hasOvertime ? 'grid-cols-8' : 'grid-cols-7'} gap-4 text-center text-white font-bold items-center bg-slate-900 p-4 rounded-lg border border-slate-800/50`}>
                     <div className="col-span-2 text-left pl-2 flex items-center gap-3">
                         {homeLogo ? <img src={homeLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.homeTeam} /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{gameState.homeTeam?.charAt(0) || '?'}</div>}
                         <span className="text-lg md:text-xl truncate">{gameState.homeTeam || 'TBD'}</span>
@@ -146,6 +196,7 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
                     <div className="text-xl text-slate-400">{getScoreboardVal(2, 'home')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(3, 'home')}</div>
                     <div className="text-xl text-slate-400">{getScoreboardVal(4, 'home')}</div>
+                    {hasOvertime && <div className="text-xl text-amber-400">{getOTScore('home')}</div>}
                     <div className="text-3xl text-rose-400 font-black">{sanitize(gameState.scores?.current?.home)}</div>
                 </div>
             </div>

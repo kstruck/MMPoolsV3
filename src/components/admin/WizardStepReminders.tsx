@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Bell, CheckCircle, Clock, Sparkles, Trash2 } from 'lucide-react';
 import type { GameState } from '../../types';
 
@@ -20,6 +20,21 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
         lock: { ...defaultReminders.lock, ...(gameState.reminders?.lock || {}) },
         winner: { ...defaultReminders.winner, ...(gameState.reminders?.winner || {}) }
     };
+
+    // Auto-set lock time to 15 minutes before kickoff when game is linked and no lockAt is set
+    useEffect(() => {
+        if (gameState.scores.startTime && !gameState.reminders?.lock?.lockAt) {
+            const startTime = new Date(gameState.scores.startTime).getTime();
+            const lockAt15MinsBefore = startTime - (15 * 60 * 1000); // 15 minutes before
+            updateConfig({
+                reminders: {
+                    ...safeReminders,
+                    lock: { ...safeReminders.lock, enabled: true, lockAt: lockAt15MinsBefore }
+                }
+            });
+        }
+    }, [gameState.scores.startTime]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">

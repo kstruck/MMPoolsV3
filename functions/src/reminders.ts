@@ -79,7 +79,7 @@ async function logAudit(poolId: string, message: string, type: string, payload?:
 
 // --- SCHEDULED REMINDER LOGIC ---
 
-export const runReminders = functions.scheduler.onSchedule("every 15 minutes", async (event) => {
+export const runReminders = functions.scheduler.onSchedule("every 5 minutes", async (event) => {
     const db = admin.firestore();
     const now = Date.now();
     console.log(`[runReminders] Starting reminder check at ${new Date(now).toISOString()}`);

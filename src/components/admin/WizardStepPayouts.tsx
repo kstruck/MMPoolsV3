@@ -1,5 +1,5 @@
-import React from 'react';
-import { Trophy, Zap, Users, Activity, CheckCircle, Shield, Heart } from 'lucide-react';
+import React, { useState } from 'react';
+import { Trophy, Zap, Users, Activity, CheckCircle, Shield, Heart, AlertTriangle } from 'lucide-react';
 import type { GameState, PayoutConfig } from '../../types';
 
 interface WizardStepPayoutsProps {
@@ -18,6 +18,17 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
     updateConfig,
     totalPayout
 }) => {
+    const [showRandomDrawWarning, setShowRandomDrawWarning] = useState(false);
+
+    const handleRandomDrawClick = () => {
+        setShowRandomDrawWarning(true);
+    };
+
+    const confirmRandomDraw = () => {
+        updateConfig({ ruleVariations: { ...gameState.ruleVariations, unclaimedFinalPrizeStrategy: 'random' } });
+        setShowRandomDrawWarning(false);
+    };
+
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
 
@@ -410,7 +421,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                                 </button>
 
                                 <button
-                                    onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, unclaimedFinalPrizeStrategy: 'random' } })}
+                                    onClick={handleRandomDrawClick}
                                     className={`p-3 rounded-lg border text-left transition-all ${gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'}`}
                                 >
                                     <div className="font-bold text-sm mb-1">Option B: Random Draw</div>
@@ -421,8 +432,46 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                     )}
                 </div>
             </div>
+
+            {/* Random Draw Warning Modal */}
+            {showRandomDrawWarning && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-in fade-in">
+                    <div className="bg-slate-900 border border-amber-500/50 rounded-2xl p-6 max-w-md mx-4 shadow-2xl animate-in zoom-in-95">
+                        <div className="flex items-start gap-4 mb-4">
+                            <div className="p-3 bg-amber-500/20 rounded-xl text-amber-400">
+                                <AlertTriangle size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-white mb-1">Random Draw Warning</h3>
+                                <p className="text-slate-400 text-sm leading-relaxed">
+                                    Choosing <strong className="text-amber-300">Random Draw</strong> means that if the Final winning square is empty,
+                                    you will need to manually click a "Randomizer" button after the game ends to pick a lucky square that receives the rollover pot.
+                                </p>
+                            </div>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-6 pl-16">
+                            This requires action from you after the game. Are you sure you want this option?
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowRandomDrawWarning(false)}
+                                className="px-4 py-2 text-slate-400 hover:text-white transition-colors font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmRandomDraw}
+                                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-lg transition-colors"
+                            >
+                                Yes, Use Random Draw
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 export default WizardStepPayouts;
+

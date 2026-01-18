@@ -8,6 +8,7 @@ interface WizardStepFinishProps {
     handleFixSync?: () => Promise<void>;
     isFixing?: boolean;
     setupMode?: boolean; // If true, hide Debug tools (for SetupWizard)
+    currentUser?: { role?: string }; // For SuperAdmin check
 }
 
 export const WizardStepFinish: React.FC<WizardStepFinishProps> = ({
@@ -15,8 +16,11 @@ export const WizardStepFinish: React.FC<WizardStepFinishProps> = ({
     updateConfig,
     handleFixSync,
     isFixing = false,
-    setupMode = false
+    setupMode = false,
+    currentUser
 }) => {
+    const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -79,8 +83,8 @@ export const WizardStepFinish: React.FC<WizardStepFinishProps> = ({
                         </div>
                     </div>
 
-                    {/* Debug & Repair (Admin Only - Hidden in Setup) */}
-                    {!setupMode && handleFixSync && (
+                    {/* Debug & Repair (SuperAdmin Only - Hidden in Setup) */}
+                    {!setupMode && handleFixSync && isSuperAdmin && (
                         <div className="bg-slate-950 p-4 rounded-xl border border-slate-700 border-l-4 border-l-amber-500">
                             <h4 className="font-bold text-white mb-3 text-sm uppercase flex items-center gap-2"><Hammer size={14} className="text-amber-400" /> Debug & Repair</h4>
                             <p className="text-xs text-slate-500 mb-4">Advanced tools to fix stuck states or missing scores.</p>
