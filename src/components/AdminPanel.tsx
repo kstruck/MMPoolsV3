@@ -317,8 +317,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     // Auto-set the Lock Time to the game start time
     const gameDate = new Date(game.date);
     const existingReminders = gameState.reminders || {
-      payment: { enabled: false, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false },
-      lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: gameDate.getTime() },
+      payment: { enabled: true, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: true },
+      lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: gameDate.getTime() - (15 * 60 * 1000) },
       winner: { enabled: true, channels: ['email'], includeDigits: true, includeCharityImpact: true }
     };
 
@@ -347,7 +347,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         ...existingReminders,
         lock: {
           ...existingReminders.lock,
-          lockAt: gameDate.getTime()
+          lockAt: gameDate.getTime() - (15 * 60 * 1000)
         }
       },
       scores: {
@@ -571,7 +571,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   { step: 5, label: '5. Side Hustle' },
                   { step: 6, label: '6. Branding' },
                   { step: 7, label: '7. Reminders' },
-                  { step: 8, label: '8. Finish' }
+                  { step: 8, label: '8. Summary' },
+                  { step: 9, label: '9. Finish' }
                 ].map(s => (
                   <button
                     key={s.step}
@@ -648,18 +649,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               />
             )}
             {wizardStep === 8 && (
+              <WizardStepSummary
+                gameState={gameState}
+                onEditStep={(step) => setWizardStep(step)}
+              />
+            )}
+            {wizardStep === 9 && (
               <WizardStepFinish
                 gameState={gameState}
                 updateConfig={updateConfig}
                 handleFixSync={handleFixSync}
                 isFixing={isFixing}
                 currentUser={currentUser}
-              />
-            )}
-            {wizardStep === 9 && (
-              <WizardStepSummary
-                gameState={gameState}
-                onEditStep={(step) => setWizardStep(step)}
               />
             )}
 

@@ -14,7 +14,8 @@ import {
     WizardStepSideHustle,
     WizardStepBrandingAdmin,
     WizardStepReminders,
-    WizardStepFinish
+    WizardStepFinish,
+    WizardStepSummary
 } from './admin';
 
 interface SetupWizardProps {
@@ -26,7 +27,8 @@ interface SetupWizardProps {
 export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBack }) => {
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
-    const TOTAL_STEPS = 8;
+    const TOTAL_STEPS = 9;
+    console.log('[SetupWizard] Initialized - Version 1.1 (9 Steps, New Defaults)');
     const [isCreating, setIsCreating] = useState(false);
 
     // Initial Draft State
@@ -44,8 +46,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
             quarterlyRollover: true, // Default to rollover winnings
             reverseWinners: false,
             scoreChangePayout: false,
-            unclaimedFinalPrizeStrategy: 'random',
+            unclaimedFinalPrizeStrategy: 'last_winner',
         },
+        includeOvertime: true, // Default to include OT in final score
         emailNumbersGenerated: true, // Default to email players when numbers set
         notifyAdminFull: true, // Default to alert admin when grid full
         charity: { enabled: false, name: '', percentage: 0 },
@@ -58,7 +61,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
         paymentInstructions: '',
         waitlist: [],
         reminders: {
-            payment: { enabled: false, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false },
+            payment: { enabled: true, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: true },
             lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: undefined },
             winner: { enabled: true, channels: ['email'], includeDigits: true, includeCharityImpact: true }
         },
@@ -168,13 +171,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
             week: parseInt(week),
             reminders: {
                 ...(gameState.reminders || {
-                    payment: { enabled: false, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: false },
+                    payment: { enabled: true, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: true },
                     lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: undefined },
                     winner: { enabled: true, channels: ['email'], includeDigits: true, includeCharityImpact: true }
                 }),
                 lock: {
                     ...(gameState.reminders?.lock || { enabled: true, scheduleMinutes: [60, 30, 15] }),
-                    lockAt: gameDate.getTime()
+                    lockAt: gameDate.getTime() - (15 * 60 * 1000)
                 }
             },
             scores: {
@@ -278,7 +281,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                             {step === 5 && 'Side Hustle'}
                             {step === 6 && 'Branding'}
                             {step === 7 && 'Reminders'}
-                            {step === 8 && 'Final Review'}
+                            {step === 8 && 'Summary'}
+                            {step === 9 && 'Final Review'}
                         </h1>
                         <span className="text-slate-500 font-bold font-mono">Step {step} of {TOTAL_STEPS}</span>
                     </div>
@@ -354,10 +358,18 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                     )}
 
                     {step === 8 && (
+                        <WizardStepSummary
+                            gameState={gameState as GameState}
+                            onEditStep={(s) => setStep(s)}
+                        />
+                    )}
+
+                    {step === 9 && (
                         <WizardStepFinish
                             gameState={gameState as GameState}
                             updateConfig={updateConfig}
                             setupMode={true}
+                            currentUser={user}
                         />
                     )}
                 </div>
