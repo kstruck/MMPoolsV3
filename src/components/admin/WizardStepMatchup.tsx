@@ -105,6 +105,7 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({
                             <select value={week} onChange={(e) => setWeek(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none">
                                 {seasonType === '3' && (
                                     <>
+                                        <option value="1">Wild Card</option>
                                         <option value="2">Divisional</option>
                                         <option value="3">Conf. Champ</option>
                                         <option value="4">Pro Bowl</option>

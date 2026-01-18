@@ -55,8 +55,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isFetchingScores, setIsFetchingScores] = useState(false);
   const [fetchStatus, setFetchStatus] = useState<{ type: 'success' | 'error' | 'neutral', msg: string } | null>(null);
 
-  const [seasonType, setSeasonType] = useState('2');
-  const [week, setWeek] = useState('1');
+  // Auto-detect season type: Dec-Feb is postseason, otherwise regular
+  const getDefaultSeasonType = () => {
+    const month = new Date().getMonth();
+    return (month === 11 || month === 0 || month === 1) ? '3' : '2';
+  };
+  const [seasonType, setSeasonType] = useState(getDefaultSeasonType());
+  const [week, setWeek] = useState('2'); // Default to Divisional for postseason
   const [scheduleGames, setScheduleGames] = useState<any[]>([]);
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
