@@ -281,7 +281,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                 <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Divisional</th>
                                                 <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Conf Champ</th>
                                                 <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Super Bowl</th>
-                                                <th className="p-4 text-emerald-400 font-bold text-sm text-right bg-emerald-500/5">Total</th>
+                                                <th className="p-4 text-emerald-400 font-black text-sm text-right bg-emerald-500/10 border-l border-emerald-500/20 sticky right-0 z-20 shadow-[-4px_0_8px_rgba(0,0,0,0.1)]">TOTAL</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -393,7 +393,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                             <td className="p-4 text-center font-mono text-slate-300">
                                                                 {entry.scoreSB > 0 ? entry.scoreSB : '-'}
                                                             </td>
-                                                            <td className="p-4 text-right font-black text-emerald-400 text-lg bg-emerald-500/5">
+                                                            <td className="p-4 text-right font-black text-emerald-400 text-xl bg-emerald-500/10 border-l border-emerald-500/20 sticky right-0 z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.1)]">
                                                                 {entry.calculatedTotal}
                                                             </td>
                                                         </tr>
@@ -401,7 +401,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                 })}
                                             {(!pool.entries || Object.keys(pool.entries).length === 0) && (
                                                 <tr>
-                                                    <td colSpan={7} className="p-8 text-center text-slate-500 italic">No entries yet. Be the first!</td>
+                                                    <td colSpan={8} className="p-8 text-center text-slate-500 italic">No entries yet. Be the first!</td>
                                                 </tr>
                                             )}
                                         </tbody>
