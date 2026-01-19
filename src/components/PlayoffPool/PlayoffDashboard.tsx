@@ -267,9 +267,14 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         </div>
                     )}
                     {activeTab === 'leaderboard' && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {/* Left Column: Table */}
-                            <div className="lg:col-span-2">
+                        <div className="flex flex-col gap-6">
+                            {/* Top Section: Payouts */}
+                            <div className="max-w-md">
+                                <PlayoffPayoutCard pool={pool} paidEntriesCount={paidEntriesCount} />
+                            </div>
+
+                            {/* Bottom Section: Table */}
+                            <div>
                                 <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden overflow-x-auto">
                                     <table className="w-full text-left border-collapse">
                                         <thead>
@@ -281,7 +286,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                 <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Divisional</th>
                                                 <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Conf Champ</th>
                                                 <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Super Bowl</th>
-                                                <th className="p-4 text-emerald-400 font-black text-sm text-right bg-emerald-500/10 border-l border-emerald-500/20 sticky right-0 z-20 shadow-[-4px_0_8px_rgba(0,0,0,0.1)]">TOTAL</th>
+                                                <th className="p-4 text-emerald-400 font-black text-sm text-right bg-emerald-500/10 border-l border-emerald-500/20">TOTAL</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -393,7 +398,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                             <td className="p-4 text-center font-mono text-slate-300">
                                                                 {entry.scoreSB > 0 ? entry.scoreSB : '-'}
                                                             </td>
-                                                            <td className="p-4 text-right font-black text-emerald-400 text-xl bg-emerald-500/10 border-l border-emerald-500/20 sticky right-0 z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.1)]">
+                                                            <td className="p-4 text-right font-black text-emerald-400 text-xl bg-emerald-500/10 border-l border-emerald-500/20">
                                                                 {entry.calculatedTotal}
                                                             </td>
                                                         </tr>
@@ -409,10 +414,6 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                 </div>
                             </div>
 
-                            {/* Right Column: Payouts */}
-                            <div className="lg:col-span-1 self-start">
-                                <PlayoffPayoutCard pool={pool} paidEntriesCount={paidEntriesCount} />
-                            </div>
                         </div>
                     )}
                     {activeTab === 'rules' && (
