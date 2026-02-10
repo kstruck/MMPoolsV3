@@ -6,6 +6,7 @@ import { Loader } from 'lucide-react';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LandingPage } from './components/LandingPage';
+import { GamedaySquaresLanding } from './components/GamedaySquaresLanding';
 import { AuthModal } from './components/modals';
 import { CreatePoolSelection } from './components/CreatePoolSelection';
 import { BrowsePools } from './components/BrowsePools';
@@ -166,6 +167,23 @@ const App: React.FC = () => {
         <Route path="/" element={
           <>
             <LandingPage
+              user={user}
+              isLoggedIn={!!user}
+              onLogin={() => handleOpenAuth('login')}
+              onSignup={() => handleOpenAuth('register')}
+              onLogout={handleLogout}
+              onCreatePool={handleCreatePoolClick}
+              onBrowse={() => navigate('/browse')}
+              totalPrizes={stats?.totalRevenue || 0}
+              totalDonated={stats?.totalDonated || 0}
+            />
+          </>
+        } />
+
+        {/* Squares Landing */}
+        <Route path="/gameday-squares" element={
+          <>
+            <GamedaySquaresLanding
               user={user}
               isLoggedIn={!!user}
               onLogin={() => handleOpenAuth('login')}
