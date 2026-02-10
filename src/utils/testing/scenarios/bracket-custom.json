@@ -1,0 +1,61 @@
+{
+    "id": "bracket-custom",
+    "name": "Bracket: Custom Scoring",
+    "description": "Verifies custom scoring system (1-2-3-4-5-6)",
+    "poolType": "BRACKET",
+    "poolConfig": {
+        "name": "Custom Scoring Pool",
+        "type": "BRACKET",
+        "scoringSystem": "CUSTOM",
+        "customScoring": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+        ],
+        "entryFee": 10
+    },
+    "testEntries": [
+        {
+            "userName": "CustomMaster",
+            "picks": {
+                "slot-g1": "team1",
+                "slot-g2": "team4",
+                "slot-g3": "team1"
+            },
+            "tiebreakerPrediction": 140
+        }
+    ],
+    "tournamentResults": [
+        {
+            "gameId": "g1",
+            "homeTeamId": "team1",
+            "awayTeamId": "team2",
+            "winnerId": "team1",
+            "round": 1
+        },
+        {
+            "gameId": "g2",
+            "homeTeamId": "team3",
+            "awayTeamId": "team4",
+            "winnerId": "team4",
+            "round": 1
+        },
+        {
+            "gameId": "g3",
+            "homeTeamId": "team1",
+            "awayTeamId": "team4",
+            "winnerId": "team1",
+            "round": 2
+        }
+    ],
+    "assertions": [
+        {
+            "type": "bracketTopScore",
+            "expected": 3,
+            "message": "Top score should be 3 (1 point R1 + 2 points R2)"
+        }
+    ]
+}

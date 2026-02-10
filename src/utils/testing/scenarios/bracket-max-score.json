@@ -1,0 +1,61 @@
+{
+    "id": "bracket-max-score",
+    "name": "Bracket: Max Possible Score",
+    "description": "Verifies Max Possible Score calculation with alive/eliminated teams",
+    "poolType": "BRACKET",
+    "poolConfig": {
+        "name": "Max Score Test Pool",
+        "type": "BRACKET",
+        "scoringSystem": "CLASSIC",
+        "entryFee": 10
+    },
+    "testEntries": [
+        {
+            "userName": "Optimist",
+            "picks": {
+                "slot-g1": "team1",
+                "slot-g2": "team3",
+                "slot-g3": "team1"
+            },
+            "tiebreakerPrediction": 140
+        }
+    ],
+    "tournamentResults": [
+        {
+            "gameId": "g1",
+            "homeTeamId": "team1",
+            "awayTeamId": "team2",
+            "winnerId": "team1",
+            "round": 1,
+            "status": "FINAL"
+        },
+        {
+            "gameId": "g2",
+            "homeTeamId": "team3",
+            "awayTeamId": "team4",
+            "winnerId": null,
+            "round": 1,
+            "status": "SCHEDULED"
+        },
+        {
+            "gameId": "g3",
+            "homeTeamId": "team1",
+            "awayTeamId": null,
+            "winnerId": null,
+            "round": 2,
+            "status": "SCHEDULED"
+        }
+    ],
+    "assertions": [
+        {
+            "type": "bracketTopScore",
+            "expected": 10,
+            "message": "Current score should be 10 (R1 G1 Correct)"
+        },
+        {
+            "type": "maxScoreAtLeast",
+            "expected": 30,
+            "message": "Max Score should include potential R1 G2 (10) and R2 G3 (20) points"
+        }
+    ]
+}

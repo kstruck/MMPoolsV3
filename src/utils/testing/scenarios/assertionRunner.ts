@@ -79,6 +79,8 @@ function runSingleAssertion(
             return assertBracketWinner(assertion, pool);
         case 'bracketTopScore':
             return assertBracketTopScore(assertion, pool);
+        case 'maxScoreAtLeast':
+            return assertMaxScoreAtLeast(assertion, pool);
         // Playoff-specific assertions
         case 'playoffEntryCount':
             return assertPlayoffEntryCount(assertion, pool);

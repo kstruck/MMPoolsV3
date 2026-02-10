@@ -297,3 +297,8 @@ This document provides a comprehensive overview of the specialized skills availa
 ### [skill-superpowers-using-superpowers](./skill-superpowers-using-superpowers/SKILL.md)
 
 **Description:** Guide to the Superpowers system (Superpowers). Meta-documentation.
+
+### [skill-security-scanner](./skill-security-scanner/SKILL.md)
+
+**Description:** Expert security auditor for vulnerability assessment, dependency scanning, and comprehensive hardening.
+**Tools:** `scanner.py`, `update.sh`.

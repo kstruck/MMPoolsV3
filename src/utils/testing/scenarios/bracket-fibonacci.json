@@ -1,0 +1,67 @@
+{
+    "id": "bracket-fibonacci",
+    "name": "Bracket: Fibonacci Scoring",
+    "description": "Verifies Fibonacci scoring system (1-2-3-5-8-13)",
+    "poolType": "BRACKET",
+    "poolConfig": {
+        "name": "Fibonacci Test Pool",
+        "type": "BRACKET",
+        "scoringSystem": "FIBONACCI",
+        "entryFee": 10
+    },
+    "testEntries": [
+        {
+            "userName": "FibonacciMaster",
+            "picks": {
+                "slot-g1": "team1",
+                "slot-g2": "team4",
+                "slot-g3": "team1"
+            },
+            "tiebreakerPrediction": 140
+        },
+        {
+            "userName": "WrongPicker",
+            "picks": {
+                "slot-g1": "team2",
+                "slot-g2": "team3",
+                "slot-g3": "team4"
+            },
+            "tiebreakerPrediction": 100
+        }
+    ],
+    "tournamentResults": [
+        {
+            "gameId": "g1",
+            "homeTeamId": "team1",
+            "awayTeamId": "team2",
+            "winnerId": "team1",
+            "round": 1
+        },
+        {
+            "gameId": "g2",
+            "homeTeamId": "team3",
+            "awayTeamId": "team4",
+            "winnerId": "team4",
+            "round": 1
+        },
+        {
+            "gameId": "g3",
+            "homeTeamId": "team1",
+            "awayTeamId": "team4",
+            "winnerId": "team1",
+            "round": 2
+        }
+    ],
+    "assertions": [
+        {
+            "type": "bracketWinner",
+            "expected": "FibonacciMaster",
+            "message": "FibonacciMaster should win"
+        },
+        {
+            "type": "bracketTopScore",
+            "expected": 30,
+            "message": "Top score should be 30 (10 R1 + 20 R2 in Fib? Wait check bracketScoring.ts)"
+        }
+    ]
+}

@@ -8,13 +8,16 @@ import propsBasic from './props-basic.json';
 import bracketBasic from './bracket-basic.json';
 import playoffBasic from './playoff-basic.json';
 import playoffLifecycle from './playoff-lifecycle.json';
+import bracketFibonacci from './bracket-fibonacci.json';
+import bracketCustom from './bracket-custom.json';
+import bracketMaxScore from './bracket-max-score.json';
 
 export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
 
 export interface TestAssertion {
     type: 'winnerCount' | 'winnerCountAtLeast' | 'winnerExists' | 'totalPayout' | 'poolStatus'
     | 'propCardCount' | 'propWinner' | 'propTopScore'
-    | 'bracketEntryCount' | 'bracketWinner' | 'bracketTopScore'
+    | 'bracketEntryCount' | 'bracketWinner' | 'bracketTopScore' | 'maxScoreAtLeast'
     | 'playoffEntryCount' | 'playoffWinner';
     expected?: number | string | boolean;
     period?: string;
@@ -74,6 +77,9 @@ export const SCENARIOS: Record<string, TestScenario> = {
     'bracket-basic': bracketBasic as unknown as TestScenario,
     'playoff-basic': playoffBasic as unknown as TestScenario,
     'playoff-lifecycle': playoffLifecycle as unknown as TestScenario,
+    'bracket-fibonacci': bracketFibonacci as unknown as TestScenario,
+    'bracket-custom': bracketCustom as unknown as TestScenario,
+    'bracket-max-score': bracketMaxScore as unknown as TestScenario,
 };
 
 export const SCENARIO_LIST = Object.values(SCENARIOS);

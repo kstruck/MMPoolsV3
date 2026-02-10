@@ -1,7 +1,7 @@
 {
     "id": "bracket-basic",
     "name": "Bracket Basic Test",
-    "description": "Tests bracket entry submission, scoring, and ranking calculation",
+    "description": "Tests bracket entry submission, scoring, and ranking calculation (Updated 2025)",
     "poolType": "BRACKET",
     "poolConfig": {
         "name": "Test Bracket Pool",

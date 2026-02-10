@@ -7,6 +7,9 @@ import type { ValidationResult } from './scenarios/assertionRunner';
 import { runAssertions } from './scenarios/assertionRunner';
 import { runScenario } from './simulators/squaresSimulator';
 import { dbService } from '../../services/dbService';
+import { runScenario as runBracketScenario } from './simulators/bracketSimulator';
+import { runScenario as runPropsScenario } from './simulators/propsSimulator';
+import { runScenario as runPlayoffScenario } from './simulators/playoffSimulator';
 
 export interface SimpleTestResult {
     scenarioId: string;
@@ -54,7 +57,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
                     grading: (scenario as any).grading
                 }
             };
-            const { runScenario: runPropsScenario } = await import('./simulators/propsSimulator');
+            // Props Simulator is now statically imported
             result = await runPropsScenario('props-basic', 'actual', propsSettings);
         } else if (poolType === 'BRACKET') {
             // Route to bracket simulator
@@ -66,7 +69,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
                     tournamentResults: (scenario as any).tournamentResults
                 }
             };
-            const { runScenario: runBracketScenario } = await import('./simulators/bracketSimulator');
+            // Bracket Simulator is now statically imported
             result = await runBracketScenario('bracket-basic', 'actual', bracketSettings);
         } else if (poolType === 'NFL_PLAYOFFS') {
             // Route to playoff simulator
@@ -78,7 +81,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
                     roundResults: (scenario as any).roundResults
                 }
             };
-            const { runScenario: runPlayoffScenario } = await import('./simulators/playoffSimulator');
+            // Playoff Simulator is now statically imported
             result = await runPlayoffScenario('playoff-basic', 'actual', playoffSettings);
         } else {
             // SQUARES (default)
