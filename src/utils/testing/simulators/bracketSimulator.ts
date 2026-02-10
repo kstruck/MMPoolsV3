@@ -3,7 +3,7 @@
 
 import { getFirestore, doc, collection, getDocs, updateDoc, setDoc, addDoc } from 'firebase/firestore';
 import { dbService } from '../../../services/dbService';
-import type { BracketEntry, Tournament, Game, TournamentSlot } from '../../../types';
+import type { BracketEntry, Tournament, Game, TournamentSlot, BracketPool } from '../../../types';
 import { calculateScore } from '../../../components/BracketPoolDashboard/bracketScoring';
 
 export interface BracketTestResult {
@@ -12,7 +12,7 @@ export interface BracketTestResult {
         step: string;
         status: 'success' | 'failed' | 'skipped';
         message: string;
-        data?: any;
+        data?: unknown;
     }>;
 }
 
@@ -52,7 +52,7 @@ export async function runScenario(
     const steps: BracketTestResult['steps'] = [];
     let poolId: string = '';
 
-    const addStep = (step: string, status: 'success' | 'failed' | 'skipped', message: string, data?: any) => {
+    const addStep = (step: string, status: 'success' | 'failed' | 'skipped', message: string, data?: unknown) => {
         steps.push({ step, status, message, data });
         console.log(`${status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏭️'} [BracketTest] [${step}] ${message}`);
     };
@@ -69,7 +69,7 @@ export async function runScenario(
         const now = Date.now();
         const poolSettings = scenarioData.poolConfig || {}; // Get pool settings from scenario
 
-        const poolData: any = {
+        const poolData: Partial<BracketPool> & { type: 'BRACKET'; costPerSquare: number; maxSquaresPerPlayer: number } = {
             type: 'BRACKET',
             name: poolName,
             slug: `test-bracket-${now}`,
@@ -93,11 +93,12 @@ export async function runScenario(
             entryCount: 0,
             // Required shims for createPool validation
             costPerSquare: 0,
-            maxSquaresPerPlayer: 0
+            maxSquaresPerPlayer: 0,
+            managerUid: 'test-admin', // Shim for Partial<BracketPool>
         };
 
         // Use Cloud Function via dbService
-        poolId = await dbService.createPool(poolData);
+        poolId = await dbService.createPool(poolData as any);
         addStep('Create Pool', 'success', `Pool created with ID: ${poolId}`);
 
         // === B. CREATE MOCK TOURNAMENT (SuperAdmin can write to tournaments) ===
@@ -144,8 +145,9 @@ export async function runScenario(
         // SuperAdmin can write tournaments (Firestore rules allow this)
         try {
             await setDoc(doc(db, 'tournaments', tournamentId), tournamentData);
-        } catch (e: any) {
-            addStep('Tournament Warning', 'skipped', `Could not create tournament: ${e.message}`);
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            addStep('Tournament Warning', 'skipped', `Could not create tournament: ${errMsg}`);
         }
 
         addStep('Create Tournament', 'success', `Created mock tournament with ${gameResults.length} games`);
@@ -178,8 +180,9 @@ export async function runScenario(
                     };
 
                     await addDoc(entriesCollection, entryData);
-                } catch (e: any) {
-                    addStep('Entry Error', 'failed', `Failed to create entry for ${entry.userName}: ${e.message}`);
+                } catch (e: unknown) {
+                    const errMsg = e instanceof Error ? e.message : String(e);
+                    addStep('Entry Error', 'failed', `Failed to create entry for ${entry.userName}: ${errMsg}`);
                 }
             }
 
@@ -195,12 +198,14 @@ export async function runScenario(
         for (const entryDoc of entriesSnap.docs) {
             const entry = entryDoc.data() as BracketEntry;
 
+            if (!poolData.settings) throw new Error("Pool settings missing");
+
             // Use shared scoring engine
-            const scoringResult = calculateScore(entry, tournamentData, (poolData as any).settings);
+            const scoringResult = calculateScore(entry, tournamentData, poolData.settings);
             const score = scoringResult.score;
 
             // Store maxPossibleScore for verification (used by maxScoreAtLeast assertion)
-            (entry as any).maxPossibleScore = scoringResult.maxPossibleScore;
+            (entry as BracketEntry & { maxPossibleScore?: number }).maxPossibleScore = scoringResult.maxPossibleScore;
 
             try {
                 await updateDoc(entryDoc.ref, {
@@ -210,7 +215,7 @@ export async function runScenario(
 
                 // Update local object for verification step
                 entry.score = score;
-            } catch (_e) {
+            } catch {
                 addStep('Score Warning', 'skipped', `Could not update score for ${entry.name}`);
             }
         }
@@ -220,8 +225,8 @@ export async function runScenario(
 
         // === E. MARK POOL COMPLETE ===
         try {
-            await dbService.updatePool(poolId, { status: 'COMPLETED' } as any);
-        } catch (_e) {
+            await dbService.updateBracketPool(poolId, { status: 'COMPLETED' });
+        } catch {
             await updateDoc(doc(db, 'pools', poolId), { status: 'COMPLETED' });
         }
         addStep('Complete Pool', 'success', 'Pool marked as COMPLETED');
@@ -234,14 +239,14 @@ export async function runScenario(
 
         // Re-calculate maxPossibleScore for verification (since it wasn't saved to DB)
         entries.forEach(e => {
-            const res = calculateScore(e, tournamentData, (poolData as any).settings);
-            (e as any).maxPossibleScore = res.maxPossibleScore;
+            const res = calculateScore(e, tournamentData, poolData.settings!);
+            (e as BracketEntry & { maxPossibleScore?: number }).maxPossibleScore = res.maxPossibleScore;
         });
 
         // Sort by score descending
         entries.sort((a, b) => (b.score || 0) - (a.score || 0));
 
-        const leaderboard = entries.map((e, i) => `${i + 1}. ${e.name}: ${e.score} pts (Max: ${(e as any).maxPossibleScore})`).join(' | ');
+        const leaderboard = entries.map((e, i) => `${i + 1}. ${e.name}: ${e.score} pts (Max: ${(e as BracketEntry & { maxPossibleScore?: number }).maxPossibleScore})`).join(' | ');
         addStep('Verification', 'success', `Found ${entries.length} entries. Leaderboard: ${leaderboard}`);
 
         // Return entries as the "pool" object has _bracketEntries attached in runner
@@ -302,8 +307,9 @@ export async function runScenario(
         // So just need to make sure loop saves it.
 
 
-    } catch (error: any) {
-        addStep('Error', 'failed', error.message);
+    } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        addStep('Error', 'failed', errMsg);
         throw error;
     }
 
