@@ -1,32 +1,32 @@
 {
-    "id": "bracket-fibonacci",
-    "name": "Bracket: Fibonacci Scoring",
-    "description": "Verifies Fibonacci scoring system (1-2-3-5-8-13)",
+    "id": "bracket-espn",
+    "name": "Bracket: ESPN Scoring",
+    "description": "Verifies ESPN scoring system (same points as Classic: 10-20-40-80-160-320)",
     "poolType": "BRACKET",
     "poolConfig": {
-        "name": "Fibonacci Test Pool",
+        "name": "ESPN Scoring Pool",
         "type": "BRACKET",
-        "scoringSystem": "FIBONACCI",
+        "scoringSystem": "ESPN",
         "entryFee": 10
     },
     "testEntries": [
         {
-            "userName": "FibonacciMaster",
+            "userName": "ESPNMaster",
             "picks": {
                 "slot-g1": "team1",
                 "slot-g2": "team4",
                 "slot-g3": "team1"
             },
-            "tiebreakerPrediction": 140
+            "tiebreakerPrediction": 145
         },
         {
-            "userName": "WrongPicker",
+            "userName": "ESPNNovice",
             "picks": {
                 "slot-g1": "team2",
                 "slot-g2": "team3",
                 "slot-g3": "team4"
             },
-            "tiebreakerPrediction": 100
+            "tiebreakerPrediction": 130
         }
     ],
     "tournamentResults": [
@@ -54,14 +54,19 @@
     ],
     "assertions": [
         {
-            "type": "bracketWinner",
-            "expected": "FibonacciMaster's Bracket",
-            "message": "FibonacciMaster should win"
+            "type": "bracketEntryCount",
+            "expected": 2,
+            "message": "Should have 2 bracket entries"
         },
         {
             "type": "bracketTopScore",
             "expected": 40,
-            "message": "Top score should be 40 (R1:10 + R1:10 + R2:20 = 40 in Fibonacci)"
+            "message": "ESPN top score should be 40 (R1:10 + R1:10 + R2:20) — same as Classic"
+        },
+        {
+            "type": "bracketWinner",
+            "expected": "ESPNMaster's Bracket",
+            "message": "ESPNMaster should win with all 3 correct picks"
         }
     ]
 }

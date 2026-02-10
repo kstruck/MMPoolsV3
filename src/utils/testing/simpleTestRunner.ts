@@ -10,6 +10,7 @@ import { dbService } from '../../services/dbService';
 import { runScenario as runBracketScenario } from './simulators/bracketSimulator';
 import { runScenario as runPropsScenario } from './simulators/propsSimulator';
 import { runScenario as runPlayoffScenario } from './simulators/playoffSimulator';
+import { runE2EBracketSimulation } from './simulators/bracketE2ESimulator';
 
 export interface SimpleTestResult {
     scenarioId: string;
@@ -60,17 +61,30 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             // Props Simulator is now statically imported
             result = await runPropsScenario('props-basic', 'actual', propsSettings);
         } else if (poolType === 'BRACKET') {
-            // Route to bracket simulator
-            const bracketSettings = {
-                ...scenario.poolConfig,
-                _fullScenario: {
-                    poolConfig: (scenario as any).poolConfig,
-                    testEntries: (scenario as any).testEntries,
-                    tournamentResults: (scenario as any).tournamentResults
-                }
-            };
-            // Bracket Simulator is now statically imported
-            result = await runBracketScenario('bracket-basic', 'actual', bracketSettings);
+            if (scenario.isE2E && scenario.e2eConfig) {
+                // Route to E2E bracket simulator
+                const e2eResult = await runE2EBracketSimulation(scenario.e2eConfig);
+                result = {
+                    poolId: e2eResult.poolId,
+                    steps: e2eResult.steps.map(s => ({
+                        step: s.label,
+                        status: s.status,
+                        message: s.detail,
+                        data: s.data,
+                    })),
+                };
+            } else {
+                // Route to standard bracket simulator
+                const bracketSettings = {
+                    ...scenario.poolConfig,
+                    _fullScenario: {
+                        poolConfig: (scenario as any).poolConfig,
+                        testEntries: (scenario as any).testEntries,
+                        tournamentResults: (scenario as any).tournamentResults
+                    }
+                };
+                result = await runBracketScenario('bracket-basic', 'actual', bracketSettings);
+            }
         } else if (poolType === 'NFL_PLAYOFFS') {
             // Route to playoff simulator
             const playoffSettings = {

@@ -11,6 +11,11 @@ import playoffLifecycle from './playoff-lifecycle.json';
 import bracketFibonacci from './bracket-fibonacci.json';
 import bracketCustom from './bracket-custom.json';
 import bracketMaxScore from './bracket-max-score.json';
+import bracketEspn from './bracket-espn.json';
+import bracketTiebreaker from './bracket-tiebreaker.json';
+import bracketIncomplete from './bracket-incomplete.json';
+import bracketZeroCorrect from './bracket-zero-correct.json';
+import bracketE2EFullTournament from './bracket-e2e-full-tournament.json';
 
 export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
 
@@ -31,6 +36,7 @@ export interface TestScenario {
     name: string;
     description: string;
     poolType?: PoolType; // Default: SQUARES
+    isE2E?: boolean; // If true, uses E2E simulator instead of standard simulator
     poolConfig: {
         name: string;
         type: string;
@@ -39,6 +45,18 @@ export interface TestScenario {
         maxPlayers?: number;
         maxCards?: number; // For props
         ruleVariations?: Record<string, any>;
+        scoringSystem?: string;
+        entryFee?: number;
+    };
+    // E2E-specific configuration
+    e2eConfig?: {
+        entryCount?: number;
+        scoringSystem?: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
+        customScoring?: number[];
+        chalkBias?: number;
+        seed?: number;
+        includePerfectBracket?: boolean;
+        includeControlEntries?: boolean;
     };
     squareCount?: number; // Default 100 (SQUARES only)
     testUsers?: Array<{
@@ -80,6 +98,11 @@ export const SCENARIOS: Record<string, TestScenario> = {
     'bracket-fibonacci': bracketFibonacci as unknown as TestScenario,
     'bracket-custom': bracketCustom as unknown as TestScenario,
     'bracket-max-score': bracketMaxScore as unknown as TestScenario,
+    'bracket-espn': bracketEspn as unknown as TestScenario,
+    'bracket-tiebreaker': bracketTiebreaker as unknown as TestScenario,
+    'bracket-incomplete': bracketIncomplete as unknown as TestScenario,
+    'bracket-zero-correct': bracketZeroCorrect as unknown as TestScenario,
+    'bracket-e2e-full-tournament': bracketE2EFullTournament as unknown as TestScenario,
 };
 
 export const SCENARIO_LIST = Object.values(SCENARIOS);

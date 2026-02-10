@@ -1,32 +1,21 @@
 {
-    "id": "bracket-fibonacci",
-    "name": "Bracket: Fibonacci Scoring",
-    "description": "Verifies Fibonacci scoring system (1-2-3-5-8-13)",
+    "id": "bracket-incomplete",
+    "name": "Bracket: Incomplete Picks",
+    "description": "Entry with missing picks — should score only for games actually picked",
     "poolType": "BRACKET",
     "poolConfig": {
-        "name": "Fibonacci Test Pool",
+        "name": "Incomplete Bracket Pool",
         "type": "BRACKET",
-        "scoringSystem": "FIBONACCI",
+        "scoringSystem": "CLASSIC",
         "entryFee": 10
     },
     "testEntries": [
         {
-            "userName": "FibonacciMaster",
+            "userName": "PartialPicker",
             "picks": {
-                "slot-g1": "team1",
-                "slot-g2": "team4",
-                "slot-g3": "team1"
+                "slot-g1": "team1"
             },
             "tiebreakerPrediction": 140
-        },
-        {
-            "userName": "WrongPicker",
-            "picks": {
-                "slot-g1": "team2",
-                "slot-g2": "team3",
-                "slot-g3": "team4"
-            },
-            "tiebreakerPrediction": 100
         }
     ],
     "tournamentResults": [
@@ -54,14 +43,14 @@
     ],
     "assertions": [
         {
-            "type": "bracketWinner",
-            "expected": "FibonacciMaster's Bracket",
-            "message": "FibonacciMaster should win"
+            "type": "bracketEntryCount",
+            "expected": 1,
+            "message": "Should have 1 bracket entry"
         },
         {
             "type": "bracketTopScore",
-            "expected": 40,
-            "message": "Top score should be 40 (R1:10 + R1:10 + R2:20 = 40 in Fibonacci)"
+            "expected": 10,
+            "message": "Score should be 10 (only slot-g1 picked correctly, unpicked games = 0)"
         }
     ]
 }

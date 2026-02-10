@@ -27,7 +27,7 @@ export function runAssertions(
     const results: AssertionResult[] = [];
 
     for (const assertion of scenario.assertions) {
-        const result = runSingleAssertion(assertion, winners, pool);
+        const result = runSingleAssertion(assertion, winners, pool, scenario);
         results.push(result);
     }
 
@@ -52,7 +52,8 @@ export function runAssertions(
 function runSingleAssertion(
     assertion: TestAssertion,
     winners: any[],
-    pool: any
+    pool: any,
+    scenario?: TestScenario
 ): AssertionResult {
     switch (assertion.type) {
         case 'winnerCount':
@@ -76,7 +77,7 @@ function runSingleAssertion(
         case 'bracketEntryCount':
             return assertBracketEntryCount(assertion, pool);
         case 'bracketWinner':
-            return assertBracketWinner(assertion, pool);
+            return assertBracketWinner(assertion, pool, scenario);
         case 'bracketTopScore':
             return assertBracketTopScore(assertion, pool);
         case 'maxScoreAtLeast':
@@ -257,10 +258,34 @@ function assertBracketEntryCount(assertion: TestAssertion, pool: any): Assertion
     };
 }
 
-function assertBracketWinner(assertion: TestAssertion, pool: any): AssertionResult {
+function assertBracketWinner(assertion: TestAssertion, pool: any, scenario?: TestScenario): AssertionResult {
     const entries = pool?._bracketEntries || [];
-    // Sort by score descending, then by tiebreaker
-    const sorted = [...entries].sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+
+    // Derive the championship total score from tournament results for tiebreaker resolution
+    let championshipTotal: number | null = null;
+    if (scenario) {
+        const tournamentResults = (scenario as any).tournamentResults || [];
+        // Find the highest-round game to get the championship total
+        const champGame = tournamentResults.reduce((best: any, g: any) =>
+            (!best || g.round > best.round) ? g : best, null);
+        if (champGame && champGame.homeScore != null && champGame.awayScore != null) {
+            championshipTotal = champGame.homeScore + champGame.awayScore;
+        }
+    }
+
+    // Sort by score descending, then by tiebreaker proximity to championship total
+    const sorted = [...entries].sort((a: any, b: any) => {
+        const scoreDiff = (b.score || 0) - (a.score || 0);
+        if (scoreDiff !== 0) return scoreDiff;
+        // Tiebreaker: closest to championship total wins
+        if (championshipTotal != null) {
+            const aDiff = Math.abs((a.tieBreakerPrediction || 0) - championshipTotal);
+            const bDiff = Math.abs((b.tieBreakerPrediction || 0) - championshipTotal);
+            return aDiff - bDiff; // Lower diff = closer = better
+        }
+        return 0;
+    });
+
     const winner = sorted[0];
     const actual = winner?.name || 'No winner';
     const expected = assertion.expected as string;

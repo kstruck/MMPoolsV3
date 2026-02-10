@@ -1,0 +1,39 @@
+{
+    "id": "bracket-e2e-full-tournament",
+    "name": "Bracket: Full 2025 Tournament (E2E)",
+    "description": "End-to-end simulation of full 2025 NCAA Men's tournament with 50+ entries, round-by-round scoring, and winner determination. Uses real 2025 results (Florida defeats Houston 65-63).",
+    "poolType": "BRACKET",
+    "isE2E": true,
+    "poolConfig": {
+        "name": "E2E Full Tournament",
+        "type": "BRACKET",
+        "scoringSystem": "CLASSIC",
+        "entryFee": 25
+    },
+    "e2eConfig": {
+        "entryCount": 50,
+        "scoringSystem": "CLASSIC",
+        "chalkBias": 0.65,
+        "seed": 42,
+        "includePerfectBracket": true,
+        "includeControlEntries": true
+    },
+    "assertions": [
+        {
+            "type": "bracketEntryCount",
+            "expected": 54,
+            "message": "Should have 54 entries (50 random + 1 perfect + 3 control)"
+        },
+        {
+            "type": "bracketWinner",
+            "expected": "PerfectBracket's Bracket",
+            "message": "PerfectBracket should win (all picks correct + closest tiebreaker)"
+        },
+        {
+            "type": "poolStatus",
+            "field": "status",
+            "expected": "COMPLETED",
+            "message": "Pool should be marked COMPLETED"
+        }
+    ]
+}

@@ -1,0 +1,78 @@
+{
+    "id": "bracket-tiebreaker",
+    "name": "Bracket: Tiebreaker Resolution",
+    "description": "Two entries with identical scores — closest tiebreaker prediction wins",
+    "poolType": "BRACKET",
+    "poolConfig": {
+        "name": "Tiebreaker Test Pool",
+        "type": "BRACKET",
+        "scoringSystem": "CLASSIC",
+        "entryFee": 10
+    },
+    "testEntries": [
+        {
+            "userName": "TiedAlice",
+            "picks": {
+                "slot-g1": "team1",
+                "slot-g2": "team4",
+                "slot-g3": "team1"
+            },
+            "tiebreakerPrediction": 148
+        },
+        {
+            "userName": "TiedBob",
+            "picks": {
+                "slot-g1": "team1",
+                "slot-g2": "team4",
+                "slot-g3": "team1"
+            },
+            "tiebreakerPrediction": 160
+        }
+    ],
+    "tournamentResults": [
+        {
+            "gameId": "g1",
+            "homeTeamId": "team1",
+            "awayTeamId": "team2",
+            "homeScore": 70,
+            "awayScore": 65,
+            "winnerId": "team1",
+            "round": 1
+        },
+        {
+            "gameId": "g2",
+            "homeTeamId": "team3",
+            "awayTeamId": "team4",
+            "homeScore": 68,
+            "awayScore": 72,
+            "winnerId": "team4",
+            "round": 1
+        },
+        {
+            "gameId": "g3",
+            "homeTeamId": "team1",
+            "awayTeamId": "team4",
+            "homeScore": 75,
+            "awayScore": 70,
+            "winnerId": "team1",
+            "round": 2
+        }
+    ],
+    "assertions": [
+        {
+            "type": "bracketEntryCount",
+            "expected": 2,
+            "message": "Should have 2 bracket entries"
+        },
+        {
+            "type": "bracketTopScore",
+            "expected": 40,
+            "message": "Both entries should have 40 points (all picks correct)"
+        },
+        {
+            "type": "bracketWinner",
+            "expected": "TiedAlice's Bracket",
+            "message": "TiedAlice should win — tiebreaker 148 is closer to actual 145 (|148-145|=3) vs TiedBob 160 (|160-145|=15)"
+        }
+    ]
+}
