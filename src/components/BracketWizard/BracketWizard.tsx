@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { User } from '../../types';
-import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Sparkles, Calendar, Users, Globe } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe, Share2, Copy, ExternalLink, AlertTriangle, Mail } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase';
 import { WizardStepBranding } from '../admin/WizardStepBranding';
@@ -16,6 +16,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
+    const [shareMessage, setShareMessage] = useState('');
 
     const [formData, setFormData] = useState<{
         // Step 1: Basics
@@ -79,7 +81,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         // Basics
         name: `${user.name}'s March Madness Pool`,
         slug: '',
-        seasonYear: 2025,
+        seasonYear: 2026,
         gender: 'mens',
         isListedPublic: false,
         managerName: user.name || '',
@@ -97,7 +99,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         scoringSystem: 'CLASSIC',
         customScoring: [1, 2, 4, 8, 16, 32],
         tieBreaker: 'CLOSEST_ABSOLUTE',
-        lockAt: new Date('2025-03-18T12:00:00').getTime(), // March Madness 2025
+        lockAt: new Date('2026-03-17T12:00:00').getTime(), // March Madness 2026
 
         // Payouts
         payouts: {
@@ -264,7 +266,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
             const result = await createBracketPool(payload);
             const data = result.data as any;
 
-            if (data.success && data.poolId) {
+            if (data.poolId) {
                 onSuccess(data.poolId);
             } else {
                 setError(data.message || 'Failed to create pool');
@@ -470,8 +472,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 }}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
                             >
-                                <option value="mens-2025">Men's 2025</option>
-                                <option value="womens-2025">Women's 2025</option>
+                                <option value="mens-2026">Men's 2026</option>
+                                <option value="womens-2026">Women's 2026</option>
                             </select>
                         </div>
 
@@ -603,6 +605,31 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 <option value="CUSTOM">Custom</option>
                             </select>
                         </div>
+
+                        {formData.scoringSystem === 'CUSTOM' && (
+                            <div className="md:col-span-2 bg-slate-950 p-4 rounded-lg border border-amber-500/30">
+                                <label className="block text-xs font-bold text-amber-400 uppercase mb-3">⚡ Custom Points Per Round</label>
+                                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                                    {['R64', 'R32', 'Sweet 16', 'Elite 8', 'Final 4', 'Champ'].map((label, i) => (
+                                        <div key={i}>
+                                            <label className="block text-[10px] text-slate-500 mb-1 text-center">{label}</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={formData.customScoring[i]}
+                                                onChange={(e) => {
+                                                    const newScoring = [...formData.customScoring];
+                                                    newScoring[i] = parseInt(e.target.value) || 0;
+                                                    update({ customScoring: newScoring });
+                                                }}
+                                                className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-2 text-white text-sm text-center outline-none focus:border-amber-500"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-2">Points awarded per correct pick in each round.</p>
+                            </div>
+                        )}
 
                         <div>
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lock Date/Time</label>
@@ -880,14 +907,138 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     }
 
     function renderStep7() {
+        const poolSlug = formData.slug || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const baseUrl = `https://www.marchmeleepools.com/${poolSlug}`;
+        const defaultMessage = `🏀 Join my March Madness bracket pool "${formData.name}"! Entry fee: $${formData.entryFee}. Think you can pick the winners?`;
+        const message = shareMessage || defaultMessage;
+
+        const makeUrl = (platform: string) => {
+            const params = new URLSearchParams({
+                utm_source: platform,
+                utm_medium: 'social',
+                utm_campaign: poolSlug
+            });
+            return `${baseUrl}?${params.toString()}`;
+        };
+
+        const shareToFacebook = () => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(makeUrl('facebook'))}&quote=${encodeURIComponent(message)}`, '_blank');
+        const shareToX = () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(message)}&url=${encodeURIComponent(makeUrl('twitter'))}`, '_blank');
+        const shareToReddit = () => window.open(`https://reddit.com/submit?url=${encodeURIComponent(makeUrl('reddit'))}&title=${encodeURIComponent(message)}`, '_blank');
+        const shareToEmail = () => window.open(`mailto:?subject=${encodeURIComponent(`Join: ${formData.name}`)}&body=${encodeURIComponent(`${message}\n\n${makeUrl('email')}`)}`);
+
+        const copyToClipboard = (platform: string) => {
+            const url = makeUrl(platform);
+            const text = `${message}\n\n${url}`;
+            navigator.clipboard.writeText(text).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            });
+        };
+
         return (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center">
-                    <Sparkles size={48} className="text-amber-400 mx-auto mb-4" />
-                    <h3 className="text-2xl font-bold text-white mb-2">Share Your Pool (QR in Step 6)</h3>
-                    <p className="text-slate-400 text-sm mb-6">
-                        QR code generation is available in the Advanced step. You can go back to download it or continue to review.
-                    </p>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <div className="flex items-center gap-3 mb-2">
+                        <Share2 size={24} className="text-indigo-400" />
+                        <h3 className="text-xl font-bold text-white">Share Your Pool</h3>
+                    </div>
+                    <p className="text-slate-400 text-sm mb-6">Invite players to join your bracket pool via social media.</p>
+
+                    {/* Custom Message Editor */}
+                    <div className="mb-6">
+                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Customize Your Message</label>
+                        <textarea
+                            value={shareMessage || defaultMessage}
+                            onChange={(e) => setShareMessage(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white text-sm outline-none focus:border-indigo-500 h-24 resize-none"
+                            placeholder="Write your invite message..."
+                        />
+                        <p className="text-[10px] text-slate-500 mt-1">This message will be included when sharing to each platform.</p>
+                    </div>
+
+                    {/* Share Buttons */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+                        <button
+                            onClick={shareToFacebook}
+                            className="flex items-center justify-center gap-2 bg-[#1877F2] hover:bg-[#166FE5] text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" /></svg>
+                            Facebook
+                        </button>
+
+                        <button
+                            onClick={shareToX}
+                            className="flex items-center justify-center gap-2 bg-black hover:bg-slate-800 text-white px-4 py-3 rounded-lg font-bold text-sm transition-all border border-slate-700"
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+                            X (Twitter)
+                        </button>
+
+                        <button
+                            onClick={shareToReddit}
+                            className="flex items-center justify-center gap-2 bg-[#FF4500] hover:bg-[#E03D00] text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z" /></svg>
+                            Reddit
+                        </button>
+
+                        <button
+                            onClick={() => copyToClipboard('discord')}
+                            className="flex items-center justify-center gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286z" /></svg>
+                            Discord
+                        </button>
+
+                        <button
+                            onClick={shareToEmail}
+                            className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                        >
+                            <Mail size={18} />
+                            Email
+                        </button>
+
+                        <button
+                            onClick={() => copyToClipboard('copy')}
+                            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                        >
+                            <Copy size={16} />
+                            {copied ? '✓ Copied!' : 'Copy Link'}
+                        </button>
+                    </div>
+
+                    {/* Instagram — No Tracking */}
+                    <div className="bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-amber-500/10 border border-purple-500/20 rounded-lg p-4 mb-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-pink-400"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" /></svg>
+                                <div>
+                                    <p className="text-white text-sm font-bold">Instagram</p>
+                                    <p className="text-[10px] text-slate-400">Paste the copied link in your bio, story, or DM</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => copyToClipboard('instagram')}
+                                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all"
+                            >
+                                {copied ? '✓ Copied!' : 'Copy for Instagram'}
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-2 mt-3 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
+                            <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                            <p className="text-[10px] text-amber-300">No click tracking available for Instagram — links shared on Instagram bypass UTM parameters.</p>
+                        </div>
+                    </div>
+
+                    {/* URL Preview */}
+                    <div className="bg-slate-950 border border-slate-700 rounded-lg p-4">
+                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Tracked URL Preview</label>
+                        <div className="flex items-center gap-2">
+                            <ExternalLink size={14} className="text-indigo-400 shrink-0" />
+                            <code className="text-xs text-indigo-300 break-all">{makeUrl('platform')}</code>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-2">Each platform generates a unique tracked URL so you can see which channels drive the most signups.</p>
+                    </div>
                 </div>
             </div>
         );

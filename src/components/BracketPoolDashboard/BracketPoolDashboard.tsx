@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Settings, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Settings, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3 } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
+import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 
 interface BracketPoolDashboardProps {
     pool: BracketPool;
@@ -24,6 +25,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [shareStats, setShareStats] = useState<ShareStats | null>(null);
 
     const isManager = user ? pool.managerUid === user.id : false;
     const userEntries = entries.filter(e => e.ownerUid === user?.id);
@@ -51,6 +53,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             setTournament(null);
         }
     }, [pool.tournamentId]);
+
+    // Load share analytics for managers
+    useEffect(() => {
+        if (isManager && activeTab === 'settings') {
+            shareTrackingService.getStats(pool.id).then(setShareStats);
+        }
+    }, [isManager, activeTab, pool.id]);
 
     // Load user's existing entry picks when switching to edit mode
     const handleEditEntry = useCallback((entry: BracketEntry) => {
@@ -369,6 +378,59 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     <span className="font-mono text-slate-300 text-xs">{pool.tournamentId || 'Not linked'}</span>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Share Analytics Card */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <div className="flex items-center gap-2 mb-4">
+                                <BarChart3 size={20} className="text-indigo-400" />
+                                <h3 className="text-xl font-bold text-white">Share Analytics</h3>
+                            </div>
+                            {shareStats ? (
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-slate-950 rounded-lg p-4 border border-slate-800 text-center">
+                                            <p className="text-3xl font-bold text-indigo-400">{shareStats.total}</p>
+                                            <p className="text-[10px] text-slate-500 uppercase">Total Clicks</p>
+                                        </div>
+                                        <div className="bg-slate-950 rounded-lg p-4 border border-slate-800 text-center">
+                                            <p className="text-3xl font-bold text-emerald-400">{shareStats.last7Days}</p>
+                                            <p className="text-[10px] text-slate-500 uppercase">Last 7 Days</p>
+                                        </div>
+                                    </div>
+                                    {Object.keys(shareStats.byPlatform).length > 0 ? (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-bold text-slate-400 uppercase">By Platform</p>
+                                            {Object.entries(shareStats.byPlatform)
+                                                .sort(([, a], [, b]) => b - a)
+                                                .map(([platform, count]) => {
+                                                    const pct = shareStats.total > 0 ? (count / shareStats.total) * 100 : 0;
+                                                    const colors: Record<string, string> = {
+                                                        facebook: 'bg-blue-500', twitter: 'bg-sky-500', reddit: 'bg-orange-500',
+                                                        discord: 'bg-indigo-500', email: 'bg-slate-500', copy: 'bg-emerald-500',
+                                                        instagram: 'bg-pink-500'
+                                                    };
+                                                    return (
+                                                        <div key={platform} className="flex items-center gap-3">
+                                                            <span className="text-xs text-slate-300 w-20 capitalize">{platform}</span>
+                                                            <div className="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+                                                                <div className={`h-full rounded-full ${colors[platform] || 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
+                                                            </div>
+                                                            <span className="text-xs font-mono text-slate-400 w-10 text-right">{count}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                        </div>
+                                    ) : (
+                                        <p className="text-slate-500 text-sm text-center py-4">No share clicks recorded yet. Share your pool to start tracking!</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="text-center py-6">
+                                    <Loader2 className="animate-spin text-indigo-400 mx-auto" size={24} />
+                                    <p className="text-slate-500 text-xs mt-2">Loading share analytics...</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

@@ -8,7 +8,7 @@ const SETTINGS_DOC_REF = doc(db, 'system', 'config');
 const DEFAULT_SETTINGS: SystemSettings = {
     enableBracketPools: false, // Default to OFF
     maintenanceMode: false,
-    currentSeason: 2025,
+    currentSeason: 2026,
     propCategories: ['Game', 'Player', 'Offense', 'Defense', 'Yards', 'TD', 'FG', 'Fun']
 };
 

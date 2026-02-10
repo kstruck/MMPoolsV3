@@ -18,6 +18,7 @@ import { PlayoffDashboard } from '../PlayoffPool/PlayoffDashboard';
 
 import { dbService } from '../../services/dbService';
 import { calculateScenarioWinners, getLastDigit } from '../../services/gameLogic';
+import { shareTrackingService } from '../../services/shareTrackingService';
 import { getTeamLogo } from '../../constants';
 import { calculateQuarterlyPayouts } from '../../utils/payouts';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner } from '../../types';
@@ -79,6 +80,20 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         });
         return () => unsubscribe();
     }, [pool]);
+
+    // Share click tracking: record when visitor arrives via shared link
+    useEffect(() => {
+        if (!pool?.id) return;
+        const params = new URLSearchParams(window.location.search);
+        const utmSource = params.get('utm_source');
+        if (!utmSource) return;
+
+        const trackingKey = `share_tracked_${pool.id}`;
+        if (sessionStorage.getItem(trackingKey)) return;
+
+        sessionStorage.setItem(trackingKey, '1');
+        shareTrackingService.recordClick(pool.id, utmSource);
+    }, [pool?.id]);
 
 
 
