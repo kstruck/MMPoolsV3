@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Clock, Target, Check, Copy, Download, MessageSquare, Calendar } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Clock, Target, Check, Copy, Download, MessageSquare, Edit3 } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
+import { DateTimePicker } from './DateTimePicker';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager';
 
@@ -32,12 +33,19 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [commissionerDraft, setCommissionerDraft] = useState(pool.commissionerMessage || '');
     const [savingMessage, setSavingMessage] = useState(false);
     const [messageSaved, setMessageSaved] = useState(false);
-    const [regDeadline, setRegDeadline] = useState(pool.registrationDeadline ? new Date(pool.registrationDeadline).toISOString().slice(0, 16) : '');
-    const [subDeadline, setSubDeadline] = useState(pool.submissionDeadline ? new Date(pool.submissionDeadline).toISOString().slice(0, 16) : '');
-    const [savingDeadlines, setSavingDeadlines] = useState(false);
-    const [deadlinesSaved, setDeadlinesSaved] = useState(false);
     const [togglingPayment, setTogglingPayment] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
+    // Editable pool settings state
+    const [editEntryFee, setEditEntryFee] = useState(pool.settings.entryFee);
+    const [editMaxTotal, setEditMaxTotal] = useState(pool.settings.maxEntriesTotal);
+    const [editMaxPerUser, setEditMaxPerUser] = useState(pool.settings.maxEntriesPerUser);
+    const [editScoring, setEditScoring] = useState(pool.settings.scoringSystem);
+    const [editRegDeadline, setEditRegDeadline] = useState<number | undefined>(pool.registrationDeadline);
+    const [editSubDeadline, setEditSubDeadline] = useState<number | undefined>(pool.submissionDeadline);
+    const [editLockAt, setEditLockAt] = useState<number | undefined>(pool.lockAt);
+    const [savingSettings, setSavingSettings] = useState(false);
+    const [settingsSaved, setSettingsSaved] = useState(false);
+    const [editingSettings, setEditingSettings] = useState(false);
 
     const isManager = user ? pool.managerUid === user.id : false;
     const userEntries = entries.filter(e => e.ownerUid === user?.id);
@@ -102,24 +110,30 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         }
     }, [pool.id]);
 
-    // Deadline save
-    const handleSaveDeadlines = useCallback(async () => {
-        setSavingDeadlines(true);
+    // Save all pool settings
+    const handleSaveSettings = useCallback(async () => {
+        setSavingSettings(true);
         try {
             const updates: Record<string, unknown> = {
-                registrationDeadline: regDeadline ? new Date(regDeadline).getTime() : null,
-                submissionDeadline: subDeadline ? new Date(subDeadline).getTime() : null,
+                'settings.entryFee': editEntryFee,
+                'settings.maxEntriesTotal': editMaxTotal,
+                'settings.maxEntriesPerUser': editMaxPerUser,
+                'settings.scoringSystem': editScoring,
+                registrationDeadline: editRegDeadline || null,
+                submissionDeadline: editSubDeadline || null,
+                lockAt: editLockAt || pool.lockAt,
             };
             await dbService.updateBracketPool(pool.id, updates);
-            setDeadlinesSaved(true);
-            setTimeout(() => setDeadlinesSaved(false), 2000);
+            setSettingsSaved(true);
+            setEditingSettings(false);
+            setTimeout(() => setSettingsSaved(false), 2000);
         } catch (err) {
-            console.error('Failed to save deadlines:', err);
-            setError('Failed to save deadlines');
+            console.error('Failed to save settings:', err);
+            setError('Failed to save settings');
         } finally {
-            setSavingDeadlines(false);
+            setSavingSettings(false);
         }
-    }, [pool.id, regDeadline, subDeadline]);
+    }, [pool.id, pool.lockAt, editEntryFee, editMaxTotal, editMaxPerUser, editScoring, editRegDeadline, editSubDeadline, editLockAt]);
 
     // CSV Export
     const handleExportCSV = useCallback(() => {
@@ -633,57 +647,132 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 max-w-3xl">
                         {/* Pool Settings + Deadlines Card */}
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                            <h3 className="text-xl font-bold text-white mb-4">Pool Settings</h3>
-                            <div className="space-y-3">
-                                {[
-                                    { label: 'Status', value: pool.status, color: 'text-emerald-400' },
-                                    { label: 'Scoring', value: pool.settings.scoringSystem, color: 'text-white' },
-                                    { label: 'Entries', value: `${entries.length} / ${pool.settings.maxEntriesTotal === -1 ? '∞' : pool.settings.maxEntriesTotal}`, color: 'text-white' },
-                                    { label: 'Entry Fee', value: pool.settings.entryFee > 0 ? `$${pool.settings.entryFee}` : 'Free', color: 'text-white' },
-                                    { label: 'Lock Date', value: new Date(pool.lockAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }), color: 'text-white' },
-                                    { label: 'Tournament', value: pool.tournamentId || 'Not linked', color: 'text-slate-300' },
-                                ].map(row => (
-                                    <div key={row.label} className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
-                                        <span className="text-slate-400 text-sm">{row.label}</span>
-                                        <span className={`font-mono text-sm ${row.color}`}>{row.value}</span>
-                                    </div>
-                                ))}
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-bold text-white">Pool Settings</h3>
+                                {!editingSettings ? (
+                                    <button onClick={() => setEditingSettings(true)} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 px-3 py-1.5 border border-indigo-800 rounded-lg">
+                                        <Edit3 size={12} /> Edit
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleSaveSettings}
+                                        disabled={savingSettings}
+                                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                    >
+                                        {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
+                                        {settingsSaved ? 'Saved!' : 'Save Settings'}
+                                    </button>
+                                )}
                             </div>
 
-                            {/* Deadline Pickers */}
-                            <div className="mt-4 pt-4 border-t border-slate-800">
-                                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                                    <Calendar size={14} className="text-indigo-400" /> Pool Deadlines
-                                </h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {!editingSettings ? (
+                                /* Read-Only View */
+                                <div className="space-y-3">
+                                    {[
+                                        { label: 'Status', value: pool.status, color: 'text-emerald-400' },
+                                        { label: 'Scoring', value: pool.settings.scoringSystem, color: 'text-white' },
+                                        { label: 'Entries', value: `${entries.length} / ${pool.settings.maxEntriesTotal === -1 ? '\u221e' : pool.settings.maxEntriesTotal}`, color: 'text-white' },
+                                        { label: 'Per User', value: pool.settings.maxEntriesPerUser === -1 ? 'Unlimited' : String(pool.settings.maxEntriesPerUser), color: 'text-white' },
+                                        { label: 'Entry Fee', value: pool.settings.entryFee > 0 ? `$${pool.settings.entryFee}` : 'Free', color: 'text-white' },
+                                        { label: 'Lock Date', value: new Date(pool.lockAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }), color: 'text-white' },
+                                        { label: 'Registration', value: pool.registrationDeadline ? new Date(pool.registrationDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.registrationDeadline ? 'text-white' : 'text-slate-600' },
+                                        { label: 'Submission', value: pool.submissionDeadline ? new Date(pool.submissionDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.submissionDeadline ? 'text-white' : 'text-slate-600' },
+                                        { label: 'Tournament', value: pool.tournamentId || 'Not linked', color: 'text-slate-300' },
+                                    ].map(row => (
+                                        <div key={row.label} className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
+                                            <span className="text-slate-400 text-sm">{row.label}</span>
+                                            <span className={`font-mono text-sm ${row.color}`}>{row.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                /* Edit Mode */
+                                <div className="space-y-4">
+                                    {/* Status (read-only) */}
+                                    <div className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
+                                        <span className="text-slate-400 text-sm">Status</span>
+                                        <span className="font-mono text-sm text-emerald-400">{pool.status}</span>
+                                    </div>
+
+                                    {/* Scoring System */}
                                     <div>
-                                        <label className="text-xs text-slate-500 block mb-1">Registration Deadline</label>
-                                        <input
-                                            type="datetime-local"
-                                            value={regDeadline}
-                                            onChange={e => setRegDeadline(e.target.value)}
+                                        <label className="text-xs text-slate-500 block mb-1">Scoring System</label>
+                                        <select
+                                            value={editScoring}
+                                            onChange={e => setEditScoring(e.target.value as 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM')}
                                             className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
+                                        >
+                                            <option value="CLASSIC">Classic (1-2-4-8-16-32)</option>
+                                            <option value="ESPN">ESPN (10-20-40-80-160-320)</option>
+                                            <option value="FIBONACCI">Fibonacci (1-1-2-3-5-8)</option>
+                                            <option value="CUSTOM">Custom</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Entry Limits */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-xs text-slate-500 block mb-1">Max Entries (Total)</label>
+                                            <input
+                                                type="number"
+                                                value={editMaxTotal}
+                                                onChange={e => setEditMaxTotal(Number(e.target.value))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
+                                                min={-1}
+                                                placeholder="-1 for unlimited"
+                                            />
+                                            <p className="text-[10px] text-slate-600 mt-1">-1 = unlimited</p>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-500 block mb-1">Max Per User</label>
+                                            <input
+                                                type="number"
+                                                value={editMaxPerUser}
+                                                onChange={e => setEditMaxPerUser(Number(e.target.value))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
+                                                min={-1}
+                                                placeholder="-1 for unlimited"
+                                            />
+                                            <p className="text-[10px] text-slate-600 mt-1">-1 = unlimited</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Entry Fee */}
+                                    <div>
+                                        <label className="text-xs text-slate-500 block mb-1">Entry Fee ($)</label>
+                                        <input
+                                            type="number"
+                                            value={editEntryFee}
+                                            onChange={e => setEditEntryFee(Number(e.target.value))}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
+                                            min={0}
+                                            step={5}
                                         />
                                     </div>
-                                    <div>
-                                        <label className="text-xs text-slate-500 block mb-1">Submission Deadline</label>
-                                        <input
-                                            type="datetime-local"
-                                            value={subDeadline}
-                                            onChange={e => setSubDeadline(e.target.value)}
-                                            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
-                                        />
+
+                                    {/* Date Pickers */}
+                                    <div className="pt-3 border-t border-slate-800">
+                                        <h4 className="text-sm font-bold text-white mb-3">Dates & Deadlines</h4>
+                                        <div className="space-y-3">
+                                            <DateTimePicker
+                                                label="Lock Date (auto-lock entries)"
+                                                value={editLockAt}
+                                                onChange={ts => setEditLockAt(ts ?? undefined)}
+                                            />
+                                            <DateTimePicker
+                                                label="Registration Deadline (no new members)"
+                                                value={editRegDeadline}
+                                                onChange={ts => setEditRegDeadline(ts ?? undefined)}
+                                            />
+                                            <DateTimePicker
+                                                label="Submission Deadline (no new/edited brackets)"
+                                                value={editSubDeadline}
+                                                onChange={ts => setEditSubDeadline(ts ?? undefined)}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={handleSaveDeadlines}
-                                    disabled={savingDeadlines}
-                                    className="mt-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
-                                >
-                                    {savingDeadlines ? <Loader2 size={14} className="animate-spin" /> : deadlinesSaved ? <Check size={14} /> : <Save size={14} />}
-                                    {deadlinesSaved ? 'Saved!' : 'Save Deadlines'}
-                                </button>
-                            </div>
+                            )}
                         </div>
 
                         {/* Commissioner Message Editor */}
