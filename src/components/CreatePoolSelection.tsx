@@ -65,27 +65,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* SQUARES OPTION */}
-                    <button
-                        onClick={onSelectSquares}
-                        className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-indigo-500 rounded-2xl p-8 text-left transition-all hover:-translate-y-1 shadow-xl"
-                    >
-                        <div className="absolute top-4 right-4 bg-indigo-500/20 p-3 rounded-xl group-hover:bg-indigo-500 transition-colors">
-                            <Grid3X3 size={32} className="text-indigo-400 group-hover:text-white" />
-                        </div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Gameday Squares</h3>
-                        <p className="text-slate-400 mb-6 min-h-[48px]">Classic 10x10 grid. Random numbers per quarter. Perfect for the big game.</p>
-                        <ul className="text-sm text-slate-500 space-y-2 mb-8">
-                            <li className="flex items-center gap-2">✓ Automated scoring</li>
-                            <li className="flex items-center gap-2">✓ Quarter & Final payouts</li>
-                            <li className="flex items-center gap-2">✓ Custom pricing</li>
-                        </ul>
-                        <span className="inline-flex items-center gap-2 text-indigo-400 font-bold group-hover:translate-x-1 transition-transform">
-                            Create Squares Pool <ArrowRight size={16} />
-                        </span>
-                    </button>
-
-                    {/* BRACKET OPTION */}
+                    {/* BRACKET OPTION - PRIMARY */}
                     <button
                         onClick={() => isBracketEnabled && onSelectBracket()}
                         disabled={!isBracketEnabled}
@@ -101,8 +81,8 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                 <Lock size={32} className="text-slate-600" />
                             )}
                         </div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Bracket Challenge</h3>
-                        <p className="text-slate-400 mb-6">Traditional 64-team bracket. Pick winners for every round. Features automated scoring and multiple scoring systems.</p>
+                        <h3 className="text-2xl font-bold text-white mb-2">March Madness Bracket</h3>
+                        <p className="text-slate-400 mb-6">Traditional 64-team tournament bracket. Pick winners for every round. Features automated scoring, live updates, and "Who to Root For" analytics.</p>
                         <ul className="text-sm text-slate-500 space-y-2 mb-8">
                             <li className="flex items-center gap-2">✓ Live bracket updates</li>
                             <li className="flex items-center gap-2">✓ Round-by-round scoring</li>
@@ -114,23 +94,43 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                         </span>
                     </button>
 
-                    {/* NFL PLAYOFFS OPTION */}
+                    {/* SQUARES OPTION - DISABLED */}
                     <button
-                        onClick={onSelectPlayoff}
-                        className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-orange-500 rounded-2xl p-8 text-left transition-all hover:-translate-y-1 shadow-xl md:col-span-2 lg:col-span-1"
+                        disabled={true}
+                        className="group relative bg-slate-900 border-2 border-slate-800 rounded-2xl p-8 text-left opacity-60 cursor-not-allowed shadow-none"
                     >
-                        <div className="absolute top-4 right-4 bg-orange-500/20 p-3 rounded-xl group-hover:bg-orange-500 transition-colors">
-                            <Trophy size={32} className="text-orange-400 group-hover:text-white" />
+                        <div className="absolute top-4 right-4 bg-slate-800 p-3 rounded-xl">
+                            <Grid3X3 size={32} className="text-slate-600" />
                         </div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Playoff Challenge</h3>
-                        <p className="text-slate-400 mb-6">Rank all 14 playoff teams from 14 down to 1. Points accumulate as teams advance. Simple and exciting.</p>
-                        <ul className="text-sm text-slate-500 space-y-2 mb-8">
+                        <h3 className="text-2xl font-bold text-slate-400 mb-2">Gameday Squares</h3>
+                        <p className="text-slate-500 mb-6 min-h-[48px]">Classic 10x10 grid for Super Bowl and MNF.</p>
+                        <ul className="text-sm text-slate-600 space-y-2 mb-8">
+                            <li className="flex items-center gap-2">✓ Automated scoring</li>
+                            <li className="flex items-center gap-2">✓ Quarter & Final payouts</li>
+                            <li className="flex items-center gap-2">✓ Custom pricing</li>
+                        </ul>
+                        <span className="inline-flex items-center gap-2 text-slate-500 font-bold">
+                            Opens August 2026
+                        </span>
+                    </button>
+
+                    {/* NFL PLAYOFFS OPTION - DISABLED */}
+                    <button
+                        disabled={true}
+                        className="group relative bg-slate-900 border-2 border-slate-800 rounded-2xl p-8 text-left opacity-60 cursor-not-allowed shadow-none md:col-span-2 lg:col-span-1"
+                    >
+                        <div className="absolute top-4 right-4 bg-slate-800 p-3 rounded-xl">
+                            <Trophy size={32} className="text-slate-600" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-slate-400 mb-2">Playoff Challenge</h3>
+                        <p className="text-slate-500 mb-6">Rank all 14 NFL playoff teams.</p>
+                        <ul className="text-sm text-slate-600 space-y-2 mb-8">
                             <li className="flex items-center gap-2">✓ Progressive scoring</li>
                             <li className="flex items-center gap-2">✓ Drag & Drop Rankings</li>
                             <li className="flex items-center gap-2">✓ Strategic multipliers</li>
                         </ul>
-                        <span className="inline-flex items-center gap-2 text-orange-400 font-bold group-hover:translate-x-1 transition-transform">
-                            Create Playoff Pool <ArrowRight size={16} />
+                        <span className="inline-flex items-center gap-2 text-slate-500 font-bold">
+                            Opens December 2026
                         </span>
                     </button>
 
