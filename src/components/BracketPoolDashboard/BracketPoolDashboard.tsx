@@ -6,8 +6,12 @@ import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { DateTimePicker } from './DateTimePicker';
+import { PickHistory } from './PickHistory';
+import { WhoToRootFor } from './WhoToRootFor';
+import { WhatIfSimulator } from './WhatIfSimulator';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager';
+type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif';
 
 interface BracketPoolDashboardProps {
     pool: BracketPool;
@@ -28,6 +32,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [shareStats, setShareStats] = useState<ShareStats | null>(null);
+    const [bracketSubTab, setBracketSubTab] = useState<BracketSubTab>('poolwide');
 
     // Manager tab interactive state
     const [commissionerDraft, setCommissionerDraft] = useState(pool.commissionerMessage || '');
@@ -475,64 +480,108 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
                         {/* Brackets Sub-Navigation */}
                         <div className="flex gap-2 flex-wrap">
-                            {['Poolwide Picks', 'Pick History', 'Who to Root For', 'What-If Simulator'].map(sub => (
-                                <button key={sub} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-slate-400 hover:bg-slate-800 border border-slate-800 transition-colors">
-                                    {sub}
+                            {[
+                                { id: 'poolwide' as BracketSubTab, label: 'Poolwide Picks' },
+                                { id: 'history' as BracketSubTab, label: 'Pick History' },
+                                { id: 'rootfor' as BracketSubTab, label: 'Who to Root For' },
+                                { id: 'whatif' as BracketSubTab, label: 'What-If Simulator' },
+                            ].map(sub => (
+                                <button
+                                    key={sub.id}
+                                    onClick={() => setBracketSubTab(sub.id)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${bracketSubTab === sub.id
+                                            ? 'bg-indigo-600 text-white border-indigo-500'
+                                            : 'bg-slate-900 text-slate-400 hover:bg-slate-800 border-slate-800'
+                                        }`}
+                                >
+                                    {sub.label}
                                 </button>
                             ))}
                         </div>
 
                         {/* Poolwide Picks Heatmap */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                            <div className="flex items-center gap-2 mb-4">
-                                <Target size={20} className="text-amber-400" />
-                                <h3 className="text-xl font-bold text-white">Poolwide Picks</h3>
+                        {bracketSubTab === 'poolwide' && (
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Target size={20} className="text-amber-400" />
+                                    <h3 className="text-xl font-bold text-white">Poolwide Picks</h3>
+                                </div>
+                                <p className="text-slate-400 text-sm mb-4">See what percentage of the pool picked each team to advance in each round.</p>
+                                {tournament ? (
+                                    <div className="space-y-3">
+                                        {Object.values(tournament.games)
+                                            .filter(g => g.round === 1)
+                                            .slice(0, 8)
+                                            .map(game => {
+                                                const homePicks = entries.filter(e => e.picks[game.id] === game.homeTeamId).length;
+                                                const awayPicks = entries.filter(e => e.picks[game.id] === game.awayTeamId).length;
+                                                const total = entries.length || 1;
+                                                return (
+                                                    <div key={game.id} className="flex items-center gap-2 bg-slate-950 rounded-lg p-3 border border-slate-800">
+                                                        <div className="flex-1">
+                                                            <div className="flex justify-between text-xs mb-1">
+                                                                <span className="text-white">{game.homeTeamId}</span>
+                                                                <span className="text-emerald-400 font-mono">{Math.round((homePicks / total) * 100)}%</span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-800 rounded-full h-1.5">
+                                                                <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${(homePicks / total) * 100}%` }} />
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-slate-600 text-xs">vs</span>
+                                                        <div className="flex-1">
+                                                            <div className="flex justify-between text-xs mb-1">
+                                                                <span className="text-white">{game.awayTeamId}</span>
+                                                                <span className="text-indigo-400 font-mono">{Math.round((awayPicks / total) * 100)}%</span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-800 rounded-full h-1.5">
+                                                                <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${(awayPicks / total) * 100}%` }} />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12 text-slate-500">
+                                        <GitBranch size={48} className="mx-auto mb-4 opacity-20" />
+                                        <p>Bracket data will be available once the tournament bracket is set.</p>
+                                    </div>
+                                )}
                             </div>
-                            <p className="text-slate-400 text-sm mb-4">See what percentage of the pool picked each team to advance in each round.</p>
-                            {tournament ? (
-                                <div className="space-y-3">
-                                    {Object.values(tournament.games)
-                                        .filter(g => g.round === 1)
-                                        .slice(0, 8)
-                                        .map(game => {
-                                            const homePicks = entries.filter(e => e.picks[game.id] === game.homeTeamId).length;
-                                            const awayPicks = entries.filter(e => e.picks[game.id] === game.awayTeamId).length;
-                                            const total = entries.length || 1;
-                                            return (
-                                                <div key={game.id} className="flex items-center gap-2 bg-slate-950 rounded-lg p-3 border border-slate-800">
-                                                    <div className="flex-1">
-                                                        <div className="flex justify-between text-xs mb-1">
-                                                            <span className="text-white">{game.homeTeamId}</span>
-                                                            <span className="text-emerald-400 font-mono">{Math.round((homePicks / total) * 100)}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-slate-800 rounded-full h-1.5">
-                                                            <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${(homePicks / total) * 100}%` }} />
-                                                        </div>
-                                                    </div>
-                                                    <span className="text-slate-600 text-xs">vs</span>
-                                                    <div className="flex-1">
-                                                        <div className="flex justify-between text-xs mb-1">
-                                                            <span className="text-white">{game.awayTeamId}</span>
-                                                            <span className="text-indigo-400 font-mono">{Math.round((awayPicks / total) * 100)}%</span>
-                                                        </div>
-                                                        <div className="w-full bg-slate-800 rounded-full h-1.5">
-                                                            <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${(awayPicks / total) * 100}%` }} />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    {!tournament && (
-                                        <p className="text-slate-500 text-sm text-center py-8">Bracket data will be available once the tournament bracket is set.</p>
-                                    )}
-                                </div>
+                        )}
+
+                        {/* Pick History */}
+                        {bracketSubTab === 'history' && (
+                            tournament && userEntries.length > 0 ? (
+                                <PickHistory entry={userEntries[0]} tournament={tournament} pool={pool} />
                             ) : (
-                                <div className="text-center py-12 text-slate-500">
-                                    <GitBranch size={48} className="mx-auto mb-4 opacity-20" />
-                                    <p>Bracket data will be available once the tournament bracket is set.</p>
+                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                    <p>{!tournament ? 'Tournament data not yet available.' : 'Submit a bracket to see your pick history.'}</p>
                                 </div>
-                            )}
-                        </div>
+                            )
+                        )}
+
+                        {/* Who to Root For */}
+                        {bracketSubTab === 'rootfor' && (
+                            tournament && userEntries.length > 0 ? (
+                                <WhoToRootFor userEntry={userEntries[0]} allEntries={entries} tournament={tournament} pool={pool} />
+                            ) : (
+                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                    <p>{!tournament ? 'Tournament data not yet available.' : 'Submit a bracket to see rooting advice.'}</p>
+                                </div>
+                            )
+                        )}
+
+                        {/* What-If Simulator */}
+                        {bracketSubTab === 'whatif' && (
+                            tournament ? (
+                                <WhatIfSimulator entries={entries} tournament={tournament} pool={pool} currentUserId={user?.id} />
+                            ) : (
+                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                    <p>Tournament data not yet available for simulation.</p>
+                                </div>
+                            )
+                        )}
                     </div>
                 )}
 
