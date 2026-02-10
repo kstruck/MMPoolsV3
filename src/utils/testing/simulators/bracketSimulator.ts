@@ -21,6 +21,11 @@ export interface BracketScenarioSettings {
     seasonYear?: number;
     gender?: 'mens' | 'womens';
     _fullScenario?: {
+        poolConfig?: {
+            entryFee?: number;
+            scoringSystem?: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
+            customScoring?: number[];
+        };
         testEntries?: Array<{
             userName: string;
             picks: Record<string, string>; // slotId -> teamId
@@ -28,12 +33,13 @@ export interface BracketScenarioSettings {
         }>;
         tournamentResults?: Array<{
             gameId: string;
-            homeTeamId: string;
-            awayTeamId: string;
+            homeTeamId: string | null;
+            awayTeamId: string | null;
             homeScore: number;
             awayScore: number;
-            winnerId: string;
+            winnerId: string | null;
             round: number;
+            status?: 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL';
         }>;
     };
 }
@@ -61,6 +67,8 @@ export async function runScenario(
         addStep('Create Pool', 'success', `Creating bracket pool: ${poolName}`);
 
         const now = Date.now();
+        const poolSettings = scenarioData.poolConfig || {}; // Get pool settings from scenario
+
         const poolData: any = {
             type: 'BRACKET',
             name: poolName,
@@ -74,9 +82,10 @@ export async function runScenario(
             settings: {
                 maxEntriesTotal: -1,
                 maxEntriesPerUser: 3,
-                entryFee: 10,
+                entryFee: poolSettings.entryFee || 10,
                 paymentInstructions: 'Test pool',
-                scoringSystem: 'CLASSIC',
+                scoringSystem: poolSettings.scoringSystem || 'CLASSIC',
+                customScoring: poolSettings.customScoring, // Pass custom scoring if present
                 tieBreakers: { closestAbsolute: true, closestUnder: false },
                 payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] }
             },
@@ -109,12 +118,12 @@ export async function runScenario(
             mockGames[result.gameId] = {
                 id: result.gameId,
                 startTime: new Date().toISOString(),
-                status: 'FINAL',
-                homeTeamId: result.homeTeamId,
-                awayTeamId: result.awayTeamId,
+                status: result.status || 'FINAL', // Respect status from scenario or default to FINAL
+                homeTeamId: result.homeTeamId || '',
+                awayTeamId: result.awayTeamId || '',
                 homeScore: result.homeScore,
                 awayScore: result.awayScore,
-                winnerTeamId: result.winnerId,
+                winnerTeamId: result.winnerId || undefined,
                 round: result.round
             };
             mockSlots[`slot-${result.gameId}`] = {

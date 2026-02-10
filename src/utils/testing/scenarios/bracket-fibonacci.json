@@ -55,7 +55,7 @@
     "assertions": [
         {
             "type": "bracketWinner",
-            "expected": "FibonacciMaster",
+            "expected": "FibonacciMaster's Bracket",
             "message": "FibonacciMaster should win"
         },
         {
