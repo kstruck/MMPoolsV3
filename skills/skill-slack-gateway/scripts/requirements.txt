@@ -1,4 +1,0 @@
-slack_bolt
-flask
-requests
-python-dotenv
