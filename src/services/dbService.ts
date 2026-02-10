@@ -221,6 +221,18 @@ export const dbService = {
         }
     },
 
+    /** Update bracket pool fields (manager-only: deadlines, commissioner message, etc.) */
+    updateBracketPool: async (poolId: string, updates: Record<string, unknown>): Promise<void> => {
+        const poolRef = doc(db, 'pools', poolId);
+        await updateDoc(poolRef, { ...updates, updatedAt: Date.now() });
+    },
+
+    /** Update a bracket entry's payment status */
+    updateBracketEntryPayment: async (poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID'): Promise<void> => {
+        const entryRef = doc(db, 'pools', poolId, 'entries', entryId);
+        await updateDoc(entryRef, { paidStatus, updatedAt: Date.now() });
+    },
+
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: any | null) => void) => {
         const docRef = doc(db, 'pools', poolId, 'propCards', userId);
         return onSnapshot(docRef, (doc) => {

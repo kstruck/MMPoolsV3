@@ -1,11 +1,12 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Settings, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Clock, Target, Check, Copy, Download, MessageSquare, Calendar } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
+
+type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager';
 
 interface BracketPoolDashboardProps {
     pool: BracketPool;
@@ -15,7 +16,7 @@ interface BracketPoolDashboardProps {
 }
 
 export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool, user, onBack, onShare }) => {
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'standings' | 'entries' | 'settings'>('dashboard');
+    const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
     const [entries, setEntries] = useState<BracketEntry[]>([]);
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [isCreating, setIsCreating] = useState(false);
@@ -26,6 +27,17 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [shareStats, setShareStats] = useState<ShareStats | null>(null);
+
+    // Manager tab interactive state
+    const [commissionerDraft, setCommissionerDraft] = useState(pool.commissionerMessage || '');
+    const [savingMessage, setSavingMessage] = useState(false);
+    const [messageSaved, setMessageSaved] = useState(false);
+    const [regDeadline, setRegDeadline] = useState(pool.registrationDeadline ? new Date(pool.registrationDeadline).toISOString().slice(0, 16) : '');
+    const [subDeadline, setSubDeadline] = useState(pool.submissionDeadline ? new Date(pool.submissionDeadline).toISOString().slice(0, 16) : '');
+    const [savingDeadlines, setSavingDeadlines] = useState(false);
+    const [deadlinesSaved, setDeadlinesSaved] = useState(false);
+    const [togglingPayment, setTogglingPayment] = useState<string | null>(null);
+    const [linkCopied, setLinkCopied] = useState(false);
 
     const isManager = user ? pool.managerUid === user.id : false;
     const userEntries = entries.filter(e => e.ownerUid === user?.id);
@@ -56,10 +68,85 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     // Load share analytics for managers
     useEffect(() => {
-        if (isManager && activeTab === 'settings') {
+        if (isManager && activeTab === 'manager') {
             shareTrackingService.getStats(pool.id).then(setShareStats);
         }
     }, [isManager, activeTab, pool.id]);
+
+    // Commissioner message save
+    const handleSaveCommissionerMessage = useCallback(async () => {
+        setSavingMessage(true);
+        try {
+            await dbService.updateBracketPool(pool.id, { commissionerMessage: commissionerDraft.trim() || null });
+            setMessageSaved(true);
+            setTimeout(() => setMessageSaved(false), 2000);
+        } catch (err) {
+            console.error('Failed to save commissioner message:', err);
+            setError('Failed to save message');
+        } finally {
+            setSavingMessage(false);
+        }
+    }, [pool.id, commissionerDraft]);
+
+    // Payment toggle
+    const handleTogglePayment = useCallback(async (entryId: string, currentStatus: string) => {
+        setTogglingPayment(entryId);
+        try {
+            const newStatus = currentStatus === 'PAID' ? 'UNPAID' : 'PAID';
+            await dbService.updateBracketEntryPayment(pool.id, entryId, newStatus);
+        } catch (err) {
+            console.error('Failed to toggle payment:', err);
+            setError('Failed to update payment');
+        } finally {
+            setTogglingPayment(null);
+        }
+    }, [pool.id]);
+
+    // Deadline save
+    const handleSaveDeadlines = useCallback(async () => {
+        setSavingDeadlines(true);
+        try {
+            const updates: Record<string, unknown> = {
+                registrationDeadline: regDeadline ? new Date(regDeadline).getTime() : null,
+                submissionDeadline: subDeadline ? new Date(subDeadline).getTime() : null,
+            };
+            await dbService.updateBracketPool(pool.id, updates);
+            setDeadlinesSaved(true);
+            setTimeout(() => setDeadlinesSaved(false), 2000);
+        } catch (err) {
+            console.error('Failed to save deadlines:', err);
+            setError('Failed to save deadlines');
+        } finally {
+            setSavingDeadlines(false);
+        }
+    }, [pool.id, regDeadline, subDeadline]);
+
+    // CSV Export
+    const handleExportCSV = useCallback(() => {
+        const headers = ['Entry Name', 'Status', 'Paid Status', 'Score', 'Entry Fee'];
+        const rows = entries.map(e => [
+            e.name,
+            e.status,
+            e.paidStatus,
+            String(e.score || 0),
+            String(pool.settings.entryFee),
+        ]);
+        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${pool.name.replace(/\s+/g, '-')}-accounting.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }, [entries, pool.name, pool.settings.entryFee]);
+
+    // Copy link with feedback
+    const handleCopyLink = useCallback(() => {
+        navigator.clipboard.writeText(`${window.location.origin}/pool/${pool.slug}`);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+    }, [pool.slug]);
 
     // Load user's existing entry picks when switching to edit mode
     const handleEditEntry = useCallback((entry: BracketEntry) => {
@@ -162,20 +249,33 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4">
 
+                {/* Commissioner Message Banner */}
+                {pool.commissionerMessage && (
+                    <div className="bg-indigo-900/30 border border-indigo-800 rounded-xl p-4 mb-6 flex items-start gap-3 animate-in fade-in">
+                        <ShieldCheck className="text-indigo-400 shrink-0 mt-0.5" size={18} />
+                        <div className="flex-1">
+                            <p className="text-xs font-bold text-indigo-400 uppercase mb-1">Commissioner Message</p>
+                            <p className="text-slate-300 text-sm">{pool.commissionerMessage}</p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Navigation Tabs */}
-                <div className="flex gap-4 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+                <div className="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
                     {[
-                        { id: 'dashboard', label: 'My Entry', icon: LayoutDashboard },
-                        { id: 'standings', label: 'Standings', icon: Trophy },
-                        { id: 'entries', label: 'All Entries', icon: Users },
-                        { id: 'settings', label: 'Settings', icon: Settings, hidden: !isManager },
+                        { id: 'dashboard' as DashboardTab, label: 'My Brackets', icon: LayoutDashboard },
+                        { id: 'standings' as DashboardTab, label: 'Standings', icon: Trophy },
+                        { id: 'entries' as DashboardTab, label: 'All Entries', icon: Users },
+                        { id: 'brackets' as DashboardTab, label: 'Brackets', icon: GitBranch },
+                        { id: 'reports' as DashboardTab, label: 'Reports', icon: FileText },
+                        { id: 'manager' as DashboardTab, label: 'Manager', icon: ShieldCheck, hidden: !isManager },
                     ].map(tab => !tab.hidden && (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id as 'dashboard' | 'standings' | 'entries' | 'settings')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm ${activeTab === tab.id ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}
                         >
-                            <tab.icon size={16} />
+                            <tab.icon size={14} />
                             {tab.label}
                         </button>
                     ))}
@@ -356,27 +456,338 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     </div>
                 )}
 
-                {!loading && activeTab === 'settings' && isManager && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 max-w-2xl">
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-6">
+                {/* Brackets Tab */}
+                {!loading && activeTab === 'brackets' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
+                        {/* Brackets Sub-Navigation */}
+                        <div className="flex gap-2 flex-wrap">
+                            {['Poolwide Picks', 'Pick History', 'Who to Root For', 'What-If Simulator'].map(sub => (
+                                <button key={sub} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-slate-400 hover:bg-slate-800 border border-slate-800 transition-colors">
+                                    {sub}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Poolwide Picks Heatmap */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Target size={20} className="text-amber-400" />
+                                <h3 className="text-xl font-bold text-white">Poolwide Picks</h3>
+                            </div>
+                            <p className="text-slate-400 text-sm mb-4">See what percentage of the pool picked each team to advance in each round.</p>
+                            {tournament ? (
+                                <div className="space-y-3">
+                                    {Object.values(tournament.games)
+                                        .filter(g => g.round === 1)
+                                        .slice(0, 8)
+                                        .map(game => {
+                                            const homePicks = entries.filter(e => e.picks[game.id] === game.homeTeamId).length;
+                                            const awayPicks = entries.filter(e => e.picks[game.id] === game.awayTeamId).length;
+                                            const total = entries.length || 1;
+                                            return (
+                                                <div key={game.id} className="flex items-center gap-2 bg-slate-950 rounded-lg p-3 border border-slate-800">
+                                                    <div className="flex-1">
+                                                        <div className="flex justify-between text-xs mb-1">
+                                                            <span className="text-white">{game.homeTeamId}</span>
+                                                            <span className="text-emerald-400 font-mono">{Math.round((homePicks / total) * 100)}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-slate-800 rounded-full h-1.5">
+                                                            <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${(homePicks / total) * 100}%` }} />
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-slate-600 text-xs">vs</span>
+                                                    <div className="flex-1">
+                                                        <div className="flex justify-between text-xs mb-1">
+                                                            <span className="text-white">{game.awayTeamId}</span>
+                                                            <span className="text-indigo-400 font-mono">{Math.round((awayPicks / total) * 100)}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-slate-800 rounded-full h-1.5">
+                                                            <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${(awayPicks / total) * 100}%` }} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    {!tournament && (
+                                        <p className="text-slate-500 text-sm text-center py-8">Bracket data will be available once the tournament bracket is set.</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 text-slate-500">
+                                    <GitBranch size={48} className="mx-auto mb-4 opacity-20" />
+                                    <p>Bracket data will be available once the tournament bracket is set.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Reports Tab */}
+                {!loading && activeTab === 'reports' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Standings Summary */}
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                    <Trophy size={18} className="text-amber-400" /> Standings
+                                </h3>
+                                <div className="space-y-2">
+                                    {entries
+                                        .sort((a, b) => (b.score || 0) - (a.score || 0))
+                                        .slice(0, 5)
+                                        .map((entry, i) => (
+                                            <div key={entry.id} className="flex items-center justify-between p-2 bg-slate-950 rounded border border-slate-800">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-amber-500 text-black' : i === 1 ? 'bg-slate-400 text-black' : i === 2 ? 'bg-orange-700 text-white' : 'bg-slate-800 text-slate-400'}`}>{i + 1}</span>
+                                                    <span className="text-white text-sm">{entry.name}</span>
+                                                </div>
+                                                <span className="text-emerald-400 font-mono text-sm">{entry.score || 0}</span>
+                                            </div>
+                                        ))}
+                                </div>
+                                {isManager && (
+                                    <button className="mt-3 w-full text-xs text-indigo-400 hover:text-indigo-300 font-bold py-2 border border-dashed border-slate-700 rounded-lg">
+                                        📥 Export CSV
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Round Breakdown */}
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                    <BarChart3 size={18} className="text-indigo-400" /> Breakdown by Round
+                                </h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                        <thead>
+                                            <tr className="border-b border-slate-800">
+                                                <th className="text-left py-2 text-slate-500">Entry</th>
+                                                <th className="text-center py-2 text-slate-500">R64</th>
+                                                <th className="text-center py-2 text-slate-500">R32</th>
+                                                <th className="text-center py-2 text-slate-500">S16</th>
+                                                <th className="text-center py-2 text-slate-500">E8</th>
+                                                <th className="text-center py-2 text-slate-500">F4</th>
+                                                <th className="text-center py-2 text-slate-500">Final</th>
+                                                <th className="text-right py-2 text-slate-500">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {entries.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 10).map(entry => (
+                                                <tr key={entry.id} className="border-b border-slate-800/50">
+                                                    <td className="py-2 text-white">{entry.name}</td>
+                                                    <td className="text-center text-slate-400">—</td>
+                                                    <td className="text-center text-slate-400">—</td>
+                                                    <td className="text-center text-slate-400">—</td>
+                                                    <td className="text-center text-slate-400">—</td>
+                                                    <td className="text-center text-slate-400">—</td>
+                                                    <td className="text-center text-slate-400">—</td>
+                                                    <td className="text-right font-mono text-emerald-400">{entry.score || 0}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p className="text-[10px] text-slate-600 mt-2">Per-round breakdown available after tournament begins.</p>
+                            </div>
+
+                            {/* Teams Picked */}
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                    <Users size={18} className="text-sky-400" /> Teams Picked
+                                </h3>
+                                <p className="text-slate-500 text-sm text-center py-8">Team popularity data will be available once the bracket is set and entries are submitted.</p>
+                            </div>
+
+                            {/* Live Scores */}
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                    <Clock size={18} className="text-red-400" /> Live Scores
+                                </h3>
+                                {tournament ? (
+                                    <div className="space-y-2">
+                                        {Object.values(tournament.games)
+                                            .filter(g => g.status === 'IN_PROGRESS')
+                                            .map(game => (
+                                                <div key={game.id} className="flex items-center justify-between p-2 bg-slate-950 rounded border border-slate-800">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                                                        <span className="text-white text-sm">{game.homeTeamId} vs {game.awayTeamId}</span>
+                                                    </div>
+                                                    <span className="font-mono text-white text-sm">{game.homeScore} - {game.awayScore}</span>
+                                                </div>
+                                            ))}
+                                        {Object.values(tournament.games).filter(g => g.status === 'IN_PROGRESS').length === 0 && (
+                                            <p className="text-slate-500 text-sm text-center py-4">No games currently in progress.</p>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="text-slate-500 text-sm text-center py-8">Live scores will appear during tournament games.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Manager Tab */}
+                {!loading && activeTab === 'manager' && isManager && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 max-w-3xl">
+                        {/* Pool Settings + Deadlines Card */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                             <h3 className="text-xl font-bold text-white mb-4">Pool Settings</h3>
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
-                                    <span className="text-slate-400">Status</span>
-                                    <span className="font-mono text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded text-xs">{pool.status}</span>
+                            <div className="space-y-3">
+                                {[
+                                    { label: 'Status', value: pool.status, color: 'text-emerald-400' },
+                                    { label: 'Scoring', value: pool.settings.scoringSystem, color: 'text-white' },
+                                    { label: 'Entries', value: `${entries.length} / ${pool.settings.maxEntriesTotal === -1 ? '∞' : pool.settings.maxEntriesTotal}`, color: 'text-white' },
+                                    { label: 'Entry Fee', value: pool.settings.entryFee > 0 ? `$${pool.settings.entryFee}` : 'Free', color: 'text-white' },
+                                    { label: 'Lock Date', value: new Date(pool.lockAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }), color: 'text-white' },
+                                    { label: 'Tournament', value: pool.tournamentId || 'Not linked', color: 'text-slate-300' },
+                                ].map(row => (
+                                    <div key={row.label} className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
+                                        <span className="text-slate-400 text-sm">{row.label}</span>
+                                        <span className={`font-mono text-sm ${row.color}`}>{row.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Deadline Pickers */}
+                            <div className="mt-4 pt-4 border-t border-slate-800">
+                                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                                    <Calendar size={14} className="text-indigo-400" /> Pool Deadlines
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs text-slate-500 block mb-1">Registration Deadline</label>
+                                        <input
+                                            type="datetime-local"
+                                            value={regDeadline}
+                                            onChange={e => setRegDeadline(e.target.value)}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-slate-500 block mb-1">Submission Deadline</label>
+                                        <input
+                                            type="datetime-local"
+                                            value={subDeadline}
+                                            onChange={e => setSubDeadline(e.target.value)}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
+                                        />
+                                    </div>
                                 </div>
-                                <div className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
-                                    <span className="text-slate-400">Scoring</span>
-                                    <span className="text-white">{pool.settings.scoringSystem}</span>
+                                <button
+                                    onClick={handleSaveDeadlines}
+                                    disabled={savingDeadlines}
+                                    className="mt-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                >
+                                    {savingDeadlines ? <Loader2 size={14} className="animate-spin" /> : deadlinesSaved ? <Check size={14} /> : <Save size={14} />}
+                                    {deadlinesSaved ? 'Saved!' : 'Save Deadlines'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Commissioner Message Editor */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <MessageSquare size={18} className="text-amber-400" /> Commissioner Message
+                            </h3>
+                            <p className="text-slate-400 text-xs mb-3">This message is displayed to all pool members as a banner.</p>
+                            <textarea
+                                value={commissionerDraft}
+                                onChange={e => setCommissionerDraft(e.target.value)}
+                                placeholder="Welcome to the pool! Payment is due by March 15th via Venmo..."
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white text-sm resize-none h-24 placeholder:text-slate-600"
+                                maxLength={500}
+                            />
+                            <div className="flex items-center justify-between mt-2">
+                                <span className="text-[10px] text-slate-600">{commissionerDraft.length}/500</span>
+                                <button
+                                    onClick={handleSaveCommissionerMessage}
+                                    disabled={savingMessage}
+                                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                >
+                                    {savingMessage ? <Loader2 size={14} className="animate-spin" /> : messageSaved ? <Check size={14} /> : <Save size={14} />}
+                                    {messageSaved ? 'Saved!' : 'Save Message'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Accounting Card */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                    💰 Accounting
+                                </h3>
+                                <button
+                                    onClick={handleExportCSV}
+                                    className="text-xs text-indigo-400 hover:text-indigo-300 font-bold px-3 py-1.5 border border-indigo-800 rounded-lg flex items-center gap-1"
+                                >
+                                    <Download size={12} /> Export CSV
+                                </button>
+                            </div>
+                            {/* Summary Stats */}
+                            <div className="grid grid-cols-3 gap-3 mb-4">
+                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
+                                    <p className="text-2xl font-bold text-emerald-400">${entries.filter(e => e.paidStatus === 'PAID').length * pool.settings.entryFee}</p>
+                                    <p className="text-[10px] text-slate-500 uppercase">Collected</p>
                                 </div>
-                                <div className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
-                                    <span className="text-slate-400">Entries</span>
-                                    <span className="text-white">{entries.length} / {pool.settings.maxEntriesTotal || '∞'}</span>
+                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
+                                    <p className="text-2xl font-bold text-amber-400">${entries.filter(e => e.paidStatus !== 'PAID').length * pool.settings.entryFee}</p>
+                                    <p className="text-[10px] text-slate-500 uppercase">Outstanding</p>
                                 </div>
-                                <div className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
-                                    <span className="text-slate-400">Tournament ID</span>
-                                    <span className="font-mono text-slate-300 text-xs">{pool.tournamentId || 'Not linked'}</span>
+                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
+                                    <p className="text-2xl font-bold text-white">${entries.length * pool.settings.entryFee}</p>
+                                    <p className="text-[10px] text-slate-500 uppercase">Total Pot</p>
                                 </div>
+                            </div>
+                            {/* Entry Payment List — now with toggle buttons */}
+                            <div className="space-y-2">
+                                {entries.map(entry => (
+                                    <div key={entry.id} className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
+                                        <div>
+                                            <span className="text-white text-sm font-bold">{entry.name}</span>
+                                            <span className="text-slate-500 text-xs ml-2">${pool.settings.entryFee}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleTogglePayment(entry.id, entry.paidStatus)}
+                                            disabled={togglingPayment === entry.id}
+                                            className={`text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1 ${entry.paidStatus === 'PAID' ? 'bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20' : 'bg-red-400/10 text-red-400 hover:bg-red-400/20'}`}
+                                        >
+                                            {togglingPayment === entry.id ? (
+                                                <Loader2 size={12} className="animate-spin" />
+                                            ) : entry.paidStatus === 'PAID' ? (
+                                                <><Check size={12} /> Paid</>
+                                            ) : (
+                                                <>✗ Unpaid</>
+                                            )}
+                                        </button>
+                                    </div>
+                                ))}
+                                {entries.length === 0 && (
+                                    <p className="text-slate-500 text-sm text-center py-4">No entries yet.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Send Invitation */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <Send size={18} className="text-indigo-400" /> Send Invitation
+                            </h3>
+                            <p className="text-slate-400 text-sm mb-3">Share the pool link to invite players.</p>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    readOnly
+                                    value={`${window.location.origin}/pool/${pool.slug}`}
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm font-mono"
+                                />
+                                <button
+                                    onClick={handleCopyLink}
+                                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors ${linkCopied ? 'bg-emerald-600 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                                >
+                                    {linkCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
+                                </button>
                             </div>
                         </div>
 
@@ -422,7 +833,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 })}
                                         </div>
                                     ) : (
-                                        <p className="text-slate-500 text-sm text-center py-4">No share clicks recorded yet. Share your pool to start tracking!</p>
+                                        <p className="text-slate-500 text-sm text-center py-4">No share clicks recorded yet.</p>
                                     )}
                                 </div>
                             ) : (

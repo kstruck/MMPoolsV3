@@ -636,6 +636,14 @@ export interface BracketPool {
   participantCount?: number;
   entryCount?: number;
 
+  // Pool Deadlines
+  registrationDeadline?: number;  // After this, no new members can join
+  submissionDeadline?: number;    // After this, no new/edited brackets
+  // Existing: lockAt (tournament start — auto-lock everything)
+
+  // Commissioner Message
+  commissionerMessage?: string;
+
   createdAt: number;
   updatedAt?: number;
 }
@@ -660,6 +668,20 @@ export interface BracketEntry {
   rank?: number;
 
   createdAt: number;
+  updatedAt: number;
+}
+
+export interface PaymentRecord {
+  id: string;
+  entryId: string;        // Links to BracketEntry
+  userName: string;
+  amount: number;          // Amount paid
+  amountOwed: number;      // Entry fee
+  method: 'venmo' | 'zelle' | 'cashapp' | 'paypal' | 'cash' | 'other';
+  status: 'PAID' | 'PARTIAL' | 'UNPAID';
+  paidAt?: number;
+  note?: string;
+  markedBy: string;        // Manager UID who marked it
   updatedAt: number;
 }
 
