@@ -18,9 +18,9 @@ interface CreatePoolSelectionProps {
 }
 
 export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
-    onSelectSquares,
+    // onSelectSquares,
     onSelectBracket,
-    onSelectPlayoff,
+    // onSelectPlayoff,
     user,
     isManager,
     onOpenAuth,
