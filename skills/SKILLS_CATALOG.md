@@ -246,13 +246,54 @@ This document provides a comprehensive overview of the specialized skills availa
 **Description:** Curated marketplace for Claude Code plugins (Superpowers, Elements of Style).
 **Install:** `/plugin marketplace add obra/superpowers-marketplace`
 
-### [skill-superpowers](./skill-superpowers/README.md)
+### [skill-superpowers-brainstorming](./skill-superpowers-brainstorming/SKILL.md)
 
-**Description:** A complete software development workflow suite (TDD, Debugging, Planning).
-**Includes:**
+**Description:** Socratic design refinement (Superpowers). Explores user intent, requirements and design before implementation.
 
-- `brainstorming`: Socratic design refinement
-- `writing-plans`: Implementation planning
-- `test-driven-development`: RED-GREEN-REFACTOR cycle
-- `systematic-debugging`: Root cause analysis
-- `subagent-driven-development`: Subagent orchestration
+### [skill-superpowers-writing-plans](./skill-superpowers-writing-plans/SKILL.md)
+
+**Description:** Create detailed implementation plans (Superpowers). Breaks work into bite-sized tasks.
+
+### [skill-superpowers-test-driven-development](./skill-superpowers-test-driven-development/SKILL.md)
+
+**Description:** RED-GREEN-REFACTOR cycle (Superpowers). Enforces test-first methodology.
+
+### [skill-superpowers-systematic-debugging](./skill-superpowers-systematic-debugging/SKILL.md)
+
+**Description:** Root cause analysis (Superpowers). 4-phase process: trace, defend, reproduce, fix.
+
+### [skill-superpowers-subagent-driven-development](./skill-superpowers-subagent-driven-development/SKILL.md)
+
+**Description:** Subagent orchestration (Superpowers). Iterative development with spec compliance review.
+
+### [skill-superpowers-verification-before-completion](./skill-superpowers-verification-before-completion/SKILL.md)
+
+**Description:** Evidence-based completion (Superpowers). Ensure fixes are verified before claiming success.
+
+### [skill-superpowers-using-git-worktrees](./skill-superpowers-using-git-worktrees/SKILL.md)
+
+**Description:** Parallel development branches (Superpowers). Isolates work in clean environments.
+
+### [skill-superpowers-executing-plans](./skill-superpowers-executing-plans/SKILL.md)
+
+**Description:** Batch execution of plans (Superpowers). Run multiple tasks with checkpoints.
+
+### [skill-superpowers-dispatching-parallel-agents](./skill-superpowers-dispatching-parallel-agents/SKILL.md)
+
+**Description:** Concurrent agent workflows (Superpowers). Managing multiple streams of work.
+
+### [skill-superpowers-requesting-code-review](./skill-superpowers-requesting-code-review/SKILL.md)
+
+**Description:** Pre-review checklist (Superpowers). Self-correction before human review.
+
+### [skill-superpowers-receiving-code-review](./skill-superpowers-receiving-code-review/SKILL.md)
+
+**Description:** Handling feedback (Superpowers). Structured response to code review.
+
+### [skill-superpowers-finishing-a-development-branch](./skill-superpowers-finishing-a-development-branch/SKILL.md)
+
+**Description:** Merge/PR decision workflow (Superpowers). Clean up and finalize work.
+
+### [skill-superpowers-using-superpowers](./skill-superpowers-using-superpowers/SKILL.md)
+
+**Description:** Guide to the Superpowers system (Superpowers). Meta-documentation.
