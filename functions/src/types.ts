@@ -548,6 +548,7 @@ export interface BracketPool {
     ownerId?: string; // Back-compat / Rules
     seasonYear: number;
     gender: 'mens' | 'womens';
+    tournamentId: string; // Links to tournaments/{id}
 
     // NEW: Manager Contact Info
     managerName?: string;
@@ -595,5 +596,52 @@ export interface BracketPool {
 export interface PayoutSettings {
     places: { rank: number; percentage: number }[];
     bonuses: { name: string; percentage: number }[];
+}
+
+
+// --- TOURNAMENT TYPES ---
+
+export type BracketRegion = 'East' | 'West' | 'South' | 'Midwest';
+
+export interface Tournament {
+    id: string; // e.g. 'mens-2025'
+    seasonYear: number;
+    gender: 'mens' | 'womens';
+    isFinalized: boolean; // Tournament over?
+
+    games: Record<string, Game>;
+    slots: Record<string, TournamentSlot>;
+}
+
+export interface Game {
+    id: string; // e.g. 'R1-W1'
+    externalId?: string; // ESPN Game ID (e.g. '401638630')
+    startTime: string; // ISO
+    status: 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL';
+    homeTeamId: string;
+    awayTeamId: string;
+    homeScore: number;
+    awayScore: number;
+    winnerTeamId?: string;
+    round: number; // 0=FirstFour, 1=R64, 2=R32...
+    region?: string;
+}
+
+export interface TournamentSlot {
+    id: string; // e.g. 'R1-W1'
+    gameId: string;
+    nextSlotId?: string; // Where winner goes
+
+    // If play-in mapping
+    isPlayInPlaceholder?: boolean;
+    playInGameId?: string;
+}
+
+export interface Team {
+    id: string;
+    name: string;
+    seed: number;
+    region: string;
+    logoUrl?: string;
 }
 

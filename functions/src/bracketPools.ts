@@ -46,6 +46,7 @@ export const createBracketPool = onCall(async (request) => {
         ownerId: uid, // Added for backward compatibility/rules
         seasonYear,
         gender: gender || 'mens',
+        tournamentId: `${gender || 'mens'}-${seasonYear}`,
         isListedPublic: false,
         status: "DRAFT",
         lockAt: 0, // Set on publish or specific date

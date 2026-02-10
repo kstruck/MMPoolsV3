@@ -1,16 +1,33 @@
 
 import React from 'react';
-import type { BracketEntry } from '../../types';
+import type { BracketEntry, BracketPool, Tournament } from '../../types';
 import { Trophy, Medal, AlertCircle } from 'lucide-react';
-
+import { calculateEntryMaxScore, getEliminatedTeams } from '../../utils/bracketScoring';
 
 interface StandingsTableProps {
     entries: BracketEntry[];
-    maxScore: number; // Potential max score
+    pool: BracketPool;
+    tournament: Tournament;
+    currentUserId?: string; // For highlighting user's own entries
 }
 
-export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, maxScore }) => {
-    const sorted = [...entries].sort((a, b) => (b.score || 0) - (a.score || 0));
+export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, tournament, currentUserId }) => {
+    // Pre-calculate eliminated teams once
+    const eliminatedTeams = React.useMemo(() => getEliminatedTeams(tournament), [tournament]);
+
+    // Calculate derived stats for sorting
+    const entriesWithStats = React.useMemo(() => {
+        return entries.map(entry => {
+            const max = calculateEntryMaxScore(entry, tournament, pool.settings, eliminatedTeams);
+            return { ...entry, max };
+        }).sort((a, b) => {
+            // Sort by current score desc
+            if ((b.score || 0) !== (a.score || 0)) return (b.score || 0) - (a.score || 0);
+            // Tiebreaker: Max possible desc
+            return b.max - a.max;
+        });
+    }, [entries, tournament, pool.settings, eliminatedTeams]);
+
 
     if (entries.length === 0) {
         return (
@@ -33,13 +50,13 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, maxScor
 
             {/* Rows */}
             <div className="divide-y divide-slate-800">
-                {sorted.map((entry, idx) => {
+                {entriesWithStats.map((entry, idx) => {
                     const rank = idx + 1;
                     const isChampion = rank === 1;
                     const isTop3 = rank <= 3;
 
                     return (
-                        <div key={entry.id} className={`grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/5 transition-colors ${entry.ownerUid === 'me' ? 'bg-indigo-900/20 border-l-2 border-indigo-500' : ''}`}>
+                        <div key={entry.id} className={`grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/5 transition-colors ${currentUserId && entry.ownerUid === currentUserId ? 'bg-indigo-900/20 border-l-2 border-indigo-500' : ''}`}>
                             <div className="col-span-2 md:col-span-1 flex justify-center">
                                 {isChampion ? <Trophy size={20} className="text-amber-400" /> :
                                     isTop3 ? <Medal size={20} className={rank === 2 ? 'text-slate-300' : 'text-amber-700'} /> :
@@ -53,7 +70,7 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, maxScor
                                 {entry.score || 0}
                             </div>
                             <div className="col-span-2 text-right font-mono text-slate-500 hidden md:block">
-                                {maxScore} {/* TODO: Calculate actual max possible for this entry */}
+                                {entry.max}
                             </div>
                         </div>
                     );

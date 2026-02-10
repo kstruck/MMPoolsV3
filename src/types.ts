@@ -594,6 +594,7 @@ export interface BracketPool {
   ownerId?: string; // Back-compat / Rules
   seasonYear: number;
   gender: 'mens' | 'womens';
+  tournamentId?: string; // Links to tournaments/{id} in Firestore
 
   // NEW: Manager Contact Info
   managerName?: string;
@@ -639,6 +640,8 @@ export interface BracketPool {
   updatedAt?: number;
 }
 
+export type BracketRegion = 'East' | 'West' | 'South' | 'Midwest';
+
 export interface PayoutSettings {
   places: { rank: number; percentage: number }[]; // e.g. [{rank: 1, percentage: 70}]
   bonuses: { name: string; percentage: number }[]; // e.g. [{name: "Underdog", percentage: 5}]
@@ -671,7 +674,8 @@ export interface Tournament {
 }
 
 export interface Game {
-  id: string;
+  id: string; // e.g. "R1-W1"
+  externalId?: string; // ESPN Game ID (e.g. "401638630")
   startTime: string; // ISO
   status: 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL';
   homeTeamId: string;

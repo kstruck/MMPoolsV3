@@ -35,7 +35,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
     //     return () => unsub();
     // }, []);
 
-    const isBracketEnabled = user?.role === 'SUPER_ADMIN';
+    const isBracketEnabled = !!user; // Open for all logged-in users
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col">

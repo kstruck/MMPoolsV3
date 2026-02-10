@@ -19,7 +19,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
 export { db };
-import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool } from "../types";
+import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament } from "../types";
 
 /** Global statistics tracked across all pools */
 export interface GlobalStats {
@@ -146,6 +146,79 @@ export const dbService = {
         const q = collection(db, 'pools', poolId, 'entries');
         const snap = await getDocs(q);
         return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    },
+
+    // ===== BRACKET POOL METHODS =====
+
+    /** Real-time listener for bracket entries subcollection */
+    subscribeToBracketEntries: (poolId: string, callback: (entries: BracketEntry[]) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'entries'), orderBy('score', 'desc'));
+        return onSnapshot(q, (snapshot) => {
+            const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BracketEntry));
+            callback(entries);
+        }, (error) => {
+            console.error('[dbService] subscribeToBracketEntries error:', error);
+            callback([]);
+        });
+    },
+
+    /** One-time fetch of tournament data */
+    getTournament: async (tournamentId: string): Promise<Tournament | null> => {
+        try {
+            const docRef = doc(db, 'tournaments', tournamentId);
+            const snap = await getDoc(docRef);
+            return snap.exists() ? { id: snap.id, ...snap.data() } as Tournament : null;
+        } catch (error) {
+            console.error('[dbService] getTournament error:', error);
+            return null;
+        }
+    },
+
+    /** Real-time listener for tournament data (scores, game results) */
+    subscribeToBracketTournament: (tournamentId: string, callback: (tournament: Tournament | null) => void) => {
+        const docRef = doc(db, 'tournaments', tournamentId);
+        return onSnapshot(docRef, (snap) => {
+            callback(snap.exists() ? { id: snap.id, ...snap.data() } as Tournament : null);
+        }, (error) => {
+            console.error('[dbService] subscribeToBracketTournament error:', error);
+            callback(null);
+        });
+    },
+
+    /** Create a new bracket entry via Cloud Function */
+    createBracketEntry: async (poolId: string, data: { name: string; tiebreakerScore?: number }): Promise<{ success: boolean; entryId?: string; message?: string }> => {
+        try {
+            const fn = httpsCallable(functions, 'createBracketEntry');
+            const result = await fn({ poolId, ...data });
+            return result.data as { success: boolean; entryId?: string; message?: string };
+        } catch (error: any) {
+            console.error('[dbService] createBracketEntry error:', error);
+            return { success: false, message: error.message || 'Failed to create entry' };
+        }
+    },
+
+    /** Submit bracket picks via Cloud Function */
+    submitBracketEntry: async (poolId: string, entryId: string, picks: Record<string, string>, tiebreakerScore?: number): Promise<{ success: boolean; message?: string }> => {
+        try {
+            const fn = httpsCallable(functions, 'submitBracketEntry');
+            const result = await fn({ poolId, entryId, picks, tiebreakerScore });
+            return result.data as { success: boolean; message?: string };
+        } catch (error: any) {
+            console.error('[dbService] submitBracketEntry error:', error);
+            return { success: false, message: error.message || 'Failed to submit entry' };
+        }
+    },
+
+    /** Update bracket picks (draft save, before submission) */
+    updateBracketPicks: async (poolId: string, entryId: string, picks: Record<string, string>): Promise<{ success: boolean; message?: string }> => {
+        try {
+            const fn = httpsCallable(functions, 'updateBracketPicks');
+            const result = await fn({ poolId, entryId, picks });
+            return result.data as { success: boolean; message?: string };
+        } catch (error: any) {
+            console.error('[dbService] updateBracketPicks error:', error);
+            return { success: false, message: error.message || 'Failed to update picks' };
+        }
     },
 
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: any | null) => void) => {
