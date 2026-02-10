@@ -327,3 +327,20 @@ function assertPlayoffWinner(assertion: TestAssertion, pool: any): AssertionResu
             : `❌ ${assertion.message} - Expected "${expected}", got "${actual}"`
     };
 }
+
+function assertMaxScoreAtLeast(assertion: TestAssertion, pool: any): AssertionResult {
+    const entries = pool?._bracketEntries || [];
+    // Find max "maxPossibleScore" across all entries
+    const maxPossible = entries.reduce((max: number, e: any) => Math.max(max, e.maxPossibleScore || 0), 0);
+    const expected = assertion.expected as number;
+    const passed = maxPossible >= expected;
+
+    return {
+        assertion,
+        passed,
+        actual: maxPossible,
+        message: passed
+            ? `✅ ${assertion.message} (Max Possible: ${maxPossible})`
+            : `❌ ${assertion.message} - Expected at least ${expected}, got ${maxPossible}`
+    };
+}

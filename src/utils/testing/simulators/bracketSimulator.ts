@@ -178,7 +178,7 @@ export async function runScenario(
             try {
                 await updateDoc(entryDoc.ref, {
                     score,
-                    // We can also store maxPossibleScore in DB if needed, but mostly for test verification
+                    maxPossibleScore: scoringResult.maxPossibleScore
                 });
 
                 // Update local object for verification step
