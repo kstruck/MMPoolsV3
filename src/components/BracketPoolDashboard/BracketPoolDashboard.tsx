@@ -10,6 +10,7 @@ import { PickHistory } from './PickHistory';
 import { WhoToRootFor } from './WhoToRootFor';
 import { WhatIfSimulator } from './WhatIfSimulator';
 import { ReportsTab } from './ReportsTab';
+import { LiveScoreTicker } from './LiveScoreTicker';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager';
 type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif';
@@ -265,6 +266,9 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     </div>
                 </div>
             </div>
+
+            {/* Live Score Ticker */}
+            <LiveScoreTicker tournament={tournament} />
 
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4">
