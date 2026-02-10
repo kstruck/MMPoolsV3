@@ -2,6 +2,8 @@ import React from 'react';
 import type { User } from '../types';
 import { Trophy, Zap, Shield, LayoutGrid, CheckCircle2, Heart, Globe, ArrowRight } from 'lucide-react';
 import { Header } from './Header';
+import { Footer } from './Footer';
+import { Link } from 'react-router-dom';
 
 interface GamedaySquaresLandingProps {
     user?: User | null;
