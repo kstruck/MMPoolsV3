@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Clock, Target, Check, Copy, Download, MessageSquare, Edit3 } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3 } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
@@ -9,6 +9,7 @@ import { DateTimePicker } from './DateTimePicker';
 import { PickHistory } from './PickHistory';
 import { WhoToRootFor } from './WhoToRootFor';
 import { WhatIfSimulator } from './WhatIfSimulator';
+import { ReportsTab } from './ReportsTab';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager';
 type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif';
@@ -490,8 +491,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     key={sub.id}
                                     onClick={() => setBracketSubTab(sub.id)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${bracketSubTab === sub.id
-                                            ? 'bg-indigo-600 text-white border-indigo-500'
-                                            : 'bg-slate-900 text-slate-400 hover:bg-slate-800 border-slate-800'
+                                        ? 'bg-indigo-600 text-white border-indigo-500'
+                                        : 'bg-slate-900 text-slate-400 hover:bg-slate-800 border-slate-800'
                                         }`}
                                 >
                                     {sub.label}
@@ -587,107 +588,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 {/* Reports Tab */}
                 {!loading && activeTab === 'reports' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* Standings Summary */}
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                    <Trophy size={18} className="text-amber-400" /> Standings
-                                </h3>
-                                <div className="space-y-2">
-                                    {entries
-                                        .sort((a, b) => (b.score || 0) - (a.score || 0))
-                                        .slice(0, 5)
-                                        .map((entry, i) => (
-                                            <div key={entry.id} className="flex items-center justify-between p-2 bg-slate-950 rounded border border-slate-800">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-amber-500 text-black' : i === 1 ? 'bg-slate-400 text-black' : i === 2 ? 'bg-orange-700 text-white' : 'bg-slate-800 text-slate-400'}`}>{i + 1}</span>
-                                                    <span className="text-white text-sm">{entry.name}</span>
-                                                </div>
-                                                <span className="text-emerald-400 font-mono text-sm">{entry.score || 0}</span>
-                                            </div>
-                                        ))}
-                                </div>
-                                {isManager && (
-                                    <button className="mt-3 w-full text-xs text-indigo-400 hover:text-indigo-300 font-bold py-2 border border-dashed border-slate-700 rounded-lg">
-                                        📥 Export CSV
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* Round Breakdown */}
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                    <BarChart3 size={18} className="text-indigo-400" /> Breakdown by Round
-                                </h3>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-xs">
-                                        <thead>
-                                            <tr className="border-b border-slate-800">
-                                                <th className="text-left py-2 text-slate-500">Entry</th>
-                                                <th className="text-center py-2 text-slate-500">R64</th>
-                                                <th className="text-center py-2 text-slate-500">R32</th>
-                                                <th className="text-center py-2 text-slate-500">S16</th>
-                                                <th className="text-center py-2 text-slate-500">E8</th>
-                                                <th className="text-center py-2 text-slate-500">F4</th>
-                                                <th className="text-center py-2 text-slate-500">Final</th>
-                                                <th className="text-right py-2 text-slate-500">Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {entries.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 10).map(entry => (
-                                                <tr key={entry.id} className="border-b border-slate-800/50">
-                                                    <td className="py-2 text-white">{entry.name}</td>
-                                                    <td className="text-center text-slate-400">—</td>
-                                                    <td className="text-center text-slate-400">—</td>
-                                                    <td className="text-center text-slate-400">—</td>
-                                                    <td className="text-center text-slate-400">—</td>
-                                                    <td className="text-center text-slate-400">—</td>
-                                                    <td className="text-center text-slate-400">—</td>
-                                                    <td className="text-right font-mono text-emerald-400">{entry.score || 0}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <p className="text-[10px] text-slate-600 mt-2">Per-round breakdown available after tournament begins.</p>
-                            </div>
-
-                            {/* Teams Picked */}
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                    <Users size={18} className="text-sky-400" /> Teams Picked
-                                </h3>
-                                <p className="text-slate-500 text-sm text-center py-8">Team popularity data will be available once the bracket is set and entries are submitted.</p>
-                            </div>
-
-                            {/* Live Scores */}
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                    <Clock size={18} className="text-red-400" /> Live Scores
-                                </h3>
-                                {tournament ? (
-                                    <div className="space-y-2">
-                                        {Object.values(tournament.games)
-                                            .filter(g => g.status === 'IN_PROGRESS')
-                                            .map(game => (
-                                                <div key={game.id} className="flex items-center justify-between p-2 bg-slate-950 rounded border border-slate-800">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                                                        <span className="text-white text-sm">{game.homeTeamId} vs {game.awayTeamId}</span>
-                                                    </div>
-                                                    <span className="font-mono text-white text-sm">{game.homeScore} - {game.awayScore}</span>
-                                                </div>
-                                            ))}
-                                        {Object.values(tournament.games).filter(g => g.status === 'IN_PROGRESS').length === 0 && (
-                                            <p className="text-slate-500 text-sm text-center py-4">No games currently in progress.</p>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <p className="text-slate-500 text-sm text-center py-8">Live scores will appear during tournament games.</p>
-                                )}
-                            </div>
-                        </div>
+                    <div className="animate-in fade-in slide-in-from-bottom-4">
+                        <ReportsTab entries={entries} tournament={tournament} pool={pool} />
                     </div>
                 )}
 
