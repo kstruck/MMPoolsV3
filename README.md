@@ -222,6 +222,19 @@ Built-in viral growth mechanism to help pool managers expand their reach.
 
     The app will be available at `http://localhost:5173`.
 
+## 🧪 Testing
+
+Run the automated test suite to verify scoring logic and edge cases:
+
+```bash
+npx vitest run
+```
+
+Includes:
+
+* **2025 Tournament Replay:** Validates scoring engine against realistic bracket scenarios.
+* **Synthetic Scenarios:** Stress-tests the engine with 1,000+ combinations of random picks and results to ensure invariant integers (e.g. Max Possible Score >= Current Score).
+
 ## 🔒 Authentication & Security
 
 This project relies on **Firebase Cloud Functions (2nd Gen)** to enforce game integrity and prevent cheating.
