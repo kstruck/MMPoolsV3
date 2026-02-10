@@ -1,7 +1,7 @@
 // BRACKET Pool Test Simulator
 // Creates a bracket pool, adds test entries with picks, scores them, and verifies results
 
-import { getFirestore, doc, collection, getDocs, updateDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, collection, getDocs, updateDoc, setDoc, addDoc } from 'firebase/firestore';
 import { dbService } from '../../../services/dbService';
 import type { BracketEntry, Tournament, Game, TournamentSlot } from '../../../types';
 import { calculateScore } from '../../../components/BracketPoolDashboard/bracketScoring';
@@ -151,12 +151,30 @@ export async function runScenario(
         if (testEntries.length > 0) {
             addStep('Add Entries', 'success', `Adding ${testEntries.length} test bracket entries...`);
 
-            // Note: Bracket entries require Cloud Function - just log for now
+            const entriesCollection = collection(db, 'pools', poolId, 'entries');
+
             for (const entry of testEntries) {
-                addStep('Entry Warning', 'skipped', `Entry creation for ${entry.userName} requires Cloud Function`);
+                try {
+                    const entryData: Partial<BracketEntry> = {
+                        poolId: poolId,
+                        ownerUid: `test-user-${entry.userName.toLowerCase()}`,
+                        name: `${entry.userName}'s Bracket`,
+                        picks: entry.picks,
+                        tieBreakerPrediction: entry.tiebreakerPrediction,
+                        status: 'SUBMITTED',
+                        paidStatus: 'PAID',
+                        score: 0,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    };
+
+                    await addDoc(entriesCollection, entryData);
+                } catch (e: any) {
+                    addStep('Entry Error', 'failed', `Failed to create entry for ${entry.userName}: ${e.message}`);
+                }
             }
 
-            addStep('Add Entries', 'success', `Logged ${testEntries.length} bracket entry requests`);
+            addStep('Add Entries', 'success', `Created ${testEntries.length} bracket entries`);
         }
 
         // === D. SCORE ENTRIES ===
@@ -193,7 +211,7 @@ export async function runScenario(
 
         // === E. MARK POOL COMPLETE ===
         try {
-            await dbService.updatePool(poolId, { status: 'archived' } as any);
+            await dbService.updatePool(poolId, { status: 'COMPLETED' } as any);
         } catch (_e) {
             await updateDoc(doc(db, 'pools', poolId), { status: 'COMPLETED' });
         }
