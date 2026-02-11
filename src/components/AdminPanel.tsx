@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
-import type { PoolTheme, GameState, Scores, Square } from '../types';
+import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry } from '../types';
+
 import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User as UserIcon, Heart, Clock, Download, TrendingUp, Hammer } from 'lucide-react';
 
 
@@ -26,7 +27,7 @@ interface AdminPanelProps {
   onShare: () => void;
   checkSlugAvailable: (slug: string) => boolean;
   checkNameAvailable: (name: string) => boolean;
-  currentUser: any;
+  currentUser: User | null;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -55,6 +56,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isFetchingScores, setIsFetchingScores] = useState(false);
   const [fetchStatus, setFetchStatus] = useState<{ type: 'success' | 'error' | 'neutral', msg: string } | null>(null);
 
+  interface ESPNTeam {
+    id: string;
+    uid: string;
+    slug: string;
+    displayName: string;
+    logo: string;
+  }
+
+  interface ESPNCompetitor {
+    id: string;
+    uid: string;
+    type: string;
+    order: number;
+    homeAway: string;
+    team: ESPNTeam;
+    score?: string;
+  }
+
+  interface ESPNCompetition {
+    id: string;
+    uid: string;
+    date: string;
+    attendance: number;
+    type: { id: string; abbreviation: string };
+    timeValid: boolean;
+    neutralSite: boolean;
+    competitors: ESPNCompetitor[];
+  }
+
+  interface ESPNGame {
+    id: string;
+    uid: string;
+    date: string;
+    name: string;
+    shortName: string;
+    season: { year: number; type: number; slug: string };
+    competitions: ESPNCompetition[];
+    status: { clock: number; displayClock: string; period: number; type: { id: string; name: string; state: string; completed: boolean; detail: string; shortDetail: string } };
+  }
+
   // Auto-detect season type: Dec-Feb is postseason, otherwise regular
   const getDefaultSeasonType = () => {
     const month = new Date().getMonth();
@@ -62,7 +103,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
   const [seasonType, setSeasonType] = useState(getDefaultSeasonType());
   const [week, setWeek] = useState('2'); // Default to Divisional for postseason
-  const [scheduleGames, setScheduleGames] = useState<any[]>([]);
+  const [scheduleGames, setScheduleGames] = useState<ESPNGame[]>([]);
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -92,12 +133,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   }, []);
 
   // Prop Player Management
-  const [propCards, setPropCards] = useState<any[]>([]);
+  const [propCards, setPropCards] = useState<PropCard[]>([]);
   const [playerTab, setPlayerTab] = useState<'grid' | 'props'>('grid');
 
   useEffect(() => {
     if (activeTab === 'players' && gameState.id) {
-      const unsub = dbService.subscribeToAllPropCards(gameState.id, (cards) => {
+      const unsub = dbService.subscribeToAllPropCards(gameState.id, (cards: PropCard[]) => {
         setPropCards(cards);
       });
       return () => unsub();
@@ -176,7 +217,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSaveMessage('Settings Saved Successfully!');
     setTimeout(() => {
       setSaveMessage(null);
-      window.location.href = `/pool/${gameState.id}`;
+      window.location.href = `/ pool / ${gameState.id} `;
     }, 1500);
   };
 
@@ -193,7 +234,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         return;
       }
       const ai = new GoogleGenAI({ apiKey });
-      const prompt = `Generate a fun, creative, short rule variation for a Super Bowl Squares betting pool. Examples: 'Touchdowns on the 7 get a bonus', 'Score change payouts'. Keep it under 25 words.`;
+      const prompt = `Generate a fun, creative, short rule variation for a Super Bowl Squares betting pool.Examples: 'Touchdowns on the 7 get a bonus', 'Score change payouts'.Keep it under 25 words.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -239,7 +280,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       // Only include if we have at least a name
       if (safeName) {
-        csvContent += `${safeEmail},${safeName},${safePhone}\n`;
+        csvContent += `${safeEmail},${safeName},${safePhone} \n`;
       }
     });
 
@@ -248,7 +289,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
-      link.setAttribute("download", `${gameState.urlSlug || 'pool'}_participants.csv`);
+      link.setAttribute("download", `${gameState.urlSlug || 'pool'} _participants.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -296,7 +337,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       // Filter for future games only (based on user request)
       const now = new Date();
       // Optional: buffer of 0 hours, strict future.
-      const upcoming = events.filter((e: any) => {
+      const upcoming = events.filter((e: ESPNGame) => {
         const gameDate = new Date(e.date);
         return gameDate > now;
       });
@@ -310,10 +351,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsLoadingSchedule(false);
   };
 
-  const selectGame = (game: any) => {
-    const comp = game.competitions[0];
-    const home = comp.competitors.find((c: any) => c.homeAway === 'home').team;
-    const away = comp.competitors.find((c: any) => c.homeAway === 'away').team;
+  const selectGame = (game: ESPNGame) => {
+    const comp: ESPNCompetition = game.competitions[0];
+    const home = comp.competitors.find((c: ESPNCompetitor) => c.homeAway === 'home')?.team;
+    const away = comp.competitors.find((c: ESPNCompetitor) => c.homeAway === 'away')?.team;
+    if (!home || !away) return; // Guard clause
     // Auto-set the Lock Time to the game start time
     const gameDate = new Date(game.date);
     const existingReminders = gameState.reminders || {
@@ -397,7 +439,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const totalPayout = (gameState.payouts.q1 || 0) + (gameState.payouts.half || 0) + (gameState.payouts.q3 || 0) + (gameState.payouts.final || 0);
 
   // Player Management Logic
-  const getPlayers = () => {
+  interface PlayerSummary {
+    name: string;
+    squares: Square[];
+    totalPaid: number;
+    totalOwed: number;
+    contact?: { email?: string; phone?: string; notes?: string };
+  }
+
+  const getPlayers = (): PlayerSummary[] => {
     const players: Record<string, Square[]> = {};
     gameState.squares.forEach(sq => {
       if (sq.owner) {
@@ -410,13 +460,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       squares,
       totalPaid: squares.filter(s => s.isPaid).length * gameState.costPerSquare,
       totalOwed: squares.filter(s => !s.isPaid).length * gameState.costPerSquare,
-      contact: squares[0].playerDetails
+      contact: squares[0].playerDetails || undefined
     }));
   };
 
-  const getPropPlayers = () => {
+  interface PropPlayerSummary {
+    uid: string;
+    name: string;
+    cards: PropCard[];
+    totalPaid: number;
+    totalOwed: number;
+    email?: string;
+  }
+
+  const getPropPlayers = (): PropPlayerSummary[] => {
     // Group cards by user
-    const players: Record<string, any[]> = {};
+    const players: Record<string, PropCard[]> = {};
     propCards.forEach(card => {
       const uId = card.userId || 'unknown';
       if (!players[uId]) players[uId] = [];
@@ -434,16 +493,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const updatePropPlayerDetails = async (uid: string, details: { name: string, email: string, phone: string, notes: string }) => {
-    const userCards = propCards.filter(c => c.userId === uid);
-    const updates: any = { userName: details.name, userEmail: details.email };
-    await Promise.all(userCards.map(c => dbService.updatePropCard(gameState.id, c.id, updates)));
+    const userCards = propCards.filter(c => c.userId === uid && c.id);
+    const updates: Partial<PropCard> = { userName: details.name, userEmail: details.email };
+    await Promise.all(userCards.map(c => dbService.updatePropCard(gameState.id, c.id!, updates)));
     setEditingPlayer(null);
   };
 
   const removePropPlayer = async (uid: string) => {
     // No confirmation dialog (Sandbox restriction)
-    const userCards = propCards.filter(c => c.userId === uid);
-    await Promise.all(userCards.map(c => dbService.deletePropCard(gameState.id, c.id)));
+    const userCards = propCards.filter(c => c.userId === uid && c.id);
+    await Promise.all(userCards.map(c => dbService.deletePropCard(gameState.id, c.id!)));
   };
 
 
@@ -660,7 +719,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 updateConfig={updateConfig}
                 handleFixSync={handleFixSync}
                 isFixing={isFixing}
-                currentUser={currentUser}
+                currentUser={currentUser || undefined}
               />
             )}
 
@@ -874,8 +933,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             className={`p-4 rounded-lg border flex items-center justify-between transition-all ${win.isPaid ? 'bg-emerald-900/10 border-emerald-500/30' : 'bg-slate-950 border-slate-700'}`}
                           >
                             <div className="flex items-center gap-4">
-                              <div className={`p-2 rounded-lg ${win.isPaid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
-                                <DollarSign size={20} />
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${win.isPaid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+                                {(win.owner || '??').substring(0, 2).toUpperCase()}
                               </div>
                               <div>
                                 <div className="font-bold text-white flex items-center gap-2">
@@ -921,7 +980,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {activeTab === 'communications' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <AnnouncementManager pool={gameState} currentUser={currentUser} />
+              {currentUser ? (
+                <AnnouncementManager pool={gameState} currentUser={currentUser} />
+              ) : (
+                <div className="text-center text-slate-500 py-8">Please log in to send announcements.</div>
+              )}
             </div>
           </div>
         )}
@@ -1020,7 +1083,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <button onClick={() => updateConfig({ waitlist: [] })} className="text-xs text-rose-400 hover:text-rose-300">Clear List</button>
                 </div>
                 <div className="divide-y divide-slate-800">
-                  {gameState.waitlist.map((entry, idx) => (
+                  {gameState.waitlist.map((entry: WaitlistEntry, idx: number) => (
                     <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-800/20 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 text-xs font-bold">
@@ -1091,7 +1154,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="p-8 text-center text-slate-500">No players yet. Share the pool link!</div>
                 ) : (
                   <div className="divide-y divide-slate-800">
-                    {getPlayers().map((player: any) => (
+                    {getPlayers().map((player: PlayerSummary) => (
 
                       <div key={player.name} className="bg-slate-900 hover:bg-slate-800/50 transition-colors">
                         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.name ? null : player.name)}>
@@ -1143,11 +1206,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 <div className="flex justify-between items-center mb-2">
                                   <span className="text-xs font-bold text-slate-500 uppercase">Squares Owned</span>
                                   <button onClick={async () => {
-                                    const ids = player.squares.map((s: any) => s.id);
+                                    const ids = player.squares.map((s: Square) => s.id);
                                     if (ids.length) await dbService.markSquarePaid(gameState.id, ids, true);
                                   }} className="text-xs text-emerald-400 hover:text-emerald-300 font-bold">Mark All Paid</button>
                                 </div>
-                                {player.squares.map((sq: any) => (
+                                {player.squares.map((sq: Square) => (
                                   <div key={sq.id} className="flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-800">
                                     <span className="text-sm font-mono text-slate-300">Square #{sq.id}</span>
                                     <div className="flex items-center gap-3">
@@ -1185,7 +1248,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="p-8 text-center text-slate-500">No prop cards purchased yet.</div>
                 ) : (
                   <div className="divide-y divide-slate-800">
-                    {getPropPlayers().map((player: any) => (
+                    {getPropPlayers().map((player: PropPlayerSummary) => (
                       <div key={player.uid} className="bg-slate-900 hover:bg-slate-800/50 transition-colors">
                         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.uid ? null : player.uid)}>
                           <div className="flex items-center gap-4">
@@ -1232,19 +1295,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <div className="px-4 pb-4 pl-16 animate-in slide-in-from-top-2">
                             <div className="bg-slate-950 rounded-lg p-4 border border-slate-800">
                               <div className="space-y-2">
-                                {player.cards.map((card: any, idx: number) => (
+                                {player.cards.map((card: PropCard, idx: number) => (
                                   <div key={card.id} className="bg-slate-900 border border-slate-800 rounded p-3">
                                     <div className="flex justify-between items-center mb-2">
                                       <span className="text-sm font-bold text-slate-300">Card #{idx + 1}</span>
                                       <div className="flex gap-2">
                                         <button
-                                          onClick={() => dbService.updatePropCard(gameState.id, card.id, { isPaid: !card.isPaid })}
+                                          onClick={() => dbService.updatePropCard(gameState.id, card.id!, { isPaid: !card.isPaid })}
                                           className={`text-xs px-2 py-1 rounded font-bold border transition-colors ${card.isPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}
                                         >
                                           {card.isPaid ? 'PAID' : 'UNPAID'}
                                         </button>
                                         <button
-                                          onClick={() => dbService.deletePropCard(gameState.id, card.id)}
+                                          onClick={() => dbService.deletePropCard(gameState.id, card.id!)}
                                           className="text-slate-600 hover:text-rose-500 transition-colors"
                                           title="Delete Card"
                                         >

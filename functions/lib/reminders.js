@@ -45,7 +45,8 @@ async function createNotificationOnce(dedupeKey, logData) {
         return true;
     }
     catch (e) {
-        if (e.message === "ALREADY_SENT") {
+        const error = e;
+        if (error.message === "ALREADY_SENT") {
             return false;
         }
         throw e;
@@ -58,7 +59,7 @@ async function logAudit(poolId, message, type, payload) {
         id: auditRef.id,
         poolId,
         timestamp: Date.now(),
-        type: "POOL_STATUS_CHANGED", // Reusing generic type or add NOTIFICATION_SENT
+        type,
         message,
         severity: "INFO",
         actor: { uid: "SYSTEM", role: "SYSTEM", label: "SmartReminders" },
@@ -68,7 +69,7 @@ async function logAudit(poolId, message, type, payload) {
     await auditRef.set(event);
 }
 // --- SCHEDULED REMINDER LOGIC ---
-exports.runReminders = functions.scheduler.onSchedule("every 5 minutes", async (event) => {
+exports.runReminders = functions.scheduler.onSchedule("every 5 minutes", async () => {
     var _a, _b;
     const db = admin.firestore();
     const now = Date.now();
@@ -78,14 +79,14 @@ exports.runReminders = functions.scheduler.onSchedule("every 5 minutes", async (
     for (const doc of poolsSnapshot.docs) {
         try {
             const poolData = doc.data();
-            const pool = Object.assign({ id: doc.id }, poolData); // Loose type to handle unions
+            const pool = Object.assign({ id: doc.id }, poolData); // Better type casting
             // --- TYPE: SQUARES or PROPS --- 
             if (pool.type === 'SQUARES' || pool.type === 'PROPS' || !pool.type) {
                 if (!pool.reminders)
                     continue;
-                if ((_a = pool.reminders.payment) === null || _a === void 0 ? void 0 : _a.enabled)
+                if (((_a = pool.reminders.payment) === null || _a === void 0 ? void 0 : _a.enabled) && pool.type === 'SQUARES')
                     await checkPaymentReminders(pool, now);
-                if ((_b = pool.reminders.lock) === null || _b === void 0 ? void 0 : _b.enabled)
+                if (((_b = pool.reminders.lock) === null || _b === void 0 ? void 0 : _b.enabled) && (pool.type === 'SQUARES' || !pool.type))
                     await checkLockReminders(pool, now);
             }
             // --- TYPE: NFL PLAYOFFS ---
@@ -104,7 +105,7 @@ async function checkPlayoffReminders(pool, now) {
     var _a, _b;
     // 1. Check if locking soon (Start of Wild Card is traditionally the lock)
     // Using `lockDate` or `lockAt` if available.
-    const lockTime = pool.lockDate || pool.lockAt;
+    const lockTime = pool.lockDate;
     if (!lockTime)
         return;
     // Time Check: Is it within 2 hours of lock?
@@ -131,7 +132,7 @@ async function checkPlayoffReminders(pool, now) {
                 if (userSnap.exists) {
                     const email = (_a = userSnap.data()) === null || _a === void 0 ? void 0 : _a.email;
                     if (email) {
-                        emailsToSend.push({ email, name: entry.userName, entryName: entry.entryName });
+                        emailsToSend.push({ email, name: entry.userName, entryName: entry.entryName || 'Entry' });
                         // Mark as sent immediately in memory updates
                         updates[`entries.${entryId}.paymentReminderSent`] = true;
                     }
@@ -311,6 +312,7 @@ async function notifyWaitlist(pool, releasedCount) {
         releasedCount
     });
 }
+// Removed duplicate import
 async function checkLockReminders(pool, now) {
     var _a, _b;
     const settings = pool.reminders.lock;
@@ -329,7 +331,13 @@ async function checkLockReminders(pool, now) {
     if (minutesUntilLock <= 0) {
         // Time has passed: Execute Auto-Lock if not already locked
         if (!pool.isLocked) {
-            await executeAutoLock(pool);
+            if (pool.type === 'SQUARES' || !pool.type) {
+                await executeAutoLock(pool);
+            }
+            else {
+                // TODO: Implement auto-lock for Props
+                console.log(`[AutoLock] Props pool auto-lock not implemented yet: ${pool.id}`);
+            }
         }
         return;
     }
@@ -348,17 +356,20 @@ async function checkLockReminders(pool, now) {
             });
             if (sent) {
                 // Email Host
-                const hostBody = `<p>Your pool <strong>${pool.name}</strong> locks soon.</p>`;
-                const hostHtml = (0, emailStyles_1.renderEmailHtml)(`Pool Locking Soon`, hostBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Manage Pool');
-                await sendEmail(pool.contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
-                // Start: Email all participants if needed (expensive for free tier, maybe limit or skip for MVP if list huge)
-                // For MVP, let's just email the host to trigger their manual blast if they want.
-                // Or iterate unique emails from squares.
-                const uniqueEmails = Array.from(new Set(pool.squares.map(s => { var _a; return (_a = s.playerDetails) === null || _a === void 0 ? void 0 : _a.email; }).filter(Boolean)));
-                for (const email of uniqueEmails) {
-                    const userBody = `<p>The pool locks in approximately ${Math.round(minutesUntilLock / 60)} hours.</p>`;
-                    const userHtml = (0, emailStyles_1.renderEmailHtml)(`Grid Locking Soon: ${pool.name}`, userBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Check Your Squares');
-                    await sendEmail(email, `Grid Locking Soon: ${pool.name}`, userHtml);
+                const contactEmail = pool.contactEmail;
+                if (contactEmail) {
+                    const hostBody = `<p>Your pool <strong>${pool.name}</strong> locks soon.</p>`;
+                    const hostHtml = (0, emailStyles_1.renderEmailHtml)(`Pool Locking Soon`, hostBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Manage Pool');
+                    await sendEmail(contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
+                }
+                if (pool.type === 'SQUARES' || !pool.type) {
+                    const squaresPool = pool;
+                    const uniqueEmails = Array.from(new Set(squaresPool.squares.map(s => { var _a; return (_a = s.playerDetails) === null || _a === void 0 ? void 0 : _a.email; }).filter(Boolean)));
+                    for (const email of uniqueEmails) {
+                        const userBody = `<p>The pool locks in approximately ${Math.round(minutesUntilLock / 60)} hours.</p>`;
+                        const userHtml = (0, emailStyles_1.renderEmailHtml)(`Grid Locking Soon: ${pool.name}`, userBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Check Your Squares');
+                        await sendEmail(email, `Grid Locking Soon: ${pool.name}`, userHtml);
+                    }
                 }
                 await logAudit(pool.id, `Sent lock reminder (${scheduleMin} min warning)`, 'NOTIFICATION_SENT', { dedupeKey: key });
             }
@@ -438,7 +449,7 @@ async function executeAutoLock(pool) {
                 home: generateDigits(),
                 away: generateDigits(),
             };
-            let updates = {
+            const updates = {
                 isLocked: true,
                 lockGrid: true, // Legacy/UI sync
                 axisNumbers,

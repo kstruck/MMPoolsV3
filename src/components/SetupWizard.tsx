@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { dbService } from '../services/dbService';
 
-import type { GameState, User, PoolTheme } from '../types';
+import type { GameState, PoolTheme, Pool } from "../types";
+import type { User } from '../types';
+import type { ESPNGame, ESPNCompetitor } from '../types/espn';
 
 // Import all shared wizard steps
 import {
@@ -75,9 +77,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
     });
 
     // Schedule State (for Step 1) - Defaults to Postseason Divisional Round
+
+    // Schedule State (for Step 1) - Defaults to Postseason Divisional Round
     const [seasonType, setSeasonType] = useState('3');
     const [week, setWeek] = useState('2');
-    const [scheduleGames, setScheduleGames] = useState<any[]>([]);
+    const [scheduleGames, setScheduleGames] = useState<ESPNGame[]>([]);
     const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
     const [showSchedule, setShowSchedule] = useState(false);
     const [cfbConference, setCfbConference] = useState('80');
@@ -131,12 +135,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
             }
             const response = await fetch(url);
             if (!response.ok) throw new Error('Failed to fetch schedule');
-            const data = await response.json();
+            const data = await response.json() as { events?: ESPNGame[] };
             const events = data.events || [];
-
             // Filter for future games only
             const now = new Date();
-            const upcoming = events.filter((e: any) => {
+            const upcoming = events.filter((e: ESPNGame) => {
                 const gameDate = new Date(e.date);
                 return gameDate > now;
             });
@@ -149,26 +152,29 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
         setIsLoadingSchedule(false);
     };
 
-    const selectGame = (game: any) => {
+
+
+    const selectGame = (game: ESPNGame) => {
         const comp = game.competitions[0];
-        const home = comp.competitors.find((c: any) => c.homeAway === 'home').team;
-        const away = comp.competitors.find((c: any) => c.homeAway === 'away').team;
+        const home = comp.competitors.find((c: ESPNCompetitor) => c.homeAway === 'home')?.team;
+        const away = comp.competitors.find((c: ESPNCompetitor) => c.homeAway === 'away')?.team;
         const gameDate = new Date(game.date);
 
         // Auto-Name Logic
-        let candidateName = `${away.displayName} @ ${home.displayName}`;
+        const candidateName = `${away?.displayName || 'Away'} @ ${home?.displayName || 'Home'}`;
         // Basic check - uniqueness handled by server/db usually, or we just let it be duplicate name
         // ... omitted sophisticated unique check for wizard ...
 
         updateConfig({
             name: candidateName,
-            homeTeam: home.displayName,
-            awayTeam: away.displayName,
+            homeTeam: home?.displayName || 'Home',
+            awayTeam: away?.displayName || 'Away',
             gameId: game.id,
-            homeTeamLogo: home.logo,
-            awayTeamLogo: away.logo,
+            homeTeamLogo: home?.logo,
+            awayTeamLogo: away?.logo,
             seasonType: seasonType as '1' | '2' | '3',
             week: parseInt(week),
+            gameTime: gameDate.getTime(), // Added gameTime
             reminders: {
                 ...(gameState.reminders || {
                     payment: { enabled: true, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: true },
@@ -242,7 +248,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                 scores: { ...gameState.scores, q1: {}, half: {}, q3: {}, final: {}, current: { home: 0, away: 0 } } // Init scores
             };
 
-            const poolId = await dbService.createPool(newPool as any);
+            const poolId = await dbService.createPool(newPool as unknown as Pool);
             navigate(`/pool/${poolId}`);
             onComplete();
         } catch (error) {

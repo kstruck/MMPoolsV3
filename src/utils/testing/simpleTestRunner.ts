@@ -11,6 +11,8 @@ import { runScenario as runBracketScenario } from './simulators/bracketSimulator
 import { runScenario as runPropsScenario } from './simulators/propsSimulator';
 import { runScenario as runPlayoffScenario } from './simulators/playoffSimulator';
 import { runE2EBracketSimulation } from './simulators/bracketE2ESimulator';
+import type { TestScenario } from './scenarios';
+import type { Pool, Winner, PropCard, BracketEntry } from '../../types';
 
 export interface SimpleTestResult {
     scenarioId: string;
@@ -19,7 +21,7 @@ export interface SimpleTestResult {
     duration: number;
     validation: ValidationResult | null;
     error?: string;
-    steps: any[];
+    steps: { step: string; status: string; message?: string; data?: unknown }[];
     poolId?: string;
 }
 
@@ -30,7 +32,7 @@ export interface SimpleTestResult {
 export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestResult> {
     const startTime = Date.now();
 
-    const scenario = getScenarioById(scenarioId);
+    const scenario = getScenarioById(scenarioId) as TestScenario;
     if (!scenario) {
         return {
             scenarioId,
@@ -45,17 +47,17 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
 
     try {
         const poolType = scenario.poolType || 'SQUARES';
-        let result: { poolId?: string; steps: any[] };
+        let result: { poolId?: string; steps: { step: string; status: string; message: string; data?: unknown }[] };
 
         if (poolType === 'PROPS') {
             // Route to props simulator
             const propsSettings = {
                 ...scenario.poolConfig,
                 _fullScenario: {
-                    poolConfig: (scenario as any).poolConfig,
-                    questions: (scenario as any).questions,
-                    testEntries: (scenario as any).testEntries,
-                    grading: (scenario as any).grading
+                    poolConfig: scenario.poolConfig,
+                    questions: scenario.questions,
+                    testEntries: scenario.testEntries,
+                    grading: scenario.grading
                 }
             };
             // Props Simulator is now statically imported
@@ -78,9 +80,13 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
                 const bracketSettings = {
                     ...scenario.poolConfig,
                     _fullScenario: {
-                        poolConfig: (scenario as any).poolConfig,
-                        testEntries: (scenario as any).testEntries,
-                        tournamentResults: (scenario as any).tournamentResults
+                        poolConfig: scenario.poolConfig,
+                        testEntries: (scenario.testEntries || []).map(e => ({
+                            userName: e.userName,
+                            picks: e.picks || {},
+                            tiebreaker: e.tiebreaker || e.tiebreakerVal
+                        })),
+                        tournamentResults: scenario.tournamentResults
                     }
                 };
                 result = await runBracketScenario('bracket-basic', 'actual', bracketSettings);
@@ -90,9 +96,13 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             const playoffSettings = {
                 ...scenario.poolConfig,
                 _fullScenario: {
-                    poolConfig: (scenario as any).poolConfig,
-                    testEntries: (scenario as any).testEntries,
-                    roundResults: (scenario as any).roundResults
+                    poolConfig: scenario.poolConfig,
+                    testEntries: (scenario.testEntries || []).map(e => ({
+                        userName: e.userName,
+                        rankings: e.rankings || {},
+                        tiebreaker: e.tiebreaker || e.tiebreakerVal
+                    })),
+                    roundResults: scenario.roundResults
                 }
             };
             // Playoff Simulator is now statically imported
@@ -103,7 +113,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
                 ...scenario.poolConfig,
                 _fullScenario: {
                     testUsers: scenario.testUsers,
-                    squareCount: (scenario as any).squareCount || 100,
+                    squareCount: scenario.squareCount || 100,
                     actions: (scenario.scoreUpdates || []).map(u => ({
                         actionType: 'SCORE_UPDATE',
                         period: u.period,
@@ -128,17 +138,19 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
         }
 
         // Fetch final data for validation
-        const pool: any = await dbService.getPoolById(result.poolId);
-        let winners: any[] = [];
+        // Use a local intersection type to allow testing-specific properties
+        type TestPool = Pool & { _propCards?: PropCard[]; _bracketEntries?: BracketEntry[] };
+        const pool = await dbService.getPoolById(result.poolId) as TestPool;
+        let winners: Winner[] = [];
 
         if (poolType === 'PROPS') {
             // For props, fetch prop cards and attach to pool object
             const propCards = await dbService.getPropCards(result.poolId);
-            pool._propCards = propCards;
+            pool._propCards = propCards as unknown as PropCard[];
         } else if (poolType === 'BRACKET') {
             // For brackets, fetch entries and attach to pool object
             const bracketEntries = await dbService.getBracketEntries(result.poolId);
-            pool._bracketEntries = bracketEntries;
+            pool._bracketEntries = bracketEntries as unknown as BracketEntry[];
         } else {
             // SQUARES - get winners
             winners = await dbService.getWinners(result.poolId);
@@ -157,14 +169,15 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
             poolId: result.poolId
         };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         return {
             scenarioId,
             scenarioName: scenario.name,
             status: 'ERROR',
             duration: Date.now() - startTime,
             validation: null,
-            error: error.message,
+            error: errorMessage,
             steps: []
         };
     }

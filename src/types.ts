@@ -287,6 +287,8 @@ export interface PropCard {
   answers: Record<string, number>; // { questionId: optionIndex }
   score: number;
   tiebreakerVal?: number;
+  isPaid?: boolean;
+  userEmail?: string;
 }
 
 export interface PropSeed {
@@ -359,8 +361,8 @@ export interface GameState {
 
   isPublic: boolean; // Visibility on public listing
   squares: Square[];
-  createdAt?: any; // Firestore Timestamp - kept as any for method access compatibility
-  updatedAt?: any; // Firestore Timestamp - kept as any for method access compatibility
+  createdAt?: number | FirestoreTimestamp;
+  updatedAt?: number | FirestoreTimestamp;
   axisNumbers: AxisNumbers | null; // For Single Set (or current set)
   quarterlyNumbers?: {
     q1?: AxisNumbers;

@@ -28,14 +28,14 @@ export const SimpleTestingDashboard: React.FC = () => {
         try {
             const testResult = await runPredefinedTest(selectedScenario);
             setResult(testResult);
-        } catch (error: any) {
+        } catch (error: unknown) {
             setResult({
                 scenarioId: selectedScenario,
                 scenarioName: 'Error',
                 status: 'ERROR',
                 duration: 0,
                 validation: null,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
                 steps: []
             });
         } finally {
@@ -51,7 +51,7 @@ export const SimpleTestingDashboard: React.FC = () => {
         try {
             const results = await runAllTests();
             setAllResults(results.results);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Run all tests failed:', error);
         } finally {
             setIsRunning(false);
@@ -194,7 +194,7 @@ export const SimpleTestingDashboard: React.FC = () => {
                                     {/* Show detailed failures if failed */}
                                     {r.status === 'FAIL' && r.validation && (
                                         <div className="mt-2 space-y-1 bg-red-950/30 p-2 rounded border border-red-500/20">
-                                            {r.validation.results.filter((res: any) => !res.passed).map((res: any, idx: number) => (
+                                            {r.validation.results.filter((res: { passed: boolean }) => !res.passed).map((res: { message: string }, idx: number) => (
                                                 <p key={idx} className="text-xs text-red-300 flex items-start gap-1">
                                                     <XCircle className="w-3 h-3 mt-0.5 shrink-0" />
                                                     {res.message}

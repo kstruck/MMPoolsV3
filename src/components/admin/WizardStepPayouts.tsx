@@ -277,7 +277,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                                     <label className="text-sm text-slate-300 block font-bold mb-2">If Winning Square is Unsold?</label>
                                     <select
                                         value={gameState.ruleVariations.scoreChangeHandleUnsold || 'rollover_next'}
-                                        onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangeHandleUnsold: e.target.value as any } })}
+                                        onChange={(e) => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangeHandleUnsold: e.target.value as 'rollover_next' | 'house' | 'split_winners' } })}
                                         className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500 text-sm"
                                     >
                                         <option value="rollover_next">Rollover to Next Event (Increases Pot)</option>

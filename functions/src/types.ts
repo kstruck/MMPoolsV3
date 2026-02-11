@@ -115,6 +115,7 @@ export interface PropCard {
 
 export interface GameState {
     id: string; // Unique ID
+    type: 'SQUARES'; // Discriminated Union
     name: string; // Pool Name (Title)
     urlSlug: string;
     gridUsername?: string;
@@ -256,7 +257,8 @@ export type AuditEventType =
     | 'PROP_QUESTION_GRADED'
     | 'SQUARE_MARKED_PAID'
     | 'PAYMENT_CONFIRMED'
-    | 'AI_ARTIFACT_CREATED';
+    | 'AI_ARTIFACT_CREATED'
+    | 'NOTIFICATION_SENT';
 
 export interface AuditLogEvent {
     id: string;
@@ -401,6 +403,7 @@ export interface PlayoffEntry {
     totalScore: number;
     submittedAt: number;
     paid?: boolean; // NEW: Payment status
+    paymentReminderSent?: boolean;
 }
 
 export interface PlayoffPool {
@@ -482,6 +485,7 @@ export interface PropsPool {
     name: string;
     ownerId: string;
     createdAt: number;
+    contactEmail?: string; // Consistent with other pool types
 
     // Custom Branding
     theme: string;

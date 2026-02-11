@@ -207,13 +207,13 @@ const E8_RESULTS: GameResult[] = [
 
 // ── ROUND 5: Final Four (2 games) ──
 const F4_RESULTS: GameResult[] = [
-    { id: 'R5-1', homeTeamId: 'E1-Duke', awayTeamId: 'W1-Florida', homeScore: 55, awayScore: 67, winnerTeamId: 'W1-Florida', round: 5 },
-    { id: 'R5-2', homeTeamId: 'S1-Auburn', awayTeamId: 'M1-Houston', homeScore: 54, awayScore: 61, winnerTeamId: 'M1-Houston', round: 5 },
+    { id: 'R5-1', homeTeamId: 'E1-Duke', awayTeamId: 'W1-Florida', homeScore: 55, awayScore: 67, winnerTeamId: 'W1-Florida', round: 5, region: 'Final Four' },
+    { id: 'R5-2', homeTeamId: 'S1-Auburn', awayTeamId: 'M1-Houston', homeScore: 54, awayScore: 61, winnerTeamId: 'M1-Houston', round: 5, region: 'Final Four' },
 ];
 
 // ── ROUND 6: Championship (1 game) ──
 const CHAMP_RESULTS: GameResult[] = [
-    { id: 'R6-CHAMP', homeTeamId: 'W1-Florida', awayTeamId: 'M1-Houston', homeScore: 65, awayScore: 63, winnerTeamId: 'W1-Florida', round: 6 },
+    { id: 'R6-CHAMP', homeTeamId: 'W1-Florida', awayTeamId: 'M1-Houston', homeScore: 65, awayScore: 63, winnerTeamId: 'W1-Florida', round: 6, region: 'Championship' },
 ];
 
 // All results grouped by round for easy access
@@ -296,7 +296,7 @@ export function generateTournament2025(): Tournament {
             homeScore: 0,
             awayScore: 0,
             round: result.round,
-            region: result.region,
+            ...(result.region ? { region: result.region } : {}),
         };
         games[result.id] = game;
 

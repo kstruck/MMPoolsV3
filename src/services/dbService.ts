@@ -68,7 +68,7 @@ export const dbService = {
         }
     },
 
-    updatePool: async (poolId: string, updates: Partial<GameState>) => {
+    updatePool: async <T extends Pool>(poolId: string, updates: Partial<T> | Record<string, any>) => {
         console.log('[dbService] updatePool called', { poolId, updates });
         try {
             const poolRef = doc(db, "pools", poolId);

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import type { GameState } from '../types';
+import type { GameState, PropCard } from '../types';
 import { dbService } from '../services/dbService';
 import { DollarSign, Users, TrendingUp, Award, Percent, Clock, Zap } from 'lucide-react';
 
 interface PoolStatisticsProps {
     pool: GameState;
 }
-
+// ...
 export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
     // Props State
-    const [propCards, setPropCards] = useState<any[]>([]);
+    const [propCards, setPropCards] = useState<PropCard[]>([]);
+    const [now] = useState(Date.now()); // Stable reference for calculations
 
     useEffect(() => {
         if (pool.id && pool.props?.enabled) {
@@ -49,9 +50,13 @@ export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
         .slice(0, 5);
 
     // Sale velocity (squares per day since creation)
-    const daysSinceCreation = pool.createdAt
-        ? Math.max(1, Math.ceil((Date.now() - pool.createdAt.toMillis()) / (1000 * 60 * 60 * 24)))
-        : 1;
+    const getCreatedMillis = (val: GameState['createdAt']) => {
+        if (!val) return now;
+        if (typeof val === 'number') return val;
+        return val.toMillis();
+    };
+    const createdMillis = getCreatedMillis(pool.createdAt);
+    const daysSinceCreation = Math.max(1, Math.ceil((now - createdMillis) / (1000 * 60 * 60 * 24)));
     const salesVelocity = (soldSquares / daysSinceCreation).toFixed(1);
 
     const percentSold = ((soldSquares / totalSquares) * 100).toFixed(0);

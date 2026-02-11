@@ -45,7 +45,7 @@ export interface TestScenario {
         maxPlayers?: number;
         maxCards?: number; // For props
         ruleVariations?: Record<string, any>;
-        scoringSystem?: string;
+        scoringSystem?: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
         entryFee?: number;
     };
     // E2E-specific configuration
@@ -79,11 +79,13 @@ export interface TestScenario {
         userName: string;
         answers?: Record<string, number>; // Props
         rankings?: Record<string, number>; // Playoff
+        picks?: Record<string, string>; // Bracket
         tiebreaker?: number; // Props
         tiebreakerVal?: number; // Playoff (standardize?)
     }>;
     grading?: Record<string, number>;
     assertions: TestAssertion[];
+    tournamentResults?: any; // Bracket results
     roundResults?: any; // Playoff round results
 }
 

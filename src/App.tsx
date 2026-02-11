@@ -87,7 +87,7 @@ const LegacyHashHandler = () => {
         navigate(targetPath, { replace: true });
       }
     }
-  }, []); // Run once on mount - eslint-disable-line react-hooks/exhaustive-deps
+  }, [navigate]); // Run once on mount
 
   return null;
 };
@@ -262,7 +262,7 @@ const App: React.FC = () => {
             onOpenAuth={handleOpenAuth}
             onLogout={handleLogout}
             onCreatePool={handleCreatePoolClick}
-            updatePool={dbService.updatePool as any}
+            updatePool={(id, updates) => dbService.updatePool(id, updates)}
           />
         } />
 

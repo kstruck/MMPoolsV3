@@ -1,7 +1,8 @@
 
 import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
-import { GameState, NotificationLog, Square, AuditLogEvent } from "./types";
+// Fixed imports
+import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 
@@ -12,7 +13,7 @@ import { renderEmailHtml, BASE_URL } from "./emailStyles";
 /**
  * Sends an email by writing to the /mail collection (triggered by EmailJS or other service).
  */
-export async function sendEmail(to: string, subject: string, html: string, context?: any) {
+export async function sendEmail(to: string, subject: string, html: string, context?: Record<string, unknown>) {
     const db = admin.firestore();
     if (!to || !to.includes('@')) {
         console.warn(`Skipping email to invalid address: ${to}`);
@@ -52,34 +53,35 @@ async function createNotificationOnce(dedupeKey: string, logData: Omit<Notificat
             t.set(ref, { ...logData, id: dedupeKey });
         });
         return true;
-    } catch (e: any) {
-        if (e.message === "ALREADY_SENT") {
+    } catch (e: unknown) {
+        const error = e as Error;
+        if (error.message === "ALREADY_SENT") {
             return false;
         }
         throw e;
     }
 }
 
-async function logAudit(poolId: string, message: string, type: string, payload?: any) {
+async function logAudit(poolId: string, message: string, type: AuditEventType, payload?: Record<string, unknown>) {
     const db = admin.firestore();
     const auditRef = db.collection("pools").doc(poolId).collection("audit").doc();
     const event: AuditLogEvent = {
         id: auditRef.id,
         poolId,
         timestamp: Date.now(),
-        type: "POOL_STATUS_CHANGED" as any, // Reusing generic type or add NOTIFICATION_SENT
+        type,
         message,
         severity: "INFO",
         actor: { uid: "SYSTEM", role: "SYSTEM", label: "SmartReminders" },
         payload,
-        dedupeKey: payload?.dedupeKey
+        dedupeKey: payload?.dedupeKey as string | undefined
     };
     await auditRef.set(event);
 }
 
 // --- SCHEDULED REMINDER LOGIC ---
 
-export const runReminders = functions.scheduler.onSchedule("every 5 minutes", async (event) => {
+export const runReminders = functions.scheduler.onSchedule("every 5 minutes", async () => {
     const db = admin.firestore();
     const now = Date.now();
     console.log(`[runReminders] Starting reminder check at ${new Date(now).toISOString()}`);
@@ -89,13 +91,13 @@ export const runReminders = functions.scheduler.onSchedule("every 5 minutes", as
     for (const doc of poolsSnapshot.docs) {
         try {
             const poolData = doc.data();
-            const pool = { id: doc.id, ...poolData } as any; // Loose type to handle unions
+            const pool = { id: doc.id, ...poolData } as unknown as Pool; // Better type casting
 
             // --- TYPE: SQUARES or PROPS --- 
             if (pool.type === 'SQUARES' || pool.type === 'PROPS' || !pool.type) {
                 if (!pool.reminders) continue;
-                if (pool.reminders.payment?.enabled) await checkPaymentReminders(pool, now);
-                if (pool.reminders.lock?.enabled) await checkLockReminders(pool, now);
+                if (pool.reminders.payment?.enabled && pool.type === 'SQUARES') await checkPaymentReminders(pool as GameState, now);
+                if (pool.reminders.lock?.enabled && (pool.type === 'SQUARES' || !pool.type)) await checkLockReminders(pool as GameState, now);
             }
 
             // --- TYPE: NFL PLAYOFFS ---
@@ -103,7 +105,7 @@ export const runReminders = functions.scheduler.onSchedule("every 5 minutes", as
                 await checkPlayoffReminders(pool, now);
             }
 
-        } catch (poolError: any) {
+        } catch (poolError: unknown) {
             console.error(`[runReminders] Error processing pool ${doc.id}:`, poolError);
         }
     }
@@ -111,10 +113,10 @@ export const runReminders = functions.scheduler.onSchedule("every 5 minutes", as
 });
 
 // --- PLAYOFF REMINDER LOGIC ---
-async function checkPlayoffReminders(pool: any, now: number) {
+async function checkPlayoffReminders(pool: PlayoffPool, now: number) {
     // 1. Check if locking soon (Start of Wild Card is traditionally the lock)
     // Using `lockDate` or `lockAt` if available.
-    const lockTime = pool.lockDate || pool.lockAt;
+    const lockTime = pool.lockDate;
     if (!lockTime) return;
 
     // Time Check: Is it within 2 hours of lock?
@@ -126,10 +128,10 @@ async function checkPlayoffReminders(pool: any, now: number) {
 
     // 2. Find Unpaid Entries that haven't been reminded
     const entries = pool.entries || {};
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
     const emailsToSend: { email: string, name: string, entryName: string }[] = [];
 
-    for (const [entryId, entry] of Object.entries(entries) as [string, any][]) {
+    for (const [entryId, entry] of Object.entries(entries) as [string, PlayoffEntry][]) {
         if (!entry.paid && !entry.paymentReminderSent) {
             // Need user email. PlayoffEntry stores userId.
             // Ideally we'd have it denormalized, but let's try to fetch or skip if missing.
@@ -144,7 +146,7 @@ async function checkPlayoffReminders(pool: any, now: number) {
                 if (userSnap.exists) {
                     const email = userSnap.data()?.email;
                     if (email) {
-                        emailsToSend.push({ email, name: entry.userName, entryName: entry.entryName });
+                        emailsToSend.push({ email, name: entry.userName, entryName: entry.entryName || 'Entry' });
                         // Mark as sent immediately in memory updates
                         updates[`entries.${entryId}.paymentReminderSent`] = true;
                     }
@@ -351,14 +353,16 @@ async function notifyWaitlist(pool: GameState, releasedCount: number) {
     });
 }
 
-async function checkLockReminders(pool: GameState, now: number) {
+// Removed duplicate import
+
+async function checkLockReminders(pool: GameState | PropsPool, now: number) {
     const settings = pool.reminders!.lock;
     if (!settings.lockAt) return;
 
     // Robust handling of lockAt (could be number or Timestamp)
     const lockAtNum = typeof settings.lockAt === 'number'
         ? settings.lockAt
-        : (settings.lockAt as any)?.toMillis?.() || new Date(settings.lockAt as any).getTime();
+        : (settings.lockAt as admin.firestore.Timestamp)?.toMillis?.() || new Date(settings.lockAt as number | string | Date).getTime();
 
     if (isNaN(lockAtNum)) {
         console.warn(`[checkLockReminders] Invalid lockAt for pool ${pool.id}:`, settings.lockAt);
@@ -371,7 +375,12 @@ async function checkLockReminders(pool: GameState, now: number) {
     if (minutesUntilLock <= 0) {
         // Time has passed: Execute Auto-Lock if not already locked
         if (!pool.isLocked) {
-            await executeAutoLock(pool);
+            if (pool.type === 'SQUARES' || !pool.type) {
+                await executeAutoLock(pool as GameState);
+            } else {
+                // TODO: Implement auto-lock for Props
+                console.log(`[AutoLock] Props pool auto-lock not implemented yet: ${pool.id}`);
+            }
         }
         return;
     }
@@ -392,18 +401,21 @@ async function checkLockReminders(pool: GameState, now: number) {
 
             if (sent) {
                 // Email Host
-                const hostBody = `<p>Your pool <strong>${pool.name}</strong> locks soon.</p>`;
-                const hostHtml = renderEmailHtml(`Pool Locking Soon`, hostBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
-                await sendEmail(pool.contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
+                const contactEmail = pool.contactEmail;
+                if (contactEmail) {
+                    const hostBody = `<p>Your pool <strong>${pool.name}</strong> locks soon.</p>`;
+                    const hostHtml = renderEmailHtml(`Pool Locking Soon`, hostBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
+                    await sendEmail(contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
+                }
 
-                // Start: Email all participants if needed (expensive for free tier, maybe limit or skip for MVP if list huge)
-                // For MVP, let's just email the host to trigger their manual blast if they want.
-                // Or iterate unique emails from squares.
-                const uniqueEmails = Array.from(new Set(pool.squares.map(s => s.playerDetails?.email).filter(Boolean))) as string[];
-                for (const email of uniqueEmails) {
-                    const userBody = `<p>The pool locks in approximately ${Math.round(minutesUntilLock / 60)} hours.</p>`;
-                    const userHtml = renderEmailHtml(`Grid Locking Soon: ${pool.name}`, userBody, `${BASE_URL}/pool/${pool.id}`, 'Check Your Squares');
-                    await sendEmail(email, `Grid Locking Soon: ${pool.name}`, userHtml);
+                if (pool.type === 'SQUARES' || !pool.type) {
+                    const squaresPool = pool as GameState;
+                    const uniqueEmails = Array.from(new Set(squaresPool.squares.map(s => s.playerDetails?.email).filter(Boolean))) as string[];
+                    for (const email of uniqueEmails) {
+                        const userBody = `<p>The pool locks in approximately ${Math.round(minutesUntilLock / 60)} hours.</p>`;
+                        const userHtml = renderEmailHtml(`Grid Locking Soon: ${pool.name}`, userBody, `${BASE_URL}/pool/${pool.id}`, 'Check Your Squares');
+                        await sendEmail(email, `Grid Locking Soon: ${pool.name}`, userHtml);
+                    }
                 }
 
                 await logAudit(pool.id, `Sent lock reminder (${scheduleMin} min warning)`, 'NOTIFICATION_SENT', { dedupeKey: key });
@@ -501,7 +513,7 @@ async function executeAutoLock(pool: GameState) {
                 away: generateDigits(),
             };
 
-            let updates: any = {
+            const updates: Record<string, unknown> = {
                 isLocked: true,
                 lockGrid: true, // Legacy/UI sync
                 axisNumbers,

@@ -31,10 +31,10 @@ export const WizardStepFinish: React.FC<WizardStepFinishProps> = ({
                     <div className="bg-slate-950 p-4 rounded-xl border border-slate-700">
                         <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Users size={16} className="text-indigo-400" /> Player Data Collection</h4>
                         <div className="space-y-3">
-                            {['collectPhone', 'collectAddress', 'collectReferral', 'collectNotes'].map((field) => (
+                            {(['collectPhone', 'collectAddress', 'collectReferral', 'collectNotes'] as const).map((field) => (
                                 <label key={field} className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-900 rounded">
                                     <span className="text-sm text-slate-300 capitalize">{field.replace('collect', '').replace(/([A-Z])/g, ' $1').trim()}</span>
-                                    <input type="checkbox" checked={(gameState as any)[field]} onChange={(e) => updateConfig({ [field]: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
+                                    <input type="checkbox" checked={!!gameState[field]} onChange={(e) => updateConfig({ [field]: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
                                 </label>
                             ))}
                         </div>
