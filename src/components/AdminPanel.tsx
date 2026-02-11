@@ -2,7 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry } from '../types';
 
-import { Settings, Sparkles, Lock, Unlock, Trash2, Shuffle, ArrowLeft, Share2, RefreshCw, Wifi, CheckCircle, Save, ArrowRight, DollarSign, Mail, Users, User as UserIcon, Heart, Clock, Download, TrendingUp, Hammer } from 'lucide-react';
+import Settings from 'lucide-react/dist/esm/icons/settings';
+import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
+import Lock from 'lucide-react/dist/esm/icons/lock';
+import Unlock from 'lucide-react/dist/esm/icons/unlock';
+import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
+import Shuffle from 'lucide-react/dist/esm/icons/shuffle';
+import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left';
+import Share2 from 'lucide-react/dist/esm/icons/share-2';
+import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
+import Wifi from 'lucide-react/dist/esm/icons/wifi';
+import CheckCircle from 'lucide-react/dist/esm/icons/check-circle';
+import Save from 'lucide-react/dist/esm/icons/save';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
+import DollarSign from 'lucide-react/dist/esm/icons/dollar-sign';
+import Mail from 'lucide-react/dist/esm/icons/mail';
+import Users from 'lucide-react/dist/esm/icons/users';
+import UserIcon from 'lucide-react/dist/esm/icons/user';
+import Heart from 'lucide-react/dist/esm/icons/heart';
+import Clock from 'lucide-react/dist/esm/icons/clock';
+import Download from 'lucide-react/dist/esm/icons/download';
+import TrendingUp from 'lucide-react/dist/esm/icons/trending-up';
+import Hammer from 'lucide-react/dist/esm/icons/hammer';
 
 
 

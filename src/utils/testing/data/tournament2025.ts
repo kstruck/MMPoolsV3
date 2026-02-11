@@ -296,7 +296,7 @@ export function generateTournament2025(): Tournament {
             homeScore: 0,
             awayScore: 0,
             round: result.round,
-            ...(result.region ? { region: result.region } : {}),
+            ...(result.region ? { region: result.region } : { region: null }), // Ensure null if no region
         };
         games[result.id] = game;
 
@@ -305,7 +305,7 @@ export function generateTournament2025(): Tournament {
         const slot: TournamentSlot = {
             id: buildSlotId(result.id),
             gameId: result.id,
-            nextSlotId: nextGameId ? buildSlotId(nextGameId) : undefined,
+            nextSlotId: nextGameId ? buildSlotId(nextGameId) : null,
         };
         slots[slot.id] = slot;
     }
