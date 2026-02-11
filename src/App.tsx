@@ -32,6 +32,7 @@ import { SetupWizard } from './components/SetupWizard';
 
 // Admin / SuperAdmin
 import { SuperAdmin } from './components/SuperAdmin';
+import { TournamentSimulator } from './components/TournamentSimulator/TournamentSimulator';
 
 // Services & Objects
 import { authService } from './services/authService';
@@ -273,6 +274,11 @@ const App: React.FC = () => {
               <Footer />
             </div>
           ) : <Navigate to="/" />
+        } />
+
+        {/* Tournament Simulator */}
+        <Route path="/tournament-sim" element={
+          <TournamentSimulator />
         } />
 
         {/* Creation Wizards */}

@@ -249,6 +249,14 @@ export async function runE2EBracketSimulation(config: {
 
                 const scoringResult = calculateScore(entry, tournament, poolSettings);
 
+                // Debug: log PerfectBracket's scoring details in final round
+                if (round === 6 && entry.name?.includes('PerfectBracket')) {
+                    const pickCount = entry.picks ? Object.keys(entry.picks).length : 0;
+                    const slotCount = tournament.slots ? Object.keys(tournament.slots).length : 0;
+                    console.log(`[E2E DEBUG] PerfectBracket: score=${scoringResult.score}, correct=${scoringResult.correctPicks}, maxPossible=${scoringResult.maxPossibleScore}, pickCount=${pickCount}, slotCount=${slotCount}`);
+                    console.log(`[E2E DEBUG] PerfectBracket roundBreakdown:`, JSON.stringify(scoringResult.roundBreakdown));
+                }
+
                 try {
                     await updateDoc(entryDoc.ref, {
                         score: scoringResult.score,
@@ -338,6 +346,12 @@ export async function runE2EBracketSimulation(config: {
             const data = d.data() as BracketEntry;
             return { ...data, id: d.id };
         });
+
+        // Debug: log PerfectBracket's score from Firestore vs others
+        const perfectFromFS = finalEntries.find(e => e.name?.includes('PerfectBracket'));
+        const reboundFromFS = finalEntries.find(e => e.name?.includes('Rebound King'));
+        console.log(`[E2E DEBUG] FROM FIRESTORE: PerfectBracket score=${perfectFromFS?.score}, Rebound King score=${reboundFromFS?.score}`);
+        console.log(`[E2E DEBUG] Top 5 raw scores:`, finalEntries.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5).map(e => `${e.name}:${e.score}`));
 
         // Sort by score desc, then tiebreaker proximity
         const champTotal = getChampionshipTotal(); // 128 (Florida 65 + Houston 63)
