@@ -9,7 +9,7 @@ import type { Tournament, Game } from '../types';
 export async function seedTestTournament(year: number) {
     // Fill the rest with generics
     const regions = ['East', 'West', 'South', 'Midwest'];
-    const fullTeams: any[] = [];
+    const fullTeams: { id: string; name: string; seed: number; region: string }[] = [];
     regions.forEach(r => {
         for (let i = 1; i <= 16; i++) {
             fullTeams.push({
@@ -63,7 +63,7 @@ export async function simulateRound(year: number) {
 
     const data = snap.data() as Tournament;
     const games = data.games;
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
 
     // Find lowest active round
     let activeRound = 7;
@@ -125,7 +125,7 @@ export async function resetTournament(year: number) {
  * Trigger a robust server-side simulation of a game update (for Squares pools etc.)
  */
 
-export async function simulatePoolGame(poolId: string, scores: any) {
+export async function simulatePoolGame(poolId: string, scores: Record<string, unknown>) {
     const simulateStats = httpsCallable(functions, 'simulateGameUpdate');
     await simulateStats({ poolId, scores });
 }
@@ -147,10 +147,10 @@ export async function fillGridWithBlanks(poolId: string, blanksToLeave: number) 
         squares = Array(100).fill(null).map((_, i) => ({ id: i, owner: null }));
     }
 
-    const currentFilled = squares.filter((s: any) => s.owner).length;
+    const currentFilled = squares.filter((s) => s.owner).length;
     const currentEmptyIndices = squares
-        .map((s: any, i: number) => s.owner ? -1 : i)
-        .filter((i: number) => i !== -1);
+        .map((s, i) => s.owner ? -1 : i)
+        .filter((i) => i !== -1);
 
     const targetFilled = 100 - blanksToLeave;
     const needed = targetFilled - currentFilled;

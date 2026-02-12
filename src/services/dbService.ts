@@ -56,11 +56,11 @@ export const dbService = {
         });
     },
 
-    createPool: async (pool: any): Promise<string> => {
+    createPool: async (pool: Record<string, unknown>): Promise<string> => {
         try {
-            const createPoolFn = httpsCallable(functions, 'createPool');
+            const createPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createPool');
             const result = await createPoolFn(pool);
-            const { poolId } = result.data as { success: boolean; poolId: string };
+            const { poolId } = result.data;
             return poolId;
         } catch (error) {
             console.error("Error creating pool:", error);
@@ -68,7 +68,7 @@ export const dbService = {
         }
     },
 
-    updatePool: async <T extends Pool>(poolId: string, updates: Partial<T> | Record<string, any>) => {
+    updatePool: async <T extends Pool>(poolId: string, updates: Partial<T> | Record<string, unknown>) => {
         console.log('[dbService] updatePool called', { poolId, updates });
         try {
             const poolRef = doc(db, "pools", poolId);
@@ -191,9 +191,10 @@ export const dbService = {
             const fn = httpsCallable(functions, 'createBracketEntry');
             const result = await fn({ poolId, ...data });
             return result.data as { success: boolean; entryId?: string; message?: string };
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[dbService] createBracketEntry error:', error);
-            return { success: false, message: error.message || 'Failed to create entry' };
+            const msg = error instanceof Error ? error.message : 'Failed to create entry';
+            return { success: false, message: msg };
         }
     },
 
@@ -203,9 +204,10 @@ export const dbService = {
             const fn = httpsCallable(functions, 'submitBracketEntry');
             const result = await fn({ poolId, entryId, picks, tiebreakerScore });
             return result.data as { success: boolean; message?: string };
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[dbService] submitBracketEntry error:', error);
-            return { success: false, message: error.message || 'Failed to submit entry' };
+            const msg = error instanceof Error ? error.message : 'Failed to submit entry';
+            return { success: false, message: msg };
         }
     },
 
@@ -215,9 +217,10 @@ export const dbService = {
             const fn = httpsCallable(functions, 'updateBracketPicks');
             const result = await fn({ poolId, entryId, picks });
             return result.data as { success: boolean; message?: string };
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[dbService] updateBracketPicks error:', error);
-            return { success: false, message: error.message || 'Failed to update picks' };
+            const msg = error instanceof Error ? error.message : 'Failed to update picks';
+            return { success: false, message: msg };
         }
     },
 
@@ -233,10 +236,10 @@ export const dbService = {
         await updateDoc(entryRef, { paidStatus, updatedAt: Date.now() });
     },
 
-    subscribeToPropCard: (poolId: string, userId: string, callback: (card: any | null) => void) => {
+    subscribeToPropCard: (poolId: string, userId: string, callback: (card: PropCard | null) => void) => {
         const docRef = doc(db, 'pools', poolId, 'propCards', userId);
         return onSnapshot(docRef, (doc) => {
-            callback(doc.exists() ? doc.data() : null);
+            callback(doc.exists() ? doc.data() as PropCard : null);
         });
     },
 
@@ -259,10 +262,10 @@ export const dbService = {
         });
     },
 
-    subscribeToAllPropCards: (poolId: string, callback: (cards: any[]) => void) => {
+    subscribeToAllPropCards: (poolId: string, callback: (cards: PropCard[]) => void) => {
         const q = collection(db, 'pools', poolId, 'propCards');
         return onSnapshot(q, (snapshot) => {
-            const cards = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+            const cards = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as PropCard);
             callback(cards);
         }, (error) => {
             console.error("Error subscribing to all prop cards:", error);
@@ -281,7 +284,7 @@ export const dbService = {
         }
     },
 
-    updatePropCard: async (poolId: string, cardId: string, updates: Partial<PropCard> | any) => {
+    updatePropCard: async (poolId: string, cardId: string, updates: Partial<PropCard> | Record<string, unknown>) => {
         try {
             const cardRef = doc(db, 'pools', poolId, 'propCards', cardId);
             await updateDoc(cardRef, updates);
@@ -327,9 +330,9 @@ export const dbService = {
         }
     },
 
-    recalculateGlobalStats: async (): Promise<any> => {
+    recalculateGlobalStats: async (): Promise<Record<string, unknown>> => {
         try {
-            const recalcFn = httpsCallable(functions, 'recalculateGlobalStats');
+            const recalcFn = httpsCallable<void, Record<string, unknown>>(functions, 'recalculateGlobalStats');
             const result = await recalcFn();
             return result.data;
         } catch (error) {
@@ -348,9 +351,9 @@ export const dbService = {
         }
     },
 
-    fixParticipantIds: async (dryRun: boolean = true): Promise<any> => {
+    fixParticipantIds: async (dryRun: boolean = true): Promise<Record<string, unknown>> => {
         try {
-            const fn = httpsCallable(functions, 'fixParticipantIds');
+            const fn = httpsCallable<{ dryRun: boolean }, Record<string, unknown>>(functions, 'fixParticipantIds');
             const result = await fn({ dryRun });
             return result.data;
         } catch (error) {
@@ -588,6 +591,7 @@ export const dbService = {
     // Update winner paid status (via Cloud Function)
     updateWinnerPaidStatus: async (poolId: string, winnerId: string, _isPaid: boolean, _paidByUid?: string) => {
         try {
+            console.log(`[dbService] Toggling paid status (current request: ${_isPaid}, by: ${_paidByUid})`);
             const fn = httpsCallable(functions, 'toggleWinnerPaid');
             // Cloud function toggles based on current state, so isPaid arg is technically ignored but good for intent.
             // Actually, my CF is a toggle. UI passes !win.isPaid. So calling toggle is correct.
@@ -643,9 +647,9 @@ export const dbService = {
         }
     },
 
-    deleteUserAccount: async (targetUid: string): Promise<any> => {
+    deleteUserAccount: async (targetUid: string): Promise<Record<string, unknown>> => {
         try {
-            const fn = httpsCallable(functions, 'deleteUserAccount');
+            const fn = httpsCallable<{ targetUid: string }, Record<string, unknown>>(functions, 'deleteUserAccount');
             const result = await fn({ targetUid });
             return result.data;
         } catch (error) {
@@ -654,9 +658,9 @@ export const dbService = {
         }
     },
 
-    sendAdminPasswordReset: async (email: string): Promise<any> => {
+    sendAdminPasswordReset: async (email: string): Promise<Record<string, unknown>> => {
         try {
-            const fn = httpsCallable(functions, 'sendAdminPasswordReset');
+            const fn = httpsCallable<{ email: string }, Record<string, unknown>>(functions, 'sendAdminPasswordReset');
             const result = await fn({ email });
             return result.data;
         } catch (error) {
@@ -666,7 +670,7 @@ export const dbService = {
     },
 
     // --- SYSTEM LOGS ---
-    getSystemLogs: async (limitCount = 50): Promise<any[]> => {
+    getSystemLogs: async (limitCount = 50): Promise<Record<string, unknown>[]> => {
         try {
             const q = query(collection(db, "system_logs"), orderBy("timestamp", "desc"), limit(limitCount));
             const snapshot = await getDocs(q);
@@ -677,9 +681,9 @@ export const dbService = {
         }
     },
 
-    fixPoolScores: async (poolId?: string): Promise<any> => {
+    fixPoolScores: async (poolId?: string): Promise<Record<string, unknown>> => {
         try {
-            const fn = httpsCallable(functions, 'fixPoolScores');
+            const fn = httpsCallable<{ poolId?: string }, Record<string, unknown>>(functions, 'fixPoolScores');
             const result = await fn({ poolId });
             return result.data;
         } catch (error) {
@@ -825,7 +829,7 @@ export const dbService = {
         }
     },
 
-    managePlayoffEntry: async (poolId: string, entryId: string, action: 'togglePaid' | 'delete', value?: any): Promise<{ success: boolean; message: string }> => {
+    managePlayoffEntry: async (poolId: string, entryId: string, action: 'togglePaid' | 'delete', value?: unknown): Promise<{ success: boolean; message: string }> => {
         try {
             const fn = httpsCallable(functions, 'managePlayoffEntry');
             const result = await fn({ poolId, entryId, action, value });

@@ -1,11 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
-import type { GameState, PropCard, PropsPool } from '../../types';
+import type { GameState, PropCard, PropsPool, User } from '../../types';
 import { dbService } from '../../services/dbService';
 import { Check, Lock, Trophy, Plus, Eye, Edit2, Save, Loader } from 'lucide-react';
 
 interface PropCardFormProps {
     gameState?: GameState;
-    currentUser: any;
+    currentUser: User | null;
     userCard?: PropCard | null;
     poolId?: string;
     config?: PropsPool['props'];
@@ -19,7 +20,8 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const effectiveConfig = config || gameState?.props;
     const effectiveIsLocked = isLocked ?? gameState?.isLocked ?? false;
 
-    if (!effectivePoolId || !effectiveConfig) return null;
+    // Early return moved to bottom to satisfy Rules of Hooks
+    // if (!effectivePoolId || !effectiveConfig) return null;
     const [answers, setAnswers] = useState<Record<string, number>>({});
     const [tiebreaker, setTiebreaker] = useState('');
     const [cardName, setCardName] = useState('');
@@ -49,7 +51,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             setAllPoolCards(cards); // Store all cards for stats
 
             if (!userCards) {
-                const myCards = cards.filter((c: any) => c.userId === currentUser.id);
+                const myCards = cards.filter((c) => c.userId === currentUser.id);
                 setFetchedCards(myCards);
 
                 // Auto-show new card form if no cards yet and not locked
@@ -59,10 +61,10 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             }
         });
         return () => unsub();
-    }, [effectivePoolId, currentUser?.id]);
+    }, [effectivePoolId, currentUser?.id, userCards, effectiveIsLocked]);
 
     const canBuyMoreCards = activeCards.length < maxCards;
-    const viewingCard = viewingCardId ? activeCards.find(c => (c as any).id === viewingCardId) : null;
+    const viewingCard = viewingCardId ? activeCards.find(c => c.id === viewingCardId) : null;
 
     useEffect(() => {
         if (userCards && userCards.length === 0 && !effectiveIsLocked) {
@@ -97,14 +99,14 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     };
 
     const handleFinalizePurchase = async () => {
-        if (!currentUser) return;
+        if (!currentUser || !effectivePoolId) return;
         setIsSubmitting(true);
         setError(null);
 
         try {
-            const name = cardName.trim() || `Card #${activeCards.length + 1}`;
+            const name = cardName.trim() || `Card #${activeCards.length + 1} `;
 
-            await dbService.purchasePropCard(effectivePoolId, answers, Number(tiebreaker), currentUser.displayName || currentUser.email, name);
+            await dbService.purchasePropCard(effectivePoolId, answers, Number(tiebreaker), currentUser.name || currentUser.email, name);
             // Reset form
 
             setAnswers({});
@@ -112,8 +114,8 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             setCardName('');
             setShowNewCardForm(false);
             setIsConfirming(false);
-        } catch (e: any) {
-            setError(e.message || "Failed to submit card.");
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Failed to submit card.");
             setIsConfirming(false); // Close modal on error to show error message
         } finally {
             setIsSubmitting(false);
@@ -139,7 +141,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
 
     // Save edits to existing card
     const handleSaveEdit = async () => {
-        if (!editingCardId) return;
+        if (!editingCardId || !effectivePoolId) return;
         setIsSubmitting(true);
         setError(null);
 
@@ -167,8 +169,8 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             setAnswers({});
             setTiebreaker('');
             setCardName('');
-        } catch (e: any) {
-            setError(e.message || "Failed to save changes.");
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Failed to save changes.");
         } finally {
             setIsSubmitting(false);
         }
@@ -190,6 +192,8 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     const getTotalPoints = () => questions.reduce((sum, q) => sum + (q.points || 1), 0);
     const displayAnswers = viewingCard ? viewingCard.answers : answers;
 
+    if (!effectivePoolId || !effectiveConfig) return null;
+
     return (
         <div className="max-w-2xl mx-auto p-4 space-y-6">
             <div className="text-center mb-8">
@@ -209,16 +213,15 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                     <div className="space-y-2">
                         {activeCards.map((card, idx) => {
                             const { score, correctCount } = getCardScore(card);
-                            const isViewing = (card as any).id === viewingCardId;
+                            const isViewing = card.id === viewingCardId;
                             return (
                                 <div
-                                    key={(card as any).id || idx}
-                                    className={`p-3 rounded-lg flex items-center justify-between cursor-pointer transition-all ${isViewing ? 'bg-indigo-500/20 border border-indigo-500' : 'bg-slate-900 hover:bg-slate-800'
-                                        }`}
-                                    onClick={() => setViewingCardId(isViewing ? null : (card as any).id)}
+                                    key={card.id || idx}
+                                    className={`p-3 rounded-lg flex items-center justify-between cursor-pointer transition-all ${isViewing ? 'bg-indigo-500/20 border border-indigo-500' : 'bg-slate-900 hover:bg-slate-800'}`}
+                                    onClick={() => setViewingCardId(isViewing ? null : card.id || null)}
                                 >
                                     <div>
-                                        <div className="text-white font-medium">{card.cardName || `Card #${idx + 1}`}</div>
+                                        <div className="text-white font-medium">{card.cardName || `Card #${idx + 1} `}</div>
                                         <div className="text-xs text-slate-500">
                                             Score: <span className="text-emerald-400">{score}/{getTotalPoints()}</span> •
                                             Correct: <span className="text-indigo-400">{correctCount}/{questions.length}</span> •
@@ -230,7 +233,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    handleStartEdit(card as any);
+                                                    if (card.id) handleStartEdit(card as PropCard & { id: string });
                                                 }}
                                                 className="p-2 text-indigo-400 hover:text-indigo-300 hover:bg-slate-800 rounded-full"
                                                 title="Edit Picks"
@@ -266,7 +269,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                     <div className="flex justify-center gap-2 mt-2">
                         {!effectiveIsLocked && (
                             <button
-                                onClick={() => handleStartEdit(viewingCard as any)}
+                                onClick={() => viewingCard && viewingCard.id && handleStartEdit(viewingCard as PropCard & { id: string })}
                                 className="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/50 px-3 py-1 rounded-full flex items-center gap-1"
                             >
                                 <Edit2 size={12} /> Edit Picks
@@ -290,7 +293,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                     </h3>
                     <input
                         type="text"
-                        placeholder={`Card name (e.g. "${currentUser?.name || 'My'}'s Lucky Pick")`}
+                        placeholder={`Card name(e.g. "${currentUser?.name || 'My'}'s Lucky Pick")`}
                         value={cardName}
                         onChange={(e) => setCardName(e.target.value)}
                         className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded"

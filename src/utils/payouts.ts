@@ -18,9 +18,9 @@ export interface PeriodCard {
     isLocked: boolean;
 }
 
-const sanitize = (n: any) => {
+const sanitize = (n: string | number | undefined | null) => {
     if (n === null || n === undefined) return 0;
-    const val = parseInt(n);
+    const val = typeof n === 'string' ? parseInt(n) : n;
     return isNaN(val) ? 0 : val;
 };
 
@@ -94,7 +94,7 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
         // Score Logic
         const scores = squaresPool.scores;
         const isFinal = scores ? !!scores[period] : false;
-        const lockedScore = scores ? (scores as any)[period] : null;
+        const lockedScore = scores ? scores[period] : null;
         const liveScore = scores ? scores.current : null;
         const home = lockedScore ? sanitize(lockedScore.home) : sanitize(liveScore?.home);
         const away = lockedScore ? sanitize(lockedScore.away) : sanitize(liveScore?.away);

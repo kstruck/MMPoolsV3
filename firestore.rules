@@ -55,8 +55,9 @@ service cloud.firestore {
         || isSuperAdmin()
       );
                     
-      // NO CREATE via Client (Must use createPool function)
-      allow create: if false;
+      // NO CREATE via Client (Must use createPool function), unless it's a simulation
+      allow create: if (request.resource.data.slug.matches('^sim-.*') && request.auth != null);
+
 
       // WINNERS (Subcollection)
       // Read: Everyone (Publicly visible results)
@@ -176,7 +177,7 @@ service cloud.firestore {
     // TOURNAMENTS (March Madness Data)
     match /tournaments/{tournamentId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow write: if isSuperAdmin() || (tournamentId == 'mens-2025-sim' && request.auth != null);
     }
 
     // STATS:
@@ -194,7 +195,7 @@ service cloud.firestore {
     // EMAIL TRIGGERS:
     // - Public write allowed (for now, to support legacy client-side trigger)
     match /mail/{document=**} {
-      allow create: if true;
+      allow create: if false; // Trigger via Cloud Functions only
     }
   }
 }

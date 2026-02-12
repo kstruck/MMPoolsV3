@@ -243,7 +243,7 @@ export const syncBracketTournament = onCall(async (request) => {
 });
 
 // Scheduled task: Runs every 10 minutes during March Madness
-export const scheduledBracketSync = onSchedule("every 10 minutes", async (event) => {
+export const scheduledBracketSync = onSchedule("every 10 minutes", async () => {
     const db = admin.firestore();
     // Sync both men's and women's tournaments if active
     await updateTournamentScores(db, 'mens-2025');

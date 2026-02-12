@@ -134,8 +134,9 @@ export const scoreBracketEntries = onCall(async (request) => {
         const count = await scoreTournamentEntries(db, tournamentId);
         logger.info(`Scored ${count} entries for tournament ${tournamentId}.`);
         return { success: true, scored: count };
-    } catch (e: any) {
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
         logger.error(`Error scoring tournament ${tournamentId}:`, e);
-        throw new HttpsError('internal', e.message || 'An unknown error occurred during scoring.');
+        throw new HttpsError('internal', msg || 'An unknown error occurred during scoring.');
     }
 });

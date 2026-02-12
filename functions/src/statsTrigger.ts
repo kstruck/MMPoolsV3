@@ -22,7 +22,7 @@ const calculatePoolPot = (pool: any): { prizePot: number; charityAmount: number 
     }
 
     // Prize Pot defaults to Gross - Charity
-    let prizePot = grossPot - charityAmount;
+    const prizePot = grossPot - charityAmount;
 
     // Check strict payouts if defined
     // ... logic simplifies to just using the calculated net pot usually, but let's trust gross - charity.

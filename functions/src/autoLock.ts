@@ -76,7 +76,7 @@ async function executeAutoLock(pool: GameState) {
                 return;
             }
 
-            let updates: any = {
+            const updates: any = {
                 isLocked: true,
                 updatedAt: admin.firestore.Timestamp.now(),
             };

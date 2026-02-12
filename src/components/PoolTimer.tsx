@@ -7,11 +7,22 @@ interface PoolTimerProps {
 }
 
 export const PoolTimer: React.FC<PoolTimerProps> = ({ targetDate, gameStatus, isLocked }) => {
-    const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
+    const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(() => {
+        if (!targetDate || gameStatus === 'in' || gameStatus === 'post') return null;
+        const target = new Date(targetDate).getTime();
+        const now = Date.now();
+        const diff = target - now;
+        if (diff <= 0) return { d: 0, h: 0, m: 0, s: 0 };
+        return {
+            d: Math.floor(diff / (1000 * 60 * 60 * 24)),
+            h: Math.floor((diff / (1000 * 60 * 60)) % 24),
+            m: Math.floor((diff / 1000 / 60) % 60),
+            s: Math.floor((diff / 1000) % 60)
+        };
+    });
 
     useEffect(() => {
         if (!targetDate || gameStatus === 'in' || gameStatus === 'post') {
-            setTimeLeft(null);
             return;
         }
 
@@ -48,7 +59,7 @@ export const PoolTimer: React.FC<PoolTimerProps> = ({ targetDate, gameStatus, is
         return <span className="text-amber-500 font-black uppercase tracking-widest text-lg">LOCKED</span>;
     }
 
-    if (!timeLeft) {
+    if (!targetDate || !timeLeft) {
         return <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">Waiting for Schedule</span>;
     }
 

@@ -2,11 +2,12 @@
 // Replaces AI-based validation with deterministic code-based assertions
 
 import type { TestAssertion, TestScenario } from './index';
+import type { Pool, Winner } from '../../../types';
 
 export interface AssertionResult {
     assertion: TestAssertion;
     passed: boolean;
-    actual?: any;
+    actual?: unknown;
     message: string;
 }
 
@@ -21,13 +22,13 @@ export interface ValidationResult {
 
 export function runAssertions(
     scenario: TestScenario,
-    winners: any[],
-    pool: any
+    winners: Winner[],
+    pool: Pool
 ): ValidationResult {
     const results: AssertionResult[] = [];
 
     for (const assertion of scenario.assertions) {
-        const result = runSingleAssertion(assertion, winners, pool, scenario);
+        const result = runSingleAssertion(assertion, winners, pool as TestPool, scenario);
         results.push(result);
     }
 
@@ -49,10 +50,24 @@ export function runAssertions(
     };
 }
 
+// Extended Pool interface for testing properties
+type TestPool = Pool & {
+    _propCards?: { score?: number; userName?: string }[];
+    _bracketEntries?: {
+        score?: number;
+        name?: string;
+        tieBreakerPrediction?: number;
+        maxPossibleScore?: number;
+    }[];
+    entryCount?: number;
+    entries?: Record<string, { totalScore?: number; userName?: string }>;
+    [key: string]: unknown; // Allow safe access to other properties
+};
+
 function runSingleAssertion(
     assertion: TestAssertion,
-    winners: any[],
-    pool: any,
+    winners: Winner[],
+    pool: TestPool,
     scenario?: TestScenario
 ): AssertionResult {
     switch (assertion.type) {
@@ -91,12 +106,12 @@ function runSingleAssertion(
             return {
                 assertion,
                 passed: false,
-                message: `Unknown assertion type: ${(assertion as any).type}`
+                message: `Unknown assertion type: ${(assertion as { type: string }).type}`
             };
     }
 }
 
-function assertWinnerCount(assertion: TestAssertion, winners: any[]): AssertionResult {
+function assertWinnerCount(assertion: TestAssertion, winners: Winner[]): AssertionResult {
     const actual = winners.length;
     const expected = assertion.expected as number;
     const passed = actual === expected;
@@ -111,7 +126,7 @@ function assertWinnerCount(assertion: TestAssertion, winners: any[]): AssertionR
     };
 }
 
-function assertWinnerCountAtLeast(assertion: TestAssertion, winners: any[]): AssertionResult {
+function assertWinnerCountAtLeast(assertion: TestAssertion, winners: Winner[]): AssertionResult {
     const actual = winners.length;
     const expected = assertion.expected as number;
     const passed = actual >= expected;
@@ -126,7 +141,7 @@ function assertWinnerCountAtLeast(assertion: TestAssertion, winners: any[]): Ass
     };
 }
 
-function assertWinnerExists(assertion: TestAssertion, winners: any[]): AssertionResult {
+function assertWinnerExists(assertion: TestAssertion, winners: Winner[]): AssertionResult {
     const expectedPeriod = assertion.period;
     const expectedDigits = assertion.digits || [0, 0];
 
@@ -148,7 +163,7 @@ function assertWinnerExists(assertion: TestAssertion, winners: any[]): Assertion
     };
 }
 
-function assertTotalPayout(assertion: TestAssertion, winners: any[]): AssertionResult {
+function assertTotalPayout(assertion: TestAssertion, winners: Winner[]): AssertionResult {
     const actual = winners.reduce((sum, w) => sum + (w.amount || 0), 0);
     const expected = assertion.expected as number;
     // Use tolerance for floating-point comparison (within $0.01)
@@ -165,15 +180,17 @@ function assertTotalPayout(assertion: TestAssertion, winners: any[]): AssertionR
     };
 }
 
-function assertPoolStatus(assertion: TestAssertion, pool: any): AssertionResult {
+function assertPoolStatus(assertion: TestAssertion, pool: TestPool): AssertionResult {
     // Check specific field if provided (e.g., isLocked), otherwise check scores.gameStatus
-    const field = (assertion as any).field;
-    let actual: any;
+    const field = (assertion as { field?: string }).field;
+    let actual: unknown;
 
     if (field) {
-        actual = pool?.[field];
+        actual = pool[field];
     } else {
-        actual = pool?.scores?.gameStatus;
+        // Safe access for scores if it exists
+        const p = pool as { scores?: { gameStatus?: string } };
+        actual = p.scores?.gameStatus;
     }
 
     const expected = assertion.expected;
@@ -191,7 +208,7 @@ function assertPoolStatus(assertion: TestAssertion, pool: any): AssertionResult 
 
 // === PROPS-SPECIFIC ASSERTIONS ===
 
-function assertPropCardCount(assertion: TestAssertion, pool: any): AssertionResult {
+function assertPropCardCount(assertion: TestAssertion, pool: TestPool): AssertionResult {
     const actual = pool?._propCards?.length || pool?.entryCount || 0;
     const expected = assertion.expected as number;
     const passed = actual === expected;
@@ -206,10 +223,10 @@ function assertPropCardCount(assertion: TestAssertion, pool: any): AssertionResu
     };
 }
 
-function assertPropWinner(assertion: TestAssertion, pool: any): AssertionResult {
-    const cards = pool?._propCards || [];
+function assertPropWinner(assertion: TestAssertion, pool: TestPool): AssertionResult {
+    const cards = pool._propCards || [];
     // Sort by score descending
-    const sorted = [...cards].sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+    const sorted = [...cards].sort((a, b) => (b.score || 0) - (a.score || 0));
     const winner = sorted[0];
     const actual = winner?.userName || 'No winner';
     const expected = assertion.expected as string;
@@ -225,9 +242,9 @@ function assertPropWinner(assertion: TestAssertion, pool: any): AssertionResult 
     };
 }
 
-function assertPropTopScore(assertion: TestAssertion, pool: any): AssertionResult {
-    const cards = pool?._propCards || [];
-    const topScore = cards.reduce((max: number, c: any) => Math.max(max, c.score || 0), 0);
+function assertPropTopScore(assertion: TestAssertion, pool: TestPool): AssertionResult {
+    const cards = pool._propCards || [];
+    const topScore = cards.reduce((max: number, c) => Math.max(max, c.score || 0), 0);
     const expected = assertion.expected as number;
     const passed = topScore === expected;
 
@@ -243,7 +260,7 @@ function assertPropTopScore(assertion: TestAssertion, pool: any): AssertionResul
 
 // === BRACKET-SPECIFIC ASSERTIONS ===
 
-function assertBracketEntryCount(assertion: TestAssertion, pool: any): AssertionResult {
+function assertBracketEntryCount(assertion: TestAssertion, pool: TestPool): AssertionResult {
     const actual = pool?._bracketEntries?.length || pool?.entryCount || 0;
     const expected = assertion.expected as number;
     const passed = actual === expected;
@@ -258,23 +275,23 @@ function assertBracketEntryCount(assertion: TestAssertion, pool: any): Assertion
     };
 }
 
-function assertBracketWinner(assertion: TestAssertion, pool: any, scenario?: TestScenario): AssertionResult {
-    const entries = pool?._bracketEntries || [];
+function assertBracketWinner(assertion: TestAssertion, pool: TestPool, scenario?: TestScenario): AssertionResult {
+    const entries = pool._bracketEntries || [];
 
     // Derive the championship total score from tournament results for tiebreaker resolution
     let championshipTotal: number | null = null;
     if (scenario) {
-        const tournamentResults = (scenario as any).tournamentResults || [];
+        const tournamentResults = (scenario as { tournamentResults?: { round: number; homeScore: number; awayScore: number }[] }).tournamentResults || [];
         // Find the highest-round game to get the championship total
-        const champGame = tournamentResults.reduce((best: any, g: any) =>
-            (!best || g.round > best.round) ? g : best, null);
+        const champGame = tournamentResults.reduce((best: { round: number } | null, g: { round: number }) =>
+            (!best || g.round > best.round) ? g : best, null) as { round: number; homeScore: number; awayScore: number } | null;
         if (champGame && champGame.homeScore != null && champGame.awayScore != null) {
             championshipTotal = champGame.homeScore + champGame.awayScore;
         }
     }
 
     // Sort by score descending, then by tiebreaker proximity to championship total
-    const sorted = [...entries].sort((a: any, b: any) => {
+    const sorted = [...entries].sort((a, b) => {
         const scoreDiff = (b.score || 0) - (a.score || 0);
         if (scoreDiff !== 0) return scoreDiff;
         // Tiebreaker: closest to championship total wins
@@ -301,9 +318,9 @@ function assertBracketWinner(assertion: TestAssertion, pool: any, scenario?: Tes
     };
 }
 
-function assertBracketTopScore(assertion: TestAssertion, pool: any): AssertionResult {
-    const entries = pool?._bracketEntries || [];
-    const topScore = entries.reduce((max: number, e: any) => Math.max(max, e.score || 0), 0);
+function assertBracketTopScore(assertion: TestAssertion, pool: TestPool): AssertionResult {
+    const entries = pool._bracketEntries || [];
+    const topScore = entries.reduce((max: number, e) => Math.max(max, e.score || 0), 0);
     const expected = assertion.expected as number;
     const passed = topScore === expected;
 
@@ -319,7 +336,7 @@ function assertBracketTopScore(assertion: TestAssertion, pool: any): AssertionRe
 
 // === PLAYOFF-SPECIFIC ASSERTIONS ===
 
-function assertPlayoffEntryCount(assertion: TestAssertion, pool: any): AssertionResult {
+function assertPlayoffEntryCount(assertion: TestAssertion, pool: TestPool): AssertionResult {
     const entries = pool?.entries ? Object.keys(pool.entries).length : 0;
     const expected = assertion.expected as number;
     const passed = entries === expected;
@@ -334,8 +351,8 @@ function assertPlayoffEntryCount(assertion: TestAssertion, pool: any): Assertion
     };
 }
 
-function assertPlayoffWinner(assertion: TestAssertion, pool: any): AssertionResult {
-    const entries = Object.values(pool?.entries || {}) as any[];
+function assertPlayoffWinner(assertion: TestAssertion, pool: TestPool): AssertionResult {
+    const entries = Object.values(pool.entries || {});
     // Sort by totalScore descending
     const sorted = [...entries].sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
     const winner = sorted[0];
@@ -353,10 +370,10 @@ function assertPlayoffWinner(assertion: TestAssertion, pool: any): AssertionResu
     };
 }
 
-function assertMaxScoreAtLeast(assertion: TestAssertion, pool: any): AssertionResult {
-    const entries = pool?._bracketEntries || [];
+function assertMaxScoreAtLeast(assertion: TestAssertion, pool: TestPool): AssertionResult {
+    const entries = pool._bracketEntries || [];
     // Find max "maxPossibleScore" across all entries
-    const maxPossible = entries.reduce((max: number, e: any) => Math.max(max, e.maxPossibleScore || 0), 0);
+    const maxPossible = entries.reduce((max: number, e) => Math.max(max, e.maxPossibleScore || 0), 0);
     const expected = assertion.expected as number;
     const passed = maxPossible >= expected;
 

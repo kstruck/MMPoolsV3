@@ -38,7 +38,7 @@ export const lockPool = onCall(async (request) => {
     let axisNumbers;
     const type = poolData.type || 'SQUARES';
 
-    let updates: any = {
+    const updates: any = {
         isLocked: true,
         updatedAt: admin.firestore.Timestamp.now(),
     };

@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import type { BracketEntry, Tournament, BracketPool } from '../../types';
-import { calculateRootForResults } from './bracketScoring';
+import { calculateRootForResults, type RootForResult } from './bracketScoring';
 import { Heart, ArrowUp, ArrowDown, Minus, Loader2 } from 'lucide-react';
 
 interface WhoToRootForProps {
@@ -13,11 +13,17 @@ interface WhoToRootForProps {
 export const WhoToRootFor: React.FC<WhoToRootForProps> = ({ userEntry, allEntries, tournament, pool }) => {
     const [computing, setComputing] = useState(true);
 
-    const results = useMemo(() => {
+    const [results, setResults] = useState<RootForResult[]>([]);
+
+    React.useEffect(() => {
         setComputing(true);
-        const r = calculateRootForResults(userEntry, allEntries, tournament, pool.settings);
-        setComputing(false);
-        return r;
+        // Small timeout to allow UI to show loading state if calculation is heavy
+        const timer = setTimeout(() => {
+            const r = calculateRootForResults(userEntry, allEntries, tournament, pool.settings);
+            setResults(r);
+            setComputing(false);
+        }, 10);
+        return () => clearTimeout(timer);
     }, [userEntry, allEntries, tournament, pool.settings]);
 
     const formatRankChange = (change: number) => {

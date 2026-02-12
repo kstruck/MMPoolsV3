@@ -18,14 +18,14 @@
 
 ---
 
-# 📝 Current Trajectory
+## 📝 Current Trajectory
 
 **Step**: Squad Project Initialisation & Roadmap Alignment
 **Goal**: Establish the Squad workflow and confirm the roadmap for the upcoming month (NFL Super Bowl & March Madness).
 
 ---
 
-# 🚥 Squad Status
+## 🚥 Squad Status
 
 | Agent | Task | Status |
 | :--- | :--- | :--- |
@@ -36,7 +36,7 @@
 
 ---
 
-# 🛠️ Squad Mission
+## 🛠️ Squad Mission
 
 - **Design Lead**: Visual beauty and high-end UX. Focus: /frontend, /components, /styles.
 - **Builder**: Performance and reliability. Focus: /backend, /api, /lib.

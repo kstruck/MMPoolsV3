@@ -26,9 +26,11 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 
         Object.values(tournament.games).forEach(game => {
             if (picks[game.id]) {
-                if (game.region && game.region !== 'Final Four') {
-                    status[game.region as BracketRegion].count++;
-                } else if (game.region === 'Final Four' || game.round >= 5) {
+                const region = game.region as BracketRegion;
+                // Only count if it's a valid main region
+                if (region && status[region]) {
+                    status[region].count++;
+                } else if (game.region === 'Final Four' || game.region === 'Championship' || game.round >= 5) {
                     status.FF.count++;
                 }
             }

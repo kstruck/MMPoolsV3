@@ -171,9 +171,9 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
     const handleBack = () => setStep(s => Math.max(1, s - 1));
 
-    const update = (updates: Partial<typeof formData>) => {
+    const update = React.useCallback((updates: Partial<typeof formData>) => {
         setFormData(prev => ({ ...prev, ...updates }));
-    };
+    }, []);
 
     const addPlace = () => {
         const nextRank = formData.payouts.places.length + 1;
@@ -264,16 +264,17 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
             const createBracketPool = httpsCallable(functions, 'createBracketPool');
             const result = await createBracketPool(payload);
-            const data = result.data as any;
+            const data = result.data as { poolId?: string; message?: string };
 
             if (data.poolId) {
                 onSuccess(data.poolId);
             } else {
                 setError(data.message || 'Failed to create pool');
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Publish error:', err);
-            setError(err.message || 'An error occurred');
+            const msg = err instanceof Error ? err.message : 'An error occurred';
+            setError(msg);
         } finally {
             setLoading(false);
         }
@@ -288,7 +289,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                 .replace(/^-|-$/g, '');
             update({ slug: autoSlug });
         }
-    }, [formData.name]);
+    }, [formData.name, formData.slug, update]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -596,7 +597,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Scoring System</label>
                             <select
                                 value={formData.scoringSystem}
-                                onChange={(e) => update({ scoringSystem: e.target.value as any })}
+                                onChange={(e) => update({ scoringSystem: e.target.value as 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM' })}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
                             >
                                 <option value="CLASSIC">Classic (1-2-4-8-16-32)</option>
@@ -646,7 +647,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tiebreaker Rule</label>
                             <select
                                 value={formData.tieBreaker}
-                                onChange={(e) => update({ tieBreaker: e.target.value as any })}
+                                onChange={(e) => update({ tieBreaker: e.target.value as 'CLOSEST_ABSOLUTE' | 'CLOSEST_UNDER' })}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
                             >
                                 <option value="CLOSEST_ABSOLUTE">Closest (Over/Under)</option>
@@ -888,7 +889,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                 poolUrl={`${window.location.origin}/#bracket/${formData.slug || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
                 poolSlug={formData.slug}
                 onUpdate={(settings) => {
-                    const newData: any = {};
+                    const newData: Partial<typeof formData> = {};
                     if (settings.collectPhone !== undefined) newData.collectPhone = settings.collectPhone;
                     if (settings.collectAddress !== undefined) newData.collectAddress = settings.collectAddress;
                     if (settings.collectReferral !== undefined) newData.collectReferral = settings.collectReferral;

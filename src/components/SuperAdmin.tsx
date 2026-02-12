@@ -283,7 +283,7 @@ export const SuperAdmin: React.FC = () => {
 
             // State Machine Logic
             // We construct the "Next" ESPN-like score object
-            let nextState: any = { ...scores };
+            const nextState: any = { ...scores };
             let actionDescription = "";
 
             if (!pool.isLocked) {

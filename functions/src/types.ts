@@ -82,6 +82,8 @@ export interface Announcement {
     readBy?: string[];
 }
 
+export type BracketRegion = 'East' | 'West' | 'South' | 'Midwest';
+
 export interface ScoreEvent {
     id: string;
     home: number;
@@ -117,6 +119,7 @@ export interface GameState {
     id: string; // Unique ID
     type: 'SQUARES'; // Discriminated Union
     name: string; // Pool Name (Title)
+    league?: string; // e.g. 'nfl' or 'college'
     urlSlug: string;
     gridUsername?: string;
     gridPassword?: string;
@@ -188,7 +191,7 @@ export interface GameState {
     createdByUid?: string; // Required for RBAC
     status?: 'DRAFT' | 'LOCKED' | 'LIVE' | 'FINAL';
     manualScoreOverride?: boolean;
-    reminders?: any; // Simplified for backend
+    reminders?: ReminderSettings; // Simplified for backend
     waitlist?: WaitlistEntry[];
 
     // Prop Bets / Side Hustle
@@ -272,7 +275,7 @@ export interface AuditLogEvent {
         role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST';
         label?: string;
     };
-    payload?: any;
+    payload?: Record<string, unknown>;
     dedupeKey?: string;
 }
 
@@ -283,7 +286,7 @@ export interface NotificationLog {
     recipient: string;
     sentAt: number;
     status: 'SENT' | 'FAILED' | 'SKIPPED';
-    metadata?: any;
+    metadata?: Record<string, unknown>;
 }
 
 // --- AI COMMISSIONER ---
@@ -603,43 +606,7 @@ export interface PayoutSettings {
 }
 
 
-// --- TOURNAMENT TYPES ---
 
-export type BracketRegion = 'East' | 'West' | 'South' | 'Midwest';
-
-export interface Tournament {
-    id: string; // e.g. 'mens-2025'
-    seasonYear: number;
-    gender: 'mens' | 'womens';
-    isFinalized: boolean; // Tournament over?
-
-    games: Record<string, Game>;
-    slots: Record<string, TournamentSlot>;
-}
-
-export interface Game {
-    id: string; // e.g. 'R1-W1'
-    externalId?: string; // ESPN Game ID (e.g. '401638630')
-    startTime: string; // ISO
-    status: 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL';
-    homeTeamId: string;
-    awayTeamId: string;
-    homeScore: number;
-    awayScore: number;
-    winnerTeamId?: string;
-    round: number; // 0=FirstFour, 1=R64, 2=R32...
-    region?: string;
-}
-
-export interface TournamentSlot {
-    id: string; // e.g. 'R1-W1'
-    gameId: string;
-    nextSlotId?: string; // Where winner goes
-
-    // If play-in mapping
-    isPlayInPlaceholder?: boolean;
-    playInGameId?: string;
-}
 
 export interface Team {
     id: string;

@@ -377,6 +377,7 @@ export interface GameState {
   charity?: CharityConfig; // Optional charity configuration
   includeOvertime: boolean; // If true, Final score includes OT. If false, Final is end of Q4.
   isLocked: boolean; // If true, users can't buy squares, numbers are revealed
+  lockDate?: number; // Auto-lock timestamp
   ruleVariations: {
     reverseWinners: boolean; // Split pot with reverse digits
     quarterlyRollover: boolean; // Unsold squares roll money to next quarter

@@ -8,9 +8,9 @@ interface GameScoreboardProps {
 }
 
 export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRepair }) => {
-    const sanitize = (n: any) => {
+    const sanitize = (n: string | number | undefined | null) => {
         if (n === null || n === undefined) return 0;
-        const val = parseInt(n);
+        const val = typeof n === 'string' ? parseInt(n) : n;
         return isNaN(val) ? 0 : val;
     };
     /* ... existing sanitize and getScoreboardVal ... */

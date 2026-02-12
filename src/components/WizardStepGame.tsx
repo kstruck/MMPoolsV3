@@ -3,6 +3,26 @@ import { RefreshCw, Calendar, CheckCircle } from 'lucide-react';
 import type { GameState } from '../types';
 import { getTeamLogo } from '../constants';
 
+interface ESPNCompetitor {
+    homeAway: string;
+    team: {
+        id: string;
+        displayName: string;
+        logo: string;
+        abbreviation: string;
+    };
+}
+
+interface ESPNCompetition {
+    competitors: ESPNCompetitor[];
+}
+
+interface ESPNEvent {
+    id: string;
+    date: string;
+    competitions: ESPNCompetition[];
+}
+
 interface WizardStepGameProps {
     gameState: GameState;
     updateConfig: (updates: Partial<GameState>) => void;
@@ -28,7 +48,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
     // --- Game Finder State ---
     const [seasonType, setSeasonType] = useState('3'); // Default to Postseason per user request
     const [week, setWeek] = useState('1'); // Default to Week 1 or calculate dynamically
-    const [scheduleGames, setScheduleGames] = useState<any[]>([]);
+    const [scheduleGames, setScheduleGames] = useState<ESPNEvent[]>([]);
     const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
     const [showSchedule, setShowSchedule] = useState(false);
     const [cfbConference, setCfbConference] = useState('80');
@@ -53,7 +73,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
         // Force show schedule container so user sees loading state or results
         setShowSchedule(true);
         try {
-            const league = (gameState as any).league || 'nfl';
+            const league = gameState.league || 'nfl';
             const leaguePath = league === 'college' || league === 'ncaa' ? 'college-football' : 'nfl';
             let url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/scoreboard?seasontype=${seasonType}&week=${week}`;
 
@@ -69,7 +89,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
 
             // Filter future only
             const now = new Date();
-            const upcoming = events.filter((e: any) => new Date(e.date) > now);
+            const upcoming = events.filter((e: ESPNEvent) => new Date(e.date) > now);
             setScheduleGames(upcoming);
 
         } catch (e) {
@@ -78,34 +98,35 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
         setIsLoadingSchedule(false);
     };
 
-    const selectGame = (game: any) => {
+    const selectGame = (game: ESPNEvent) => {
         const comp = game.competitions[0];
-        const home = comp.competitors.find((c: any) => c.homeAway === 'home').team;
-        const away = comp.competitors.find((c: any) => c.homeAway === 'away').team;
+        const home = comp.competitors.find((c) => c.homeAway === 'home')?.team;
+        const away = comp.competitors.find((c) => c.homeAway === 'away')?.team;
         const gameDate = new Date(game.date);
 
+        if (!home || !away) return;
+
         // Auto-Name
-        let candidateName = `${away.displayName} @ ${home.displayName}`;
+        const candidateName = `${away.displayName} @ ${home.displayName}`;
 
         // Update Config
         updateConfig({
             name: candidateName,
             gameId: game.id,
             homeTeam: home.displayName,
-            awayTeam: away.displayName, // Ensure these fields exist on GameState/PropsPool in types.ts or use 'as any'
+            awayTeam: away.displayName,
             homeTeamLogo: home.logo,
             awayTeamLogo: away.logo,
-            lockDate: gameDate.getTime(), // Common field for Props
-            date: gameDate.getTime(), // Common field
-            gameTime: gameDate.getTime(), // Explicitly set gameTime
-            league: (gameState as any).league || 'nfl'
-        } as any);
+            lockDate: gameDate.getTime(),
+            gameTime: gameDate.getTime(),
+            league: gameState.league || 'nfl'
+        });
 
         setShowSchedule(false);
     };
 
-    const homeLogo = (gameState as any).homeTeamLogo || getTeamLogo((gameState as any).homeTeam);
-    const awayLogo = (gameState as any).awayTeamLogo || getTeamLogo((gameState as any).awayTeam);
+    const homeLogo = gameState.homeTeamLogo || getTeamLogo(gameState.homeTeam);
+    const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam);
 
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
@@ -141,8 +162,8 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                     <div className="mb-8 bg-slate-950 border border-slate-700 rounded-xl p-4 animate-in fade-in">
                         <div className="flex flex-wrap items-center gap-2 mb-4">
                             <select
-                                value={(gameState as any).league || 'nfl'}
-                                onChange={(e) => updateConfig({ league: e.target.value } as any)}
+                                value={gameState.league || 'nfl'}
+                                onChange={(e) => updateConfig({ league: e.target.value as 'nfl' | 'college' })}
                                 className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm font-bold"
                             >
                                 <option value="nfl">NFL</option>
@@ -184,7 +205,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                 )}
                             </select>
 
-                            {((gameState as any).league === 'college') && (
+                            {(gameState.league === 'college') && (
                                 <select
                                     value={cfbConference}
                                     onChange={(e) => setCfbConference(e.target.value)}
@@ -208,10 +229,11 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                             {scheduleGames.length === 0 && !isLoadingSchedule && (
                                 <div className="text-slate-500 text-sm text-center py-4">No future games found.</div>
                             )}
-                            {scheduleGames.map((game: any) => {
+                            {scheduleGames.map((game) => {
                                 const comp = game.competitions[0];
-                                const home = comp.competitors.find((c: any) => c.homeAway === 'home').team;
-                                const away = comp.competitors.find((c: any) => c.homeAway === 'away').team;
+                                const home = comp.competitors.find((c) => c.homeAway === 'home')?.team;
+                                const away = comp.competitors.find((c) => c.homeAway === 'away')?.team;
+                                if (!home || !away) return null;
                                 const dateStr = new Date(game.date).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                                 return (
                                     <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-slate-800 cursor-pointer border border-transparent hover:border-indigo-500/30 group transition-all">
@@ -263,7 +285,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                         <input
                             type="datetime-local"
                             value={(() => {
-                                const t = (gameState as any).lockDate;
+                                const t = gameState.lockDate;
                                 if (!t) return '';
                                 const d = new Date(t);
                                 const offset = d.getTimezoneOffset() * 60000;
@@ -274,11 +296,11 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                 const val = e.target.value;
                                 if (!val) return;
                                 const date = new Date(val);
-                                updateConfig({ lockDate: date.getTime(), date: date.getTime() } as any);
+                                updateConfig({ lockDate: date.getTime() });
                             }}
                             className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
                         />
-                        {(gameState as any).lockDate && (
+                        {gameState.lockDate && (
                             <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
                                 <CheckCircle size={10} /> Auto-Lock enabled for this time.
                             </p>
@@ -289,7 +311,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                 <div className="pt-8 flex justify-end">
                     <button
                         onClick={onNext}
-                        disabled={!gameState.name || !(gameState as any).lockDate}
+                        disabled={!gameState.name || !gameState.lockDate}
                         className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105"
                     >
                         Next: Grid Settings

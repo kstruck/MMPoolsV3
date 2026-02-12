@@ -388,7 +388,7 @@ const processGameUpdate = async (
             : (espnScores.final || espnScores.current);
     }
 
-    let transactionUpdates: any = {};
+    const transactionUpdates: any = {};
     let shouldUpdate = false;
 
     // Include axisNumbers override if passed (e.g., from simulation auto-generation)
@@ -863,7 +863,7 @@ const processGameUpdate = async (
     }
 
     if (freshPool.numberSets === 4) {
-        let qNums = freshPool.quarterlyNumbers || {};
+        const qNums = freshPool.quarterlyNumbers || {};
         let numsUpdated = false;
 
         const handleGen = async (pKey: 'q2' | 'q3' | 'q4') => {
@@ -1208,7 +1208,7 @@ export const simulateGameUpdate = onCall({
             // since processGameUpdate does transaction.getAll() for deduping.
             // Instead, pass the axis as an override and processGameUpdate will include it
             // in its final poolRef update.
-            let overrides: Partial<GameState> = {};
+            const overrides: Partial<GameState> = {};
             const poolData = doc.data() as GameState;
             if (!poolData.axisNumbers) {
                 const newAxis = generateAxisNumbers();

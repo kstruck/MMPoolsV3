@@ -54,7 +54,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
         // Optimistically set from global cache if available to prevent flash
         // We do not add pools to default dependency to avoid re-subscribing on every global update
-        const cached = pools.find(p => p.id === id || (p as any).slug === id || (p as any).urlSlug === id);
+        const cached = pools.find(p => p.id === id || ('slug' in p && p.slug === id) || ('urlSlug' in p && p.urlSlug === id));
         if (cached) {
             setPool(cached);
             setIsFetchingPool(false);
@@ -67,7 +67,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             setIsFetchingPool(false);
         });
         return () => unsubscribe();
-    }, [id]);
+    }, [id, pools]);
 
     // State for winners
     const [winners, setWinners] = useState<Winner[]>([]);
@@ -100,7 +100,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     // Calculate isManager
     const isManager = useMemo(() => {
         if (!user || !pool) return false;
-        return user.id === pool.ownerId || user.id === (pool as any).managerUid;
+        return user.id === pool.ownerId || ('managerUid' in pool && user.id === pool.managerUid);
     }, [user, pool]);
 
     // State moved from App.tsx
@@ -252,7 +252,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             return { success: false, message: 'Square already taken.' };
         }
         // Max limit
-        const currentOwned = squaresPool.squares.filter((s: any) => s.owner === normalizedName).length;
+        const currentOwned = squaresPool.squares.filter((s) => s.owner === normalizedName).length;
         const limit = Number(squaresPool.maxSquaresPerPlayer) || 10;
         if (currentOwned + ids.length > limit && squaresPool.ownerId !== user?.id) return { success: false, message: `Limit exceeded. Max ${limit}.` };
 
@@ -265,14 +265,16 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 normalizedName
             ));
             await Promise.all(promises);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Reserve failed", error);
-            return { success: false, message: error.message || "Reservation failed." };
+            const msg = error instanceof Error ? error.message : "Reservation failed.";
+            return { success: false, message: msg };
         }
 
         // Email Confirmation Trigger (Client Side for now per original App.tsx)
         if ((squaresPool.emailConfirmation === 'Email Confirmation' || squaresPool.emailConfirmation === 'true') && details.email) {
-            const ownerId = (pool as any).ownerId || (pool as any).managerUid;
+            const p = pool as { ownerId?: string; managerUid?: string };
+            const ownerId = p.ownerId || p.managerUid;
             import('../../services/emailService').then(({ emailService }) => {
                 emailService.sendConfirmation(
                     squaresPool.name,
@@ -302,8 +304,9 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         try {
             await dbService.joinWaitlist(squaresPool.id, { email, name, timestamp: Date.now() });
             return { success: true, message: 'You have been added to the waitlist!' };
-        } catch (error: any) {
-            return { success: false, message: error.message || 'Failed to join waitlist.' };
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : 'Failed to join waitlist.';
+            return { success: false, message: msg };
         }
     };
 
@@ -523,8 +526,8 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
                             <div className="flex border-b border-slate-800 bg-slate-900 px-6 py-4"><h3 className="text-sm font-bold uppercase tracking-wider text-white">Payout Structure</h3></div>
                             <div className="p-6 flex-1 flex flex-col justify-center">
-                                <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2"><span className="text-slate-400">Total Pot</span><span className="text-white font-mono font-bold">${(squaresPool.squares.filter((s: any) => s.owner).length * squaresPool.costPerSquare).toLocaleString()}</span></div>
-                                <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2 mt-2"><span className="text-white font-bold">Net Prize Pool</span><span className="text-emerald-400 font-mono font-bold text-lg">${(Math.floor((squaresPool.squares.filter((s: any) => s.owner).length * squaresPool.costPerSquare * (1 - (squaresPool.charity?.enabled ? squaresPool.charity.percentage / 100 : 0))))).toLocaleString()}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2"><span className="text-slate-400">Total Pot</span><span className="text-white font-mono font-bold">${(squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare).toLocaleString()}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2 mt-2"><span className="text-white font-bold">Net Prize Pool</span><span className="text-emerald-400 font-mono font-bold text-lg">${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (1 - (squaresPool.charity?.enabled ? squaresPool.charity.percentage / 100 : 0))))).toLocaleString()}</span></div>
                                 <div className="space-y-1 mt-2">
                                     {quarterlyPayouts.map((card) => {
                                         return (

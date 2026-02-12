@@ -4,6 +4,24 @@ import type { GameState } from '../../types';
 import { DebouncedInput } from './DebouncedInputs';
 import { getTeamLogo } from '../../constants';
 
+interface ScheduleCompetitor {
+    homeAway: string;
+    team: {
+        logo: string;
+        abbreviation: string;
+    };
+}
+
+interface ScheduleCompetition {
+    competitors: ScheduleCompetitor[];
+}
+
+interface ScheduleGame {
+    id: string;
+    date: string;
+    competitions: ScheduleCompetition[];
+}
+
 interface WizardStepMatchupProps {
     gameState: GameState;
     updateConfig: (updates: Partial<GameState>) => void;
@@ -11,12 +29,12 @@ interface WizardStepMatchupProps {
     setSeasonType: (type: string) => void;
     week: string;
     setWeek: (week: string) => void;
-    scheduleGames: any[];
+    scheduleGames: ScheduleGame[];
     isLoadingSchedule: boolean;
     showSchedule: boolean;
     setShowSchedule: (show: boolean) => void;
     fetchSchedule: () => void;
-    selectGame: (game: any) => void;
+    selectGame: (game: ScheduleGame) => void;
     currentEstimatedWeek: number;
     cfbConference?: string;
     setCfbConference?: (conf: string) => void;
@@ -87,7 +105,7 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({
                 {showSchedule && (
                     <div className="mb-6 bg-slate-950 border border-slate-700 rounded-xl p-4 animate-in fade-in">
                         <div className="flex flex-wrap items-center gap-2 mb-4">
-                            <select value={gameState.league || 'nfl'} onChange={(e) => updateConfig({ league: e.target.value as any })} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none font-bold">
+                            <select value={gameState.league || 'nfl'} onChange={(e) => updateConfig({ league: e.target.value as 'nfl' | 'college' | 'ncaa' })} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm outline-none font-bold">
                                 <option value="nfl">NFL (Pro)</option>
                                 <option value="college">College (NCAA)</option>
                             </select>
@@ -128,10 +146,11 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({
                             {scheduleGames.length === 0 && !isLoadingSchedule && (
                                 <div className="text-slate-500 text-sm text-center py-4">No future games found for this week.</div>
                             )}
-                            {scheduleGames.map((game: any) => {
+                            {scheduleGames.map((game: ScheduleGame) => {
                                 const comp = game.competitions[0];
-                                const home = comp.competitors.find((c: any) => c.homeAway === 'home').team;
-                                const away = comp.competitors.find((c: any) => c.homeAway === 'away').team;
+                                const home = comp.competitors.find((c) => c.homeAway === 'home')?.team;
+                                const away = comp.competitors.find((c) => c.homeAway === 'away')?.team;
+                                if (!home || !away) return null;
                                 const dateStr = new Date(game.date).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                                 return (
                                     <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-slate-800 cursor-pointer border border-transparent hover:border-indigo-500/30 group transition-all">

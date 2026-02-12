@@ -1,0 +1,391 @@
+{
+  "timestamp": "2026-02-11T22:37:55.093253",
+  "ecosystems": {
+    "npm": {
+      "ecosystem": "npm",
+      "vulnerabilities": [
+        {
+          "package": "@isaacs/brace-expansion",
+          "version": "5.0.0",
+          "vulnerability_id": "@isaacs/brace-expansion",
+          "severity": "HIGH",
+          "cve": [
+            {
+              "source": 1112954,
+              "name": "@isaacs/brace-expansion",
+              "dependency": "@isaacs/brace-expansion",
+              "title": "@isaacs/brace-expansion has Uncontrolled Resource Consumption",
+              "url": "https://github.com/advisories/GHSA-7h2j-956f-4vf2",
+              "severity": "high",
+              "cwe": [
+                "CWE-1333"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<=5.0.0"
+            }
+          ],
+          "fixed_in": "N/A",
+          "source": "npm_audit"
+        },
+        {
+          "package": "@modelcontextprotocol/sdk",
+          "version": "1.10.0 - 1.25.3",
+          "vulnerability_id": "@modelcontextprotocol/sdk",
+          "severity": "HIGH",
+          "cve": [
+            {
+              "source": 1113080,
+              "name": "@modelcontextprotocol/sdk",
+              "dependency": "@modelcontextprotocol/sdk",
+              "title": "@modelcontextprotocol/sdk has cross-client data leak via shared server/transport instance reuse",
+              "url": "https://github.com/advisories/GHSA-345p-7cg4-v4c7",
+              "severity": "high",
+              "cwe": [
+                "CWE-362"
+              ],
+              "cvss": {
+                "score": 7.1,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:N"
+              },
+              "range": ">=1.10.0 <=1.25.3"
+            }
+          ],
+          "fixed_in": "N/A",
+          "source": "npm_audit"
+        },
+        {
+          "package": "diff",
+          "version": "4.0.0 - 4.0.3",
+          "vulnerability_id": "diff",
+          "severity": "LOW",
+          "cve": [
+            {
+              "source": 1112704,
+              "name": "diff",
+              "dependency": "diff",
+              "title": "jsdiff has a Denial of Service vulnerability in parsePatch and applyPatch",
+              "url": "https://github.com/advisories/GHSA-73rr-hh4g-fpgx",
+              "severity": "low",
+              "cwe": [
+                "CWE-400",
+                "CWE-1333"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": ">=4.0.0 <4.0.4"
+            }
+          ],
+          "fixed_in": "N/A",
+          "source": "npm_audit"
+        },
+        {
+          "package": "lodash",
+          "version": "4.0.0 - 4.17.21",
+          "vulnerability_id": "lodash",
+          "severity": "MODERATE",
+          "cve": [
+            {
+              "source": 1112455,
+              "name": "lodash",
+              "dependency": "lodash",
+              "title": "Lodash has Prototype Pollution Vulnerability in `_.unset` and `_.omit` functions",
+              "url": "https://github.com/advisories/GHSA-xxjr-mmjv-4gpg",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-1321"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+              },
+              "range": ">=4.0.0 <=4.17.22"
+            }
+          ],
+          "fixed_in": "N/A",
+          "source": "npm_audit"
+        },
+        {
+          "package": "tar",
+          "version": "<=7.5.6",
+          "vulnerability_id": "tar",
+          "severity": "HIGH",
+          "cve": [
+            {
+              "source": 1112329,
+              "name": "tar",
+              "dependency": "tar",
+              "title": "Race Condition in node-tar Path Reservations via Unicode Ligature Collisions on macOS APFS",
+              "url": "https://github.com/advisories/GHSA-r6q2-hw4h-h46w",
+              "severity": "high",
+              "cwe": [
+                "CWE-176"
+              ],
+              "cvss": {
+                "score": 8.8,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:H/A:L"
+              },
+              "range": "<=7.5.3"
+            },
+            {
+              "source": 1112659,
+              "name": "tar",
+              "dependency": "tar",
+              "title": "node-tar Vulnerable to Arbitrary File Creation/Overwrite via Hardlink Path Traversal",
+              "url": "https://github.com/advisories/GHSA-34x7-hfp2-rc4v",
+              "severity": "high",
+              "cwe": [
+                "CWE-22",
+                "CWE-59"
+              ],
+              "cvss": {
+                "score": 8.2,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N"
+              },
+              "range": "<7.5.7"
+            }
+          ],
+          "fixed_in": "N/A",
+          "source": "npm_audit"
+        }
+      ]
+    },
+    "pip": {
+      "ecosystem": "python",
+      "vulnerabilities": []
+    }
+  },
+  "vulnerabilities": [
+    {
+      "package": "@isaacs/brace-expansion",
+      "version": "5.0.0",
+      "vulnerability_id": "@isaacs/brace-expansion",
+      "severity": "HIGH",
+      "cve": [
+        {
+          "source": 1112954,
+          "name": "@isaacs/brace-expansion",
+          "dependency": "@isaacs/brace-expansion",
+          "title": "@isaacs/brace-expansion has Uncontrolled Resource Consumption",
+          "url": "https://github.com/advisories/GHSA-7h2j-956f-4vf2",
+          "severity": "high",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=5.0.0"
+        }
+      ],
+      "fixed_in": "N/A",
+      "source": "npm_audit"
+    },
+    {
+      "package": "@modelcontextprotocol/sdk",
+      "version": "1.10.0 - 1.25.3",
+      "vulnerability_id": "@modelcontextprotocol/sdk",
+      "severity": "HIGH",
+      "cve": [
+        {
+          "source": 1113080,
+          "name": "@modelcontextprotocol/sdk",
+          "dependency": "@modelcontextprotocol/sdk",
+          "title": "@modelcontextprotocol/sdk has cross-client data leak via shared server/transport instance reuse",
+          "url": "https://github.com/advisories/GHSA-345p-7cg4-v4c7",
+          "severity": "high",
+          "cwe": [
+            "CWE-362"
+          ],
+          "cvss": {
+            "score": 7.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:N"
+          },
+          "range": ">=1.10.0 <=1.25.3"
+        }
+      ],
+      "fixed_in": "N/A",
+      "source": "npm_audit"
+    },
+    {
+      "package": "diff",
+      "version": "4.0.0 - 4.0.3",
+      "vulnerability_id": "diff",
+      "severity": "LOW",
+      "cve": [
+        {
+          "source": 1112704,
+          "name": "diff",
+          "dependency": "diff",
+          "title": "jsdiff has a Denial of Service vulnerability in parsePatch and applyPatch",
+          "url": "https://github.com/advisories/GHSA-73rr-hh4g-fpgx",
+          "severity": "low",
+          "cwe": [
+            "CWE-400",
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=4.0.0 <4.0.4"
+        }
+      ],
+      "fixed_in": "N/A",
+      "source": "npm_audit"
+    },
+    {
+      "package": "lodash",
+      "version": "4.0.0 - 4.17.21",
+      "vulnerability_id": "lodash",
+      "severity": "MODERATE",
+      "cve": [
+        {
+          "source": 1112455,
+          "name": "lodash",
+          "dependency": "lodash",
+          "title": "Lodash has Prototype Pollution Vulnerability in `_.unset` and `_.omit` functions",
+          "url": "https://github.com/advisories/GHSA-xxjr-mmjv-4gpg",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": ">=4.0.0 <=4.17.22"
+        }
+      ],
+      "fixed_in": "N/A",
+      "source": "npm_audit"
+    },
+    {
+      "package": "tar",
+      "version": "<=7.5.6",
+      "vulnerability_id": "tar",
+      "severity": "HIGH",
+      "cve": [
+        {
+          "source": 1112329,
+          "name": "tar",
+          "dependency": "tar",
+          "title": "Race Condition in node-tar Path Reservations via Unicode Ligature Collisions on macOS APFS",
+          "url": "https://github.com/advisories/GHSA-r6q2-hw4h-h46w",
+          "severity": "high",
+          "cwe": [
+            "CWE-176"
+          ],
+          "cvss": {
+            "score": 8.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:H/A:L"
+          },
+          "range": "<=7.5.3"
+        },
+        {
+          "source": 1112659,
+          "name": "tar",
+          "dependency": "tar",
+          "title": "node-tar Vulnerable to Arbitrary File Creation/Overwrite via Hardlink Path Traversal",
+          "url": "https://github.com/advisories/GHSA-34x7-hfp2-rc4v",
+          "severity": "high",
+          "cwe": [
+            "CWE-22",
+            "CWE-59"
+          ],
+          "cvss": {
+            "score": 8.2,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N"
+          },
+          "range": "<7.5.7"
+        }
+      ],
+      "fixed_in": "N/A",
+      "source": "npm_audit"
+    }
+  ],
+  "summary": {
+    "total_vulnerabilities": 5,
+    "critical": 0,
+    "high": 3,
+    "medium": 0,
+    "low": 1
+  },
+  "remediation_plan": {
+    "immediate_actions": [
+      {
+        "package": "@isaacs/brace-expansion",
+        "current_version": "5.0.0",
+        "fixed_version": "N/A",
+        "severity": "HIGH",
+        "priority": 1
+      },
+      {
+        "package": "@modelcontextprotocol/sdk",
+        "current_version": "1.10.0 - 1.25.3",
+        "fixed_version": "N/A",
+        "severity": "HIGH",
+        "priority": 1
+      },
+      {
+        "package": "tar",
+        "current_version": "<=7.5.6",
+        "fixed_version": "N/A",
+        "severity": "HIGH",
+        "priority": 1
+      }
+    ],
+    "short_term": [],
+    "automation_scripts": {
+      "npm_fix": "npm audit fix && npm update",
+      "pip_fix": "pip-audit --fix && safety check",
+      "go_fix": "go get -u ./... && go mod tidy",
+      "cargo_fix": "cargo update && cargo audit"
+    }
+  },
+  "sbom": {
+    "bomFormat": "CycloneDX",
+    "specVersion": "1.5",
+    "version": 1,
+    "metadata": {
+      "timestamp": "2026-02-11T22:37:56.041472"
+    },
+    "components": [
+      {
+        "type": "library",
+        "name": "@isaacs/brace-expansion",
+        "version": "5.0.0",
+        "purl": "pkg:npm/@isaacs/brace-expansion@5.0.0"
+      },
+      {
+        "type": "library",
+        "name": "@modelcontextprotocol/sdk",
+        "version": "1.10.0 - 1.25.3",
+        "purl": "pkg:npm/@modelcontextprotocol/sdk@1.10.0 - 1.25.3"
+      },
+      {
+        "type": "library",
+        "name": "diff",
+        "version": "4.0.0 - 4.0.3",
+        "purl": "pkg:npm/diff@4.0.0 - 4.0.3"
+      },
+      {
+        "type": "library",
+        "name": "lodash",
+        "version": "4.0.0 - 4.17.21",
+        "purl": "pkg:npm/lodash@4.0.0 - 4.17.21"
+      },
+      {
+        "type": "library",
+        "name": "tar",
+        "version": "<=7.5.6",
+        "purl": "pkg:npm/tar@<=7.5.6"
+      }
+    ]
+  }
+}

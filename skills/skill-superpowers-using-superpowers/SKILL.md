@@ -3,13 +3,16 @@ name: using-superpowers
 description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
 ---
 
-<EXTREMELY-IMPORTANT>
+# Skill Instructions
+
+**EXTREMELY IMPORTANT**
 If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
 
 IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
 
 This is not negotiable. This is not optional. You cannot rationalize your way out of this.
-</EXTREMELY-IMPORTANT>
+This is not negotiable. This is not optional. You cannot rationalize your way out of this.
+**END EXTREMELY IMPORTANT**
 
 ## How to Access Skills
 
@@ -17,7 +20,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 **In other environments:** Check your platform's documentation for how skills are loaded.
 
-# Using Skills
+## Using Skills
 
 ## The Rule
 
@@ -50,7 +53,7 @@ digraph skill_flow {
 These thoughts mean STOP—you're rationalizing:
 
 | Thought | Reality |
-|---------|---------|
+| --- | --- |
 | "This is just a simple question" | Questions are tasks. Check for skills. |
 | "I need more context first" | Skill check comes BEFORE clarifying questions. |
 | "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |

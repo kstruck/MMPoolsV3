@@ -139,7 +139,7 @@ export const calculateWinners = (state: GameState): Winner[] => {
     // Generate Winners
     validEvents.forEach((event, index) => {
       // Current Event Value
-      let currentEventValue = baseAmountPerEvent + runningRollover;
+      const currentEventValue = baseAmountPerEvent + runningRollover;
       runningRollover = 0; // Reset unless we roll over again
 
       const homeDigit = getLastDigit(event.home);
@@ -248,7 +248,7 @@ export const calculateWinners = (state: GameState): Winner[] => {
       const mainRowIndex = currentAxis.away.indexOf(awayDigit);
       const mainColIndex = currentAxis.home.indexOf(homeDigit);
 
-      let winningScenarios = [];
+      const winningScenarios = [];
 
       // Main Scenario
       if (mainRowIndex !== -1 && mainColIndex !== -1) {
