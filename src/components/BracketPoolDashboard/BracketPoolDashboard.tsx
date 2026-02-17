@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3 } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
+import { calculateCorrectPicks } from '../../utils/bracketScoring';
 import { DateTimePicker } from './DateTimePicker';
 import { PickHistory } from './PickHistory';
 import { WhoToRootFor } from './WhoToRootFor';
@@ -35,6 +36,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [error, setError] = useState<string | null>(null);
     const [shareStats, setShareStats] = useState<ShareStats | null>(null);
     const [bracketSubTab, setBracketSubTab] = useState<BracketSubTab>('poolwide');
+
+    // Entry Viewing Modal
+    const [viewingEntry, setViewingEntry] = useState<BracketEntry | null>(null);
+
+    const handleViewEntry = useCallback((entry: BracketEntry) => {
+        setViewingEntry(entry);
+    }, []);
 
     // Manager tab interactive state
     const [commissionerDraft, setCommissionerDraft] = useState(pool.commissionerMessage || '');
@@ -287,7 +295,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 {/* Navigation Tabs */}
                 <div className="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
                     {[
-                        { id: 'dashboard' as DashboardTab, label: 'My Brackets', icon: LayoutDashboard },
+                        { id: 'dashboard' as DashboardTab, label: 'Overview', icon: LayoutDashboard },
                         { id: 'standings' as DashboardTab, label: 'Standings', icon: Trophy },
                         { id: 'entries' as DashboardTab, label: 'All Entries', icon: Users },
                         { id: 'brackets' as DashboardTab, label: 'Brackets', icon: GitBranch },
@@ -324,8 +332,91 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 {/* Tab Content */}
                 {!loading && activeTab === 'dashboard' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4">
+
                         {!isCreating ? (
                             <div className="space-y-6">
+                                {/* Pool Overview Stats Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {/* Pot & Payouts */}
+                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-3 opacity-10">
+                                            <Coins size={48} className="text-emerald-400" />
+                                        </div>
+                                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-1">Total Pot</h3>
+                                        <div className="text-2xl font-bold text-white mb-2">
+                                            ${entries.length * pool.settings.entryFee}
+                                        </div>
+                                        <div className="text-xs text-slate-500">
+                                            {entries.length} entries × ${pool.settings.entryFee}
+                                        </div>
+                                        {/* Payout Structure Hint */}
+                                        <div className="mt-3 pt-3 border-t border-slate-800">
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Payouts</p>
+                                            <div className="space-y-1">
+                                                {pool.settings.payouts?.places.map((p, i) => (
+                                                    <div key={i} className="flex justify-between text-xs">
+                                                        <span className="text-slate-400">{p.rank === 1 ? '1st' : p.rank === 2 ? '2nd' : p.rank === 3 ? '3rd' : `${p.rank}th`}</span>
+                                                        <span className="text-emerald-400 font-mono">
+                                                            ${Math.floor((entries.length * pool.settings.entryFee) * (p.percentage / 100))}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                                {(!pool.settings.payouts?.places || pool.settings.payouts.places.length === 0) && (
+                                                    <div className="text-xs text-slate-500 italic">No payouts configured</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* User Stats */}
+                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-3 opacity-10">
+                                            <BarChart3 size={48} className="text-indigo-400" />
+                                        </div>
+                                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-1">Your Stats</h3>
+                                        <div className="grid grid-cols-2 gap-4 mt-2">
+                                            <div>
+                                                <div className="text-xl font-bold text-white">{userEntries.length}</div>
+                                                <div className="text-[10px] text-slate-500 uppercase">Entries</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xl font-bold text-amber-400">
+                                                    {/* Calculate best rank or score */}
+                                                    {userEntries.length > 0
+                                                        ? Math.max(...userEntries.map(e => e.score || 0))
+                                                        : '-'
+                                                    }
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 uppercase">Best Score</div>
+                                            </div>
+                                            {tournament && (
+                                                <div className="col-span-2 mt-2 pt-2 border-t border-slate-800 flex justify-between items-center">
+                                                    <span className="text-[10px] text-slate-500 uppercase">Max Correct Picks</span>
+                                                    <span className="text-sm font-bold text-emerald-400">
+                                                        {userEntries.length > 0
+                                                            ? Math.max(...userEntries.map(e => calculateCorrectPicks(e, tournament)))
+                                                            : '-'}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Tournament Status */}
+                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-3 opacity-10">
+                                            <Trophy size={48} className="text-amber-500" />
+                                        </div>
+                                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-1">Tournament</h3>
+                                        <div className="text-sm font-bold text-white mt-1">
+                                            {tournament?.isFinalized ? 'Finalized' : 'In Progress'}
+                                        </div>
+                                        <div className="text-xs text-slate-500 mt-1">
+                                            Click on "Standings" to see live leaderboards.
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {/* User's existing entries */}
                                 {userEntries.length > 0 && (
                                     <div className="space-y-3">
@@ -347,7 +438,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                     className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold"
                                                     disabled={entry.status === 'SUBMITTED' && pool.status !== 'DRAFT'}
                                                 >
-                                                    {entry.status === 'SUBMITTED' ? 'View' : 'Edit'}
+                                                    {entry.status === 'SUBMITTED' ? 'View/Edit' : 'Edit Draft'}
                                                 </button>
                                             </div>
                                         ))}
@@ -438,6 +529,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     </div>
                 )}
 
+                {/* Standings Tab */}
                 {!loading && activeTab === 'standings' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4">
                         {tournament ? (
@@ -446,6 +538,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 pool={pool}
                                 tournament={tournament}
                                 currentUserId={user?.id}
+                                onEntryClick={handleViewEntry}
                             />
                         ) : (
                             <div className="text-center py-12 text-slate-500">
@@ -891,6 +984,40 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 )}
 
             </div>
+            {/* Viewing Entry Modal */}
+            {viewingEntry && tournament && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl">
+                        <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-950 rounded-t-2xl">
+                            <div>
+                                <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                                    {viewingEntry.name}
+                                    <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
+                                        Score: {viewingEntry.score || 0}
+                                    </span>
+                                </h3>
+                                <p className="text-xs text-slate-400">
+                                    Owner: {entries.find(e => e.id === viewingEntry.id)?.ownerUid === user?.id ? 'You' : 'Another User'}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setViewingEntry(null)}
+                                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-auto p-4 bg-slate-950/50">
+                            <BracketBuilder
+                                tournament={tournament}
+                                picks={viewingEntry.picks}
+                                onPick={() => { }} // Read-only
+                                readOnly={true}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

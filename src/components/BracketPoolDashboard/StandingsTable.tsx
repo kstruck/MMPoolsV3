@@ -9,9 +9,10 @@ interface StandingsTableProps {
     pool: BracketPool;
     tournament: Tournament;
     currentUserId?: string; // For highlighting user's own entries
+    onEntryClick?: (entry: BracketEntry) => void;
 }
 
-export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, tournament, currentUserId }) => {
+export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, tournament, currentUserId, onEntryClick }) => {
     // Pre-calculate eliminated teams once
     const eliminatedTeams = React.useMemo(() => getEliminatedTeams(tournament), [tournament]);
 
@@ -93,7 +94,11 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
                     const change = rankChanges[entry.id];
 
                     return (
-                        <div key={entry.id} className={`grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/5 transition-colors ${currentUserId && entry.ownerUid === currentUserId ? 'bg-indigo-900/20 border-l-2 border-indigo-500' : ''}`}>
+                        <div
+                            key={entry.id}
+                            onClick={() => onEntryClick?.(entry)}
+                            className={`grid grid-cols-12 gap-4 p-4 items-center transition-colors ${onEntryClick ? 'cursor-pointer hover:bg-white/5' : ''} ${currentUserId && entry.ownerUid === currentUserId ? 'bg-indigo-900/20 border-l-2 border-indigo-500' : ''}`}
+                        >
                             <div className="col-span-2 md:col-span-1 flex flex-col items-center justify-center">
                                 <div className="flex items-center gap-1">
                                     {isChampion ? <Trophy size={20} className="text-amber-400" /> :

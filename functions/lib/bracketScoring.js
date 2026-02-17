@@ -119,8 +119,9 @@ exports.scoreBracketEntries = (0, https_1.onCall)(async (request) => {
         return { success: true, scored: count };
     }
     catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
         logger.error(`Error scoring tournament ${tournamentId}:`, e);
-        throw new https_1.HttpsError('internal', e.message || 'An unknown error occurred during scoring.');
+        throw new https_1.HttpsError('internal', msg || 'An unknown error occurred during scoring.');
     }
 });
 //# sourceMappingURL=bracketScoring.js.map

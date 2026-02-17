@@ -134,20 +134,59 @@ export const NFL_TEAMS: Record<string, { name: string; abbr: string; logo: strin
   'wsh': { name: 'Commanders', abbr: 'WSH', logo: 'https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png' },
 };
 
+// NCAA Team Data for Logos (Top teams)
+export const NCAA_TEAMS: Record<string, { name: string; id: string; logo: string }> = {
+  'duke': { name: 'Duke', id: '150', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/150.png' },
+  'unc': { name: 'North Carolina', id: '153', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/153.png' },
+  'kan': { name: 'Kansas', id: '2305', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png' },
+  'uk': { name: 'Kentucky', id: '96', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/96.png' },
+  'ucla': { name: 'UCLA', id: '26', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/26.png' },
+  'fla': { name: 'Florida', id: '57', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/57.png' },
+  'aub': { name: 'Auburn', id: '2', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2.png' },
+  'hou': { name: 'Houston', id: '248', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/248.png' },
+  'pur': { name: 'Purdue', id: '2509', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2509.png' },
+  'ariz': { name: 'Arizona', id: '12', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/12.png' },
+  'ala': { name: 'Alabama', id: '333', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/333.png' },
+  'tenn': { name: 'Tennessee', id: '2633', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2633.png' },
+  'gonz': { name: 'Gonzaga', id: '2250', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2250.png' },
+  'uconn': { name: 'UConn', id: '41', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/41.png' },
+  'marq': { name: 'Marquette', id: '188', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/188.png' },
+  'isu': { name: 'Iowa State', id: '66', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/66.png' },
+  'bay': { name: 'Baylor', id: '239', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/239.png' },
+  'wisc': { name: 'Wisconsin', id: '275', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/275.png' },
+  'ore': { name: 'Oregon', id: '2483', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2483.png' },
+  'crei': { name: 'Creighton', id: '156', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/156.png' },
+  'ill': { name: 'Illinois', id: '356', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/356.png' },
+};
+
 // Helper to find logo from input string (fuzzy match)
 export const getTeamLogo = (input: string): string | null => {
   if (!input) return null;
   const lower = input.toLowerCase();
 
-  // Direct Key Match
+  // 1. Try NFL Direct Key
   if (NFL_TEAMS[lower]) return NFL_TEAMS[lower].logo;
 
-  // Name/Abbr Match
-  const key = Object.keys(NFL_TEAMS).find(k =>
+  // 2. Try NCAA Direct Key
+  if (NCAA_TEAMS[lower]) return NCAA_TEAMS[lower].logo;
+
+  // 3. Fuzzy Match NFL
+  const nflKey = Object.keys(NFL_TEAMS).find(k =>
     NFL_TEAMS[k].name.toLowerCase().includes(lower) ||
     lower.includes(NFL_TEAMS[k].name.toLowerCase()) ||
     NFL_TEAMS[k].abbr.toLowerCase() === lower
   );
+  if (nflKey) return NFL_TEAMS[nflKey].logo;
 
-  return key ? NFL_TEAMS[key].logo : null;
+  // 4. Fuzzy Match NCAA
+  // Remove seed prefixes like "E1-", "W2-" for better matching
+  const cleanName = lower.replace(/^[ewsm][0-9]{1,2}-/, '').replace(/-/g, ' ');
+
+  const ncaaKey = Object.keys(NCAA_TEAMS).find(k =>
+    NCAA_TEAMS[k].name.toLowerCase().includes(cleanName) ||
+    cleanName.includes(NCAA_TEAMS[k].name.toLowerCase())
+  );
+  if (ncaaKey) return NCAA_TEAMS[ncaaKey].logo;
+
+  return null;
 };

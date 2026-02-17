@@ -26,7 +26,7 @@ exports.lockPool = (0, https_1.onCall)(async (request) => {
     // 3. Generate Digits (Random or Fixed for Testing) - ONLY FOR SQUARES
     let axisNumbers;
     const type = poolData.type || 'SQUARES';
-    let updates = {
+    const updates = {
         isLocked: true,
         updatedAt: admin.firestore.Timestamp.now(),
     };

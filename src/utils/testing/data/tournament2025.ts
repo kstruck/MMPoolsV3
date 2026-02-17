@@ -237,7 +237,7 @@ function buildSlotId(gameId: string): string {
  * Implements standard NCAA bracket advancement:
  *   R1 games 1+2 → R2 game 1, R1 games 3+4 → R2 game 2, etc.
  */
-function getNextGameId(gameId: string, _round: number, region: string): string | undefined {
+export function getNextGameId(gameId: string, _round: number, region: string): string | undefined {
     const regionPrefix = region.charAt(0); // E, W, S, M
 
     // Map game index within region+round to next round game

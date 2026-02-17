@@ -94,3 +94,24 @@ export const calculateEntryMaxScore = (
 
     return maxScore;
 };
+
+/**
+ * Calculates the total number of correct picks for an entry.
+ */
+export const calculateCorrectPicks = (entry: BracketEntry, tournament: Tournament): number => {
+    let correct = 0;
+    if (!entry.picks) return 0;
+
+    Object.entries(entry.picks).forEach(([slotId, pickedTeamId]) => {
+        const slot = tournament.slots[slotId];
+        if (!slot) return;
+
+        const game = tournament.games[slot.gameId];
+        if (!game || game.status !== 'FINAL') return;
+
+        if (game.winnerTeamId === pickedTeamId) {
+            correct++;
+        }
+    });
+    return correct;
+};

@@ -12,13 +12,14 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { getFirestore, collection, addDoc, getDocs, updateDoc, setDoc, doc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, updateDoc, setDoc, doc, getDoc } from 'firebase/firestore';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { calculateScore } from '../BracketPoolDashboard/bracketScoring';
 import {
     generateTournament2025,
     revealRound,
     getChampionshipTotal,
+    getNextGameId,
     TEAMS,
     GAMES_PER_ROUND,
 } from '../../utils/testing/data/tournament2025';
@@ -26,7 +27,8 @@ import { generateEntries, generateControlEntries } from '../../utils/testing/dat
 import type { Tournament, BracketEntry, BracketPool } from '../../types';
 import {
     Play, RotateCcw, Trophy, Users, ChevronRight, Check,
-    Zap, Crown, ArrowUp, ArrowDown, Minus, Loader, AlertTriangle
+    Zap, Crown, ArrowUp, ArrowDown, Minus, Loader, AlertTriangle,
+    Shuffle, Trash2, X
 } from 'lucide-react';
 
 // ─── TYPES ──────────────────────────────────────────────────────
@@ -108,6 +110,22 @@ export const TournamentSimulator: React.FC = () => {
 
     // Round results history
     const [roundResults, setRoundResults] = useState<RoundResult[]>([]);
+
+    // Viewing other entries
+    const [viewingEntry, setViewingEntry] = useState<BracketEntry | null>(null);
+
+    const handleEntryClick = useCallback(async (entry: LeaderboardEntry) => {
+        if (!poolId) return;
+        try {
+            const db = getFirestore();
+            const entryDoc = await getDoc(doc(db, 'pools', poolId, 'entries', entry.id));
+            if (entryDoc.exists()) {
+                setViewingEntry({ id: entryDoc.id, ...entryDoc.data() } as BracketEntry);
+            }
+        } catch (e) {
+            console.error('Failed to load entry:', e);
+        }
+    }, [poolId]);
 
 
 
@@ -249,6 +267,63 @@ export const TournamentSimulator: React.FC = () => {
             setIsLoading(false);
         }
     }, [poolId, tournament, userPicks, tieBreakerInput]);
+
+    const handleRandomFill = useCallback(() => {
+        if (!tournament) return;
+
+        const newPicks = { ...userPicks };
+        // We must simulate round by round to ensure valid progression
+        // Round 1
+        const r1Games = Object.values(tournament.games).filter(g => g.round === 1);
+        r1Games.forEach(g => {
+            if (!newPicks[g.id]) {
+                newPicks[g.id] = Math.random() > 0.5 ? g.homeTeamId! : g.awayTeamId!;
+            }
+        });
+
+        // Rounds 2-6
+        // Helper to find who advanced to a given game from previous picks
+        // We build a map of "nextGameId -> [team1, team2]" for the current round
+        // We build a map of "nextGameId -> [team1, team2]" for the current round
+
+        for (let r = 2; r <= 6; r++) {
+            const nextRoundCandidates: Record<string, string[]> = {};
+
+            // 1. Determine who advanced from previous round picks
+            const prevRoundGames = Object.values(tournament.games).filter(g => g.round === r - 1);
+            prevRoundGames.forEach(g => {
+                const winnerId = newPicks[g.id];
+                if (winnerId) {
+                    const nextGameId = getNextGameId(g.id, g.round, g.region || '');
+                    if (nextGameId) {
+                        if (!nextRoundCandidates[nextGameId]) nextRoundCandidates[nextGameId] = [];
+                        nextRoundCandidates[nextGameId].push(winnerId);
+                    }
+                }
+            });
+
+            // 2. For each game in this round, if we have candidates, pick one
+            const roundGames = Object.values(tournament.games).filter(g => g.round === r);
+            roundGames.forEach(g => {
+                if (!newPicks[g.id]) {
+                    const candidates = nextRoundCandidates[g.id];
+                    if (candidates && candidates.length > 0) {
+                        // Pick random from candidates (usually 2, possibly 1 if odd?)
+                        const winner = candidates[Math.floor(Math.random() * candidates.length)];
+                        newPicks[g.id] = winner;
+                    }
+                }
+            });
+        }
+
+        setUserPicks(newPicks);
+    }, [tournament, userPicks]);
+
+    const handleClear = useCallback(() => {
+        if (window.confirm('Are you sure you want to clear all picks?')) {
+            setUserPicks({});
+        }
+    }, []);
 
     const handleSkipBracket = useCallback(() => {
         setPhase('SIMULATION');
@@ -479,6 +554,8 @@ export const TournamentSimulator: React.FC = () => {
                         onTieBreakerChange={setTieBreakerInput}
                         onSubmit={handleSubmitBracket}
                         onSkip={handleSkipBracket}
+                        onRandomFill={handleRandomFill}
+                        onClear={handleClear}
                         isLoading={isLoading}
                     />
                 )}
@@ -517,11 +594,46 @@ export const TournamentSimulator: React.FC = () => {
                                 leaderboard={leaderboard}
                                 currentRound={currentRound}
                                 entryCount={entryCount}
+                                onEntryClick={handleEntryClick}
                             />
                         </div>
                     </div>
                 )}
             </div>
+
+            {/* Entry View Modal */}
+            {viewingEntry && tournament && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl">
+                        <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                            <div>
+                                <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                                    {viewingEntry.name}
+                                    <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
+                                        Score: {viewingEntry.score}
+                                    </span>
+                                </h3>
+                                <p className="text-xs text-slate-400">Tiebreaker: {viewingEntry.tieBreakerPrediction}</p>
+                            </div>
+                            <button
+                                onClick={() => setViewingEntry(null)}
+                                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-auto p-4 bg-slate-950/50">
+                            {/* We re-use BracketBuilder in read-only mode */}
+                            <BracketBuilder
+                                tournament={tournament}
+                                picks={viewingEntry.picks}
+                                onPick={() => { }} // Read-only
+                                readOnly={true}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -600,8 +712,10 @@ const BracketPhase: React.FC<{
     onTieBreakerChange: (val: string) => void;
     onSubmit: () => void;
     onSkip: () => void;
+    onRandomFill: () => void;
+    onClear: () => void;
     isLoading: boolean;
-}> = ({ tournament, picks, onPick, pickCount, totalPicks, tieBreakerInput, onTieBreakerChange, onSubmit, onSkip, isLoading }) => (
+}> = ({ tournament, picks, onPick, pickCount, totalPicks, tieBreakerInput, onTieBreakerChange, onSubmit, onSkip, onRandomFill, onClear, isLoading }) => (
     <div className="space-y-4">
         {/* Progress bar */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
@@ -641,6 +755,26 @@ const BracketPhase: React.FC<{
                 >
                     Skip →
                 </button>
+
+                <div className="h-6 w-px bg-slate-700 mx-2" />
+
+                <button
+                    onClick={onRandomFill}
+                    className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-md transition-colors"
+                    title="Randomly fill remaining"
+                >
+                    <Shuffle className="w-4 h-4" />
+                </button>
+
+                <button
+                    onClick={onClear}
+                    className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                    title="Clear all picks"
+                >
+                    <Trash2 className="w-4 h-4" />
+                </button>
+
+                <div className="h-6 w-px bg-slate-700 mx-2" />
 
                 <button
                     onClick={onSubmit}
@@ -828,10 +962,12 @@ const LeaderboardSidebar = ({
     leaderboard,
     currentRound,
     entryCount,
+    onEntryClick,
 }: {
     leaderboard: LeaderboardEntry[];
     currentRound: number;
     entryCount: number;
+    onEntryClick: (entry: LeaderboardEntry) => void;
 }) => {
     const avgScore = leaderboard.length > 0
         ? Math.round(leaderboard.reduce((s, e) => s + e.score, 0) / leaderboard.length)
@@ -878,11 +1014,12 @@ const LeaderboardSidebar = ({
                             <div
                                 key={entry.id}
                                 className={`
-                                    px-4 py-2 flex items-center gap-3 text-sm border-b border-slate-800/50 transition-all
+                                    px-4 py-2 flex items-center gap-3 text-sm border-b border-slate-800/50 transition-all cursor-pointer hover:bg-slate-800/50
                                     ${entry.isUser ? 'bg-indigo-500/10 border-l-2 border-l-indigo-400' : ''}
                                     ${rank <= 3 ? 'bg-amber-500/5' : ''}
-                                    ${isEliminated ? 'opacity-40' : ''}
+                                    ${isEliminated ? 'opacity-40 hover:opacity-100' : ''}
                                 `}
+                                onClick={() => onEntryClick(entry)}
                             >
                                 {/* Rank */}
                                 <div className={`w-6 text-center font-mono text-xs font-bold ${rank === 1 ? 'text-amber-400' : rank === 2 ? 'text-slate-300' : rank === 3 ? 'text-orange-400' : 'text-slate-600'

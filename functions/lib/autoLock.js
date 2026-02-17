@@ -67,7 +67,7 @@ async function executeAutoLock(pool) {
                 console.log(`[AutoLock] Skipped - already locked: ${pool.id}`);
                 return;
             }
-            let updates = {
+            const updates = {
                 isLocked: true,
                 updatedAt: admin.firestore.Timestamp.now(),
             };
