@@ -638,7 +638,7 @@ export const TournamentSimulator: React.FC = () => {
             {/* Entry View Modal */}
             {viewingEntry && tournament && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-7xl max-h-[95vh] flex flex-col shadow-2xl">
                         <div className="flex items-center justify-between p-4 border-b border-slate-700">
                             <div>
                                 <h3 className="font-bold text-lg text-white flex items-center gap-2">
@@ -660,9 +660,12 @@ export const TournamentSimulator: React.FC = () => {
                             {/* We re-use BracketBuilder in read-only mode */}
                             <BracketBuilder
                                 tournament={tournament}
-                                picks={viewingEntry.picks}
+                                picks={Object.fromEntries(
+                                    Object.entries(viewingEntry.picks).map(([k, v]) => [k.replace('slot-', ''), v])
+                                )}
                                 onPick={() => { }} // Read-only
                                 readOnly={true}
+                                viewMode="full"
                             />
                         </div>
                     </div>

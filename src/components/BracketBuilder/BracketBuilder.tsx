@@ -9,12 +9,13 @@ interface BracketBuilderProps {
     picks: Record<string, string>; // slotId -> teamId
     onPick: (slotId: string, teamId: string) => void;
     readOnly?: boolean;
+    viewMode?: 'tabs' | 'full';
 }
 
-export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly }) => {
+export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly, viewMode = 'tabs' }) => {
     const [activeRegion, setActiveRegion] = useState<BracketRegion | 'FF'>('East');
 
-    // Calculate completion status for tabs
+    // Calculate completion status for tabs - moved up to avoid conditional hook call
     const completionStatus = useMemo(() => {
         const status: Record<BracketRegion | 'FF', { count: number; total: number; complete: boolean }> = {
             East: { count: 0, total: 15, complete: false },
@@ -42,6 +43,17 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 
         return status;
     }, [tournament, picks]);
+
+    if (viewMode === 'full') {
+        return (
+            <FullBracketView
+                tournament={tournament}
+                picks={picks}
+                onPick={onPick}
+                readOnly={readOnly}
+            />
+        );
+    }
 
     const handleNextRegion = () => {
         const order: (BracketRegion | 'FF')[] = ['East', 'West', 'South', 'Midwest', 'FF'];
@@ -126,6 +138,45 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 
 // --- Sub-components ---
 
+const FullBracketView: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly }) => {
+    // Zoom/Pan could be added here later. For now, we'll do a CSS transform scale to fit.
+    return (
+        <div className="w-full h-full overflow-auto bg-slate-950 p-8">
+            <div className="min-w-[1600px] flex justify-center gap-16 relative">
+
+                {/* LEFT SIDE: East & West */}
+                <div className="flex flex-col gap-16">
+                    <div>
+                        <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">East Region</h3>
+                        <RegionBracket regionName="East" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                    </div>
+                    <div>
+                        <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">West Region</h3>
+                        <RegionBracket regionName="West" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                    </div>
+                </div>
+
+                {/* CENTER: Final Four */}
+                <div className="flex flex-col justify-center sticky top-0 self-center">
+                    <FinalFourBracket tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                </div>
+
+                {/* RIGHT SIDE: South & Midwest */}
+                <div className="flex flex-col gap-16">
+                    <div>
+                        <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">South Region</h3>
+                        <RegionBracket regionName="South" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                    </div>
+                    <div>
+                        <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">Midwest Region</h3>
+                        <RegionBracket regionName="Midwest" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({ regionName, tournament, picks, onPick, readOnly }) => {
     // Helper to get games for this region and round
     const getGames = (round: number) => {
@@ -140,16 +191,16 @@ const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({
     const r4Games = getGames(4); // 1 game
 
     return (
-        <div className="flex gap-8 min-w-[800px] justify-center">
+        <div className="flex gap-4 min-w-[600px] justify-center scale-90 origin-top">
             {/* Round 1 Column */}
-            <div className="flex flex-col justify-around gap-2 py-4">
+            <div className="flex flex-col justify-around gap-1 py-4">
                 {Array.from({ length: 8 }).map((_, i) => (
                     <MatchNode key={`r1-${i}`} game={r1Games[i]} picks={picks} onPick={onPick} readOnly={readOnly} />
                 ))}
             </div>
 
             {/* Round 2 Column */}
-            <div className="flex flex-col justify-around gap-2 py-12">
+            <div className="flex flex-col justify-around gap-2 py-8">
                 {Array.from({ length: 4 }).map((_, i) => {
                     const homeFeeder = r1Games[i * 2];
                     const awayFeeder = r1Games[i * 2 + 1];
@@ -171,7 +222,7 @@ const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({
             </div>
 
             {/* Round 3 (Sweet 16) Column */}
-            <div className="flex flex-col justify-around gap-2 py-24">
+            <div className="flex flex-col justify-around gap-2 py-16">
                 {Array.from({ length: 2 }).map((_, i) => {
                     const homeFeeder = r2Games[i * 2];
                     const awayFeeder = r2Games[i * 2 + 1];
@@ -193,7 +244,7 @@ const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({
             </div>
 
             {/* Round 4 (Elite 8) Column */}
-            <div className="flex flex-col justify-center py-32">
+            <div className="flex flex-col justify-center py-20">
                 {(() => {
                     const homeFeeder = r3Games[0];
                     const awayFeeder = r3Games[1];
@@ -242,13 +293,13 @@ const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, on
     const champAway = picks[f4Game2?.id];
 
     return (
-        <div className="flex flex-col items-center justify-center h-full gap-12 min-h-[400px]">
-            <h3 className="text-2xl font-bold text-amber-500 tracking-widest uppercase mb-8">Final Four</h3>
+        <div className="flex flex-col items-center justify-center h-full gap-8 min-h-[400px]">
+            <h3 className="text-2xl font-bold text-amber-500 tracking-widest uppercase mb-4">Final Four</h3>
 
-            <div className="flex gap-16 items-center">
+            <div className="flex gap-8 items-center">
                 {/* Semifinal 1 (East vs West) */}
-                <div className="flex flex-col items-center gap-4">
-                    <div className="text-sm text-slate-400">East vs West</div>
+                <div className="flex flex-col items-center gap-2">
+                    <div className="text-xs text-slate-400">East vs West</div>
                     <MatchNode
                         game={f4Game1}
                         picks={picks}
@@ -277,8 +328,8 @@ const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, on
                 </div>
 
                 {/* Semifinal 2 (South vs Midwest) */}
-                <div className="flex flex-col items-center gap-4">
-                    <div className="text-sm text-slate-400">South vs Midwest</div>
+                <div className="flex flex-col items-center gap-2">
+                    <div className="text-xs text-slate-400">South vs Midwest</div>
                     <MatchNode
                         game={f4Game2}
                         picks={picks}
