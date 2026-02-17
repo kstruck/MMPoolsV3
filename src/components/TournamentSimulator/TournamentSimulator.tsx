@@ -23,6 +23,11 @@ import {
     TEAMS,
     GAMES_PER_ROUND,
 } from '../../utils/testing/data/tournament2025';
+import {
+    loadTournament2025,
+    loadTournamentAtRound,
+    clearTournament,
+} from '../../utils/testing/tournamentTestUtils';
 import { generateEntries, generateControlEntries } from '../../utils/testing/data/testEntryGenerator';
 import type { Tournament, BracketEntry, BracketPool } from '../../types';
 import {
@@ -496,6 +501,59 @@ export const TournamentSimulator: React.FC = () => {
         setError(null);
     }, []);
 
+    // ─── QUICK LOAD HANDLERS ────────────────────────────────────
+
+    const handleLoadTournamentOnly = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const loadedTournament = await loadTournament2025('mens-2025');
+            setTournament(loadedTournament);
+            alert('✅ Tournament data loaded successfully to tournaments/mens-2025');
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            console.error('[Simulator] Load tournament failed:', e);
+            setError(`Load failed: ${errMsg}`);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    const handleLoadRound = useCallback(async (round: number) => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const loadedTournament = await loadTournamentAtRound(round, 'mens-2025');
+            setTournament(loadedTournament);
+            setCurrentRound(round);
+            alert(`✅ Tournament loaded at Round ${round} to tournaments/mens-2025`);
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            console.error('[Simulator] Load round failed:', e);
+            setError(`Load failed: ${errMsg}`);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    const handleClearTournament = useCallback(async () => {
+        if (!window.confirm('Clear tournament data from Firestore?')) return;
+        setIsLoading(true);
+        setError(null);
+        try {
+            await clearTournament('mens-2025');
+            setTournament(null);
+            setCurrentRound(0);
+            alert('✅ Tournament data cleared from Firestore');
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            console.error('[Simulator] Clear tournament failed:', e);
+            setError(`Clear failed: ${errMsg}`);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
     // ─── RENDER ─────────────────────────────────────────────────
 
     return (
@@ -573,6 +631,9 @@ export const TournamentSimulator: React.FC = () => {
                 {phase === 'SETUP' && (
                     <SetupPhase
                         onSetup={handleSetup}
+                        onLoadTournamentOnly={handleLoadTournamentOnly}
+                        onLoadRound={handleLoadRound}
+                        onClearTournament={handleClearTournament}
                         isLoading={isLoading}
                     />
                 )}
@@ -679,10 +740,13 @@ export const TournamentSimulator: React.FC = () => {
 
 const SetupPhase: React.FC<{
     onSetup: () => void;
+    onLoadTournamentOnly: () => void;
+    onLoadRound: (round: number) => void;
+    onClearTournament: () => void;
     isLoading: boolean;
-}> = ({ onSetup, isLoading }) => (
+}> = ({ onSetup, onLoadTournamentOnly, onLoadRound, onClearTournament, isLoading }) => (
     <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-8 max-w-lg">
+        <div className="text-center space-y-8 max-w-2xl">
             <div className="space-y-3">
                 <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/20">
                     <Trophy className="w-10 h-10 text-white" />
@@ -735,6 +799,51 @@ const SetupPhase: React.FC<{
                     </>
                 )}
             </button>
+
+            {/* Quick Load Options */}
+            <div className="border-t border-slate-800 pt-6">
+                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Quick Test Options</h3>
+
+                <div className="space-y-3">
+                    {/* Load Tournament Data Only */}
+                    <button
+                        onClick={onLoadTournamentOnly}
+                        disabled={isLoading}
+                        className="w-full px-4 py-2.5 bg-slate-800 hover:bg-slate-750 rounded-lg text-sm font-medium text-white 
+                            border border-slate-700 hover:border-indigo-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        📥 Load Tournament Data Only
+                    </button>
+
+                    {/* Load Specific Round */}
+                    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+                        <p className="text-xs text-slate-500 mb-3">Jump to specific round:</p>
+                        <div className="grid grid-cols-6 gap-2">
+                            {[1, 2, 3, 4, 5, 6].map(round => (
+                                <button
+                                    key={round}
+                                    onClick={() => onLoadRound(round)}
+                                    disabled={isLoading}
+                                    className="px-3 py-2 bg-slate-800 hover:bg-indigo-600 rounded-lg text-xs font-mono text-white 
+                                        border border-slate-700 hover:border-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    R{round}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Clear Tournament */}
+                    <button
+                        onClick={onClearTournament}
+                        disabled={isLoading}
+                        className="w-full px-4 py-2 bg-slate-900 hover:bg-red-950 rounded-lg text-xs font-medium text-slate-400 hover:text-red-400 
+                            border border-slate-800 hover:border-red-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        🗑️ Clear Tournament Data
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 );
