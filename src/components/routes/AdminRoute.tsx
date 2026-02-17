@@ -7,9 +7,10 @@ import { AdminPanel } from '../AdminPanel';
 import { ShareModal } from '../modals'; // Assuming ShareModal is updated or we use local
 import { PropsPoolDashboard } from '../PropsPoolDashboard/PropsPoolDashboard';
 import { PlayoffDashboard } from '../PlayoffPool/PlayoffDashboard';
+import { BracketPoolDashboard } from '../BracketPoolDashboard/BracketPoolDashboard';
 
 import { dbService } from '../../services/dbService';
-import type { User, Pool, GameState, PropsPool, PlayoffPool } from '../../types';
+import type { User, Pool, GameState, PropsPool, PlayoffPool, BracketPool } from '../../types';
 
 interface AdminRouteProps {
     user: User | null;
@@ -113,6 +114,23 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
                         pool={currentPool as PlayoffPool}
                         user={user}
                         onBack={() => navigate('/participant')}
+                    />
+                </div>
+                <Footer />
+            </div>
+        );
+    }
+
+    if (currentPool.type === 'BRACKET') {
+        return (
+            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+                <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
+                <div className="flex-grow">
+                    <BracketPoolDashboard
+                        pool={currentPool as BracketPool}
+                        user={user}
+                        onBack={() => navigate('/participant')}
+                        onShare={() => openShare(currentPool.id)}
                     />
                 </div>
                 <Footer />

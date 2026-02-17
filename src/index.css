@@ -102,18 +102,24 @@ body {
   }
 
   /* slate-700 */
+}
 
-  /* Page settings */
-  @page {
-    size: landscape;
-    margin: 0.25in;
-  }
+/* Page settings - Must be top level */
+@page {
+  size: landscape;
+  margin: 0.25in;
 }
 
 /* Bracket Print Styles */
 @media print {
+
   /* Hide typical app shell elements if not already hidden by "body *" */
-  nav, footer, .sidebar, .header-controls, button, .no-print {
+  nav,
+  footer,
+  .sidebar,
+  .header-controls,
+  button,
+  .no-print {
     display: none !important;
   }
 
@@ -137,7 +143,8 @@ body {
     padding: 10px !important;
     overflow: visible !important;
     display: flex !important;
-    align-items: center; /* Center vertically if possible */
+    align-items: center;
+    /* Center vertically if possible */
     justify-content: center;
     background: white !important;
     color: black !important;
@@ -145,28 +152,32 @@ body {
 
   /* Scale the bracket to fit perfectly on landscape */
   #bracket-printable-area .bracket-container {
-    transform: scale(0.65); /* Starting scale, adjust as needed */
+    transform: scale(0.65);
+    /* Starting scale, adjust as needed */
     transform-origin: top center;
-    width: 150%; /* Compensate for scale down */
+    width: 150%;
+    /* Compensate for scale down */
   }
-  
+
   /* Color adjustments for printing */
   #bracket-printable-area .bg-slate-900,
   #bracket-printable-area .bg-slate-950 {
     background-color: white !important;
-    border-color: #cbd5e1 !important; /* slate-300 */
+    border-color: #cbd5e1 !important;
+    /* slate-300 */
     color: black !important;
   }
-  
+
   #bracket-printable-area .text-white,
-  #bracket-printable-area .text-slate-200, 
+  #bracket-printable-area .text-slate-200,
   #bracket-printable-area .text-slate-300,
   #bracket-printable-area .text-slate-400 {
     color: black !important;
   }
-  
+
   #bracket-printable-area .border-slate-700,
   #bracket-printable-area .border-slate-800 {
-    border-color: #94a3b8 !important; /* slate-400 */
+    border-color: #94a3b8 !important;
+    /* slate-400 */
   }
 }
