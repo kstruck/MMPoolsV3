@@ -161,7 +161,7 @@ export function generateControlEntries(): GeneratedEntry[] {
 
     const generateSpecific = (mode: 'chalk' | 'upset' | 'half'): Record<string, string> => {
         const picks: Record<string, string> = {};
-        const isCorrect = (slotId: string, round: number, count: number) => {
+        const isCorrect = (_slotId: string, round: number, count: number) => {
             if (mode === 'chalk') return true;
             if (mode === 'upset') return false;
             // Alternating pattern for HalfRight
