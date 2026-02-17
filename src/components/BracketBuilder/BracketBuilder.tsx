@@ -150,21 +150,65 @@ const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({
 
             {/* Round 2 Column */}
             <div className="flex flex-col justify-around gap-2 py-12">
-                {Array.from({ length: 4 }).map((_, i) => (
-                    <MatchNode key={`r2-${i}`} game={r2Games[i]} picks={picks} onPick={onPick} readOnly={readOnly} />
-                ))}
+                {Array.from({ length: 4 }).map((_, i) => {
+                    const homeFeeder = r1Games[i * 2];
+                    const awayFeeder = r1Games[i * 2 + 1];
+                    const homeId = picks[homeFeeder.id];
+                    const awayId = picks[awayFeeder.id];
+                    return (
+                        <MatchNode
+                            key={`r2-${i}`}
+                            game={r2Games[i]}
+                            picks={picks}
+                            onPick={onPick}
+                            readOnly={readOnly}
+                            homeTeamIdOverride={homeId}
+                            awayTeamIdOverride={awayId}
+                        />
+                    );
+                })}
             </div>
 
             {/* Round 3 (Sweet 16) Column */}
             <div className="flex flex-col justify-around gap-2 py-24">
-                {Array.from({ length: 2 }).map((_, i) => (
-                    <MatchNode key={`r3-${i}`} game={r3Games[i]} picks={picks} onPick={onPick} readOnly={readOnly} />
-                ))}
+                {Array.from({ length: 2 }).map((_, i) => {
+                    const homeFeeder = r2Games[i * 2];
+                    const awayFeeder = r2Games[i * 2 + 1];
+                    const homeId = picks[homeFeeder.id];
+                    const awayId = picks[awayFeeder.id];
+                    return (
+                        <MatchNode
+                            key={`r3-${i}`}
+                            game={r3Games[i]}
+                            picks={picks}
+                            onPick={onPick}
+                            readOnly={readOnly}
+                            homeTeamIdOverride={homeId}
+                            awayTeamIdOverride={awayId}
+                        />
+                    );
+                })}
             </div>
 
             {/* Round 4 (Elite 8) Column */}
             <div className="flex flex-col justify-center py-32">
-                <MatchNode key="r4" game={r4Games[0]} picks={picks} onPick={onPick} readOnly={readOnly} />
+                {(() => {
+                    const homeFeeder = r3Games[0];
+                    const awayFeeder = r3Games[1];
+                    const homeId = picks[homeFeeder.id];
+                    const awayId = picks[awayFeeder.id];
+                    return (
+                        <MatchNode
+                            key="r4"
+                            game={r4Games[0]}
+                            picks={picks}
+                            onPick={onPick}
+                            readOnly={readOnly}
+                            homeTeamIdOverride={homeId}
+                            awayTeamIdOverride={awayId}
+                        />
+                    );
+                })()}
                 <div className="mt-4 text-center text-xs text-slate-500 uppercase tracking-widest font-bold">Region<br />Champion</div>
             </div>
         </div>
@@ -175,28 +219,69 @@ const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, on
     const ffGames = Object.values(tournament.games).filter(g => g.round === 5); // 2 games
     const champGame = Object.values(tournament.games).find(g => g.round === 6); // 1 game
 
+    // Helper to find regional champions
+    // East -> R4-E1, West -> R4-W1, South -> R4-S1, Midwest -> R4-M1
+    const getRegChamp = (region: string) => {
+        const game = Object.values(tournament.games).find(g => g.region === region && g.round === 4);
+        return game ? picks[game.id] : undefined;
+    };
+
+    const eastChamp = getRegChamp('East');
+    const westChamp = getRegChamp('West');
+    const southChamp = getRegChamp('South');
+    const midwestChamp = getRegChamp('Midwest');
+
+    const f4Game1 = ffGames.find(g => g.id === 'R5-1') || ffGames[0];
+    const f4Game2 = ffGames.find(g => g.id === 'R5-2') || ffGames[1];
+
+    // Championship feeders
+    const champHome = picks[f4Game1?.id];
+    const champAway = picks[f4Game2?.id];
+
     return (
         <div className="flex flex-col items-center justify-center h-full gap-12 min-h-[400px]">
             <h3 className="text-2xl font-bold text-amber-500 tracking-widest uppercase mb-8">Final Four</h3>
 
             <div className="flex gap-16 items-center">
-                {/* Semifinal 1 */}
+                {/* Semifinal 1 (East vs West) */}
                 <div className="flex flex-col items-center gap-4">
-                    <div className="text-sm text-slate-400">Semifinal 1</div>
-                    <MatchNode game={ffGames[0]} picks={picks} onPick={onPick} readOnly={readOnly} />
+                    <div className="text-sm text-slate-400">East vs West</div>
+                    <MatchNode
+                        game={f4Game1}
+                        picks={picks}
+                        onPick={onPick}
+                        readOnly={readOnly}
+                        homeTeamIdOverride={eastChamp}
+                        awayTeamIdOverride={westChamp}
+                    />
                 </div>
 
                 {/* Championship */}
                 <div className="flex flex-col items-center transform scale-125 z-10">
                     <div className="text-amber-400 font-bold mb-2 text-lg">NATIONAL CHAMPIONSHIP</div>
                     <Trophy className="w-8 h-8 text-amber-500 mb-4 animate-pulse" />
-                    <MatchNode game={champGame} picks={picks} onPick={onPick} readOnly={readOnly} isChampionship />
+                    <MatchNode
+                        game={champGame}
+                        picks={picks}
+                        onPick={onPick}
+                        readOnly={readOnly}
+                        isChampionship
+                        homeTeamIdOverride={champHome}
+                        awayTeamIdOverride={champAway}
+                    />
                 </div>
 
-                {/* Semifinal 2 */}
+                {/* Semifinal 2 (South vs Midwest) */}
                 <div className="flex flex-col items-center gap-4">
-                    <div className="text-sm text-slate-400">Semifinal 2</div>
-                    <MatchNode game={ffGames[1]} picks={picks} onPick={onPick} readOnly={readOnly} />
+                    <div className="text-sm text-slate-400">South vs Midwest</div>
+                    <MatchNode
+                        game={f4Game2}
+                        picks={picks}
+                        onPick={onPick}
+                        readOnly={readOnly}
+                        homeTeamIdOverride={southChamp}
+                        awayTeamIdOverride={midwestChamp}
+                    />
                 </div>
             </div>
         </div>

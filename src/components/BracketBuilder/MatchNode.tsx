@@ -9,11 +9,12 @@ interface MatchNodeProps {
     onPick: (slotId: string, teamId: string) => void;
     readOnly?: boolean;
     isChampionship?: boolean;
+    homeTeamIdOverride?: string;
+    awayTeamIdOverride?: string;
 }
 
-export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readOnly, isChampionship }) => {
+export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readOnly, isChampionship, homeTeamIdOverride, awayTeamIdOverride }) => {
     // If no game yet (e.g. waiting for previous round), show placeholder
-    // In a real tournament app, we might show "Winner of X vs Y"
     if (!game) {
         return (
             <div className={`flex flex-col border border-slate-800 bg-slate-900/30 rounded overflow-hidden w-40 opacity-50 ${isChampionship ? 'scale-110' : ''}`}>
@@ -23,15 +24,18 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
         );
     }
 
+    // Use overrides if provided, otherwise fallback to game data (for R1)
+    const displayHomeId = homeTeamIdOverride ?? game.homeTeamId;
+    const displayAwayId = awayTeamIdOverride ?? game.awayTeamId;
+
     const pickedTeamId = picks[game.id];
-    const isHomePicked = pickedTeamId === game.homeTeamId;
-    const isAwayPicked = pickedTeamId === game.awayTeamId;
+    const isHomePicked = pickedTeamId === displayHomeId;
+    const isAwayPicked = pickedTeamId === displayAwayId;
 
     const isFinal = game.status === 'FINAL';
-    const isHomeWinner = isFinal && game.winnerTeamId === game.homeTeamId;
-    const isAwayWinner = isFinal && game.winnerTeamId === game.awayTeamId;
+    const isHomeWinner = isFinal && game.winnerTeamId === displayHomeId;
+    const isAwayWinner = isFinal && game.winnerTeamId === displayAwayId;
 
-    // Determine status for the picked team (if any)
     const getPickStatus = (teamId?: string) => {
         if (!teamId || !pickedTeamId || teamId !== pickedTeamId) return null;
         if (!isFinal) return null;
@@ -41,27 +45,25 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
     return (
         <div className={`flex flex-col border border-slate-700 bg-slate-900 rounded overflow-hidden w-40 shadow-sm transition-all ${isChampionship ? 'scale-110 border-amber-500/50 shadow-amber-900/20' : 'hover:border-slate-600'}`}>
             <TeamSlot
-                teamId={game.homeTeamId}
-                seed={undefined} // TODO: Resolve seed if available
+                teamId={displayHomeId}
+                seed={undefined}
                 isPicked={isHomePicked}
-                pickStatus={getPickStatus(game.homeTeamId)}
+                pickStatus={getPickStatus(displayHomeId)}
                 isWinner={isHomeWinner}
-                logoUrl={game.homeTeamId ? getTeamLogo(game.homeTeamId.split('-')[1] || '') : null} // Try to extract name part
-                onClick={() => !readOnly && game.homeTeamId && onPick(game.id, game.homeTeamId)}
-                disabled={readOnly || !game.homeTeamId}
+                logoUrl={displayHomeId ? getTeamLogo(displayHomeId.split('-')[1] || '') : null}
+                onClick={() => !readOnly && displayHomeId && onPick(game.id, displayHomeId)}
+                disabled={readOnly || !displayHomeId}
             />
-            <div className="border-t border-slate-800 relative">
-                {/* Connector dot could go here */}
-            </div>
+            <div className="border-t border-slate-800 relative"></div>
             <TeamSlot
-                teamId={game.awayTeamId}
+                teamId={displayAwayId}
                 seed={undefined}
                 isPicked={isAwayPicked}
-                pickStatus={getPickStatus(game.awayTeamId)}
+                pickStatus={getPickStatus(displayAwayId)}
                 isWinner={isAwayWinner}
-                logoUrl={game.awayTeamId ? getTeamLogo(game.awayTeamId.split('-')[1] || '') : null}
-                onClick={() => !readOnly && game.awayTeamId && onPick(game.id, game.awayTeamId)}
-                disabled={readOnly || !game.awayTeamId}
+                logoUrl={displayAwayId ? getTeamLogo(displayAwayId.split('-')[1] || '') : null}
+                onClick={() => !readOnly && displayAwayId && onPick(game.id, displayAwayId)}
+                disabled={readOnly || !displayAwayId}
             />
         </div>
     );
