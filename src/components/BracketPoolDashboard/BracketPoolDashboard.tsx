@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
@@ -67,6 +67,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const maxEntriesPerUser = pool.settings?.maxEntriesPerUser || 1;
     const canCreateMore = userEntries.length < maxEntriesPerUser;
 
+    // Bracket Visibility Rules: Show brackets only when pool is locked and tournament has started
+    const shouldShowBrackets = useMemo(() => {
+        const isLocked = pool.status === 'LOCKED' || pool.status === 'COMPLETED';
+        const tournamentStarted = tournament?.games ? Object.values(tournament.games).some(g => g.winnerTeamId) : false;
+        return isLocked && tournamentStarted;
+    }, [pool.status, tournament]);
+
     // Subscribe to bracket entries
     useEffect(() => {
         const unsub = dbService.subscribeToBracketEntries(pool.id, (data) => {
@@ -100,16 +107,52 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const handleSaveCommissionerMessage = useCallback(async () => {
         setSavingMessage(true);
         try {
-            await dbService.updateBracketPool(pool.id, { commissionerMessage: commissionerDraft.trim() || null });
+            await dbService.updateBracketPool(pool.id, { commissionerMessage: commissionerDraft });
             setMessageSaved(true);
             setTimeout(() => setMessageSaved(false), 2000);
         } catch (err) {
-            console.error('Failed to save commissioner message:', err);
-            setError('Failed to save message');
+            console.error('[BracketPoolDashboard] Error saving commissioner message:', err);
+            setError('Failed to save commissioner message.');
         } finally {
             setSavingMessage(false);
         }
     }, [pool.id, commissionerDraft]);
+
+    // Pool locking handlers
+    const handleLockNow = useCallback(async () => {
+        if (!window.confirm('Are you sure you want to lock the pool now? No more brackets can be submitted after locking.')) {
+            return;
+        }
+        setSavingSettings(true);
+        try {
+            await dbService.updateBracketPool(pool.id, { status: 'LOCKED' });
+            setSettingsSaved(true);
+            setTimeout(() => setSettingsSaved(false), 2000);
+        } catch (err) {
+            console.error('[BracketPoolDashboard] Error locking pool:', err);
+            setError('Failed to lock pool.');
+        } finally {
+            setSavingSettings(false);
+        }
+    }, [pool.id]);
+
+    const handleSaveLockAt = useCallback(async () => {
+        if (!editLockAt) {
+            setError('Please select a valid lock time.');
+            return;
+        }
+        setSavingSettings(true);
+        try {
+            await dbService.updateBracketPool(pool.id, { lockAt: editLockAt });
+            setSettingsSaved(true);
+            setTimeout(() => setSettingsSaved(false), 2000);
+        } catch (err) {
+            console.error('[BracketPoolDashboard] Error saving lock time:', err);
+            setError('Failed to save lock time.');
+        } finally {
+            setSavingSettings(false);
+        }
+    }, [pool.id, editLockAt]);
 
     // Payment toggle
     const handleTogglePayment = useCallback(async (entryId: string, currentStatus: string) => {
@@ -561,20 +604,43 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 {!loading && activeTab === 'entries' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4">
-                        <h3 className="text-white font-bold mb-4">All Entries ({entries.length})</h3>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-white font-bold">All Entries ({entries.length})</h3>
+                            {!shouldShowBrackets && !isManager && (
+                                <p className="text-xs text-amber-400">
+                                    Brackets will be visible after pool locks
+                                </p>
+                            )}
+                        </div>
                         {entries.length === 0 ? (
                             <div className="text-center py-10 text-slate-500 italic">No entries yet.</div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {entries.map(entry => (
-                                    <div key={entry.id} className={`bg-slate-900 p-4 rounded-lg border transition-colors ${entry.ownerUid === user?.id ? 'border-indigo-500 bg-indigo-900/10' : 'border-slate-800'}`}>
-                                        <div className="font-bold text-white">{entry.name}</div>
+                                    <div
+                                        key={entry.id}
+                                        onClick={() => handleViewEntry(entry)}
+                                        className={`bg-slate-900 p-4 rounded-lg border transition-all cursor-pointer hover:scale-105 ${entry.ownerUid === user?.id ? 'border-indigo-500 bg-indigo-900/10 hover:border-indigo-400' : 'border-slate-800 hover:border-slate-600'}`}
+                                    >
+                                        <div className="font-bold text-white flex items-center gap-2">
+                                            {entry.name}
+                                            {entry.ownerUid === user?.id && (
+                                                <span className="text-xs bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full">You</span>
+                                            )}
+                                        </div>
                                         <div className="text-xs text-slate-500 mt-1">
                                             Score: <span className="text-emerald-400 font-mono">{entry.score || 0}</span>
                                             {' · '}
                                             <span className={entry.status === 'SUBMITTED' ? 'text-emerald-400' : 'text-amber-400'}>
                                                 {entry.status === 'SUBMITTED' ? 'Submitted' : 'Draft'}
                                             </span>
+                                            {' · '}
+                                            <span className={entry.paidStatus === 'PAID' ? 'text-emerald-400' : 'text-red-400'}>
+                                                {entry.paidStatus === 'PAID' ? 'Paid' : 'Unpaid'}
+                                            </span>
+                                        </div>
+                                        <div className="mt-2 text-xs text-indigo-400 font-bold">
+                                            Click to view →
                                         </div>
                                     </div>
                                 ))}
@@ -833,6 +899,65 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             )}
                         </div>
 
+                        {/* Pool Locking Controls */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <ShieldCheck size={18} className="text-amber-400" /> Pool Locking
+                            </h3>
+                            <p className="text-slate-400 text-xs mb-4">
+                                Control when the pool locks and brackets become visible to all participants.
+                            </p>
+
+                            <div className="space-y-4">
+                                {/* Current Status */}
+                                <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs text-slate-400 uppercase mb-1">Current Status</p>
+                                            <p className="text-lg font-bold text-white">{pool.status}</p>
+                                        </div>
+                                        {pool.status !== 'LOCKED' && pool.status !== 'COMPLETED' && (
+                                            <button
+                                                onClick={handleLockNow}
+                                                disabled={savingSettings}
+                                                className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                            >
+                                                {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                                                Lock Pool Now
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Auto-Lock Time */}
+                                <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
+                                    <label className="text-xs text-slate-400 uppercase mb-2 block">Auto-Lock Time</label>
+                                    <p className="text-xs text-slate-500 mb-3">
+                                        Pool will automatically lock at this time (typically tournament start).
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="datetime-local"
+                                            value={editLockAt ? new Date(editLockAt).toISOString().slice(0, 16) : ''}
+                                            onChange={(e) => {
+                                                const timestamp = e.target.value ? new Date(e.target.value).getTime() : undefined;
+                                                setEditLockAt(timestamp);
+                                            }}
+                                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
+                                        />
+                                        <button
+                                            onClick={handleSaveLockAt}
+                                            disabled={savingSettings || !editLockAt}
+                                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                        >
+                                            {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
+                                            {settingsSaved ? 'Saved!' : 'Save'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Commissioner Message Editor */}
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                             <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
@@ -1028,19 +1153,33 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             </div>
                         </div>
                         <div className="flex-1 overflow-auto p-4 bg-slate-950/50">
-                            <BracketBuilder
-                                tournament={tournament}
-                                picks={viewingEntry.picks}
-                                onPick={() => { }} // Read-only
-                                readOnly={true}
-                            />
+                            {shouldShowBrackets || isManager ? (
+                                <BracketBuilder
+                                    tournament={tournament}
+                                    picks={viewingEntry.picks}
+                                    onPick={() => { }} // Read-only
+                                    readOnly={true}
+                                />
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                                    <ShieldCheck className="w-16 h-16 text-slate-600 mb-4" />
+                                    <h3 className="text-xl font-bold text-white mb-2">Brackets Not Yet Visible</h3>
+                                    <p className="text-slate-400 max-w-md">
+                                        All brackets will be visible once the pool is locked and the tournament has started.
+                                        This ensures a fair playing field for all participants.
+                                    </p>
+                                    <div className="mt-4 text-sm text-slate-500">
+                                        Pool Status: <span className="text-amber-400 font-mono">{pool.status}</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
             )}
 
             {/* Hidden Printable View - Only visible when printing */}
-            {viewingEntry && tournament && (
+            {viewingEntry && tournament && (shouldShowBrackets || isManager) && (
                 <div className="hidden print:block fixed inset-0 z-[100] bg-white">
                     <BracketBuilder
                         tournament={tournament}

@@ -213,7 +213,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                         <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                             <Trophy size={18} className="text-amber-400" /> Champion Picks
                         </h3>
-                        <div className="h-[300px] w-full">
+                        <div className="h-[500px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={popularityData.champion} layout="vertical" margin={{ left: 40, right: 40 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
@@ -222,7 +222,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                                         dataKey="name"
                                         type="category"
                                         width={100}
-                                        tick={{ fill: '#94a3b8', fontSize: 12 }}
+                                        tick={{ fill: '#94a3b8', fontSize: 14 }}
                                         interval={0}
                                     />
                                     <Tooltip
@@ -244,7 +244,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                         <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                             <FileText size={18} className="text-indigo-400" /> Final Four Picks
                         </h3>
-                        <div className="h-[300px] w-full">
+                        <div className="h-[500px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={popularityData.finalFour} layout="vertical" margin={{ left: 40, right: 40 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
@@ -253,7 +253,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                                         dataKey="name"
                                         type="category"
                                         width={100}
-                                        tick={{ fill: '#94a3b8', fontSize: 12 }}
+                                        tick={{ fill: '#94a3b8', fontSize: 14 }}
                                         interval={0}
                                     />
                                     <Tooltip
