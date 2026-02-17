@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { dbService } from '../services/dbService';
 
-import type { GameState, PoolTheme, Pool } from "../types";
+import type { GameState, PoolTheme } from "../types";
 import type { User } from '../types';
 import type { ESPNGame, ESPNCompetitor } from '../types/espn';
 
@@ -248,7 +248,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                 scores: { ...gameState.scores, q1: {}, half: {}, q3: {}, final: {}, current: { home: 0, away: 0 } } // Init scores
             };
 
-            const poolId = await dbService.createPool(newPool as unknown as Pool);
+            const poolId = await dbService.createPool(newPool as unknown as Record<string, unknown>);
             navigate(`/pool/${poolId}`);
             onComplete();
         } catch (error) {

@@ -60,7 +60,7 @@ export async function runScenario(
         }
 
         addStep('Create Pool', 'success', `Creating pool: ${poolName}`);
-        poolId = await dbService.createPool(basePool);
+        poolId = await dbService.createPool(basePool as unknown as Record<string, unknown>);
         trackResource('pool', poolId!, { scenario });
         addStep('Create Pool', 'success', `Pool created with ID: ${poolId}`);
 

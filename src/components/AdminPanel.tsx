@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry } from '../types';
+import type { ESPNGame, ESPNCompetitor, ESPNCompetition } from '../types/espn';
 
 import Settings from 'lucide-react/dist/esm/icons/settings';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
@@ -77,45 +78,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isFetchingScores, setIsFetchingScores] = useState(false);
   const [fetchStatus, setFetchStatus] = useState<{ type: 'success' | 'error' | 'neutral', msg: string } | null>(null);
 
-  interface ESPNTeam {
-    id: string;
-    uid: string;
-    slug: string;
-    displayName: string;
-    logo: string;
-  }
 
-  interface ESPNCompetitor {
-    id: string;
-    uid: string;
-    type: string;
-    order: number;
-    homeAway: string;
-    team: ESPNTeam;
-    score?: string;
-  }
-
-  interface ESPNCompetition {
-    id: string;
-    uid: string;
-    date: string;
-    attendance: number;
-    type: { id: string; abbreviation: string };
-    timeValid: boolean;
-    neutralSite: boolean;
-    competitors: ESPNCompetitor[];
-  }
-
-  interface ESPNGame {
-    id: string;
-    uid: string;
-    date: string;
-    name: string;
-    shortName: string;
-    season: { year: number; type: number; slug: string };
-    competitions: ESPNCompetition[];
-    status: { clock: number; displayClock: string; period: number; type: { id: string; name: string; state: string; completed: boolean; detail: string; shortDetail: string } };
-  }
 
   // Auto-detect season type: Dec-Feb is postseason, otherwise regular
   const getDefaultSeasonType = () => {

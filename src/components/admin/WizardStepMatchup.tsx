@@ -1,26 +1,9 @@
 import React from 'react';
 import { Calendar, RefreshCw, Shield } from 'lucide-react';
 import type { GameState } from '../../types';
+import type { ESPNGame, ESPNCompetitor } from '../../types/espn';
 import { DebouncedInput } from './DebouncedInputs';
 import { getTeamLogo } from '../../constants';
-
-interface ScheduleCompetitor {
-    homeAway: string;
-    team: {
-        logo: string;
-        abbreviation: string;
-    };
-}
-
-interface ScheduleCompetition {
-    competitors: ScheduleCompetitor[];
-}
-
-interface ScheduleGame {
-    id: string;
-    date: string;
-    competitions: ScheduleCompetition[];
-}
 
 interface WizardStepMatchupProps {
     gameState: GameState;
@@ -29,12 +12,12 @@ interface WizardStepMatchupProps {
     setSeasonType: (type: string) => void;
     week: string;
     setWeek: (week: string) => void;
-    scheduleGames: ScheduleGame[];
+    scheduleGames: ESPNGame[];
     isLoadingSchedule: boolean;
     showSchedule: boolean;
     setShowSchedule: (show: boolean) => void;
     fetchSchedule: () => void;
-    selectGame: (game: ScheduleGame) => void;
+    selectGame: (game: ESPNGame) => void;
     currentEstimatedWeek: number;
     cfbConference?: string;
     setCfbConference?: (conf: string) => void;
@@ -146,10 +129,10 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({
                             {scheduleGames.length === 0 && !isLoadingSchedule && (
                                 <div className="text-slate-500 text-sm text-center py-4">No future games found for this week.</div>
                             )}
-                            {scheduleGames.map((game: ScheduleGame) => {
+                            {scheduleGames.map((game: ESPNGame) => {
                                 const comp = game.competitions[0];
-                                const home = comp.competitors.find((c) => c.homeAway === 'home')?.team;
-                                const away = comp.competitors.find((c) => c.homeAway === 'away')?.team;
+                                const home = comp.competitors.find((c: ESPNCompetitor) => c.homeAway === 'home')?.team;
+                                const away = comp.competitors.find((c: ESPNCompetitor) => c.homeAway === 'away')?.team;
                                 if (!home || !away) return null;
                                 const dateStr = new Date(game.date).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                                 return (
