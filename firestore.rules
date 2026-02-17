@@ -117,7 +117,10 @@ service cloud.firestore {
       // BRACKET/PLAYOFF ENTRIES
       match /entries/{entryId} {
         allow read: if request.auth != null;
-        allow write: if isSuperAdmin();
+        allow write: if isSuperAdmin() || (
+          request.auth != null && 
+          get(/databases/$(database)/documents/pools/$(poolId)).data.slug.matches('^sim-.*')
+        );
       }
     }
     
