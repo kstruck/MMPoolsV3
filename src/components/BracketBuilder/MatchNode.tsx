@@ -11,9 +11,10 @@ interface MatchNodeProps {
     isChampionship?: boolean;
     homeTeamIdOverride?: string;
     awayTeamIdOverride?: string;
+    dynamicParticipants?: boolean;
 }
 
-export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readOnly, isChampionship, homeTeamIdOverride, awayTeamIdOverride }) => {
+export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readOnly, isChampionship, homeTeamIdOverride, awayTeamIdOverride, dynamicParticipants }) => {
     // If no game yet (e.g. waiting for previous round), show placeholder
     if (!game) {
         return (
@@ -24,9 +25,11 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
         );
     }
 
-    // Use overrides if provided, otherwise fallback to game data (for R1)
-    const displayHomeId = homeTeamIdOverride ?? game.homeTeamId;
-    const displayAwayId = awayTeamIdOverride ?? game.awayTeamId;
+    // Use overrides if provided. 
+    // If dynamicParticipants is true, we ONLY use overrides/picks and do NOT fallback to game data.
+    // This prevents showing "TBD" or pre-filled teams in later rounds before they are known.
+    const displayHomeId = dynamicParticipants ? homeTeamIdOverride : (homeTeamIdOverride ?? game.homeTeamId);
+    const displayAwayId = dynamicParticipants ? awayTeamIdOverride : (awayTeamIdOverride ?? game.awayTeamId);
 
     const pickedTeamId = picks[game.id];
     const isHomePicked = pickedTeamId === displayHomeId;

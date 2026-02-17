@@ -164,6 +164,7 @@ const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({
                             readOnly={readOnly}
                             homeTeamIdOverride={homeId}
                             awayTeamIdOverride={awayId}
+                            dynamicParticipants
                         />
                     );
                 })}
@@ -185,6 +186,7 @@ const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({
                             readOnly={readOnly}
                             homeTeamIdOverride={homeId}
                             awayTeamIdOverride={awayId}
+                            dynamicParticipants
                         />
                     );
                 })}
@@ -206,6 +208,7 @@ const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({
                             readOnly={readOnly}
                             homeTeamIdOverride={homeId}
                             awayTeamIdOverride={awayId}
+                            dynamicParticipants
                         />
                     );
                 })()}
@@ -253,6 +256,7 @@ const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, on
                         readOnly={readOnly}
                         homeTeamIdOverride={eastChamp}
                         awayTeamIdOverride={westChamp}
+                        dynamicParticipants
                     />
                 </div>
 
@@ -268,6 +272,7 @@ const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, on
                         isChampionship
                         homeTeamIdOverride={champHome}
                         awayTeamIdOverride={champAway}
+                        dynamicParticipants
                     />
                 </div>
 
@@ -281,6 +286,7 @@ const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, on
                         readOnly={readOnly}
                         homeTeamIdOverride={southChamp}
                         awayTeamIdOverride={midwestChamp}
+                        dynamicParticipants
                     />
                 </div>
             </div>
