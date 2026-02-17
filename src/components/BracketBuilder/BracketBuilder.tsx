@@ -141,35 +141,35 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 const FullBracketView: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly }) => {
     // Zoom/Pan could be added here later. For now, we'll do a CSS transform scale to fit.
     return (
-        <div className="w-full h-full overflow-auto bg-slate-950 p-8">
-            <div className="min-w-[1600px] flex justify-center gap-16 relative">
+        <div className="w-full h-full overflow-auto bg-slate-950 p-4">
+            <div className="w-fit mx-auto flex justify-center gap-4 lg:gap-8 xl:gap-16">
 
                 {/* LEFT SIDE: East & West */}
-                <div className="flex flex-col gap-16">
+                <div className="flex flex-col gap-12 lg:gap-16">
                     <div>
                         <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">East Region</h3>
-                        <RegionBracket regionName="East" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                        <RegionBracket regionName="East" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="left" />
                     </div>
                     <div>
                         <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">West Region</h3>
-                        <RegionBracket regionName="West" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                        <RegionBracket regionName="West" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="left" />
                     </div>
                 </div>
 
                 {/* CENTER: Final Four */}
-                <div className="flex flex-col justify-center sticky top-0 self-center">
+                <div className="flex flex-col justify-center sticky top-0 self-center z-10">
                     <FinalFourBracket tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
                 </div>
 
-                {/* RIGHT SIDE: South & Midwest */}
-                <div className="flex flex-col gap-16">
+                {/* RIGHT SIDE: South & Midwest - ALIGN RIGHT */}
+                <div className="flex flex-col gap-12 lg:gap-16">
                     <div>
                         <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">South Region</h3>
-                        <RegionBracket regionName="South" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                        <RegionBracket regionName="South" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="right" />
                     </div>
                     <div>
                         <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">Midwest Region</h3>
-                        <RegionBracket regionName="Midwest" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                        <RegionBracket regionName="Midwest" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="right" />
                     </div>
                 </div>
             </div>
@@ -177,7 +177,7 @@ const FullBracketView: React.FC<BracketBuilderProps> = ({ tournament, picks, onP
     );
 };
 
-const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({ regionName, tournament, picks, onPick, readOnly }) => {
+const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right' } & BracketBuilderProps> = ({ regionName, align = 'left', tournament, picks, onPick, readOnly }) => {
     // Helper to get games for this region and round
     const getGames = (round: number) => {
         return Object.values(tournament.games)
@@ -190,8 +190,11 @@ const RegionBracket: React.FC<{ regionName: string } & BracketBuilderProps> = ({
     const r3Games = getGames(3); // 2 games
     const r4Games = getGames(4); // 1 game
 
+    // Dynamic classes based on alignment
+    const containerClasses = `flex gap-2 sm:gap-4 justify-center scale-90 sm:scale-100 origin-top ${align === 'right' ? 'flex-row-reverse' : ''}`;
+
     return (
-        <div className="flex gap-4 min-w-[600px] justify-center scale-90 origin-top">
+        <div className={containerClasses}>
             {/* Round 1 Column */}
             <div className="flex flex-col justify-around gap-1 py-4">
                 {Array.from({ length: 8 }).map((_, i) => (
