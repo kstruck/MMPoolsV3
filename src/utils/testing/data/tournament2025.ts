@@ -228,7 +228,7 @@ const ALL_RESULTS_BY_ROUND: Record<number, GameResult[]> = {
 
 // ─── TOURNAMENT GENERATOR ────────────────────────────────────────
 
-function buildSlotId(gameId: string): string {
+export function buildSlotId(gameId: string): string {
     return `slot-${gameId}`;
 }
 

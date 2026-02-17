@@ -12,9 +12,10 @@ interface MatchNodeProps {
     homeTeamIdOverride?: string;
     awayTeamIdOverride?: string;
     dynamicParticipants?: boolean;
+    eliminatedTeamIds?: Set<string>;
 }
 
-export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readOnly, isChampionship, homeTeamIdOverride, awayTeamIdOverride, dynamicParticipants }) => {
+export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readOnly, isChampionship, homeTeamIdOverride, awayTeamIdOverride, dynamicParticipants, eliminatedTeamIds }) => {
     // If no game yet (e.g. waiting for previous round), show placeholder
     if (!game) {
         return (
@@ -56,6 +57,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
                 logoUrl={displayHomeId ? getTeamLogo(displayHomeId.split('-')[1] || '') : null}
                 onClick={() => !readOnly && displayHomeId && onPick(game.id, displayHomeId)}
                 disabled={readOnly || !displayHomeId}
+                isEliminated={displayHomeId ? eliminatedTeamIds?.has(displayHomeId) : false}
             />
             <div className="border-t border-slate-800 relative"></div>
             <TeamSlot
@@ -67,6 +69,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
                 logoUrl={displayAwayId ? getTeamLogo(displayAwayId.split('-')[1] || '') : null}
                 onClick={() => !readOnly && displayAwayId && onPick(game.id, displayAwayId)}
                 disabled={readOnly || !displayAwayId}
+                isEliminated={displayAwayId ? eliminatedTeamIds?.has(displayAwayId) : false}
             />
         </div>
     );
@@ -81,9 +84,10 @@ interface TeamSlotProps {
     logoUrl?: string | null;
     onClick: () => void;
     disabled?: boolean;
+    isEliminated?: boolean;
 }
 
-const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus, isWinner, logoUrl, onClick, disabled }) => {
+const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus, isWinner, logoUrl, onClick, disabled, isEliminated }) => {
     // Extract team name from ID (e.g., "E1-Duke" -> "Duke")
     // Assuming format RegionSeed-Name or just Name
     let teamName = 'TBD';
@@ -108,6 +112,7 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
                 }
                 ${isWinner && !isPicked ? 'bg-emerald-500/10' : ''}
                 ${disabled ? 'cursor-default' : 'cursor-pointer'}
+                ${isEliminated ? 'opacity-50 grayscale-[0.5]' : ''}
             `}
         >
             <div className="flex items-center gap-2 w-full overflow-hidden z-10">
@@ -117,7 +122,7 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
                     seed && <span className="text-[10px] font-mono opacity-60 w-3">{seed}</span>
                 )}
 
-                <span className={`text-xs font-bold truncate tracking-tight flex-1 ${!teamId ? 'italic opacity-40' : ''}`}>
+                <span className={`text-xs font-bold truncate tracking-tight flex-1 ${!teamId ? 'italic opacity-40' : ''} ${isEliminated ? 'line-through decoration-red-500/50' : ''}`}>
                     {teamName}
                 </span>
             </div>
@@ -125,8 +130,10 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
             {/* Status Icons */}
             <div className="z-10 ml-1">
                 {pickStatus === 'correct' && <Check className="w-3.5 h-3.5 text-white" />}
-                {pickStatus === 'incorrect' && <X className="w-3.5 h-3.5 text-red-400" />}
-                {isPicked && !pickStatus && <div className="w-1.5 h-1.5 rounded-full bg-white shadow-sm" />}
+                {pickStatus === 'incorrect' && <X className="w-3.5 h-3.5 text-red-500" />}
+                {isWinner && !pickStatus && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                {!isWinner && isEliminated && !pickStatus && <X className="w-3.5 h-3.5 text-red-500" />}
+                {isPicked && !pickStatus && !isEliminated && !isWinner && <div className="w-1.5 h-1.5 rounded-full bg-white shadow-sm" />}
             </div>
 
             {/* Winner highlight bar */}

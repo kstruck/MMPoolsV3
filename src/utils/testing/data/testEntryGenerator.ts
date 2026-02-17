@@ -5,7 +5,8 @@
  * Uses a seeded PRNG for reproducibility — same seed = same entries every time.
  */
 
-import { getCorrectPicks, getAllPickableSlotIds, TEAMS } from './tournament2025';
+import { getCorrectPicks, generateTournament2025, getNextGameId, buildSlotId } from './tournament2025';
+import type { Game } from '../../../types';
 
 // ─── SEEDED PSEUDO-RANDOM NUMBER GENERATOR ───────────────────────
 // Mulberry32 — simple, fast, deterministic
@@ -69,12 +70,8 @@ export function generateEntries(
 
     const rng = mulberry32(seed);
     const correctPicks = getCorrectPicks();
-    const slotIds = getAllPickableSlotIds();
-
-    // Collect all team IDs that participate in R64
-    const allTeamIds = TEAMS
-        .filter(t => !t.id.startsWith('FF-')) // exclude First Four-only teams
-        .map(t => t.id);
+    const tournament = generateTournament2025();
+    const games = Object.values(tournament.games);
 
     const entries: GeneratedEntry[] = [];
 
@@ -93,30 +90,61 @@ export function generateEntries(
         const suffix = entryIdx >= ENTRY_NAMES.length ? ` #${Math.floor(entryIdx / ENTRY_NAMES.length) + 1}` : '';
         const userName = `${baseName}${suffix}`;
 
-        const picks: Record<string, string> = {};
+        const entryPicks: Record<string, string> = {};
 
-        for (const slotId of slotIds) {
+        // Helper to pick a winner between two teams
+        const pickWinner = (t1: string, t2: string, slotId: string): string => {
             const correct = correctPicks[slotId];
-            if (!correct) continue;
-
-            // With chalkBias probability, pick the correct winner.
-            // Otherwise, pick a random team from the pool.
+            // If we have a chalk bias, and one of these teams is the correct winner, favor them
             if (rng() < chalkBias) {
-                picks[slotId] = correct;
-            } else {
-                // Pick a random team — weighted toward the other team in that matchup
-                // For simplicity, just pick a random team from the full team pool
-                const randomTeam = allTeamIds[Math.floor(rng() * allTeamIds.length)];
-                picks[slotId] = randomTeam;
+                if (t1 === correct) return t1;
+                if (t2 === correct) return t2;
+            }
+            // Otherwise random choice between the TWO participants
+            return rng() < 0.5 ? t1 : t2;
+        };
+
+        // Standard 6-round advancement
+        for (let r = 1; r <= 6; r++) {
+            const roundGames = games.filter(g => (g as Game).round === r) as Game[];
+            for (const g of roundGames) {
+                const slotId = buildSlotId(g.id);
+                let team1: string | undefined;
+                let team2: string | undefined;
+
+                if (r === 1) {
+                    team1 = g.homeTeamId;
+                    team2 = g.awayTeamId;
+                } else {
+                    // Logic to find which games lead to this one
+                    const feederGames = games.filter(fg => {
+                        const nextId = getNextGameId(fg.id, fg.round, fg.region || '');
+                        return nextId === g.id;
+                    });
+
+                    if (feederGames.length === 2) {
+                        team1 = entryPicks[buildSlotId(feederGames[0].id)];
+                        team2 = entryPicks[buildSlotId(feederGames[1].id)];
+                    } else if (feederGames.length === 1) {
+                        // Safety for uneven transitions
+                        team1 = entryPicks[buildSlotId(feederGames[0].id)];
+                    }
+                }
+
+                if (team1 && team2) {
+                    entryPicks[slotId] = pickWinner(team1, team2, slotId);
+                } else if (team1) {
+                    entryPicks[slotId] = team1;
+                }
             }
         }
 
-        // Tiebreaker: random value between 120-170 (reasonable championship total range)
+        // Tiebreaker: random value between 120-170
         const tiebreakerPrediction = Math.floor(120 + rng() * 50);
 
         entries.push({
             userName,
-            picks,
+            picks: entryPicks,
             tiebreakerPrediction,
         });
     }
@@ -126,61 +154,61 @@ export function generateEntries(
 
 /**
  * Generate a small batch of hand-crafted entries for focused testing.
- * These have predictable pick patterns:
- *   - allChalk: always picks the favorite (correct pick)
- *   - allUpset: always picks the underdog (wrong pick)
- *   - halfRight: alternates correct/incorrect
  */
 export function generateControlEntries(): GeneratedEntry[] {
-    const correctPicks = getCorrectPicks();
-    const slotIds = getAllPickableSlotIds();
+    const tournament = generateTournament2025();
+    const games = Object.values(tournament.games);
 
-    // Collect all team IDs
-    const allTeamIds = TEAMS
-        .filter(t => !t.id.startsWith('FF-'))
-        .map(t => t.id);
+    const generateSpecific = (mode: 'chalk' | 'upset' | 'half'): Record<string, string> => {
+        const picks: Record<string, string> = {};
+        const isCorrect = (slotId: string, round: number, count: number) => {
+            if (mode === 'chalk') return true;
+            if (mode === 'upset') return false;
+            // Alternating pattern for HalfRight
+            return (round + count) % 2 === 0;
+        };
 
-    // All chalk (should have highest score)
-    const chalkPicks: Record<string, string> = { ...correctPicks };
+        let count = 0;
+        for (let r = 1; r <= 6; r++) {
+            const roundGames = games.filter(g => (g as Game).round === r) as Game[];
+            for (const g of roundGames) {
+                count++;
+                const slotId = buildSlotId(g.id);
+                const winner = getCorrectPicks()[slotId];
 
-    // All upset (should have lowest or zero score)
-    const upsetPicks: Record<string, string> = {};
-    for (const slotId of slotIds) {
-        const correct = correctPicks[slotId];
-        // Pick a team that is NOT the correct winner
-        const wrongTeam = allTeamIds.find(t => t !== correct) || allTeamIds[0];
-        upsetPicks[slotId] = wrongTeam;
-    }
+                let team1: string, team2: string;
+                if (r === 1) {
+                    team1 = g.homeTeamId;
+                    team2 = g.awayTeamId;
+                } else {
+                    const feeders = games.filter(fg => getNextGameId(fg.id, fg.round, fg.region || '') === g.id);
+                    team1 = picks[buildSlotId(feeders[0].id)];
+                    team2 = picks[buildSlotId(feeders[1].id)];
+                }
 
-    // Half right (alternating)
-    const halfPicks: Record<string, string> = {};
-    let flipFlop = true;
-    for (const slotId of slotIds) {
-        if (flipFlop) {
-            halfPicks[slotId] = correctPicks[slotId];
-        } else {
-            const correct = correctPicks[slotId];
-            const wrongTeam = allTeamIds.find(t => t !== correct) || allTeamIds[0];
-            halfPicks[slotId] = wrongTeam;
+                const loser = (team1 === winner) ? team2 : team1;
+                picks[slotId] = isCorrect(slotId, r, count) ? winner : (loser || team2);
+            }
         }
-        flipFlop = !flipFlop;
-    }
+        return picks;
+    };
 
     return [
         {
             userName: 'AllChalk',
-            picks: chalkPicks,
-            tiebreakerPrediction: 128, // Exact
+            picks: generateSpecific('chalk'),
+            tiebreakerPrediction: 128,
         },
         {
             userName: 'AllUpset',
-            picks: upsetPicks,
+            picks: generateSpecific('upset'),
             tiebreakerPrediction: 160,
         },
         {
             userName: 'HalfRight',
-            picks: halfPicks,
+            picks: generateSpecific('half'),
             tiebreakerPrediction: 140,
         },
     ];
 }
+

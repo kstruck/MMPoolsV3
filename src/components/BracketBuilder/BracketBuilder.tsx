@@ -17,6 +17,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 
     // Calculate completion status for tabs - moved up to avoid conditional hook call
     const completionStatus = useMemo(() => {
+        // ... (status calc same as before) ...
         const status: Record<BracketRegion | 'FF', { count: number; total: number; complete: boolean }> = {
             East: { count: 0, total: 15, complete: false },
             West: { count: 0, total: 15, complete: false },
@@ -28,7 +29,6 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
         Object.values(tournament.games).forEach(game => {
             if (picks[game.id]) {
                 const region = game.region as BracketRegion;
-                // Only count if it's a valid main region
                 if (region && status[region]) {
                     status[region].count++;
                 } else if (game.region === 'Final Four' || game.region === 'Championship' || game.round >= 5) {
@@ -44,6 +44,18 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
         return status;
     }, [tournament, picks]);
 
+    // Calculate eliminated teams globally
+    const eliminatedTeamIds = useMemo(() => {
+        const eliminated = new Set<string>();
+        Object.values(tournament.games).forEach(game => {
+            if (game.status === 'FINAL' && game.winnerTeamId) {
+                const loserId = game.winnerTeamId === game.homeTeamId ? game.awayTeamId : game.homeTeamId;
+                if (loserId) eliminated.add(loserId);
+            }
+        });
+        return eliminated;
+    }, [tournament]);
+
     if (viewMode === 'full') {
         return (
             <FullBracketView
@@ -51,6 +63,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                 picks={picks}
                 onPick={onPick}
                 readOnly={readOnly}
+                eliminatedTeamIds={eliminatedTeamIds}
             />
         );
     }
@@ -100,6 +113,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                         picks={picks}
                         onPick={onPick}
                         readOnly={readOnly}
+                        eliminatedTeamIds={eliminatedTeamIds}
                     />
                 ) : (
                     <RegionBracket
@@ -108,6 +122,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                         picks={picks}
                         onPick={onPick}
                         readOnly={readOnly}
+                        eliminatedTeamIds={eliminatedTeamIds}
                     />
                 )}
             </div>
@@ -138,7 +153,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 
 // --- Sub-components ---
 
-const FullBracketView: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly }) => {
+const FullBracketView: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<string> }> = ({ tournament, picks, onPick, readOnly, eliminatedTeamIds }) => {
     // Zoom/Pan could be added here later. For now, we'll do a CSS transform scale to fit.
     return (
         <div className="w-full h-full overflow-auto bg-slate-950 p-4">
@@ -148,28 +163,28 @@ const FullBracketView: React.FC<BracketBuilderProps> = ({ tournament, picks, onP
                 <div className="flex flex-col gap-12 lg:gap-16">
                     <div>
                         <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">East Region</h3>
-                        <RegionBracket regionName="East" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="left" />
+                        <RegionBracket regionName="East" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="left" eliminatedTeamIds={eliminatedTeamIds} />
                     </div>
                     <div>
                         <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">West Region</h3>
-                        <RegionBracket regionName="West" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="left" />
+                        <RegionBracket regionName="West" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="left" eliminatedTeamIds={eliminatedTeamIds} />
                     </div>
                 </div>
 
                 {/* CENTER: Final Four */}
                 <div className="flex flex-col justify-center sticky top-0 self-center z-10">
-                    <FinalFourBracket tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} />
+                    <FinalFourBracket tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} eliminatedTeamIds={eliminatedTeamIds} />
                 </div>
 
                 {/* RIGHT SIDE: South & Midwest - ALIGN RIGHT */}
                 <div className="flex flex-col gap-12 lg:gap-16">
                     <div>
                         <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">South Region</h3>
-                        <RegionBracket regionName="South" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="right" />
+                        <RegionBracket regionName="South" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="right" eliminatedTeamIds={eliminatedTeamIds} />
                     </div>
                     <div>
                         <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">Midwest Region</h3>
-                        <RegionBracket regionName="Midwest" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="right" />
+                        <RegionBracket regionName="Midwest" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="right" eliminatedTeamIds={eliminatedTeamIds} />
                     </div>
                 </div>
             </div>
@@ -177,7 +192,7 @@ const FullBracketView: React.FC<BracketBuilderProps> = ({ tournament, picks, onP
     );
 };
 
-const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right' } & BracketBuilderProps> = ({ regionName, align = 'left', tournament, picks, onPick, readOnly }) => {
+const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right'; eliminatedTeamIds: Set<string> } & BracketBuilderProps> = ({ regionName, align = 'left', tournament, picks, onPick, readOnly, eliminatedTeamIds }) => {
     // Helper to get games for this region and round
     const getGames = (round: number) => {
         return Object.values(tournament.games)
@@ -198,7 +213,7 @@ const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right' } &
             {/* Round 1 Column */}
             <div className="flex flex-col justify-around gap-1 py-4">
                 {Array.from({ length: 8 }).map((_, i) => (
-                    <MatchNode key={`r1-${i}`} game={r1Games[i]} picks={picks} onPick={onPick} readOnly={readOnly} />
+                    <MatchNode key={`r1-${i}`} game={r1Games[i]} picks={picks} onPick={onPick} readOnly={readOnly} eliminatedTeamIds={eliminatedTeamIds} />
                 ))}
             </div>
 
@@ -272,7 +287,7 @@ const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right' } &
     );
 };
 
-const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly }) => {
+const FinalFourBracket: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<string> }> = ({ tournament, picks, onPick, readOnly, eliminatedTeamIds }) => {
     const ffGames = Object.values(tournament.games).filter(g => g.round === 5); // 2 games
     const champGame = Object.values(tournament.games).find(g => g.round === 6); // 1 game
 
@@ -311,6 +326,7 @@ const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, on
                         homeTeamIdOverride={eastChamp}
                         awayTeamIdOverride={westChamp}
                         dynamicParticipants
+                        eliminatedTeamIds={eliminatedTeamIds}
                     />
                 </div>
 
@@ -327,6 +343,7 @@ const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, on
                         homeTeamIdOverride={champHome}
                         awayTeamIdOverride={champAway}
                         dynamicParticipants
+                        eliminatedTeamIds={eliminatedTeamIds}
                     />
                 </div>
 
@@ -341,6 +358,7 @@ const FinalFourBracket: React.FC<BracketBuilderProps> = ({ tournament, picks, on
                         homeTeamIdOverride={southChamp}
                         awayTeamIdOverride={midwestChamp}
                         dynamicParticipants
+                        eliminatedTeamIds={eliminatedTeamIds}
                     />
                 </div>
             </div>
