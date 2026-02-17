@@ -268,24 +268,50 @@ export const TournamentSimulator: React.FC = () => {
         }
     }, [poolId, tournament, userPicks, tieBreakerInput]);
 
-    const handleRandomFill = useCallback(() => {
+    const handleRandomFill = useCallback((strategy: 'random' | 'chalk' | 'upset' = 'random') => {
         if (!tournament) return;
 
         const newPicks = { ...userPicks };
-        // We must simulate round by round to ensure valid progression
+
+        // Helper to pick winner based on strategy
+        const pickWinner = (team1Id: string, team2Id: string): string => {
+            if (strategy === 'random') {
+                return Math.random() > 0.5 ? team1Id : team2Id;
+            }
+
+            const team1 = TEAMS.find(t => t.id === team1Id);
+            const team2 = TEAMS.find(t => t.id === team2Id);
+
+            if (!team1 || !team2) return Math.random() > 0.5 ? team1Id : team2Id;
+
+            // Chalk: Lower seed number (better rank) has higher chance
+            // Upset: Higher seed number (worse rank) has higher chance
+            // We'll make it probabilistic but weighted
+            const seedDiff = team2.seed - team1.seed; // Positive if team1 is better (lower seed)
+
+            // Base probability for team1 winning
+            // If team1 is 1 and team2 is 16, diff is 15.
+            let team1Prob = 0.5 + (seedDiff * 0.03); // 1 vs 16 -> 0.95
+
+            if (strategy === 'chalk') {
+                team1Prob = Math.min(0.95, Math.max(0.05, team1Prob + 0.2));
+            } else if (strategy === 'upset') {
+                // Invert the probability bias
+                team1Prob = 1 - team1Prob;
+            }
+
+            return Math.random() < team1Prob ? team1Id : team2Id;
+        };
+
         // Round 1
         const r1Games = Object.values(tournament.games).filter(g => g.round === 1);
         r1Games.forEach(g => {
             if (!newPicks[g.id]) {
-                newPicks[g.id] = Math.random() > 0.5 ? g.homeTeamId! : g.awayTeamId!;
+                newPicks[g.id] = pickWinner(g.homeTeamId!, g.awayTeamId!);
             }
         });
 
         // Rounds 2-6
-        // Helper to find who advanced to a given game from previous picks
-        // We build a map of "nextGameId -> [team1, team2]" for the current round
-        // We build a map of "nextGameId -> [team1, team2]" for the current round
-
         for (let r = 2; r <= 6; r++) {
             const nextRoundCandidates: Record<string, string[]> = {};
 
@@ -307,17 +333,25 @@ export const TournamentSimulator: React.FC = () => {
             roundGames.forEach(g => {
                 if (!newPicks[g.id]) {
                     const candidates = nextRoundCandidates[g.id];
-                    if (candidates && candidates.length > 0) {
-                        // Pick random from candidates (usually 2, possibly 1 if odd?)
-                        const winner = candidates[Math.floor(Math.random() * candidates.length)];
-                        newPicks[g.id] = winner;
+                    if (candidates && candidates.length === 2) {
+                        newPicks[g.id] = pickWinner(candidates[0], candidates[1]);
+                    } else if (candidates && candidates.length === 1) {
+                        // Auto-advance if only one candidate (shouldn't happen in valid bracket but safety)
+                        newPicks[g.id] = candidates[0];
                     }
                 }
             });
         }
 
         setUserPicks(newPicks);
-    }, [tournament, userPicks]);
+
+        // Auto-fill tiebreaker if empty
+        if (!tieBreakerInput) {
+            // Random score between 120 and 160
+            const randomScore = Math.floor(Math.random() * (160 - 120 + 1)) + 120;
+            setTieBreakerInput(randomScore.toString());
+        }
+    }, [tournament, userPicks, tieBreakerInput]);
 
     const handleClear = useCallback(() => {
         if (window.confirm('Are you sure you want to clear all picks?')) {
@@ -712,7 +746,7 @@ const BracketPhase: React.FC<{
     onTieBreakerChange: (val: string) => void;
     onSubmit: () => void;
     onSkip: () => void;
-    onRandomFill: () => void;
+    onRandomFill: (strategy: 'random' | 'chalk' | 'upset') => void;
     onClear: () => void;
     isLoading: boolean;
 }> = ({ tournament, picks, onPick, pickCount, totalPicks, tieBreakerInput, onTieBreakerChange, onSubmit, onSkip, onRandomFill, onClear, isLoading }) => (
@@ -758,13 +792,35 @@ const BracketPhase: React.FC<{
 
                 <div className="h-6 w-px bg-slate-700 mx-2" />
 
-                <button
-                    onClick={onRandomFill}
-                    className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-md transition-colors"
-                    title="Randomly fill remaining"
-                >
-                    <Shuffle className="w-4 h-4" />
-                </button>
+                {/* Random Options */}
+                <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5">
+                    <button
+                        onClick={() => onRandomFill('random')}
+                        className="p-1.5 px-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors flex items-center gap-1"
+                        title="Randomly fill remaining"
+                    >
+                        <Shuffle className="w-3.5 h-3.5" />
+                        Random
+                    </button>
+                    <div className="h-4 w-px bg-slate-700" />
+                    <button
+                        onClick={() => onRandomFill('chalk')}
+                        className="p-1.5 px-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                        title="Fill with favorites"
+                    >
+                        Chalk
+                    </button>
+                    <div className="h-4 w-px bg-slate-700" />
+                    <button
+                        onClick={() => onRandomFill('upset')}
+                        className="p-1.5 px-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                        title="Fill with upsets"
+                    >
+                        Chaos
+                    </button>
+                </div>
+
+                <div className="h-6 w-px bg-slate-700 mx-2" />
 
                 <button
                     onClick={onClear}
