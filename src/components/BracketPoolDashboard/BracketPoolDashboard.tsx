@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
@@ -433,13 +433,23 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         )}
                                                     </div>
                                                 </div>
-                                                <button
-                                                    onClick={() => handleEditEntry(entry)}
-                                                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold"
-                                                    disabled={entry.status === 'SUBMITTED' && pool.status !== 'DRAFT'}
-                                                >
-                                                    {entry.status === 'SUBMITTED' ? 'View/Edit' : 'Edit Draft'}
-                                                </button>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleViewEntry(entry)}
+                                                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                                        title="View & Print"
+                                                    >
+                                                        <Printer size={16} />
+                                                        <span className="hidden sm:inline">View</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleEditEntry(entry)}
+                                                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold"
+                                                        disabled={entry.status === 'SUBMITTED' && pool.status !== 'DRAFT'}
+                                                    >
+                                                        {entry.status === 'SUBMITTED' ? 'Edit' : 'Edit Draft'}
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -1000,12 +1010,22 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     Owner: {entries.find(e => e.id === viewingEntry.id)?.ownerUid === user?.id ? 'You' : 'Another User'}
                                 </p>
                             </div>
-                            <button
-                                onClick={() => setViewingEntry(null)}
-                                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => window.print()}
+                                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors flex items-center gap-2"
+                                    title="Print Bracket"
+                                >
+                                    <Printer className="w-5 h-5" />
+                                    <span className="text-sm font-bold hidden sm:block">Print</span>
+                                </button>
+                                <button
+                                    onClick={() => setViewingEntry(null)}
+                                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
                         </div>
                         <div className="flex-1 overflow-auto p-4 bg-slate-950/50">
                             <BracketBuilder
@@ -1016,6 +1036,19 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             />
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Hidden Printable View - Only visible when printing */}
+            {viewingEntry && tournament && (
+                <div className="hidden print:block fixed inset-0 z-[100] bg-white">
+                    <BracketBuilder
+                        tournament={tournament}
+                        picks={viewingEntry.picks}
+                        onPick={() => { }} // Read-only
+                        readOnly={true}
+                        viewMode="full"
+                    />
                 </div>
             )}
         </div>

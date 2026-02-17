@@ -156,8 +156,8 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 const FullBracketView: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<string> }> = ({ tournament, picks, onPick, readOnly, eliminatedTeamIds }) => {
     // Zoom/Pan could be added here later. For now, we'll do a CSS transform scale to fit.
     return (
-        <div className="w-full h-full overflow-auto bg-slate-950 p-4">
-            <div className="w-fit mx-auto flex justify-center gap-4 lg:gap-8 xl:gap-16">
+        <div id="bracket-printable-area" className="w-full h-full overflow-auto bg-slate-950 p-4">
+            <div className="bracket-container w-fit mx-auto flex justify-center gap-4 lg:gap-8 xl:gap-16">
 
                 {/* LEFT SIDE: East & West */}
                 <div className="flex flex-col gap-12 lg:gap-16">
