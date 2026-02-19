@@ -130,8 +130,8 @@ export const initializeBigEastTournament = async (
     // QF slots → winners go to SF
     slots['R2-CONF-1'] = { id: 'R2-CONF-1', gameId: 'R2-CONF-1', nextSlotId: 'R3-CONF-1' };
     slots['R2-CONF-2'] = { id: 'R2-CONF-2', gameId: 'R2-CONF-2', nextSlotId: 'R3-CONF-1' };
-    slots['R2-CONF-3'] = { id: 'R2-CONF-3', gameId: 'R2-CONF-3', nextSlotId: 'R3-CONF-2' };
-    slots['R2-CONF-4'] = { id: 'R2-CONF-4', gameId: 'R2-CONF-4', nextSlotId: 'R3-CONF-2' };
+    slots['R2-CONF-3'] = { id: 'R2-CONF-3', gameId: 'R2-CONF-3', nextSlotId: 'R3-CONF-2' }; // 3 seed -> SF2
+    slots['R2-CONF-4'] = { id: 'R2-CONF-4', gameId: 'R2-CONF-4', nextSlotId: 'R3-CONF-1' }; // 4 seed -> SF1 (plays 1)
 
     // SF slots → winners go to Championship
     slots['R3-CONF-1'] = { id: 'R3-CONF-1', gameId: 'R3-CONF-1', nextSlotId: 'R4-CONF-1' };

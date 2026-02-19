@@ -133,11 +133,19 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
                         eliminatedTeamIds={eliminatedTeamIds}
                         verticalSpacing="gap-16"
                         feeders={[
-                            ...r3.map((g, i) => ({
-                                gameId: g.id,
-                                homeOverride: resolveWinner(r2[i * 2]?.id),
-                                awayOverride: resolveWinner(r2[i * 2 + 1]?.id),
-                            }))
+                            // standard bracket: SF1 = Winner(1v8) vs Winner(4v5); SF2 = Winner(2v7) vs Winner(3v6)
+                            // r2[0]=1seed, r2[1]=2seed, r2[2]=3seed, r2[3]=4seed
+                            // So SF1 uses r2[0] & r2[3]. SF2 uses r2[1] & r2[2].
+                            {
+                                gameId: r3[0]?.id,
+                                homeOverride: resolveWinner(r2[0]?.id),
+                                awayOverride: resolveWinner(r2[3]?.id),
+                            },
+                            {
+                                gameId: r3[1]?.id,
+                                homeOverride: resolveWinner(r2[1]?.id),
+                                awayOverride: resolveWinner(r2[2]?.id),
+                            }
                         ]}
                     />
 

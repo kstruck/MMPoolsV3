@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam } from '../types';
+import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam, PoolTheme } from '../types';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
@@ -15,12 +15,22 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
 import { AdminStatsDashboard } from './AdminStatsDashboard';
 
+type SystemLog = {
+    timestamp?: { toDate?: () => Date } | number | string;
+    status?: string;
+    type?: string;
+    message?: string;
+    details?: unknown;
+};
+
+type PoolLike = { [key: string]: unknown };
+
 export const SuperAdmin: React.FC = () => {
     const navigate = useNavigate();
     // --- STATE ---
     const [pools, setPools] = useState<Pool[]>([]);
     const [users, setUsers] = useState<User[]>([]);
-    const [systemLogs, setSystemLogs] = useState<any[]>([]);
+    const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
 
     // UI State
     const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'stats'>('overview');
@@ -45,8 +55,8 @@ export const SuperAdmin: React.FC = () => {
     const [editEmail, setEditEmail] = useState('');
 
     // Theme Builder State
-    const [themes, setThemes] = useState<any[]>([]);
-    const [editingTheme, setEditingTheme] = useState<any | null>(null);
+    const [themes, setThemes] = useState<PoolTheme[]>([]);
+    const [editingTheme, setEditingTheme] = useState<PoolTheme | null>(null);
     const [showThemeBuilder, setShowThemeBuilder] = useState(false);
 
     // Prop Seeds State
@@ -227,9 +237,9 @@ export const SuperAdmin: React.FC = () => {
                 // but the cloud function does it. We'll just refresh.
                 fetchUsers();
                 alert(`User ${user.name} deleted successfully.`);
-            } catch (e: any) {
+            } catch (e: unknown) {
                 console.error("Delete failed", e);
-                alert("Error deleting user: " + e.message);
+                alert("Error deleting user: " + (e instanceof Error ? e.message : String(e)));
             }
         }
     };
@@ -240,9 +250,9 @@ export const SuperAdmin: React.FC = () => {
             try {
                 await dbService.sendAdminPasswordReset(user.email);
                 alert(`Reset email sent to ${user.email}`);
-            } catch (e: any) {
+            } catch (e: unknown) {
                 console.error("Reset failed", e);
-                alert("Error sending reset email: " + e.message);
+                alert("Error sending reset email: " + (e instanceof Error ? e.message : String(e)));
             }
         }
     };
@@ -263,7 +273,7 @@ export const SuperAdmin: React.FC = () => {
             await dbService.updateUser(editingUser.id, { name: editName, email: editEmail });
             setEditingUser(null);
             fetchUsers();
-        } catch (error) {
+        } catch {
             alert('Failed to update user');
         }
     };
@@ -284,7 +294,7 @@ export const SuperAdmin: React.FC = () => {
 
             // State Machine Logic
             // We construct the "Next" ESPN-like score object
-            const nextState: any = { ...scores };
+            const nextState: Record<string, unknown> = { ...scores as Record<string, unknown> };
             let actionDescription = "";
 
             if (!pool.isLocked) {
@@ -295,7 +305,7 @@ export const SuperAdmin: React.FC = () => {
                     lockGrid: true,
                     'scores.gameStatus': 'pre',
                     'scores.startTime': new Date().toISOString()
-                } as any);
+                } as Record<string, unknown>);
                 alert('Sim: Pool Locked. Open Sim again to start Game.');
                 return;
             }
@@ -391,7 +401,7 @@ export const SuperAdmin: React.FC = () => {
                         scores: { current: null, q1: null, half: null, q3: null, final: null, gameStatus: 'pre' },
                         axisNumbers: null,
                         quarterlyNumbers: null
-                    } as any);
+                    } as Record<string, unknown>);
                     alert('Pool Reset');
                     return;
                 }
@@ -404,9 +414,9 @@ export const SuperAdmin: React.FC = () => {
                 alert(`Simulated: ${actionDescription} `);
             }
 
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(e);
-            alert('Sim Failed: ' + e.message);
+            alert('Sim Failed: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
@@ -422,9 +432,9 @@ export const SuperAdmin: React.FC = () => {
             if (activeTab === 'system') {
                 dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Fix Score Error:', error);
-            alert(`Failed to fix scores: ${error.message} `);
+            alert(`Failed to fix scores: ${error instanceof Error ? error.message : String(error)} `);
         }
     };
 
@@ -439,11 +449,11 @@ export const SuperAdmin: React.FC = () => {
         try {
             const functions = getFunctions();
             const initFn = httpsCallable(functions, 'initializeBigEastTournamentHttp');
-            const result: any = await initFn({});
+            const result = await initFn({}) as { data?: { tournamentId?: string } };
             alert(`✅ Big East Tournament initialized!\nTournament ID: ${result.data?.tournamentId || 'N/A'}`);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Big East init error:', err);
-            alert(`❌ Failed to initialize Big East Tournament:\n${err.message}`);
+            alert(`❌ Failed to initialize Big East Tournament:\n${err instanceof Error ? err.message : String(err)}`);
         } finally {
             setIsInitializingBigEast(false);
         }
@@ -456,9 +466,9 @@ export const SuperAdmin: React.FC = () => {
         try {
             const result = await dbService.fixParticipantIds(dryRun);
             alert(`Participant ID Backfill Complete (${dryRun ? 'DRY RUN' : 'LIVE'}): \nProcessed: ${result.processed} pools \nUpdated: ${result.updated} pools`);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Fix Participant IDs Error:', error);
-            alert(`Failed to fix participant IDs: ${error.message}`);
+            alert(`Failed to fix participant IDs: ${error instanceof Error ? error.message : String(error)}`);
         }
     };
 
@@ -488,7 +498,7 @@ export const SuperAdmin: React.FC = () => {
             } else if (p.type === 'SQUARES') {
                 sport = getLeagueDisplayName((p as GameState).league);
             } else {
-                sport = getLeagueDisplayName((p as any).league);
+                sport = getLeagueDisplayName((p as unknown as PoolLike).league as string | undefined);
             }
             if (sport !== sportFilter) matchesSport = false;
         }
@@ -501,7 +511,7 @@ export const SuperAdmin: React.FC = () => {
             let isClosed = false;
 
             if (isBracket) {
-                const bp = p as any;
+                const bp = p as unknown as PoolLike;
                 isClosed = bp.status === 'COMPLETED';
                 isLocked = bp.status === 'LOCKED' || bp.status === 'COMPLETED';
             } else {
@@ -519,7 +529,8 @@ export const SuperAdmin: React.FC = () => {
 
         // Price filter
         if (priceFilter !== 'all') {
-            const cost = isBracket ? ((p as any).settings?.entryFee || 0) : (p as GameState).costPerSquare || 0;
+            const bpForCost = p as unknown as PoolLike;
+            const cost = isBracket ? ((bpForCost.settings as PoolLike)?.entryFee as number || 0) : (p as GameState).costPerSquare || 0;
             if (priceFilter === 'low' && cost >= 20) return false;
             if (priceFilter === 'mid' && (cost < 20 || cost > 50)) return false;
             if (priceFilter === 'high' && cost <= 50) return false;
@@ -535,7 +546,7 @@ export const SuperAdmin: React.FC = () => {
         const lowSearch = searchTerm.toLowerCase();
         return p.name.toLowerCase().includes(lowSearch) ||
             p.id.toLowerCase().includes(lowSearch) ||
-            ((p as any).ownerId || '').toLowerCase().includes(lowSearch);
+            ((p as unknown as PoolLike).ownerId as string || '').toLowerCase().includes(lowSearch);
     });
 
     const poolsBySport = filteredPools.reduce((acc, pool) => {
@@ -551,7 +562,7 @@ export const SuperAdmin: React.FC = () => {
             sport = getLeagueDisplayName((pool as GameState).league);
         } else {
             // Fallback for any other types that might have league
-            sport = getLeagueDisplayName((pool as any).league);
+            sport = getLeagueDisplayName((pool as unknown as PoolLike).league as string | undefined);
         }
 
         if (!acc[sport]) acc[sport] = [];
@@ -593,7 +604,10 @@ export const SuperAdmin: React.FC = () => {
 
         // 4. Time Filter
         if (logTimeFilter !== 'ALL') {
-            const time = log.timestamp?.toDate ? log.timestamp.toDate().getTime() : new Date(log.timestamp).getTime();
+            const ts = log.timestamp;
+            const time = ts && typeof ts === 'object' && 'toDate' in ts && typeof ts.toDate === 'function'
+                ? ts.toDate().getTime()
+                : new Date(ts as string | number).getTime();
             const now = Date.now();
             const hours = (now - time) / (1000 * 60 * 60); // hours diff
 
@@ -616,7 +630,7 @@ export const SuperAdmin: React.FC = () => {
                 {tabs.map(tab => (
                     <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
+                        onClick={() => setActiveTab(tab.id as 'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'stats')}
                         className={`flex items - center gap - 2 px - 4 py - 2 rounded - t - lg font - bold text - sm transition - colors whitespace - nowrap ${activeTab === tab.id
                             ? 'bg-slate-800 text-white border-b-2 border-indigo-500'
                             : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -790,7 +804,7 @@ export const SuperAdmin: React.FC = () => {
                                 ].map(status => (
                                     <button
                                         key={status.id}
-                                        onClick={() => setStatusFilter(status.id as any)}
+                                        onClick={() => setStatusFilter(status.id as 'all' | 'open' | 'locked' | 'live' | 'final')}
                                         className={`px - 3 py - 1 rounded text - xs font - bold transition - colors ${statusFilter === status.id
                                             ? status.id === 'live' ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white'
                                             : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
@@ -812,7 +826,7 @@ export const SuperAdmin: React.FC = () => {
                                 ].map(price => (
                                     <button
                                         key={price.id}
-                                        onClick={() => setPriceFilter(price.id as any)}
+                                        onClick={() => setPriceFilter(price.id as 'all' | 'low' | 'mid' | 'high')}
                                         className={`px - 3 py - 1 rounded text - xs font - bold transition - colors ${priceFilter === price.id
                                             ? 'bg-emerald-500 text-white'
                                             : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
@@ -869,19 +883,21 @@ export const SuperAdmin: React.FC = () => {
                                                     // Normalize data access
                                                     const createdAt = typeof pool.createdAt === 'number' ? new Date(pool.createdAt).toLocaleDateString() : (pool.createdAt?.seconds ? new Date(pool.createdAt.seconds * 1000).toLocaleDateString() : 'N/A');
                                                     const matchUp = isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} @${(pool as GameState).homeTeam} `;
-                                                    const ownerId = isBracket ? (pool as any).managerUid : (pool as any).ownerId;
+                                                    const poolLike = pool as unknown as PoolLike;
+                                                    const ownerId = isBracket ? poolLike.managerUid as string : poolLike.ownerId as string;
                                                     const contact = users.find(u => u.id === ownerId)?.email || (isBracket ? 'N/A' : (pool as GameState).contactEmail);
 
                                                     let filledPct = 0;
                                                     let filledDisplay = '';
                                                     if (isBracket) {
-                                                        const bp = pool as any;
-                                                        const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal;
-                                                        filledPct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round(((bp.entryCount || 0) / max) * 100);
+                                                        const bp = pool as unknown as PoolLike;
+                                                        const bpSettings = bp.settings as unknown as PoolLike;
+                                                        const max = bpSettings.maxEntriesTotal === -1 ? 100 : (bpSettings.maxEntriesTotal as number);
+                                                        filledPct = bpSettings.maxEntriesTotal === -1 ? 0 : Math.round(((bp.entryCount as number || 0) / max) * 100);
                                                         filledDisplay = `${bp.entryCount || 0} Entries`;
                                                     } else if (pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') {
-                                                        const pp = pool as any;
-                                                        const entryCount = pool.type === 'PROPS' ? (pp.entryCount || 0) : (pp.entries ? Object.keys(pp.entries).length : 0);
+                                                        const pp = pool as unknown as PoolLike;
+                                                        const entryCount = pool.type === 'PROPS' ? (pp.entryCount || 0) : (pp.entries ? Object.keys(pp.entries as unknown as Record<string, unknown>).length : 0);
                                                         filledPct = 0;
                                                         filledDisplay = `${entryCount} Entries`;
                                                     } else {
@@ -914,9 +930,11 @@ export const SuperAdmin: React.FC = () => {
                                                             <td className="p-4 text-xs text-slate-400 font-mono">
                                                                 {(() => {
                                                                     if (pool.type === 'BRACKET') {
-                                                                        return (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD';
+                                                                        const lockAt = (pool as unknown as PoolLike).lockAt as string | undefined;
+                                                                        return lockAt ? new Date(lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD';
                                                                     } else if (pool.type === 'NFL_PLAYOFFS') {
-                                                                        return (pool as any).lockDate ? new Date((pool as any).lockDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD';
+                                                                        const lockDate = (pool as unknown as PoolLike).lockDate as string | undefined;
+                                                                        return lockDate ? new Date(lockDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'TBD';
                                                                     } else if (pool.type === 'SQUARES' && (pool as GameState).scores?.startTime) {
                                                                         return new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                                                                     } else {
@@ -946,7 +964,7 @@ export const SuperAdmin: React.FC = () => {
                                                                     </button>
                                                                 )}
                                                                 {/* Close/Lock Button */}
-                                                                {!(pool as any).isLocked && !((pool as any).lockAt && (pool as any).status === 'LOCKED') && (
+                                                                {!(pool as unknown as PoolLike).isLocked && !((pool as unknown as PoolLike).lockAt && (pool as unknown as PoolLike).status === 'LOCKED') && (
                                                                     <button
                                                                         onClick={async (e) => {
                                                                             e.stopPropagation();
@@ -955,7 +973,7 @@ export const SuperAdmin: React.FC = () => {
                                                                                 await dbService.lockPool(pool.id);
                                                                                 alert("Pool Locked");
                                                                                 // Ideally refresh pools
-                                                                            } catch (e: any) { alert("Error: " + e.message); }
+                                                                            } catch (e: unknown) { alert("Error: " + (e instanceof Error ? e.message : String(e))); }
                                                                         }}
                                                                         className="text-rose-400 hover:text-rose-300 text-xs font-bold border border-rose-500/30 px-2 py-1 rounded flex items-center gap-1"
                                                                         title="Lock Pool"
@@ -992,8 +1010,8 @@ export const SuperAdmin: React.FC = () => {
                                                 const res = await dbService.syncAllUsers();
                                                 alert(`Synced ${res.count} users.`);
                                                 fetchUsers();
-                                            } catch (e) {
-                                                alert('Sync failed');
+                                            } catch (e: unknown) {
+                                                alert("Sync failed: " + (e instanceof Error ? e.message : String(e)));
                                             }
                                         }
                                     }}
@@ -1207,6 +1225,8 @@ export const SuperAdmin: React.FC = () => {
                                 // Create new theme from defaults
                                 import('../constants/presetThemes').then(({ createEmptyTheme }) => {
                                     setEditingTheme({
+                                        id: 'new',
+                                        updatedAt: Date.now(),
                                         ...createEmptyTheme(),
                                         createdAt: Date.now(),
                                         createdBy: 'SUPER_ADMIN'
@@ -1300,7 +1320,7 @@ export const SuperAdmin: React.FC = () => {
                                             <div
                                                 key={key}
                                                 className="w-5 h-5 rounded-full border border-slate-600"
-                                                style={{ background: theme.colors?.[key] }}
+                                                style={{ background: (theme.colors as unknown as Record<string, string>)?.[key] }}
                                                 title={key}
                                             />
                                         ))}
@@ -1332,7 +1352,8 @@ export const SuperAdmin: React.FC = () => {
                                         )}
                                         <button
                                             onClick={async () => {
-                                                const { id, ...rest } = theme;
+                                                const { id: _copyId, ...rest } = theme;
+                                                void _copyId;
                                                 await dbService.saveTheme({
                                                     ...rest,
                                                     name: `${theme.name} (Copy)`,
@@ -1425,7 +1446,7 @@ export const SuperAdmin: React.FC = () => {
                                             <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Category</label>
                                             <select
                                                 value={editingTheme.category}
-                                                onChange={(e) => setEditingTheme({ ...editingTheme, category: e.target.value })}
+                                                onChange={(e) => setEditingTheme({ ...editingTheme, category: e.target.value as PoolTheme['category'] })}
                                                 className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white"
                                             >
                                                 <option value="sports">Sports</option>
@@ -1466,7 +1487,7 @@ export const SuperAdmin: React.FC = () => {
                                             <div key={key} className="flex items-center gap-2">
                                                 <input
                                                     type="color"
-                                                    value={(editingTheme.grid as any)?.[key] || '#1e293b'}
+                                                    value={(editingTheme.grid as unknown as Record<string, string>)?.[key] || '#1e293b'}
                                                     onChange={(e) => setEditingTheme({
                                                         ...editingTheme,
                                                         grid: { ...editingTheme.grid, [key]: e.target.value }
@@ -1622,9 +1643,9 @@ export const SuperAdmin: React.FC = () => {
                                             users.forEach(u => allEmails.set(u.email.toLowerCase(), u.name));
 
                                             // 2. Scan Pools for Guests
-                                            pools.forEach((p: any) => {
-                                                if (p.squares) {
-                                                    p.squares.forEach((s: any) => {
+                                            pools.forEach((p) => {
+                                                if ((p as unknown as PoolLike).squares) {
+                                                    ((p as GameState).squares || []).forEach((s) => {
                                                         if (s.playerDetails?.email) {
                                                             const e = s.playerDetails.email.toLowerCase();
                                                             if (!allEmails.has(e)) {
@@ -1664,7 +1685,7 @@ export const SuperAdmin: React.FC = () => {
                                                         await dbService.fixPoolScores();
                                                         alert('Fix Complete.');
                                                     }
-                                                } catch (e) { alert('Fix Failed'); }
+                                                } catch { alert('Fix Failed'); }
                                             }
                                         }}
                                         className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded text-white transition-colors font-bold"
@@ -1766,16 +1787,21 @@ export const SuperAdmin: React.FC = () => {
                                         <tr><td colSpan={4} className="p-8 text-center text-slate-500">No logs found matching filters</td></tr>
                                     ) : (
                                         filteredLogs.map((log, i) => (
-                                            <tr key={i} className={`log - row hover: bg - slate - 700 / 20 font - mono text - xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''} `}>
+                                            <tr key={i} className={`log-row hover:bg-slate-700/20 font-mono text-xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''}`}>
                                                 <td className="p-3 text-slate-400 whitespace-nowrap">
-                                                    {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : new Date(log.timestamp).toLocaleString()}
+                                                    {(() => {
+                                                        const ts2 = log.timestamp;
+                                                        return ts2 && typeof ts2 === 'object' && 'toDate' in ts2 && typeof ts2.toDate === 'function'
+                                                            ? ts2.toDate().toLocaleString()
+                                                            : new Date(ts2 as string | number).toLocaleString();
+                                                    })()}
                                                 </td>
                                                 <td className="p-3">
                                                     <span className={`px - 2 py - 0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
                                                         log.status === 'partial' ? 'bg-amber-500/10 text-amber-400' :
                                                             'bg-rose-500/10 text-rose-400'
                                                         } `}>
-                                                        {log.status?.toUpperCase() || 'UNKNOWN'}
+                                                        {(log.status as string | undefined)?.toUpperCase() ?? 'UNKNOWN'}
                                                     </span>
                                                 </td>
                                                 <td className="p-3">
@@ -1796,7 +1822,7 @@ export const SuperAdmin: React.FC = () => {
                                                 <td className="p-3 text-slate-300">
                                                     <div className="flex flex-col gap-1">
                                                         {log.message && <span className="font-bold text-white mb-1 block">{log.message}</span>}
-                                                        {log.details && <span className="font-mono text-[10px] text-slate-500">{JSON.stringify(log.details)}</span>}
+                                                        {log.details !== undefined && <span className="font-mono text-[10px] text-slate-500">{String(log.details)}</span>}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -1863,8 +1889,8 @@ export const SuperAdmin: React.FC = () => {
                                                 const { seedTestTournament } = await import('../utils/simulationUtils');
                                                 await seedTestTournament(2025);
                                                 alert("Tournament seeded successfully.");
-                                            } catch (e: any) {
-                                                alert("Error: " + e.message);
+                                            } catch (e: unknown) {
+                                                alert("Error: " + (e instanceof Error ? e.message : String(e)));
                                             }
                                         }}
                                         className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold text-sm transition-colors text-left"
@@ -1884,9 +1910,9 @@ export const SuperAdmin: React.FC = () => {
                                                 const { simulateRound } = await import('../utils/simulationUtils');
                                                 const res = await simulateRound(2025);
                                                 alert(res);
-                                            } catch (e: any) {
+                                            } catch (e: unknown) {
                                                 console.error(e);
-                                                alert("Error: " + e.message);
+                                                alert("Error: " + (e instanceof Error ? e.message : String(e)));
                                             }
                                         }}
                                         className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors"
@@ -1900,8 +1926,8 @@ export const SuperAdmin: React.FC = () => {
                                                 const { resetTournament } = await import('../utils/simulationUtils');
                                                 await resetTournament(2025);
                                                 alert("Tournament reset.");
-                                            } catch (e: any) {
-                                                alert("Error: " + e.message);
+                                            } catch (e: unknown) {
+                                                alert("Error: " + (e instanceof Error ? e.message : String(e)));
                                             }
                                         }}
                                         className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors"
@@ -2051,9 +2077,9 @@ export const SuperAdmin: React.FC = () => {
                                                         'settings.maxEntriesTotal': 500
                                                     });
                                                     alert('Success: Max entries updated to 50!');
-                                                } catch (err: any) {
+                                                } catch (err: unknown) {
                                                     console.error(err);
-                                                    alert('Error: ' + err.message);
+                                                    alert('Error: ' + (err instanceof Error ? err.message : String(err)));
                                                 }
                                             }}
                                             className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/50 rounded-lg text-xs font-bold transition-all"
@@ -2084,10 +2110,10 @@ export const SuperAdmin: React.FC = () => {
                                     <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
                                         <h4 className="text-slate-400 text-xs font-bold uppercase mb-1">Owner</h4>
                                         <p className="font-medium text-white">
-                                            {users.find(u => u.id === (viewingPool.type === 'BRACKET' ? (viewingPool as any).managerUid : (viewingPool as any).ownerId))?.name || 'Unknown User'}
+                                            {users.find(u => u.id === (viewingPool.type === 'BRACKET' ? (viewingPool as unknown as PoolLike).managerUid as string : (viewingPool as unknown as PoolLike).ownerId as string))?.name || 'Unknown User'}
                                         </p>
                                         <p className="text-xs text-slate-500 font-mono mt-0.5">
-                                            {viewingPool.type === 'BRACKET' ? (viewingPool as any).managerUid : (viewingPool as any).ownerId}
+                                            {viewingPool.type === 'BRACKET' ? (viewingPool as unknown as PoolLike).managerUid as string : (viewingPool as unknown as PoolLike).ownerId as string}
                                         </p>
                                     </div>
                                 </div>
@@ -2100,7 +2126,7 @@ export const SuperAdmin: React.FC = () => {
                                             <div className="text-xs text-slate-500">State</div>
                                             <div className="text-white font-bold">
                                                 {viewingPool.type === 'BRACKET'
-                                                    ? (viewingPool as any).status
+                                                    ? (viewingPool as unknown as PoolLike).status as string
                                                     : ((viewingPool as GameState).isLocked ? "LOCKED" : "OPEN")}
                                             </div>
                                         </div>
@@ -2108,25 +2134,25 @@ export const SuperAdmin: React.FC = () => {
                                             <div className="text-xs text-slate-500">Filled</div>
                                             <div className="text-white font-bold">
                                                 {viewingPool.type === 'BRACKET'
-                                                    ? `${(viewingPool as any).entryCount || 0} Entries`
+                                                    ? `${(viewingPool as unknown as PoolLike).entryCount as number || 0} Entries`
                                                     : viewingPool.type === 'NFL_PLAYOFFS' || viewingPool.type === 'PROPS'
-                                                        ? `${(viewingPool as any).entries ? Object.keys((viewingPool as any).entries).length : 0} Entries`
+                                                        ? `${(viewingPool as unknown as PoolLike).entries ? Object.keys((viewingPool as unknown as PoolLike).entries as PoolLike).length : 0} Entries`
                                                         : `${(viewingPool as GameState).squares?.filter(s => s.owner).length || 0} / 100`}
                                             </div>
                                         </div >
                                         <div>
                                             <div className="text-xs text-slate-500">Price</div>
                                             <div className="text-white font-bold">
-                                                ${viewingPool.type === 'BRACKET' ? (viewingPool as any).settings.entryFee : (viewingPool as any).costPerSquare}
+                                                ${viewingPool.type === 'BRACKET' ? ((viewingPool as unknown as PoolLike).settings as PoolLike)?.entryFee as number : (viewingPool as unknown as PoolLike).costPerSquare as number}
                                             </div>
                                         </div>
                                         <div>
                                             <div className="text-xs text-slate-500">Total Pot</div>
                                             <div className="text-emerald-400 font-bold font-mono">
                                                 ${viewingPool.type === 'BRACKET'
-                                                    ? ((viewingPool as any).entryCount || 0) * (viewingPool as any).settings.entryFee
+                                                    ? ((viewingPool as unknown as PoolLike).entryCount as number || 0) * (((viewingPool as unknown as PoolLike).settings as PoolLike)?.entryFee as number || 0)
                                                     : viewingPool.type === 'NFL_PLAYOFFS' || viewingPool.type === 'PROPS'
-                                                        ? ((viewingPool as any).entries ? Object.keys((viewingPool as any).entries).length : 0) * ((viewingPool as any).settings?.entryFee || (viewingPool as any).costPerSquare || 0)
+                                                        ? ((viewingPool as unknown as PoolLike).entries ? Object.keys((viewingPool as unknown as PoolLike).entries as PoolLike).length : 0) * (((viewingPool as unknown as PoolLike).settings as PoolLike)?.entryFee as number || (viewingPool as unknown as PoolLike).costPerSquare as number || 0)
                                                         : ((viewingPool as GameState).squares?.filter(s => s.owner).length || 0) * ((viewingPool as GameState).costPerSquare || 0)}
                                             </div>
                                         </div>
@@ -2211,7 +2237,7 @@ export const SuperAdmin: React.FC = () => {
                                 </h3>
 
                                 {pools.filter(p => {
-                                    const owner = p.type === 'BRACKET' ? (p as any).managerUid : (p as any).ownerId;
+                                    const owner = p.type === 'BRACKET' ? (p as unknown as PoolLike).managerUid as string : (p as unknown as PoolLike).ownerId as string;
                                     return owner === viewingUser.id;
                                 }).length === 0 ? (
                                     <div className="p-8 text-center bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
@@ -2220,7 +2246,7 @@ export const SuperAdmin: React.FC = () => {
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {pools.filter(p => {
-                                            const owner = p.type === 'BRACKET' ? (p as any).managerUid : (p as any).ownerId;
+                                            const owner = p.type === 'BRACKET' ? (p as unknown as PoolLike).managerUid as string : (p as unknown as PoolLike).ownerId as string;
                                             return owner === viewingUser.id;
                                         }).map(pool => {
                                             const isBracket = pool.type === 'BRACKET';
@@ -2239,8 +2265,8 @@ export const SuperAdmin: React.FC = () => {
                                                     <div className="grid grid-cols-2 gap-2 text-sm text-slate-400 mb-4 bg-slate-900/50 p-3 rounded-lg">
                                                         {isBracket ? (
                                                             <>
-                                                                <div>Entries: <span className="text-white font-mono">{(pool as any).entryCount || 0}</span></div>
-                                                                <div>Status: <span className={(pool as any).status === 'LOCKED' ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"}>{(pool as any).status || 'OPEN'}</span></div>
+                                                                <div>Entries: <span className="text-white font-mono">{(pool as unknown as PoolLike).entryCount as number || 0}</span></div>
+                                                                <div>Status: <span className={(pool as unknown as PoolLike).status === 'LOCKED' ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"}>{(pool as unknown as PoolLike).status as string || 'OPEN'}</span></div>
                                                             </>
                                                         ) : (
                                                             <>
@@ -2503,9 +2529,9 @@ export const SuperAdmin: React.FC = () => {
                                             try {
                                                 const res = await dbService.syncPlayoffPools();
                                                 alert(res.message);
-                                            } catch (e: any) {
+                                            } catch (e: unknown) {
                                                 console.error(e);
-                                                alert("Sync Failed: " + e.message);
+                                                alert("Sync Failed: " + (e instanceof Error ? e.message : String(e)));
                                             }
                                         }
                                     }}
