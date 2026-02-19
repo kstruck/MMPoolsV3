@@ -130,7 +130,7 @@ export const reserveSquare = onCall(async (request) => {
             `https://www.marchmeleepools.com/pool/${poolId}`,
             "Go to Pool"
         );
-        sendEmail(result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));
+        sendEmail(db, result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));
     }
 
     // NOTE: Confirmation emails are sent by the frontend (PoolRoute.tsx) AFTER the batch reservation

@@ -81,7 +81,7 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
                 console.log(`[onPoolLocked] Sending to ${uniqueEmails.length} recipients`);
 
                 await Promise.all(uniqueEmails.map(email =>
-                    sendEmail(email, subject, html, { poolId: event.params.poolId, reason: 'NUMBERS_GENERATED_TRIGGER' })
+                    sendEmail(db, email, subject, html, { poolId: event.params.poolId, reason: 'NUMBERS_GENERATED_TRIGGER' })
                 ));
             }
         }

@@ -9,8 +9,8 @@
   - [ ] Auto-Release Unpaid Squares (Scheduled for Implementation)
   - [ ] Waitlist Notifications Integration
 - [ ] Upcoming: March Madness 2026 Readiness
-  - [ ] Audit Bracket Builder
-  - [ ] Verify Standings Integration
+  - [x] Audit Bracket Builder
+  - [x] Verify Standings Integration
   - [x] Load Testing for Tournament Selection Sunday
 
 - [x] Infrastructure & Tooling

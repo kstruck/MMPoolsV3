@@ -3,7 +3,6 @@ import * as logger from "firebase-functions/logger";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Tournament, BracketPool, BracketEntry } from "./types";
 
-const db = admin.firestore();
 
 // Scoring Constants
 const SCORING_Multipliers = {
@@ -130,6 +129,7 @@ export const scoreBracketEntries = onCall(async (request) => {
     const { tournamentId } = request.data;
     if (!tournamentId) throw new HttpsError('invalid-argument', 'Missing tournamentId');
 
+    const db = admin.firestore();
     try {
         const count = await scoreTournamentEntries(db, tournamentId);
         logger.info(`Scored ${count} entries for tournament ${tournamentId}.`);

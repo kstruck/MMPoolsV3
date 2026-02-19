@@ -16,6 +16,7 @@
     "@google/genai": "^1.31.0",
     "canvas-confetti": "^1.9.4",
     "firebase": "^12.6.0",
+    "firebase-admin": "^13.6.1",
     "lucide-react": "^0.556.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.1",

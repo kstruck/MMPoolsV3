@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
-import { Tournament, Game, TournamentSlot, BracketRegion } from "./types";
+import { Tournament, Game, TournamentSlot, BracketRegion, Team } from "./types";
+import { scoreTournamentEntries } from "./bracketScoring";
 
 // Standard mapping of Seed match-ups for Round 1
 // Slot 1: 1 vs 16. Slot 2: 8 vs 9. Slot 3: 5 vs 12. Slot 4: 4 vs 13.
@@ -18,21 +19,30 @@ const R1_SEED_MATCHUPS = [
 
 const REGIONS: BracketRegion[] = ['East', 'West', 'South', 'Midwest'];
 
+// Standard First Four Matchups (placeholder logic - usually 11 seeds and 16 seeds)
+const FIRST_FOUR_GAMES = [
+    { id: 'FF-1', region: 'East', seed: 16, nextGameId: 'R1-East-1' }, // 1 vs 16
+    { id: 'FF-2', region: 'West', seed: 11, nextGameId: 'R1-West-5' }, // 6 vs 11
+    { id: 'FF-3', region: 'Midwest', seed: 16, nextGameId: 'R1-Midwest-1' },
+    { id: 'FF-4', region: 'South', seed: 11, nextGameId: 'R1-South-5' }
+];
+
 /**
  * Initializes a structured Tournament document in Firestore.
- * Since the real bracket isn't out, this seeds it with placeholders or 2024 data if configured.
+ * Supports 64-team skeleton or 68-team full load.
  */
 export const initializeTournament = async (
     db: admin.firestore.Firestore,
     tournamentId: string,
     seasonYear: number,
-    gender: 'mens' | 'womens'
+    gender: 'mens' | 'womens',
+    teams: Team[] = [] // Optional real data
 ) => {
     const tournamentRef = db.collection('tournaments').doc(tournamentId);
 
-    // Check if exists
+    // Allow overwrite if teams are provided (Admin re-init)
     const doc = await tournamentRef.get();
-    if (doc.exists) {
+    if (doc.exists && teams.length === 0) {
         logger.info(`Tournament ${tournamentId} already exists. Skipping init.`);
         return;
     }
@@ -40,19 +50,69 @@ export const initializeTournament = async (
     const games: Record<string, Game> = {};
     const slots: Record<string, TournamentSlot> = {};
 
+    // Helper to find team by region/seed
+    const findTeam = (region: string, seed: number, variant?: string): Team | undefined => {
+        return teams.find(t => t.region === region && t.seed === seed && (!variant || t.name.includes(variant)));
+    };
+
+    // 0. Pre-Create First Four Games (Round 0)
+    // We'll insert these into the games map.
+    FIRST_FOUR_GAMES.forEach(ff => {
+        const gameId = `R0-${ff.region}-${ff.seed}`;
+        games[gameId] = {
+            id: gameId,
+            startTime: new Date().toISOString(),
+            status: 'SCHEDULED',
+            homeTeamId: `PlayIn ${ff.region} ${ff.seed}a`,
+            awayTeamId: `PlayIn ${ff.region} ${ff.seed}b`,
+            homeScore: 0,
+            awayScore: 0,
+            round: 0,
+            region: ff.region,
+            isFirstFour: true,
+            nextGameId: ff.nextGameId
+        };
+        // Slots for FF? Usually not valid for main bracket picks, but good for UI
+        slots[gameId] = { id: gameId, gameId: gameId, nextSlotId: ff.nextGameId };
+    });
+
     // 1. Create Regions & Round 1 Games
     REGIONS.forEach(region => {
         R1_SEED_MATCHUPS.forEach(({ slot, top, bot }) => {
             const gameId = `R1-${region}-${slot}`;
             const slotId = `R1-${region}-${slot}`;
 
+            // Determine Teams
+            let topTeamId = `${region} ${top}`;
+            let botTeamId = `${region} ${bot}`;
+
+            // If real data
+            if (teams.length > 0) {
+                const topTeam = findTeam(region, top);
+                const botTeam = findTeam(region, bot);
+                if (topTeam) topTeamId = topTeam.name;
+                if (botTeam) botTeamId = botTeam.name;
+            }
+
+            // Check if this slot is fed by a First Four game
+            const ffGame = FIRST_FOUR_GAMES.find(ff => ff.nextGameId === gameId);
+            if (ffGame) {
+                // If the bottom seed is the FF one (usually 16 or 11)
+                // We'll replace the placeholder with the FF reference
+                if (bot === ffGame.seed) {
+                    botTeamId = `Winner of ${ffGame.region} ${ffGame.seed} Play-in`;
+                } else if (top === ffGame.seed) {
+                    topTeamId = `Winner of ${ffGame.region} ${ffGame.seed} Play-in`;
+                }
+            }
+
             // Create Game
             games[gameId] = {
                 id: gameId,
                 startTime: new Date().toISOString(), // TBD
                 status: 'SCHEDULED',
-                homeTeamId: `${region} ${top}`, // Placeholder ID
-                awayTeamId: `${region} ${bot}`,
+                homeTeamId: topTeamId,
+                awayTeamId: botTeamId,
                 homeScore: 0,
                 awayScore: 0,
                 round: 1,
@@ -160,17 +220,15 @@ export const initializeTournament = async (
         slots
     };
 
-    await tournamentRef.set(tournamentData);
-    logger.info(`Initialized tournament ${tournamentId} with 63 games.`);
+    await tournamentRef.set(tournamentData, { merge: true });
+    logger.info(`Initialized tournament ${tournamentId} with games and ${teams.length} teams.`);
 };
 
 // Helper to map region to FF slot (1 or 2)
-function getFFSlot(region: BracketRegion): number {
+function getFFSlot(region: string): number {
     if (region === 'East' || region === 'West') return 1;
     return 2;
 }
-
-import { scoreTournamentEntries } from "./bracketScoring";
 
 /**
  * Updates scores for a tournament from ESPN API.
@@ -209,7 +267,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 
 /**
  * Admin-only function to seed the tournament bracket structure.
- * Usage: call with { tournamentId: 'mens-2025', seasonYear: 2025, gender: 'mens' }
+ * Usage: call with { tournamentId: 'mens-2025', seasonYear: 2025, gender: 'mens', teams: [...] }
  */
 export const adminInitTournament = onCall(async (request) => {
     // 1. Auth Check (Admin only)
@@ -217,13 +275,13 @@ export const adminInitTournament = onCall(async (request) => {
         throw new HttpsError('permission-denied', 'Must be an admin to initialize tournament.');
     }
 
-    const { tournamentId, seasonYear, gender } = request.data;
+    const { tournamentId, seasonYear, gender, teams } = request.data;
     if (!tournamentId || !seasonYear || !gender) {
         throw new HttpsError('invalid-argument', 'Missing required fields.');
     }
 
     const db = admin.firestore();
-    await initializeTournament(db, tournamentId, seasonYear, gender);
+    await initializeTournament(db, tournamentId, seasonYear, gender, teams);
     return { success: true, message: `Initialized ${tournamentId}` };
 });
 
@@ -250,4 +308,3 @@ export const scheduledBracketSync = onSchedule("every 10 minutes", async () => {
     // await updateTournamentScores(db, 'womens-2025');
     logger.info("Scheduled sync complete");
 });
-

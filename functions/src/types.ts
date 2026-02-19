@@ -358,7 +358,9 @@ export interface Game {
     awayScore: number;
     winnerTeamId?: string;
     round: number; // 0=FirstFour, 1=R64, 2=R32...
-    region?: string;
+    region?: string | null;
+    isFirstFour?: boolean;
+    nextGameId?: string;
 }
 
 export interface TournamentSlot {
