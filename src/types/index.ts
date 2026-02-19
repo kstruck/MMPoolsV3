@@ -598,6 +598,7 @@ export interface BracketPool {
   seasonYear: number;
   gender: 'mens' | 'womens';
   tournamentId?: string; // Links to tournaments/{id} in Firestore
+  tournamentType?: 'ncaa' | 'conference'; // Conference pool or NCAA pool
 
   // NEW: Manager Contact Info
   managerName?: string;
@@ -689,10 +690,14 @@ export interface PaymentRecord {
 }
 
 export interface Tournament {
-  id: string; // e.g. "mens-2025"
+  id: string; // e.g. "mens-2025" or "bigeast-2026"
   seasonYear: number;
   gender: 'mens' | 'womens';
   isFinalized: boolean; // Tournament over?
+
+  // Conference tournament support
+  tournamentType?: 'ncaa' | 'conference';
+  conferenceName?: string; // e.g. "Big East"
 
   games: Record<string, Game>;
   slots: Record<string, TournamentSlot>;

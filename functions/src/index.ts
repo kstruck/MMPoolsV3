@@ -29,3 +29,4 @@ export { submitPlayoffPicks, calculatePlayoffScores, updateGlobalPlayoffResults,
 export { joinWaitlist } from "./waitlist";
 export { generateTestScenario, validateTestResults, generateTestReport } from "./aiTesting";
 export { inspectPoolState } from "./debug";
+export { initializeBigEastTournamentHttp } from "./conferenceTournaments";

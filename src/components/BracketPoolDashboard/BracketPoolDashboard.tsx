@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
+import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
@@ -291,6 +292,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     }, [pool.id, activeEntryId, picks]);
 
     const pickCount = Object.keys(picks).length;
+    const requiredPicks = tournament ? Object.keys(tournament.games).length : (pool.tournamentType === 'conference' ? 10 : 63);
+    const isConference = pool.tournamentType === 'conference';
 
     return (
         <div className="min-h-screen bg-slate-950 pb-20">
@@ -472,7 +475,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         {entry.status === 'SUBMITTED' ? (
                                                             <span className="text-emerald-400">✓ Submitted — Score: {entry.score || 0}</span>
                                                         ) : (
-                                                            <span className="text-amber-400">Draft — {Object.keys(entry.picks || {}).length}/63 picks</span>
+                                                            <span className="text-amber-400">Draft — {Object.keys(entry.picks || {}).length}/{requiredPicks} picks</span>
                                                         )}
                                                     </div>
                                                 </div>
@@ -506,8 +509,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         </h2>
                                         <p className="text-slate-400 mb-6">
                                             {!tournament
-                                                ? 'Tournament bracket data is not yet available. Check back after Selection Sunday!'
-                                                : `Fill out all 63 games to complete your bracket.`}
+                                                ? 'Tournament bracket data is not yet available. Check back soon!'
+                                                : `Fill out all ${requiredPicks} games to complete your bracket.`}
                                         </p>
                                         {tournament && (
                                             <div className="max-w-sm mx-auto space-y-4">
@@ -537,7 +540,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 <div className="flex flex-wrap justify-between items-center gap-3 p-4 border-b border-slate-800 bg-slate-950">
                                     <div>
                                         <h3 className="font-bold text-white">{entryName}</h3>
-                                        <span className="text-xs text-slate-500">{pickCount}/63 picks</span>
+                                        <span className="text-xs text-slate-500">{pickCount}/{requiredPicks} picks</span>
                                     </div>
                                     <div className="flex gap-2">
                                         <button
@@ -555,7 +558,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         </button>
                                         <button
                                             onClick={handleSubmitBracket}
-                                            disabled={submitting || pickCount < 63}
+                                            disabled={submitting || pickCount < requiredPicks}
                                             className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded font-bold flex items-center gap-2 text-sm"
                                         >
                                             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -565,12 +568,21 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </div>
                                 <div className="p-4 overflow-x-auto">
                                     {tournament ? (
-                                        <BracketBuilder
-                                            tournament={tournament}
-                                            picks={picks}
-                                            onPick={(slot, team) => setPicks(prev => ({ ...prev, [slot]: team }))}
-                                            readOnly={false}
-                                        />
+                                        isConference ? (
+                                            <ConferenceBracketBuilder
+                                                tournament={tournament}
+                                                picks={picks}
+                                                onPick={(slot, team) => setPicks(prev => ({ ...prev, [slot]: team }))}
+                                                readOnly={false}
+                                            />
+                                        ) : (
+                                            <BracketBuilder
+                                                tournament={tournament}
+                                                picks={picks}
+                                                onPick={(slot, team) => setPicks(prev => ({ ...prev, [slot]: team }))}
+                                                readOnly={false}
+                                            />
+                                        )
                                     ) : (
                                         <div className="text-center py-10 text-slate-500">
                                             Tournament data not yet available.

@@ -364,7 +364,7 @@ export interface Game {
 export interface TournamentSlot {
     id: string; // e.g. "R1-W1"
     gameId: string;
-    nextSlotId?: string; // Where winner goes
+    nextSlotId?: string | null; // Where winner goes (null = championship, no next)
 
     // If play-in mapping
     isPlayInPlaceholder?: boolean;
@@ -556,6 +556,7 @@ export interface BracketPool {
     seasonYear: number;
     gender: 'mens' | 'womens';
     tournamentId: string; // Links to tournaments/{id}
+    tournamentType?: 'ncaa' | 'conference'; // Conference pool or standard NCAA
 
     // NEW: Manager Contact Info
     managerName?: string;

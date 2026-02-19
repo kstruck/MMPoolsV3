@@ -9,6 +9,7 @@ import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRig
 import { NFL_TEAMS, getTeamLogo } from '../constants';
 import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 
 import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
@@ -429,6 +430,24 @@ export const SuperAdmin: React.FC = () => {
 
     // Tab state
 
+    // --- BIG EAST TOURNAMENT INIT ---
+    const [isInitializingBigEast, setIsInitializingBigEast] = useState(false);
+
+    const handleInitBigEast = async () => {
+        if (!confirm('Initialize the Big East Tournament data? This will seed all teams and games into Firestore. Run this once before the tournament starts.')) return;
+        setIsInitializingBigEast(true);
+        try {
+            const functions = getFunctions();
+            const initFn = httpsCallable(functions, 'initializeBigEastTournamentHttp');
+            const result: any = await initFn({});
+            alert(`✅ Big East Tournament initialized!\nTournament ID: ${result.data?.tournamentId || 'N/A'}`);
+        } catch (err: any) {
+            console.error('Big East init error:', err);
+            alert(`❌ Failed to initialize Big East Tournament:\n${err.message}`);
+        } finally {
+            setIsInitializingBigEast(false);
+        }
+    };
 
     // Fix Participant IDs Handler
     const handleFixParticipantIds = async () => {
@@ -1657,6 +1676,13 @@ export const SuperAdmin: React.FC = () => {
                                         className="text-xs bg-amber-600 hover:bg-amber-500 px-3 py-1 rounded text-white transition-colors font-bold flex items-center gap-1"
                                     >
                                         <Users size={12} /> Fix Participants
+                                    </button>
+                                    <button
+                                        onClick={handleInitBigEast}
+                                        disabled={isInitializingBigEast}
+                                        className="text-xs bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-3 py-1 rounded text-white transition-colors font-bold flex items-center gap-1"
+                                    >
+                                        <Trophy size={12} /> {isInitializingBigEast ? 'Initializing...' : 'Init Big East'}
                                     </button>
                                     <button
                                         onClick={() => {

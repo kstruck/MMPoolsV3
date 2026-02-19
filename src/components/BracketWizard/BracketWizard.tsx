@@ -25,6 +25,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         slug: string;
         seasonYear: number;
         gender: 'mens' | 'womens';
+        tournamentType: 'ncaa' | 'bigeast';
         isListedPublic: boolean;
         managerName: string;
         contactEmail: string;
@@ -83,6 +84,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         slug: '',
         seasonYear: 2026,
         gender: 'mens',
+        tournamentType: 'ncaa',
         isListedPublic: false,
         managerName: user.name || '',
         contactEmail: user.email || '',
@@ -232,6 +234,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                 slug: formData.slug || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
                 seasonYear: formData.seasonYear,
                 gender: formData.gender,
+                tournamentType: formData.tournamentType,
                 isListedPublic: formData.isListedPublic,
                 managerName: formData.managerName,
                 contactEmail: formData.contactEmail,
@@ -464,19 +467,39 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tournament</label>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tournament Type</label>
                             <select
-                                value={`${formData.gender}-${formData.seasonYear}`}
+                                value={formData.tournamentType}
                                 onChange={(e) => {
-                                    const [gender, year] = e.target.value.split('-');
-                                    update({ gender: gender as 'mens' | 'womens', seasonYear: parseInt(year) });
+                                    const type = e.target.value as 'ncaa' | 'bigeast';
+                                    const lockAt = type === 'bigeast'
+                                        ? new Date('2026-03-11T15:00:00').getTime() // Big East tipoff
+                                        : new Date('2026-03-17T12:00:00').getTime();
+                                    update({ tournamentType: type, lockAt });
                                 }}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
                             >
-                                <option value="mens-2026">Men's 2026</option>
-                                <option value="womens-2026">Women's 2026</option>
+                                <option value="ncaa">NCAA March Madness 2026</option>
+                                <option value="bigeast">Big East Championship 2026</option>
                             </select>
+                            {formData.tournamentType === 'bigeast' && (
+                                <p className="text-[10px] text-amber-400 mt-1">🏀 Big East: 11 teams, 10 picks, lock date auto-set to Mar 11</p>
+                            )}
                         </div>
+
+                        {formData.tournamentType === 'ncaa' && (
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Gender</label>
+                                <select
+                                    value={formData.gender}
+                                    onChange={(e) => update({ gender: e.target.value as 'mens' | 'womens' })}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                                >
+                                    <option value="mens">Men's</option>
+                                    <option value="womens">Women's</option>
+                                </select>
+                            </div>
+                        )}
 
                         <div className="md:col-span-1">
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Manager Name</label>
