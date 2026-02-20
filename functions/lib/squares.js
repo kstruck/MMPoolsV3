@@ -97,7 +97,7 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
         const subject = `Grid Full: ${result.poolName}`;
         const html = (0, emailStyles_1.renderEmailHtml)("Your Grid is Full!", `<p>Great news! All squares in your pool <strong>${result.poolName}</strong> have been reserved.</p>
              <p>It's time to generate the numbers and lock the pool!</p>`, `https://www.marchmeleepools.com/pool/${poolId}`, "Go to Pool");
-        (0, reminders_1.sendEmail)(result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));
+        (0, reminders_1.sendEmail)(db, result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));
     }
     // NOTE: Confirmation emails are sent by the frontend (PoolRoute.tsx) AFTER the batch reservation
     // completes. This allows for a summary email with all squares instead of one email per square,

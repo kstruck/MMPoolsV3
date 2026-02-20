@@ -4,7 +4,6 @@ exports.scoreBracketEntries = exports.scoreTournamentEntries = exports.calculate
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const https_1 = require("firebase-functions/v2/https");
-const db = admin.firestore();
 // Scoring Constants
 const SCORING_Multipliers = {
     CLASSIC: [10, 20, 40, 80, 160, 320], // Standard X10 for readable int scores
@@ -113,6 +112,7 @@ exports.scoreBracketEntries = (0, https_1.onCall)(async (request) => {
     const { tournamentId } = request.data;
     if (!tournamentId)
         throw new https_1.HttpsError('invalid-argument', 'Missing tournamentId');
+    const db = admin.firestore();
     try {
         const count = await (0, exports.scoreTournamentEntries)(db, tournamentId);
         logger.info(`Scored ${count} entries for tournament ${tournamentId}.`);

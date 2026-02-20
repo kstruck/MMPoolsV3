@@ -143,18 +143,26 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
         if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new https_1.HttpsError("failed-precondition", "Pool is locked.");
         }
-        // Validate complete bracket?
-        // Ideally we validate that all slots are filled.
-        // For V1, client creates valid structure, strict server validation of 63 picks is good practice.
-        // I will assume `picks` key count checking for now.
+        // Validate that bracket is complete:
+        // NCAA = 63 picks (64-team bracket: 32+16+8+4+2+1)
+        // Conference = total games in tournament (10 for Big East)
         const pickCount = Object.keys(entryData.picks || {}).length;
-        if (pickCount < 63) {
-            // 63 games in a 64 bracket.
-            // Wait, does this include First Four? 
-            // "Participants do NOT pick between Team A and Team B... No scoring for First Four."
-            // So 63 picks for the main bracket.
-            // If we allow saving incomplete drafts, we must validate here.
-            throw new https_1.HttpsError("failed-precondition", `Bracket incomplete. Only ${pickCount}/63 picks made.`);
+        const isConference = poolData.tournamentType === 'conference';
+        let requiredPicks = 63; // Default for NCAA
+        if (isConference) {
+            // Look up the tournament to get actual game count
+            const tournamentRef = db.collection('tournaments').doc(poolData.tournamentId);
+            const tournamentDoc = await transaction.get(tournamentRef);
+            if (tournamentDoc.exists) {
+                const tData = tournamentDoc.data();
+                requiredPicks = Object.keys((tData === null || tData === void 0 ? void 0 : tData.games) || {}).length;
+            }
+            else {
+                requiredPicks = 10; // Big East default fallback
+            }
+        }
+        if (pickCount < requiredPicks) {
+            throw new https_1.HttpsError("failed-precondition", `Bracket incomplete. Only ${pickCount}/${requiredPicks} picks made.`);
         }
         transaction.update(entryRef, {
             status: "SUBMITTED",

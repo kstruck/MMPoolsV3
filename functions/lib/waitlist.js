@@ -48,7 +48,7 @@ exports.joinWaitlist = functions.https.onCall(async (request) => {
         `;
         const html = (0, emailStyles_1.renderEmailHtml)("Waitlist Confirmed", body, `${emailStyles_1.BASE_URL}/pool/${poolId}`, "View Pool");
         // Fire and forget email (don't block response) - checking promise for clean logs though
-        (0, reminders_1.sendEmail)(email, subject, html, { poolId, reason: 'WAITLIST_JOIN' })
+        (0, reminders_1.sendEmail)(db, email, subject, html, { poolId, reason: 'WAITLIST_JOIN' })
             .catch(err => console.error("Failed to send waitlist confirmation email:", err));
         return { success: true };
     }

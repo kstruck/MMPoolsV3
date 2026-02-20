@@ -14,6 +14,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
 import { AdminStatsDashboard } from './AdminStatsDashboard';
+import { TournamentManager } from './admin/TournamentManager';
 
 type SystemLog = {
     timestamp?: { toDate?: () => Date } | number | string;
@@ -583,41 +584,7 @@ export const SuperAdmin: React.FC = () => {
         { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
     ] as const;
 
-    // --- TOURNAMENT INIT ---
-    const [initTournamentId, setInitTournamentId] = useState('mens-2026');
-    const [initTeamData, setInitTeamData] = useState('');
-    const [isInitializing, setIsInitializing] = useState(false);
-
-    const handleInitTournament = async () => {
-        if (!confirm(`Initialize ${initTournamentId} with provided data? (Ensure teams JSON is valid if provided)`)) return;
-        setIsInitializing(true);
-        try {
-            let teams = [];
-            if (initTeamData.trim()) {
-                try {
-                    teams = JSON.parse(initTeamData);
-                } catch {
-                    alert("Invalid JSON in Team Data");
-                    setIsInitializing(false);
-                    return;
-                }
-            }
-            const functions = getFunctions();
-            const initFn = httpsCallable(functions, 'adminInitTournament');
-            await initFn({
-                tournamentId: initTournamentId,
-                seasonYear: 2026,
-                gender: 'mens',
-                teams: teams
-            });
-            alert(`Success! Initialized ${initTournamentId}`);
-        } catch (err: unknown) {
-            console.error(err);
-            alert('Failed: ' + (err instanceof Error ? err.message : String(err)));
-        } finally {
-            setIsInitializing(false);
-        }
-    };
+    // --- TOURNAMENT INIT REMOVED (Moved to TournamentManager) ---
 
     // Helper: Compute referrals locally
     const getComputedReferrals = (userId: string) => {
@@ -788,43 +755,7 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ TOURNAMENT TAB ============ */}
             {activeTab === 'tournament' && (
                 <div className="space-y-6">
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                            <Trophy className="text-amber-500" /> Tournament Initialization
-                        </h2>
-
-                        <div className="space-y-4 max-w-2xl">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-400 mb-1">Tournament ID</label>
-                                <input
-                                    type="text"
-                                    value={initTournamentId}
-                                    onChange={e => setInitTournamentId(e.target.value)}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-bold text-slate-400 mb-1">Team Data (JSON Array of Teams) - Optional</label>
-                                <p className="text-xs text-slate-500 mb-2">Leave empty to initialize skeleton. Paste JSON to seed teams.</p>
-                                <textarea
-                                    value={initTeamData}
-                                    onChange={e => setInitTeamData(e.target.value)}
-                                    className="w-full h-48 bg-slate-900 border border-slate-700 rounded-lg p-3 text-mono text-sm text-slate-300"
-                                    placeholder='[{"id": "duke", "name": "Duke", "seed": 1, "region": "South"}, ...]'
-                                />
-                            </div>
-
-                            <button
-                                onClick={handleInitTournament}
-                                disabled={isInitializing}
-                                className={`px-6 py-3 rounded-lg font-bold text-white transition-colors ${isInitializing ? 'bg-slate-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500'
-                                    }`}
-                            >
-                                {isInitializing ? 'Initializing...' : 'Initialize Tournament'}
-                            </button>
-                        </div>
-                    </div>
+                    <TournamentManager />
                 </div>
             )}
 

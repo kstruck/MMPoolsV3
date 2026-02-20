@@ -13,7 +13,7 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "User must be logged in.");
     }
-    const { name, settings, seasonYear, gender } = request.data;
+    const { name, settings, seasonYear, gender, tournamentType } = request.data;
     const uid = request.auth.uid;
     // Debug logs
     console.log("createBracketPool called by:", uid);
@@ -21,6 +21,15 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
     if (!name || !seasonYear) {
         console.error("Missing required fields");
         throw new https_1.HttpsError("invalid-argument", "Missing required fields.");
+    }
+    // Resolve tournament ID based on type
+    const isConference = tournamentType && tournamentType !== 'ncaa';
+    let resolvedTournamentId;
+    if (tournamentType === 'bigeast') {
+        resolvedTournamentId = `bigeast-${seasonYear}`;
+    }
+    else {
+        resolvedTournamentId = `${gender || 'mens'}-${seasonYear}`;
     }
     // Create a base slug suggestion
     const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -39,7 +48,8 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
         ownerId: uid, // Added for backward compatibility/rules
         seasonYear,
         gender: gender || 'mens',
-        tournamentId: `${gender || 'mens'}-${seasonYear}`,
+        tournamentId: resolvedTournamentId,
+        tournamentType: isConference ? 'conference' : 'ncaa',
         isListedPublic: false,
         status: "DRAFT",
         lockAt: 0, // Set on publish or specific date

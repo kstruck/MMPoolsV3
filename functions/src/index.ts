@@ -22,7 +22,7 @@ export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
 export { createBracketEntry, updateBracketEntry, submitBracketEntry } from "./bracketEntries";
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
-export { adminInitTournament, syncBracketTournament, scheduledBracketSync } from "./espnBracket";
+export { adminInitTournament, syncBracketTournament, scheduledBracketSync, importTournamentFromESPN } from "./espnBracket";
 export { onGameComplete } from "./postGameEmail";
 export { onAnnouncementCreated } from "./announcements";
 export { submitPlayoffPicks, calculatePlayoffScores, updateGlobalPlayoffResults, checkPlayoffScores, onPlayoffConfigUpdate, syncPlayoffPools, managePlayoffEntry } from "./playoffPools";

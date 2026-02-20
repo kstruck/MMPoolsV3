@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.onWinnerComputed = exports.runReminders = void 0;
 exports.sendEmail = sendEmail;
+exports.checkPaymentReminders = checkPaymentReminders;
+exports.notifyWaitlist = notifyWaitlist;
 const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const audit_1 = require("./audit");
@@ -10,8 +12,7 @@ const emailStyles_1 = require("./emailStyles");
 /**
  * Sends an email by writing to the /mail collection (triggered by EmailJS or other service).
  */
-async function sendEmail(to, subject, html, context) {
-    const db = admin.firestore();
+async function sendEmail(db, to, subject, html, context) {
     if (!to || !to.includes('@')) {
         console.warn(`Skipping email to invalid address: ${to}`);
         return;
@@ -31,8 +32,7 @@ async function sendEmail(to, subject, html, context) {
  * Idempotency check: Creates a notification log if it doesn't exist.
  * Returns true if created (should send), false if already exists (skip).
  */
-async function createNotificationOnce(dedupeKey, logData) {
-    const db = admin.firestore();
+async function createNotificationOnce(db, dedupeKey, logData) {
     const ref = db.collection("notifications").doc(dedupeKey);
     try {
         await db.runTransaction(async (t) => {
@@ -52,8 +52,7 @@ async function createNotificationOnce(dedupeKey, logData) {
         throw e;
     }
 }
-async function logAudit(poolId, message, type, payload) {
-    const db = admin.firestore();
+async function logAudit(db, poolId, message, type, payload) {
     const auditRef = db.collection("pools").doc(poolId).collection("audit").doc();
     const event = {
         id: auditRef.id,
@@ -85,13 +84,13 @@ exports.runReminders = functions.scheduler.onSchedule("every 5 minutes", async (
                 if (!pool.reminders)
                     continue;
                 if (((_a = pool.reminders.payment) === null || _a === void 0 ? void 0 : _a.enabled) && pool.type === 'SQUARES')
-                    await checkPaymentReminders(pool, now);
+                    await checkPaymentReminders(db, pool, now);
                 if (((_b = pool.reminders.lock) === null || _b === void 0 ? void 0 : _b.enabled) && (pool.type === 'SQUARES' || !pool.type))
-                    await checkLockReminders(pool, now);
+                    await checkLockReminders(db, pool, now);
             }
             // --- TYPE: NFL PLAYOFFS ---
             else if (pool.type === 'NFL_PLAYOFFS') {
-                await checkPlayoffReminders(pool, now);
+                await checkPlayoffReminders(db, pool, now);
             }
         }
         catch (poolError) {
@@ -101,7 +100,7 @@ exports.runReminders = functions.scheduler.onSchedule("every 5 minutes", async (
     console.log(`[runReminders] Completed reminder check`);
 });
 // --- PLAYOFF REMINDER LOGIC ---
-async function checkPlayoffReminders(pool, now) {
+async function checkPlayoffReminders(db, pool, now) {
     var _a, _b;
     // 1. Check if locking soon (Start of Wild Card is traditionally the lock)
     // Using `lockDate` or `lockAt` if available.
@@ -127,7 +126,6 @@ async function checkPlayoffReminders(pool, now) {
             // Wait - we can't fetch individual users inside this loop efficiently if there are many.
             // But usually pools are small (10-50 ppl).
             if (entry.userId) {
-                const db = admin.firestore();
                 const userSnap = await db.collection('users').doc(entry.userId).get();
                 if (userSnap.exists) {
                     const email = (_a = userSnap.data()) === null || _a === void 0 ? void 0 : _a.email;
@@ -159,18 +157,16 @@ async function checkPlayoffReminders(pool, now) {
             `;
             const html = (0, emailStyles_1.renderEmailHtml)('Payment Reminder', body, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'View Pool');
             // Queue Email
-            const db = admin.firestore();
             await db.collection("mail").add({
                 to: recipient.email,
                 message: { subject, html }
             });
         }
         // Apply Updates (mark as sent)
-        const db = admin.firestore();
         await db.collection('pools').doc(pool.id).update(updates);
     }
 }
-async function checkPaymentReminders(pool, now) {
+async function checkPaymentReminders(db, pool, now) {
     const settings = pool.reminders.payment;
     const bucketSizeMs = settings.repeatEveryHours * 60 * 60 * 1000;
     const timeBucket = Math.floor(now / bucketSizeMs);
@@ -187,7 +183,7 @@ async function checkPaymentReminders(pool, now) {
         return;
     // HOST REMINDER
     const hostKey = `PAY_HOST:${pool.id}:${timeBucket}`;
-    const hostSent = await createNotificationOnce(hostKey, {
+    const hostSent = await createNotificationOnce(db, hostKey, {
         poolId: pool.id,
         type: 'PAYMENT_HOST',
         recipient: pool.contactEmail,
@@ -201,8 +197,8 @@ async function checkPaymentReminders(pool, now) {
             <p>You have ${unpaidSquares.length} squares that are reserved but unpaid.</p>
         `;
         const html = (0, emailStyles_1.renderEmailHtml)(`Action Needed: Unpaid Squares`, emailBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Manage Pool');
-        await sendEmail(pool.contactEmail, `Action Needed: ${unpaidSquares.length} Unpaid Squares`, html);
-        await logAudit(pool.id, `Sent payment reminder to host (${unpaidSquares.length} unpaid)`, 'NOTIFICATION_SENT', { dedupeKey: hostKey });
+        await sendEmail(db, pool.contactEmail, `Action Needed: ${unpaidSquares.length} Unpaid Squares`, html);
+        await logAudit(db, pool.id, `Sent payment reminder to host (${unpaidSquares.length} unpaid)`, 'NOTIFICATION_SENT', { dedupeKey: hostKey });
     }
     // USER REMINDERS (Optional)
     if (settings.notifyUsers) {
@@ -217,7 +213,7 @@ async function checkPaymentReminders(pool, now) {
         }, {});
         for (const [email, squares] of Object.entries(squaresByOwner)) {
             const userKey = `PAY_USER:${pool.id}:${email}:${timeBucket}`;
-            const userSent = await createNotificationOnce(userKey, {
+            const userSent = await createNotificationOnce(db, userKey, {
                 poolId: pool.id,
                 type: 'PAYMENT_USER',
                 recipient: email,
@@ -232,7 +228,7 @@ async function checkPaymentReminders(pool, now) {
                     <p>Please pay the host: ${pool.paymentInstructions || 'See pool details'}</p>
                 `;
                     const html = (0, emailStyles_1.renderEmailHtml)(`Payment Reminder`, emailBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'View Pool');
-                    await sendEmail(email, `Reminder: ${squares.length} Squares Pending Payment`, html);
+                    await sendEmail(db, email, `Reminder: ${squares.length} Squares Pending Payment`, html);
                 }
             }
         }
@@ -249,7 +245,6 @@ async function checkPaymentReminders(pool, now) {
             return (now - s.reservedAt) > releaseThresholdMs;
         });
         if (squaresToRelease.length > 0) {
-            const db = admin.firestore();
             const poolRef = db.collection("pools").doc(pool.id);
             try {
                 await db.runTransaction(async (t) => {
@@ -270,13 +265,13 @@ async function checkPaymentReminders(pool, now) {
                     });
                 });
                 // Log audit event
-                await logAudit(pool.id, `Auto-released ${squaresToRelease.length} unpaid squares after ${settings.autoReleaseHours} hours`, 'NOTIFICATION_SENT', {
+                await logAudit(db, pool.id, `Auto-released ${squaresToRelease.length} unpaid squares after ${settings.autoReleaseHours} hours`, 'NOTIFICATION_SENT', {
                     releasedSquares: squaresToRelease.map(s => s.id),
                     autoReleaseHours: settings.autoReleaseHours
                 });
                 // Notify waitlist if any
                 if (pool.waitlist && pool.waitlist.length > 0) {
-                    await notifyWaitlist(pool, squaresToRelease.length);
+                    await notifyWaitlist(db, pool, squaresToRelease.length);
                 }
                 // Notify host
                 const emailBody = `
@@ -285,7 +280,7 @@ async function checkPaymentReminders(pool, now) {
                     <p>Released squares: ${squaresToRelease.map(s => `#${s.id}`).join(', ')}</p>
                 `;
                 const html = (0, emailStyles_1.renderEmailHtml)(`Squares Auto-Released`, emailBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'View Pool');
-                await sendEmail(pool.contactEmail, `${squaresToRelease.length} Squares Auto-Released: ${pool.name}`, html);
+                await sendEmail(db, pool.contactEmail, `${squaresToRelease.length} Squares Auto-Released: ${pool.name}`, html);
                 console.log(`[AutoRelease] Released ${squaresToRelease.length} squares from pool ${pool.id}`);
             }
             catch (e) {
@@ -295,7 +290,7 @@ async function checkPaymentReminders(pool, now) {
     }
 }
 // --- WAITLIST NOTIFICATION ---
-async function notifyWaitlist(pool, releasedCount) {
+async function notifyWaitlist(db, pool, releasedCount) {
     if (!pool.waitlist || pool.waitlist.length === 0)
         return;
     const emailSubject = `Squares Available: ${pool.name}`;
@@ -305,15 +300,15 @@ async function notifyWaitlist(pool, releasedCount) {
     `;
     const html = (0, emailStyles_1.renderEmailHtml)(`Squares Available!`, emailBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Claim Squares Now');
     for (const entry of pool.waitlist) {
-        await sendEmail(entry.email, emailSubject, html);
+        await sendEmail(db, entry.email, emailSubject, html);
     }
-    await logAudit(pool.id, `Notified ${pool.waitlist.length} waitlisted users about ${releasedCount} released squares`, 'NOTIFICATION_SENT', {
+    await logAudit(db, pool.id, `Notified ${pool.waitlist.length} waitlisted users about ${releasedCount} released squares`, 'NOTIFICATION_SENT', {
         waitlistCount: pool.waitlist.length,
         releasedCount
     });
 }
 // Removed duplicate import
-async function checkLockReminders(pool, now) {
+async function checkLockReminders(db, pool, now) {
     var _a, _b;
     const settings = pool.reminders.lock;
     if (!settings.lockAt)
@@ -332,7 +327,7 @@ async function checkLockReminders(pool, now) {
         // Time has passed: Execute Auto-Lock if not already locked
         if (!pool.isLocked) {
             if (pool.type === 'SQUARES' || !pool.type) {
-                await executeAutoLock(pool);
+                await executeAutoLock(db, pool);
             }
             else {
                 // TODO: Implement auto-lock for Props
@@ -346,7 +341,7 @@ async function checkLockReminders(pool, now) {
         const diff = Math.abs(minutesUntilLock - scheduleMin);
         if (diff <= 10) {
             const key = `LOCK:${pool.id}:${settings.lockAt}:${scheduleMin}`;
-            const sent = await createNotificationOnce(key, {
+            const sent = await createNotificationOnce(db, key, {
                 poolId: pool.id,
                 type: 'LOCK_COUNTDOWN',
                 recipient: 'ALL_PARTICIPANTS', // conceptual
@@ -360,7 +355,7 @@ async function checkLockReminders(pool, now) {
                 if (contactEmail) {
                     const hostBody = `<p>Your pool <strong>${pool.name}</strong> locks soon.</p>`;
                     const hostHtml = (0, emailStyles_1.renderEmailHtml)(`Pool Locking Soon`, hostBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Manage Pool');
-                    await sendEmail(contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
+                    await sendEmail(db, contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
                 }
                 if (pool.type === 'SQUARES' || !pool.type) {
                     const squaresPool = pool;
@@ -368,10 +363,10 @@ async function checkLockReminders(pool, now) {
                     for (const email of uniqueEmails) {
                         const userBody = `<p>The pool locks in approximately ${Math.round(minutesUntilLock / 60)} hours.</p>`;
                         const userHtml = (0, emailStyles_1.renderEmailHtml)(`Grid Locking Soon: ${pool.name}`, userBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Check Your Squares');
-                        await sendEmail(email, `Grid Locking Soon: ${pool.name}`, userHtml);
+                        await sendEmail(db, email, `Grid Locking Soon: ${pool.name}`, userHtml);
                     }
                 }
-                await logAudit(pool.id, `Sent lock reminder (${scheduleMin} min warning)`, 'NOTIFICATION_SENT', { dedupeKey: key });
+                await logAudit(db, pool.id, `Sent lock reminder (${scheduleMin} min warning)`, 'NOTIFICATION_SENT', { dedupeKey: key });
             }
         }
     }
@@ -395,7 +390,7 @@ exports.onWinnerComputed = functions.firestore.onDocumentCreated("pools/{poolId}
         return;
     const key = `WIN:${pool.id}:${period}:${winnerData.squareId}`;
     // Check key manually since we are in a trigger, createNotificationOnce is safe
-    const sent = await createNotificationOnce(key, {
+    const sent = await createNotificationOnce(db, key, {
         poolId: pool.id,
         type: 'WINNER_ANNOUNCEMENT',
         recipient: 'ALL',
@@ -420,9 +415,9 @@ exports.onWinnerComputed = functions.firestore.onDocumentCreated("pools/{poolId}
         const html = (0, emailStyles_1.renderEmailHtml)(`${pool.name} Winner Alert`, bodyContent, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'View Full Grid');
         // Batch send (naive loop for MVP)
         for (const email of uniqueEmails) {
-            await sendEmail(email, subject, html);
+            await sendEmail(db, email, subject, html);
         }
-        await logAudit(pool.id, `Sent winner announcement for ${period}`, 'NOTIFICATION_SENT', { dedupeKey: key });
+        await logAudit(db, pool.id, `Sent winner announcement for ${period}`, 'NOTIFICATION_SENT', { dedupeKey: key });
     }
 });
 // --- AUTO LOCK LOGIC ---
@@ -431,8 +426,7 @@ function generateDigits() {
     return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
 }
 // --- EXECUTE AUTO LOCK ---
-async function executeAutoLock(pool) {
-    const db = admin.firestore();
+async function executeAutoLock(db, pool) {
     const poolRef = db.collection('pools').doc(pool.id);
     try {
         await db.runTransaction(async (t) => {

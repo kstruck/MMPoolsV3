@@ -62,7 +62,7 @@ exports.onPoolLocked = (0, firestore_1.onDocumentUpdated)("pools/{poolId}", asyn
                 // Collect unique emails
                 const uniqueEmails = Array.from(new Set((after.squares || []).map((s) => { var _a; return (_a = s.playerDetails) === null || _a === void 0 ? void 0 : _a.email; }).filter(Boolean)));
                 console.log(`[onPoolLocked] Sending to ${uniqueEmails.length} recipients`);
-                await Promise.all(uniqueEmails.map(email => (0, reminders_1.sendEmail)(email, subject, html, { poolId: event.params.poolId, reason: 'NUMBERS_GENERATED_TRIGGER' })));
+                await Promise.all(uniqueEmails.map(email => (0, reminders_1.sendEmail)(db, email, subject, html, { poolId: event.params.poolId, reason: 'NUMBERS_GENERATED_TRIGGER' })));
             }
         }
     }

@@ -346,6 +346,10 @@ export interface Tournament {
 
     games: Record<string, Game>;
     slots: Record<string, TournamentSlot>;
+
+    // ESPN Import Data
+    importedGames?: Record<string, Game>;
+    importedTeams?: Record<string, Team>;
 }
 
 export interface Game {

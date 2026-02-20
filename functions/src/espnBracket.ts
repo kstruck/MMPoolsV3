@@ -308,3 +308,214 @@ export const scheduledBracketSync = onSchedule("every 10 minutes", async () => {
     // await updateTournamentScores(db, 'womens-2025');
     logger.info("Scheduled sync complete");
 });
+
+// --- ESPN Import Types ---
+
+interface ESPNCompetitor {
+    id: string;
+    uid: string;
+    type: string;
+    order: number;
+    homeAway: "home" | "away";
+    winner?: boolean;
+    team: {
+        id: string;
+        uid: string;
+        location: string;
+        name: string;
+        abbreviation: string;
+        displayName: string;
+        shortDisplayName: string;
+        color?: string;
+        alternateColor?: string;
+        logo?: string;
+    };
+    score?: string;
+    records?: { summary: string }[];
+    curatedRank?: { current: number }; // Added for seed extraction
+}
+
+interface ESPNEvent {
+    id: string;
+    uid: string;
+    date: string;
+    name: string;
+    shortName: string;
+    season: { year: number; type: number; slug: string };
+    competitions: {
+        id: string;
+        uid: string;
+        date: string;
+        attendance: number;
+        type: { id: string; abbreviation: string };
+        timeValid: boolean;
+        neutralSite: boolean;
+        venue?: { fullName: string };
+        competitors: ESPNCompetitor[];
+        notes?: { type: string; headline: string }[];
+        status: {
+            clock: number;
+            displayClock: string;
+            period: number;
+            type: {
+                id: string;
+                name: string;
+                state: "pre" | "in" | "post";
+                completed: boolean;
+                detail: string;
+                shortDetail: string;
+            };
+        };
+    }[];
+    status: {
+        type: {
+            state: "pre" | "in" | "post";
+        };
+    };
+}
+
+interface ESPNResponse {
+    leagues: {
+        id: string;
+        uid: string;
+        name: string;
+        abbreviation: string;
+        slug: string;
+    }[];
+    season: { type: number; year: number };
+    events: ESPNEvent[];
+}
+
+// --- ESPN Fetch & Import Logic ---
+
+async function fetchESPNTournamentData(seasonYear: number): Promise<ESPNEvent[]> {
+    // 2025 Dates: Selection Sunday (March 16) to Championship (April 7)
+    // We can just fetch a wide range or distinct "groups" for tournament (group=100 usually for NCAA Tournament)
+    // But specific date range is safer if group ID changes.
+    // For 2026: 20260317-20260406
+
+    // Better yet, just fetch "postseason" via specific endpoint logic if available, 
+    // but the scoreboard endpoint with dates is reliable.
+    const start = `${seasonYear}0315`;
+    const end = `${seasonYear}0410`;
+    const limit = 200; // Should cover all 67 games
+
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=100`; // group 100 is typically NCAA Tournament
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`ESPN API Error: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json() as ESPNResponse;
+        return data.events || [];
+    } catch (error) {
+        logger.error("Failed to fetch ESPN data:", error);
+        throw error;
+    }
+}
+
+/**
+ * Imports tournament data from ESPN, mapping existing games and teams.
+ */
+export const importTournamentFromESPN = onCall(async (request) => {
+    // 1. Auth Check
+    if (!request.auth || request.auth.token.role !== 'ADMIN') {
+        throw new HttpsError('permission-denied', 'Admin only.');
+    }
+
+    const { tournamentId, seasonYear } = request.data;
+    if (!tournamentId || !seasonYear) {
+        throw new HttpsError('invalid-argument', 'Missing tournamentId or seasonYear');
+    }
+
+    const db = admin.firestore();
+    const tournamentRef = db.collection('tournaments').doc(tournamentId);
+
+    try {
+        const events = await fetchESPNTournamentData(parseInt(seasonYear));
+        logger.info(`Fetched ${events.length} events from ESPN for ${seasonYear}`);
+
+        if (events.length === 0) {
+            return { success: false, message: "No events found from ESPN." };
+        }
+
+        // Prepare Data Structures
+        const games: Record<string, Game> = {};
+        const teams: Record<string, Team> = {};
+
+        // MAPPING LOGIC
+        for (const event of events) {
+            const competition = event.competitions[0];
+            const gameId = `espn-${event.id}`;
+            const status = competition.status.type.state === 'pre' ? 'SCHEDULED' :
+                competition.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
+
+            // Identify Teams
+            const homeComp = competition.competitors.find(c => c.homeAway === 'home');
+            const awayComp = competition.competitors.find(c => c.homeAway === 'away');
+
+            if (!homeComp || !awayComp) continue;
+
+            const homeTeamId = homeComp.team.id;
+            const awayTeamId = awayComp.team.id;
+
+            // Extract ranks (seeds)
+            // ESPN validation: curatedRank is sometimes populated
+            const homeSeed = homeComp.curatedRank?.current || 99;
+            const awaySeed = awayComp.curatedRank?.current || 99;
+
+            // Store Teams if not exists
+            if (!teams[homeTeamId]) {
+                teams[homeTeamId] = {
+                    id: homeTeamId,
+                    name: homeComp.team.displayName,
+                    seed: homeSeed,
+                    region: 'TBD', // Difficult to pinpoint region without scraping bracket specifically
+                    logoUrl: homeComp.team.logo
+                };
+            }
+            if (!teams[awayTeamId]) {
+                teams[awayTeamId] = {
+                    id: awayTeamId,
+                    name: awayComp.team.displayName,
+                    seed: awaySeed,
+                    region: 'TBD',
+                    logoUrl: awayComp.team.logo
+                };
+            }
+
+            // Create Game
+            const game: Game = {
+                id: gameId,
+                startTime: competition.date,
+                status: status === 'FINAL' ? 'FINAL' : status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'SCHEDULED', // status map
+                homeTeamId: homeTeamId,
+                awayTeamId: awayTeamId,
+                homeScore: parseInt(homeComp.score || '0'),
+                awayScore: parseInt(awayComp.score || '0'),
+                winnerTeamId: status === 'FINAL' ? (parseInt(homeComp.score || '0') > parseInt(awayComp.score || '0') ? homeTeamId : awayTeamId) : undefined,
+                round: 1, // Placeholder - needs inference
+                region: 'TBD'
+            };
+
+            games[gameId] = game;
+        }
+
+        // SAVE
+        // We preserve existing slots if we update
+        await tournamentRef.set({
+            id: tournamentId,
+            seasonYear: parseInt(seasonYear),
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            importedGames: games, // Save as separate collection or field to avoid breaking manual slots?
+            importedTeams: teams
+        }, { merge: true });
+
+        return { success: true, count: events.length, teams: Object.keys(teams).length };
+
+    } catch (error) {
+        logger.error("Import failed", error);
+        throw new HttpsError('internal', "Failed to import from ESPN");
+    }
+});
