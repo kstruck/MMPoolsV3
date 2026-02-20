@@ -422,17 +422,26 @@ export const importTournamentFromESPN = onCall(async (request) => {
     // 1. Auth Check
     if (!request.auth || request.auth.token.role !== 'ADMIN') {
         throw new HttpsError('permission-denied', 'Admin only.');
-    }
+    } // Ensure this brace closes the check
 
     const { tournamentId, seasonYear } = request.data;
+    logger.info(`Starting ESPN import for tournament: ${tournamentId}, year: ${seasonYear}`);
+
     if (!tournamentId || !seasonYear) {
-        throw new HttpsError('invalid-argument', 'Missing tournamentId or seasonYear');
+        // Return structured error instead of throwing to debug client side
+        return { success: false, message: 'Missing tournamentId or seasonYear' };
     }
 
     const db = admin.firestore();
     const tournamentRef = db.collection('tournaments').doc(tournamentId);
 
     try {
+        // Validate fetch availability
+        if (typeof fetch === 'undefined') {
+            logger.error("Global fetch is undefined!");
+            return { success: false, message: "Server configuration error: fetch not found" };
+        }
+
         const events = await fetchESPNTournamentData(parseInt(seasonYear));
         logger.info(`Fetched ${events.length} events from ESPN for ${seasonYear}`);
 
@@ -514,8 +523,10 @@ export const importTournamentFromESPN = onCall(async (request) => {
 
         return { success: true, count: events.length, teams: Object.keys(teams).length };
 
-    } catch (error) {
-        logger.error("Import failed", error);
-        throw new HttpsError('internal', "Failed to import from ESPN");
+    } catch (error: unknown) {
+        logger.error("Import failed with details:", error);
+        // Clean error message for client
+        const msg = error instanceof Error ? error.message : "Unknown error";
+        return { success: false, message: `Import failed: ${msg}` };
     }
 });
