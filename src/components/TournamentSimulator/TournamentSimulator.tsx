@@ -389,6 +389,11 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             // 2. Update tournament in Firestore
             await setDoc(doc(db, 'tournaments', 'mens-2025-sim'), updatedTournament);
 
+            // 2b. If this is the first round, lock the pool so brackets become viewable
+            if (currentRound === 0 && poolId) {
+                await updateDoc(doc(db, 'pools', poolId), { status: 'LOCKED' });
+            }
+
             // 3. Read all entries and recalculate scores
             const entriesSnap = await getDocs(collection(db, 'pools', poolId, 'entries'));
             const previousLeaderboard = [...leaderboard];
@@ -1008,7 +1013,7 @@ const SimulationControls: React.FC<{
                     ) : (
                         <>
                             <Play className="w-5 h-5" />
-                            Simulate {ROUND_LABELS[nextRound]}
+                            {nextRound === 1 ? 'Start Simulation (Round of 64)' : `Simulate ${ROUND_LABELS[nextRound]}`}
                         </>
                     )}
                 </button>
