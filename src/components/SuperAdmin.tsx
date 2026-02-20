@@ -628,9 +628,18 @@ export const SuperAdmin: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto p-4 md:p-6 relative text-slate-100">
-            <h1 className="text-3xl font-bold mb-6 flex items-center gap-3">
-                <Shield className="text-emerald-500" /> Super Admin Dashboard
-            </h1>
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold flex items-center gap-3">
+                    <Shield className="text-emerald-500" /> Super Admin Dashboard
+                </h1>
+                <button
+                    onClick={() => navigate('/tournament-sim')}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold transition-colors shadow-lg"
+                >
+                    <Trophy size={18} />
+                    Tournament Simulator
+                </button>
+            </div>
 
             {/* TWO-LEVEL NAVIGATION */}
             <div className="mb-8 space-y-4">
