@@ -642,7 +642,7 @@ export const SuperAdmin: React.FC = () => {
                             onClick={() => {
                                 setActiveGroup(group);
                                 // Auto-select first tab in group
-                                setActiveTab(navStructure[group][0].id as any);
+                                setActiveTab(navStructure[group][0].id as typeof activeTab);
                             }}
                             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeGroup === group
                                 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
@@ -659,7 +659,7 @@ export const SuperAdmin: React.FC = () => {
                     {navStructure[activeGroup].map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
+                            onClick={() => setActiveTab(tab.id as typeof activeTab)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-bold text-sm transition-colors border-b-2 ${activeTab === tab.id
                                 ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10'
                                 : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
