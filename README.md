@@ -25,6 +25,7 @@ A modern, real-time sports pool application supporting both **NCAA March Madness
 * **64-Team Bracket Challenge:** Full support for the Men's NCAA Tournament.
 * **Interactive Builder:** Mobile-friendly bracket picker with drag-and-drop-like ease. 'Smart Fill' features for rapid selection.
 * **Live Scoring:** Round-by-round scoring updates with active leaderboard table.
+* **Live Score Ticker:** **NEW!** Real-time scrolling ticker displaying live game scores, broadcast channels, and game status (powered by ESPN).
 * **Advanced Analytics:** "Who to Root For" engine calculates win probabilities and rank changes in real-time.
 * **What-If Simulator:** Forecast potential outcomes and standings based on hypothetical results.
 
@@ -172,6 +173,7 @@ Built-in viral growth mechanism to help pool managers expand their reach.
 
 ### Verification & Compliance
 
+* **Security Audited:** **NEW!** Regular automated dependency scanning and manual code audits to ensure military-grade security.
 * **Google OAuth Verified:** Fully compliant with Google API Services User Data Policy, including "Limited Use" disclosure.
 * **Legal Center:** Integrated Privacy Policy and Terms of Service pages with consistent site navigation and "Back to Home" functionality.
 * **Brand Compliance:** Uses official Google Sign-In branding and color palettes.
