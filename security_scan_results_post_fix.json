@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-19T16:09:10.063792",
+  "timestamp": "2026-02-19T16:20:23.702327",
   "ecosystems": {
     "npm": {
       "ecosystem": "npm",
@@ -12,7 +12,7 @@
           "cve": [
             "eslint"
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "N/A",
           "source": "npm_audit"
         },
         {
@@ -23,7 +23,7 @@
           "cve": [
             "minimatch"
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "N/A",
           "source": "npm_audit"
         },
         {
@@ -35,7 +35,7 @@
             "ajv",
             "minimatch"
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "N/A",
           "source": "npm_audit"
         },
         {
@@ -92,7 +92,7 @@
           "package": "@typescript-eslint/eslint-plugin",
           "version": "*",
           "vulnerability_id": "@typescript-eslint/eslint-plugin",
-          "severity": "HIGH",
+          "severity": "MODERATE",
           "cve": [
             "@typescript-eslint/parser",
             "@typescript-eslint/type-utils",
@@ -111,7 +111,7 @@
             "@typescript-eslint/typescript-estree",
             "eslint"
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "N/A",
           "source": "npm_audit"
         },
         {
@@ -121,7 +121,8 @@
           "severity": "HIGH",
           "cve": [
             "@typescript-eslint/typescript-estree",
-            "@typescript-eslint/utils"
+            "@typescript-eslint/utils",
+            "eslint"
           ],
           "fixed_in": "N/A",
           "source": "npm_audit"
@@ -134,7 +135,7 @@
           "cve": [
             "minimatch"
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "N/A",
           "source": "npm_audit"
         },
         {
@@ -147,7 +148,7 @@
             "@typescript-eslint/typescript-estree",
             "eslint"
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "N/A",
           "source": "npm_audit"
         },
         {
@@ -216,7 +217,7 @@
               "range": "<8.18.0"
             }
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "N/A",
           "source": "npm_audit"
         },
         {
@@ -267,6 +268,98 @@
             }
           ],
           "fixed_in": "N/A",
+          "source": "npm_audit"
+        },
+        {
+          "package": "axios",
+          "version": "<=0.30.2",
+          "vulnerability_id": "axios",
+          "severity": "HIGH",
+          "cve": [
+            {
+              "source": 1090049,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios vulnerable to Server-Side Request Forgery",
+              "url": "https://github.com/advisories/GHSA-4w2v-q235-vp99",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-918"
+              ],
+              "cvss": {
+                "score": 5.9,
+                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+              },
+              "range": "<0.21.1"
+            },
+            {
+              "source": 1097679,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios Cross-Site Request Forgery Vulnerability",
+              "url": "https://github.com/advisories/GHSA-wf5p-g6vw-rhxx",
+              "severity": "moderate",
+              "cwe": [
+                "CWE-352"
+              ],
+              "cvss": {
+                "score": 6.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N"
+              },
+              "range": ">=0.8.1 <0.28.0"
+            },
+            {
+              "source": 1102326,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "axios Inefficient Regular Expression Complexity vulnerability",
+              "url": "https://github.com/advisories/GHSA-cph5-m8f7-6c5x",
+              "severity": "high",
+              "cwe": [
+                "CWE-400",
+                "CWE-1333"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+              },
+              "range": "<0.21.2"
+            },
+            {
+              "source": 1111034,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "axios Requests Vulnerable To Possible SSRF and Credential Leakage via Absolute URL",
+              "url": "https://github.com/advisories/GHSA-jr5f-v2jv-69x6",
+              "severity": "high",
+              "cwe": [
+                "CWE-918"
+              ],
+              "cvss": {
+                "score": 0,
+                "vectorString": null
+              },
+              "range": "<0.30.0"
+            },
+            {
+              "source": 1113274,
+              "name": "axios",
+              "dependency": "axios",
+              "title": "Axios is Vulnerable to Denial of Service via __proto__ Key in mergeConfig",
+              "url": "https://github.com/advisories/GHSA-43fc-jf86-j433",
+              "severity": "high",
+              "cwe": [
+                "CWE-754"
+              ],
+              "cvss": {
+                "score": 7.5,
+                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+              },
+              "range": "<=0.30.2"
+            },
+            "follow-redirects"
+          ],
+          "fixed_in": "15.6.0",
           "source": "npm_audit"
         },
         {
@@ -432,7 +525,7 @@
             "ajv",
             "minimatch"
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "N/A",
           "source": "npm_audit"
         },
         {
@@ -536,7 +629,7 @@
           "package": "firebase-tools",
           "version": "*",
           "vulnerability_id": "firebase-tools",
-          "severity": "CRITICAL",
+          "severity": "HIGH",
           "cve": [
             "@google-cloud/functions-emulator",
             {
@@ -561,7 +654,7 @@
             "glob",
             "google-auto-auth",
             "jsonwebtoken",
-            "open",
+            "minimatch",
             "request",
             "superstatic",
             "tar",
@@ -645,7 +738,7 @@
               "range": "<1.15.4"
             }
           ],
-          "fixed_in": "N/A",
+          "fixed_in": "15.6.0",
           "source": "npm_audit"
         },
         {
@@ -687,10 +780,11 @@
         },
         {
           "package": "gcp-metadata",
-          "version": "<=0.4.1",
+          "version": "<=0.9.0",
           "vulnerability_id": "gcp-metadata",
-          "severity": "MODERATE",
+          "severity": "HIGH",
           "cve": [
+            "axios",
             "retry-request"
           ],
           "fixed_in": "15.6.0",
@@ -725,6 +819,8 @@
           "vulnerability_id": "google-auth-library",
           "severity": "HIGH",
           "cve": [
+            "axios",
+            "gcp-metadata",
             "gtoken",
             "gtoken",
             "request"
@@ -738,6 +834,7 @@
           "vulnerability_id": "google-auto-auth",
           "severity": "HIGH",
           "cve": [
+            "gcp-metadata",
             "gcp-metadata",
             "google-auth-library",
             "google-auth-library",
@@ -836,48 +933,6 @@
           "source": "npm_audit"
         },
         {
-          "package": "hoek",
-          "version": "*",
-          "vulnerability_id": "hoek",
-          "severity": "HIGH",
-          "cve": [
-            {
-              "source": 1105092,
-              "name": "hoek",
-              "dependency": "hoek",
-              "title": "hoek subject to prototype pollution via the clone function.",
-              "url": "https://github.com/advisories/GHSA-c429-5p7v-vgjp",
-              "severity": "high",
-              "cwe": [
-                "CWE-1321"
-              ],
-              "cvss": {
-                "score": 8.1,
-                "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
-              },
-              "range": "<=6.1.3"
-            },
-            {
-              "source": 1105121,
-              "name": "hoek",
-              "dependency": "hoek",
-              "title": "Prototype Pollution in hoek",
-              "url": "https://github.com/advisories/GHSA-jp4x-w63m-7wgm",
-              "severity": "high",
-              "cwe": [
-                "CWE-1321"
-              ],
-              "cvss": {
-                "score": 8.8,
-                "vectorString": "CVSS:3.0/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
-              },
-              "range": "<4.2.1"
-            }
-          ],
-          "fixed_in": "15.6.0",
-          "source": "npm_audit"
-        },
-        {
           "package": "http-cache-semantics",
           "version": "<4.1.1",
           "vulnerability_id": "http-cache-semantics",
@@ -928,18 +983,6 @@
             }
           ],
           "fixed_in": "N/A",
-          "source": "npm_audit"
-        },
-        {
-          "package": "joi",
-          "version": "0.0.2 - 14.3.1",
-          "vulnerability_id": "joi",
-          "severity": "HIGH",
-          "cve": [
-            "hoek",
-            "topo"
-          ],
-          "fixed_in": "15.6.0",
           "source": "npm_audit"
         },
         {
@@ -998,8 +1041,7 @@
                 "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:H/A:L"
               },
               "range": "<9.0.0"
-            },
-            "joi"
+            }
           ],
           "fixed_in": "15.6.0",
           "source": "npm_audit"
@@ -1207,7 +1249,7 @@
               "range": "<10.2.1"
             }
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "15.6.0",
           "source": "npm_audit"
         },
         {
@@ -1401,32 +1443,6 @@
                 "vectorString": null
               },
               "range": "<1.3.2"
-            }
-          ],
-          "fixed_in": "15.6.0",
-          "source": "npm_audit"
-        },
-        {
-          "package": "open",
-          "version": "<6.0.0",
-          "vulnerability_id": "open",
-          "severity": "CRITICAL",
-          "cve": [
-            {
-              "source": 1090848,
-              "name": "open",
-              "dependency": "open",
-              "title": "Command Injection in open",
-              "url": "https://github.com/advisories/GHSA-28xh-wpgr-7fm8",
-              "severity": "critical",
-              "cwe": [
-                "CWE-77"
-              ],
-              "cvss": {
-                "score": 0,
-                "vectorString": null
-              },
-              "range": "<6.0.0"
             }
           ],
           "fixed_in": "15.6.0",
@@ -1815,17 +1831,6 @@
           "source": "npm_audit"
         },
         {
-          "package": "topo",
-          "version": "*",
-          "vulnerability_id": "topo",
-          "severity": "HIGH",
-          "cve": [
-            "hoek"
-          ],
-          "fixed_in": "15.6.0",
-          "source": "npm_audit"
-        },
-        {
           "package": "tough-cookie",
           "version": "<4.1.3",
           "vulnerability_id": "tough-cookie",
@@ -1855,13 +1860,15 @@
           "package": "typescript-eslint",
           "version": "*",
           "vulnerability_id": "typescript-eslint",
-          "severity": "MODERATE",
+          "severity": "HIGH",
           "cve": [
             "@typescript-eslint/eslint-plugin",
             "@typescript-eslint/parser",
-            "@typescript-eslint/utils"
+            "@typescript-eslint/typescript-estree",
+            "@typescript-eslint/utils",
+            "eslint"
           ],
-          "fixed_in": "7.3.1",
+          "fixed_in": "N/A",
           "source": "npm_audit"
         },
         {
@@ -1953,7 +1960,7 @@
       "cve": [
         "eslint"
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "N/A",
       "source": "npm_audit"
     },
     {
@@ -1964,7 +1971,7 @@
       "cve": [
         "minimatch"
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "N/A",
       "source": "npm_audit"
     },
     {
@@ -1976,7 +1983,7 @@
         "ajv",
         "minimatch"
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "N/A",
       "source": "npm_audit"
     },
     {
@@ -2033,7 +2040,7 @@
       "package": "@typescript-eslint/eslint-plugin",
       "version": "*",
       "vulnerability_id": "@typescript-eslint/eslint-plugin",
-      "severity": "HIGH",
+      "severity": "MODERATE",
       "cve": [
         "@typescript-eslint/parser",
         "@typescript-eslint/type-utils",
@@ -2052,7 +2059,7 @@
         "@typescript-eslint/typescript-estree",
         "eslint"
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "N/A",
       "source": "npm_audit"
     },
     {
@@ -2062,7 +2069,8 @@
       "severity": "HIGH",
       "cve": [
         "@typescript-eslint/typescript-estree",
-        "@typescript-eslint/utils"
+        "@typescript-eslint/utils",
+        "eslint"
       ],
       "fixed_in": "N/A",
       "source": "npm_audit"
@@ -2075,7 +2083,7 @@
       "cve": [
         "minimatch"
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "N/A",
       "source": "npm_audit"
     },
     {
@@ -2088,7 +2096,7 @@
         "@typescript-eslint/typescript-estree",
         "eslint"
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "N/A",
       "source": "npm_audit"
     },
     {
@@ -2157,7 +2165,7 @@
           "range": "<8.18.0"
         }
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "N/A",
       "source": "npm_audit"
     },
     {
@@ -2208,6 +2216,98 @@
         }
       ],
       "fixed_in": "N/A",
+      "source": "npm_audit"
+    },
+    {
+      "package": "axios",
+      "version": "<=0.30.2",
+      "vulnerability_id": "axios",
+      "severity": "HIGH",
+      "cve": [
+        {
+          "source": 1090049,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios vulnerable to Server-Side Request Forgery",
+          "url": "https://github.com/advisories/GHSA-4w2v-q235-vp99",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": "<0.21.1"
+        },
+        {
+          "source": 1097679,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios Cross-Site Request Forgery Vulnerability",
+          "url": "https://github.com/advisories/GHSA-wf5p-g6vw-rhxx",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-352"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N"
+          },
+          "range": ">=0.8.1 <0.28.0"
+        },
+        {
+          "source": 1102326,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "axios Inefficient Regular Expression Complexity vulnerability",
+          "url": "https://github.com/advisories/GHSA-cph5-m8f7-6c5x",
+          "severity": "high",
+          "cwe": [
+            "CWE-400",
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<0.21.2"
+        },
+        {
+          "source": 1111034,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "axios Requests Vulnerable To Possible SSRF and Credential Leakage via Absolute URL",
+          "url": "https://github.com/advisories/GHSA-jr5f-v2jv-69x6",
+          "severity": "high",
+          "cwe": [
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<0.30.0"
+        },
+        {
+          "source": 1113274,
+          "name": "axios",
+          "dependency": "axios",
+          "title": "Axios is Vulnerable to Denial of Service via __proto__ Key in mergeConfig",
+          "url": "https://github.com/advisories/GHSA-43fc-jf86-j433",
+          "severity": "high",
+          "cwe": [
+            "CWE-754"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=0.30.2"
+        },
+        "follow-redirects"
+      ],
+      "fixed_in": "15.6.0",
       "source": "npm_audit"
     },
     {
@@ -2373,7 +2473,7 @@
         "ajv",
         "minimatch"
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "N/A",
       "source": "npm_audit"
     },
     {
@@ -2477,7 +2577,7 @@
       "package": "firebase-tools",
       "version": "*",
       "vulnerability_id": "firebase-tools",
-      "severity": "CRITICAL",
+      "severity": "HIGH",
       "cve": [
         "@google-cloud/functions-emulator",
         {
@@ -2502,7 +2602,7 @@
         "glob",
         "google-auto-auth",
         "jsonwebtoken",
-        "open",
+        "minimatch",
         "request",
         "superstatic",
         "tar",
@@ -2586,7 +2686,7 @@
           "range": "<1.15.4"
         }
       ],
-      "fixed_in": "N/A",
+      "fixed_in": "15.6.0",
       "source": "npm_audit"
     },
     {
@@ -2628,10 +2728,11 @@
     },
     {
       "package": "gcp-metadata",
-      "version": "<=0.4.1",
+      "version": "<=0.9.0",
       "vulnerability_id": "gcp-metadata",
-      "severity": "MODERATE",
+      "severity": "HIGH",
       "cve": [
+        "axios",
         "retry-request"
       ],
       "fixed_in": "15.6.0",
@@ -2666,6 +2767,8 @@
       "vulnerability_id": "google-auth-library",
       "severity": "HIGH",
       "cve": [
+        "axios",
+        "gcp-metadata",
         "gtoken",
         "gtoken",
         "request"
@@ -2679,6 +2782,7 @@
       "vulnerability_id": "google-auto-auth",
       "severity": "HIGH",
       "cve": [
+        "gcp-metadata",
         "gcp-metadata",
         "google-auth-library",
         "google-auth-library",
@@ -2777,48 +2881,6 @@
       "source": "npm_audit"
     },
     {
-      "package": "hoek",
-      "version": "*",
-      "vulnerability_id": "hoek",
-      "severity": "HIGH",
-      "cve": [
-        {
-          "source": 1105092,
-          "name": "hoek",
-          "dependency": "hoek",
-          "title": "hoek subject to prototype pollution via the clone function.",
-          "url": "https://github.com/advisories/GHSA-c429-5p7v-vgjp",
-          "severity": "high",
-          "cwe": [
-            "CWE-1321"
-          ],
-          "cvss": {
-            "score": 8.1,
-            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
-          },
-          "range": "<=6.1.3"
-        },
-        {
-          "source": 1105121,
-          "name": "hoek",
-          "dependency": "hoek",
-          "title": "Prototype Pollution in hoek",
-          "url": "https://github.com/advisories/GHSA-jp4x-w63m-7wgm",
-          "severity": "high",
-          "cwe": [
-            "CWE-1321"
-          ],
-          "cvss": {
-            "score": 8.8,
-            "vectorString": "CVSS:3.0/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
-          },
-          "range": "<4.2.1"
-        }
-      ],
-      "fixed_in": "15.6.0",
-      "source": "npm_audit"
-    },
-    {
       "package": "http-cache-semantics",
       "version": "<4.1.1",
       "vulnerability_id": "http-cache-semantics",
@@ -2869,18 +2931,6 @@
         }
       ],
       "fixed_in": "N/A",
-      "source": "npm_audit"
-    },
-    {
-      "package": "joi",
-      "version": "0.0.2 - 14.3.1",
-      "vulnerability_id": "joi",
-      "severity": "HIGH",
-      "cve": [
-        "hoek",
-        "topo"
-      ],
-      "fixed_in": "15.6.0",
       "source": "npm_audit"
     },
     {
@@ -2939,8 +2989,7 @@
             "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:H/A:L"
           },
           "range": "<9.0.0"
-        },
-        "joi"
+        }
       ],
       "fixed_in": "15.6.0",
       "source": "npm_audit"
@@ -3148,7 +3197,7 @@
           "range": "<10.2.1"
         }
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "15.6.0",
       "source": "npm_audit"
     },
     {
@@ -3342,32 +3391,6 @@
             "vectorString": null
           },
           "range": "<1.3.2"
-        }
-      ],
-      "fixed_in": "15.6.0",
-      "source": "npm_audit"
-    },
-    {
-      "package": "open",
-      "version": "<6.0.0",
-      "vulnerability_id": "open",
-      "severity": "CRITICAL",
-      "cve": [
-        {
-          "source": 1090848,
-          "name": "open",
-          "dependency": "open",
-          "title": "Command Injection in open",
-          "url": "https://github.com/advisories/GHSA-28xh-wpgr-7fm8",
-          "severity": "critical",
-          "cwe": [
-            "CWE-77"
-          ],
-          "cvss": {
-            "score": 0,
-            "vectorString": null
-          },
-          "range": "<6.0.0"
         }
       ],
       "fixed_in": "15.6.0",
@@ -3756,17 +3779,6 @@
       "source": "npm_audit"
     },
     {
-      "package": "topo",
-      "version": "*",
-      "vulnerability_id": "topo",
-      "severity": "HIGH",
-      "cve": [
-        "hoek"
-      ],
-      "fixed_in": "15.6.0",
-      "source": "npm_audit"
-    },
-    {
       "package": "tough-cookie",
       "version": "<4.1.3",
       "vulnerability_id": "tough-cookie",
@@ -3796,13 +3808,15 @@
       "package": "typescript-eslint",
       "version": "*",
       "vulnerability_id": "typescript-eslint",
-      "severity": "MODERATE",
+      "severity": "HIGH",
       "cve": [
         "@typescript-eslint/eslint-plugin",
         "@typescript-eslint/parser",
-        "@typescript-eslint/utils"
+        "@typescript-eslint/typescript-estree",
+        "@typescript-eslint/utils",
+        "eslint"
       ],
-      "fixed_in": "7.3.1",
+      "fixed_in": "N/A",
       "source": "npm_audit"
     },
     {
@@ -3880,8 +3894,8 @@
     }
   ],
   "summary": {
-    "total_vulnerabilities": 77,
-    "critical": 5,
+    "total_vulnerabilities": 74,
+    "critical": 3,
     "high": 47,
     "medium": 0,
     "low": 4
@@ -3891,14 +3905,14 @@
       {
         "package": "@eslint/config-array",
         "current_version": "<=0.22.0",
-        "fixed_version": "7.3.1",
+        "fixed_version": "N/A",
         "severity": "HIGH",
         "priority": 1
       },
       {
         "package": "@eslint/eslintrc",
         "current_version": "*",
-        "fixed_version": "7.3.1",
+        "fixed_version": "N/A",
         "severity": "HIGH",
         "priority": 1
       },
@@ -3910,16 +3924,9 @@
         "priority": 1
       },
       {
-        "package": "@typescript-eslint/eslint-plugin",
-        "current_version": "*",
-        "fixed_version": "N/A",
-        "severity": "HIGH",
-        "priority": 1
-      },
-      {
         "package": "@typescript-eslint/parser",
         "current_version": "*",
-        "fixed_version": "7.3.1",
+        "fixed_version": "N/A",
         "severity": "HIGH",
         "priority": 1
       },
@@ -3933,14 +3940,14 @@
       {
         "package": "@typescript-eslint/typescript-estree",
         "current_version": ">=6.16.0",
-        "fixed_version": "7.3.1",
+        "fixed_version": "N/A",
         "severity": "HIGH",
         "priority": 1
       },
       {
         "package": "@typescript-eslint/utils",
         "current_version": "*",
-        "fixed_version": "7.3.1",
+        "fixed_version": "N/A",
         "severity": "HIGH",
         "priority": 1
       },
@@ -3962,6 +3969,13 @@
         "package": "async",
         "current_version": "2.0.0 - 2.6.3",
         "fixed_version": "N/A",
+        "severity": "HIGH",
+        "priority": 1
+      },
+      {
+        "package": "axios",
+        "current_version": "<=0.30.2",
+        "fixed_version": "15.6.0",
         "severity": "HIGH",
         "priority": 1
       },
@@ -4010,7 +4024,7 @@
       {
         "package": "eslint",
         "current_version": "0.7.1 - 2.0.0-rc.1 || >=4.1.0",
-        "fixed_version": "7.3.1",
+        "fixed_version": "N/A",
         "severity": "HIGH",
         "priority": 1
       },
@@ -4042,7 +4056,7 @@
     "specVersion": "1.5",
     "version": 1,
     "metadata": {
-      "timestamp": "2026-02-19T16:09:14.374489"
+      "timestamp": "2026-02-19T16:20:28.251434"
     },
     "components": [
       {
@@ -4140,6 +4154,12 @@
         "name": "async",
         "version": "2.0.0 - 2.6.3",
         "purl": "pkg:npm/async@2.0.0 - 2.6.3"
+      },
+      {
+        "type": "library",
+        "name": "axios",
+        "version": "<=0.30.2",
+        "purl": "pkg:npm/axios@<=0.30.2"
       },
       {
         "type": "library",
@@ -4246,8 +4266,8 @@
       {
         "type": "library",
         "name": "gcp-metadata",
-        "version": "<=0.4.1",
-        "purl": "pkg:npm/gcp-metadata@<=0.4.1"
+        "version": "<=0.9.0",
+        "purl": "pkg:npm/gcp-metadata@<=0.9.0"
       },
       {
         "type": "library",
@@ -4305,12 +4325,6 @@
       },
       {
         "type": "library",
-        "name": "hoek",
-        "version": "*",
-        "purl": "pkg:npm/hoek@*"
-      },
-      {
-        "type": "library",
         "name": "http-cache-semantics",
         "version": "<4.1.1",
         "purl": "pkg:npm/http-cache-semantics@<4.1.1"
@@ -4320,12 +4334,6 @@
         "name": "http-proxy",
         "version": "<1.18.1",
         "purl": "pkg:npm/http-proxy@<1.18.1"
-      },
-      {
-        "type": "library",
-        "name": "joi",
-        "version": "0.0.2 - 14.3.1",
-        "purl": "pkg:npm/joi@0.0.2 - 14.3.1"
       },
       {
         "type": "library",
@@ -4368,12 +4376,6 @@
         "name": "node-forge",
         "version": "<=1.3.1",
         "purl": "pkg:npm/node-forge@<=1.3.1"
-      },
-      {
-        "type": "library",
-        "name": "open",
-        "version": "<6.0.0",
-        "purl": "pkg:npm/open@<6.0.0"
       },
       {
         "type": "library",
@@ -4458,12 +4460,6 @@
         "name": "tmp",
         "version": "<=0.2.3",
         "purl": "pkg:npm/tmp@<=0.2.3"
-      },
-      {
-        "type": "library",
-        "name": "topo",
-        "version": "*",
-        "purl": "pkg:npm/topo@*"
       },
       {
         "type": "library",

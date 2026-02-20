@@ -365,6 +365,10 @@ export interface Game {
     region?: string | null;
     isFirstFour?: boolean;
     nextGameId?: string;
+    period?: number;
+    clock?: string;
+    broadcast?: string;
+    externalId?: string;
 }
 
 export interface TournamentSlot {

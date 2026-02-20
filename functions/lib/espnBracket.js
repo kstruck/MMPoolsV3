@@ -1,8 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.importTournamentFromESPN = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentScores = exports.initializeTournament = void 0;
+exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentScores = exports.importTournamentFromESPN = exports.initializeTournament = void 0;
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
+const https_1 = require("firebase-functions/v2/https");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
 const bracketScoring_1 = require("./bracketScoring");
 // Standard mapping of Seed match-ups for Round 1
 // Slot 1: 1 vs 16. Slot 2: 8 vs 9. Slot 3: 5 vs 12. Slot 4: 4 vs 13.
@@ -210,39 +212,169 @@ function getFFSlot(region) {
     return 2;
 }
 /**
+ * Shared logic to fetch and map ESPN data.
+ */
+async function fetchAndMapESPNGameData(seasonYear) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    // Validate fetch availability
+    if (typeof fetch === 'undefined') {
+        throw new Error("Server configuration error: fetch not found");
+    }
+    const events = await fetchESPNTournamentData(seasonYear);
+    logger.info(`Fetched ${events.length} events from ESPN for ${seasonYear}`);
+    if (events.length === 0) {
+        return { games: {}, teams: {}, count: 0 };
+    }
+    // Prepare Data Structures
+    const games = {};
+    const teams = {};
+    // MAPPING LOGIC
+    for (const event of events) {
+        const competition = event.competitions[0];
+        const gameId = `espn-${event.id}`;
+        const status = competition.status.type.state === 'pre' ? 'SCHEDULED' :
+            competition.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
+        // Identify Teams
+        const homeComp = competition.competitors.find(c => c.homeAway === 'home');
+        const awayComp = competition.competitors.find(c => c.homeAway === 'away');
+        if (!homeComp || !awayComp)
+            continue;
+        const homeTeamId = homeComp.team.id;
+        const awayTeamId = awayComp.team.id;
+        // Extract ranks (seeds)
+        const homeSeed = ((_a = homeComp.curatedRank) === null || _a === void 0 ? void 0 : _a.current) || 99;
+        const awaySeed = ((_b = awayComp.curatedRank) === null || _b === void 0 ? void 0 : _b.current) || 99;
+        // Store Teams if not exists
+        if (!teams[homeTeamId]) {
+            teams[homeTeamId] = {
+                id: homeTeamId,
+                name: homeComp.team.displayName,
+                seed: homeSeed,
+                region: 'TBD',
+                logoUrl: homeComp.team.logo
+            };
+        }
+        if (!teams[awayTeamId]) {
+            teams[awayTeamId] = {
+                id: awayTeamId,
+                name: awayComp.team.displayName,
+                seed: awaySeed,
+                region: 'TBD',
+                logoUrl: awayComp.team.logo
+            };
+        }
+        // Create Game
+        const game = {
+            id: gameId,
+            startTime: competition.date,
+            status: status === 'FINAL' ? 'FINAL' : status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'SCHEDULED',
+            homeTeamId: homeTeamId,
+            awayTeamId: awayTeamId,
+            homeScore: parseInt(homeComp.score || '0'),
+            awayScore: parseInt(awayComp.score || '0'),
+            winnerTeamId: status === 'FINAL' ? (parseInt(homeComp.score || '0') > parseInt(awayComp.score || '0') ? homeTeamId : awayTeamId) : undefined,
+            round: 1, // Placeholder
+            region: 'TBD',
+            // Live Score Details
+            period: (_c = competition.status) === null || _c === void 0 ? void 0 : _c.period,
+            clock: (_d = competition.status) === null || _d === void 0 ? void 0 : _d.displayClock, // e.g. "12:35"
+            broadcast: (_g = (_f = (_e = competition.broadcasts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.names) === null || _g === void 0 ? void 0 : _g[0], // e.g. "CBS"
+            externalId: event.id
+        };
+        games[gameId] = game;
+    }
+    return { games, teams, count: events.length };
+}
+/**
+ * Imports tournament data from ESPN, mapping existing games and teams.
+ */
+exports.importTournamentFromESPN = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c;
+    // 1. Auth Check - Super Admin Only
+    let role = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role;
+    if (!role && ((_b = request.auth) === null || _b === void 0 ? void 0 : _b.uid)) {
+        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
+        role = (_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.role;
+    }
+    if (role !== 'SUPER_ADMIN') {
+        throw new https_1.HttpsError('permission-denied', 'Super Admin only.');
+    }
+    const { tournamentId, seasonYear } = request.data;
+    logger.info(`Starting ESPN import for tournament: ${tournamentId}, year: ${seasonYear}`);
+    if (!tournamentId || !seasonYear) {
+        return { success: false, message: 'Missing tournamentId or seasonYear' };
+    }
+    const db = admin.firestore();
+    const tournamentRef = db.collection('tournaments').doc(tournamentId);
+    try {
+        const { games, teams, count } = await fetchAndMapESPNGameData(parseInt(seasonYear));
+        if (count === 0) {
+            return { success: false, message: "No events found from ESPN." };
+        }
+        // SAVE
+        await tournamentRef.set({
+            id: tournamentId,
+            seasonYear: parseInt(seasonYear),
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            importedGames: games,
+            importedTeams: teams
+        }, { merge: true });
+        return { success: true, count, teams: Object.keys(teams).length };
+    }
+    catch (error) {
+        logger.error("Import failed with details:", error);
+        const msg = error instanceof Error ? error.message : "Unknown error";
+        return { success: false, message: `Import failed: ${msg}` };
+    }
+});
+/**
  * Updates scores for a tournament from ESPN API.
- * For Phase 3 V1, this accepts a 'simulated' payload to let us test the scoring engine.
  */
 const updateTournamentScores = async (db, tournamentId, dryRun = false) => {
-    // Phase 3: just return mock log for now until we hook up the real URL
-    logger.info("Syncing tournament scores...");
-    // In real implementation:
-    // 1. Fetch ESPN Scoreboard
-    // 2. Map ESPN events to games[].externalId
-    // 3. Update scores and statuses
-    // 4. If winner decided, advance to nextSlotId
-    // For now, we'll manually implement a "Simulator" in the frontend or calling simple update
-    if (!dryRun) {
-        try {
-            const scoredCount = await (0, bracketScoring_1.scoreTournamentEntries)(db, tournamentId);
-            logger.info(`Scoring complete. Scored ${scoredCount} entries.`);
+    logger.info(`Syncing tournament scores for ${tournamentId}...`);
+    try {
+        // Assume tournamentId format "mens-2025" -> 2025
+        const seasonYear = parseInt(tournamentId.split('-')[1] || '2025');
+        const { games, teams, count } = await fetchAndMapESPNGameData(seasonYear);
+        logger.info(`Mapped ${count} games for sync.`);
+        if (!dryRun && count > 0) {
+            const tournamentRef = db.collection('tournaments').doc(tournamentId);
+            // Update importedGames and lastUpdated
+            // We can also update importedTeams if we want to keep logos fresh, etc.
+            await tournamentRef.set({
+                importedGames: games,
+                importedTeams: teams,
+                lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            // Trigger internal scoring (noop if main bracket not linked yet)
+            try {
+                const scoredCount = await (0, bracketScoring_1.scoreTournamentEntries)(db, tournamentId);
+                logger.info(`Scoring complete. Scored ${scoredCount} entries.`);
+            }
+            catch (e) {
+                logger.error("Scoring failed after sync:", e);
+            }
         }
-        catch (e) {
-            logger.error("Scoring failed after sync:", e);
-        }
+    }
+    catch (error) {
+        logger.error("updateTournamentScores failed:", error);
     }
 };
 exports.updateTournamentScores = updateTournamentScores;
 // --- Cloud Functions ---
-const https_1 = require("firebase-functions/v2/https");
-const scheduler_1 = require("firebase-functions/v2/scheduler");
 /**
  * Admin-only function to seed the tournament bracket structure.
  * Usage: call with { tournamentId: 'mens-2025', seasonYear: 2025, gender: 'mens', teams: [...] }
  */
 exports.adminInitTournament = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c;
     // 1. Auth Check (Admin only)
-    if (!request.auth || request.auth.token.role !== 'ADMIN') {
+    let role = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role;
+    if (!role && ((_b = request.auth) === null || _b === void 0 ? void 0 : _b.uid)) {
+        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
+        role = (_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.role;
+    }
+    if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError('permission-denied', 'Must be an admin to initialize tournament.');
     }
     const { tournamentId, seasonYear, gender, teams } = request.data;
@@ -258,7 +390,13 @@ exports.adminInitTournament = (0, https_1.onCall)(async (request) => {
  * Also callable manually by admin.
  */
 exports.syncBracketTournament = (0, https_1.onCall)(async (request) => {
-    if (!request.auth || request.auth.token.role !== 'ADMIN') {
+    var _a, _b, _c;
+    let role = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role;
+    if (!role && ((_b = request.auth) === null || _b === void 0 ? void 0 : _b.uid)) {
+        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
+        role = (_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.role;
+    }
+    if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError('permission-denied', 'Admin only.');
     }
     const db = admin.firestore();
@@ -299,95 +437,4 @@ async function fetchESPNTournamentData(seasonYear) {
         throw error;
     }
 }
-/**
- * Imports tournament data from ESPN, mapping existing games and teams.
- */
-exports.importTournamentFromESPN = (0, https_1.onCall)(async (request) => {
-    var _a, _b;
-    // 1. Auth Check
-    if (!request.auth || request.auth.token.role !== 'ADMIN') {
-        throw new https_1.HttpsError('permission-denied', 'Admin only.');
-    }
-    const { tournamentId, seasonYear } = request.data;
-    if (!tournamentId || !seasonYear) {
-        throw new https_1.HttpsError('invalid-argument', 'Missing tournamentId or seasonYear');
-    }
-    const db = admin.firestore();
-    const tournamentRef = db.collection('tournaments').doc(tournamentId);
-    try {
-        const events = await fetchESPNTournamentData(parseInt(seasonYear));
-        logger.info(`Fetched ${events.length} events from ESPN for ${seasonYear}`);
-        if (events.length === 0) {
-            return { success: false, message: "No events found from ESPN." };
-        }
-        // Prepare Data Structures
-        const games = {};
-        const teams = {};
-        // MAPPING LOGIC
-        for (const event of events) {
-            const competition = event.competitions[0];
-            const gameId = `espn-${event.id}`;
-            const status = competition.status.type.state === 'pre' ? 'SCHEDULED' :
-                competition.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
-            // Identify Teams
-            const homeComp = competition.competitors.find(c => c.homeAway === 'home');
-            const awayComp = competition.competitors.find(c => c.homeAway === 'away');
-            if (!homeComp || !awayComp)
-                continue;
-            const homeTeamId = homeComp.team.id;
-            const awayTeamId = awayComp.team.id;
-            // Extract ranks (seeds)
-            // ESPN validation: curatedRank is sometimes populated
-            const homeSeed = ((_a = homeComp.curatedRank) === null || _a === void 0 ? void 0 : _a.current) || 99;
-            const awaySeed = ((_b = awayComp.curatedRank) === null || _b === void 0 ? void 0 : _b.current) || 99;
-            // Store Teams if not exists
-            if (!teams[homeTeamId]) {
-                teams[homeTeamId] = {
-                    id: homeTeamId,
-                    name: homeComp.team.displayName,
-                    seed: homeSeed,
-                    region: 'TBD', // Difficult to pinpoint region without scraping bracket specifically
-                    logoUrl: homeComp.team.logo
-                };
-            }
-            if (!teams[awayTeamId]) {
-                teams[awayTeamId] = {
-                    id: awayTeamId,
-                    name: awayComp.team.displayName,
-                    seed: awaySeed,
-                    region: 'TBD',
-                    logoUrl: awayComp.team.logo
-                };
-            }
-            // Create Game
-            const game = {
-                id: gameId,
-                startTime: competition.date,
-                status: status === 'FINAL' ? 'FINAL' : status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'SCHEDULED', // status map
-                homeTeamId: homeTeamId,
-                awayTeamId: awayTeamId,
-                homeScore: parseInt(homeComp.score || '0'),
-                awayScore: parseInt(awayComp.score || '0'),
-                winnerTeamId: status === 'FINAL' ? (parseInt(homeComp.score || '0') > parseInt(awayComp.score || '0') ? homeTeamId : awayTeamId) : undefined,
-                round: 1, // Placeholder - needs inference
-                region: 'TBD'
-            };
-            games[gameId] = game;
-        }
-        // SAVE
-        // We preserve existing slots if we update
-        await tournamentRef.set({
-            id: tournamentId,
-            seasonYear: parseInt(seasonYear),
-            lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-            importedGames: games, // Save as separate collection or field to avoid breaking manual slots?
-            importedTeams: teams
-        }, { merge: true });
-        return { success: true, count: events.length, teams: Object.keys(teams).length };
-    }
-    catch (error) {
-        logger.error("Import failed", error);
-        throw new https_1.HttpsError('internal', "Failed to import from ESPN");
-    }
-});
 //# sourceMappingURL=espnBracket.js.map
