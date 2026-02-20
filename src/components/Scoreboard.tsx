@@ -36,6 +36,9 @@ interface Game {
             score: string;
             homeAway: 'home' | 'away';
             winner?: boolean;
+            curatedRank?: {
+                current?: number;
+            };
         }>;
     }>;
 }
@@ -77,8 +80,8 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
 
             let url = '';
             if (activeTab === 'basketball') {
-                // College Basketball (Mens) - Top 25 Only
-                url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${dateStr}&limit=200&groups=25`; // 25 = Top 25
+                // College Basketball (Mens) - Division I
+                url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${dateStr}&limit=500&groups=50`;
             } else {
                 // Football
                 const leaguePath = activeTab === 'college' ? 'college-football' : 'nfl';
@@ -89,10 +92,22 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             if (!response.ok) throw new Error('Failed to fetch scores');
 
             const data: { events: Game[] } = await response.json();
-            setGames(data.events || []);
+            let fetchedGames = data.events || [];
+
+            // For basketball, filter out games that do not feature an AP Top 25 team
+            if (activeTab === 'basketball') {
+                fetchedGames = fetchedGames.filter(game => {
+                    const competitors = game.competitions?.[0]?.competitors || [];
+                    return competitors.some(c =>
+                        c.curatedRank?.current && c.curatedRank.current >= 1 && c.curatedRank.current <= 25
+                    );
+                });
+            }
+
+            setGames(fetchedGames);
             setLastUpdated(new Date());
-        } catch (err: any) {
-            setError(err.message || 'Failed to load scores');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to load scores');
         } finally {
             setLoading(false);
         }
