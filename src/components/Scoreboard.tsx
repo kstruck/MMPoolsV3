@@ -53,7 +53,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
     onLogout,
     onCreatePool
 }) => {
-    const [activeTab, setActiveTab] = useState<'nfl' | 'college'>('nfl');
+    const [activeTab, setActiveTab] = useState<'nfl' | 'college' | 'basketball'>('basketball');
     const [games, setGames] = useState<Game[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -65,8 +65,6 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             setLoading(true);
             setError(null);
 
-            const leaguePath = activeTab === 'college' ? 'college-football' : 'nfl';
-
             // Calculate date range: Past 7 days to Next 7 days
             const today = new Date();
             const past = new Date(today);
@@ -77,12 +75,20 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             const formatDate = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '');
             const dateStr = `${formatDate(past)}-${formatDate(future)}`;
 
-            const url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/scoreboard?dates=${dateStr}&limit=200`;
+            let url = '';
+            if (activeTab === 'basketball') {
+                // College Basketball (Mens) - Top 25 Only
+                url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${dateStr}&limit=200&groups=25`; // 25 = Top 25
+            } else {
+                // Football
+                const leaguePath = activeTab === 'college' ? 'college-football' : 'nfl';
+                url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/scoreboard?dates=${dateStr}&limit=200`;
+            }
 
             const response = await fetch(url);
             if (!response.ok) throw new Error('Failed to fetch scores');
 
-            const data = await response.json();
+            const data: { events: Game[] } = await response.json();
             setGames(data.events || []);
             setLastUpdated(new Date());
         } catch (err: any) {
@@ -315,6 +321,12 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                         className={`px-6 py-3 rounded-lg font-bold text-sm transition-all ${activeTab === 'college' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
                     >
                         🏟️ College Football
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('basketball')}
+                        className={`px-6 py-3 rounded-lg font-bold text-sm transition-all ${activeTab === 'basketball' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                    >
+                        🏀 NCAA Basketball
                     </button>
                 </div>
 

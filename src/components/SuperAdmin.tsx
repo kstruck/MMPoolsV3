@@ -34,6 +34,9 @@ export const SuperAdmin: React.FC = () => {
     const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
 
     // UI State
+    // UI State
+    type NavGroup = 'Dashboard' | 'Management' | 'Game Ops' | 'Configuration';
+    const [activeGroup, setActiveGroup] = useState<NavGroup>('Dashboard');
     const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
@@ -571,57 +574,57 @@ export const SuperAdmin: React.FC = () => {
         return acc;
     }, {} as Record<string, Pool[]>);
 
-    const tabs = [
-        { id: 'overview', label: 'Overview', icon: <Activity size={16} /> },
-        { id: 'pools', label: `Pools(${filteredPools.length})`, icon: <Shield size={16} /> },
-        { id: 'users', label: `Users(${users.length})`, icon: <Users size={16} /> },
-        { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
-        { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
-        { id: 'props', label: 'Global Props', icon: <List size={16} /> },
-        { id: 'tournament', label: 'Tournament', icon: <Trophy size={16} /> },
-        { id: 'playoffs', label: 'Playoffs', icon: <Trophy size={16} /> },
-        { id: 'stats', label: 'Stats', icon: <Activity size={16} /> },
-        { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
-    ] as const;
-
-    // --- TOURNAMENT INIT REMOVED (Moved to TournamentManager) ---
-
     // Helper: Compute referrals locally
     const getComputedReferrals = (userId: string) => {
         return users.filter(u => u.referredBy === userId).length;
     };
 
-    // Filtered Logs Logic
+    // Filtered Logs Logic (Restored)
     const filteredLogs = systemLogs.filter(log => {
-        // 1. Text Search
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             const text = ((log.message || '') + (JSON.stringify(log.details) || '')).toLowerCase();
             if (!text.includes(term)) return false;
         }
-
-        // 2. Status Filter
         if (logStatusFilter !== 'ALL' && log.status !== logStatusFilter) return false;
-
-        // 3. Tag Filter
         if (logTagFilter !== 'ALL' && log.type !== logTagFilter) return false;
-
-        // 4. Time Filter
         if (logTimeFilter !== 'ALL') {
             const ts = log.timestamp;
             const time = ts && typeof ts === 'object' && 'toDate' in ts && typeof ts.toDate === 'function'
                 ? ts.toDate().getTime()
                 : new Date(ts as string | number).getTime();
             const now = Date.now();
-            const hours = (now - time) / (1000 * 60 * 60); // hours diff
-
+            const hours = (now - time) / (1000 * 60 * 60);
             if (logTimeFilter === '1H' && hours > 1) return false;
             if (logTimeFilter === '24H' && hours > 24) return false;
             if (logTimeFilter === '7D' && hours > 24 * 7) return false;
         }
-
         return true;
     });
+
+    // --- NAVIGATION STRUCTURE ---
+    const navStructure = {
+        'Dashboard': [
+            { id: 'overview', label: 'Overview', icon: <Activity size={16} /> },
+            { id: 'stats', label: 'Stats', icon: <Activity size={16} /> },
+            { id: 'system', label: 'System Status', icon: <Activity size={16} /> },
+        ],
+        'Management': [
+            { id: 'users', label: `Users(${users.length})`, icon: <Users size={16} /> },
+            { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
+        ],
+        'Game Ops': [
+            { id: 'pools', label: `Pools(${filteredPools.length})`, icon: <Shield size={16} /> },
+            { id: 'tournament', label: 'Tournament', icon: <Trophy size={16} /> },
+            { id: 'playoffs', label: 'Playoffs', icon: <Trophy size={16} /> },
+            { id: 'props', label: 'Global Props', icon: <List size={16} /> },
+        ],
+        'Configuration': [
+            { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
+            { id: 'testing', label: 'AI Testing', icon: <Bot size={16} /> },
+            { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
+        ]
+    };
 
     return (
         <div className="max-w-7xl mx-auto p-4 md:p-6 relative text-slate-100">
@@ -629,20 +632,43 @@ export const SuperAdmin: React.FC = () => {
                 <Shield className="text-emerald-500" /> Super Admin Dashboard
             </h1>
 
-            {/* TAB NAVIGATION */}
-            <div className="flex gap-2 mb-6 border-b border-slate-700 pb-2 overflow-x-auto">
-                {tabs.map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id as 'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats')}
-                        className={`flex items - center gap - 2 px - 4 py - 2 rounded - t - lg font - bold text - sm transition - colors whitespace - nowrap ${activeTab === tab.id
-                            ? 'bg-slate-800 text-white border-b-2 border-indigo-500'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                            } `}
-                    >
-                        {tab.icon} {tab.label}
-                    </button>
-                ))}
+            {/* TWO-LEVEL NAVIGATION */}
+            <div className="mb-8 space-y-4">
+                {/* Level 1: Groups */}
+                <div className="flex flex-wrap gap-2 p-1 bg-slate-900/50 rounded-xl border border-slate-700/50 backdrop-blur-sm w-fit">
+                    {(Object.keys(navStructure) as NavGroup[]).map(group => (
+                        <button
+                            key={group}
+                            onClick={() => {
+                                setActiveGroup(group);
+                                // Auto-select first tab in group
+                                setActiveTab(navStructure[group][0].id as any);
+                            }}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeGroup === group
+                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+                                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                }`}
+                        >
+                            {group}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Level 2: Tabs */}
+                <div className="flex flex-wrap gap-2 border-b border-slate-700 pb-1">
+                    {navStructure[activeGroup].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as any)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-bold text-sm transition-colors border-b-2 ${activeTab === tab.id
+                                ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10'
+                                : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+                                }`}
+                        >
+                            {tab.icon} {tab.label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* ============ OVERVIEW TAB ============ */}
