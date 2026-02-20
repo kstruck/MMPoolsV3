@@ -29,7 +29,7 @@ import {
     clearTournament,
 } from '../../utils/testing/tournamentTestUtils';
 import { generateEntries, generateControlEntries } from '../../utils/testing/data/testEntryGenerator';
-import type { Tournament, BracketEntry, BracketPool } from '../../types';
+import type { Tournament, BracketEntry, BracketPool, User } from '../../types';
 import {
     Play, RotateCcw, Trophy, Users, ChevronRight, Check,
     Zap, Crown, ArrowUp, ArrowDown, Minus, Loader, AlertTriangle,
@@ -93,7 +93,7 @@ const POOL_SETTINGS: BracketPool['settings'] = {
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────
 
-export const TournamentSimulator: React.FC = () => {
+export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) => {
     // Phase state
     const [phase, setPhase] = useState<SimPhase>('SETUP');
     const [isLoading, setIsLoading] = useState(false);
@@ -160,7 +160,7 @@ export const TournamentSimulator: React.FC = () => {
                 status: 'PUBLISHED',
                 lockAt: Date.now() + 86400000,
                 settings: POOL_SETTINGS,
-                managerUid: 'simulator',
+                managerUid: user?.id || 'simulator',
                 seasonYear: 2025,
                 gender: 'mens',
                 tournamentId: 'mens-2025-sim',
@@ -213,7 +213,7 @@ export const TournamentSimulator: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [user?.id]);
 
     // ─── PHASE 2: FILL BRACKET ──────────────────────────────────
 

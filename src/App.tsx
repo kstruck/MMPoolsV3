@@ -278,7 +278,7 @@ const App: React.FC = () => {
 
         {/* Tournament Simulator */}
         <Route path="/tournament-sim" element={
-          <TournamentSimulator />
+          <TournamentSimulator user={user} />
         } />
 
         {/* Creation Wizards */}

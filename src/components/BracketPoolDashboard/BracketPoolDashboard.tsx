@@ -37,6 +37,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [error, setError] = useState<string | null>(null);
     const [shareStats, setShareStats] = useState<ShareStats | null>(null);
     const [bracketSubTab, setBracketSubTab] = useState<BracketSubTab>('poolwide');
+    const [showSuccess, setShowSuccess] = useState(false);
 
     // Entry Viewing Modal
     const [viewingEntry, setViewingEntry] = useState<BracketEntry | null>(null);
@@ -281,6 +282,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 setActiveEntryId(null);
                 setPicks({});
                 setEntryName('');
+                setShowSuccess(true);
+                setTimeout(() => setShowSuccess(false), 3000);
             } else {
                 setError(result.message || 'Failed to submit bracket');
             }
@@ -346,14 +349,17 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         { id: 'entries' as DashboardTab, label: 'All Entries', icon: Users },
                         { id: 'brackets' as DashboardTab, label: 'Brackets', icon: GitBranch },
                         { id: 'reports' as DashboardTab, label: 'Reports', icon: FileText },
-                        { id: 'manager' as DashboardTab, label: 'Manager', icon: ShieldCheck, hidden: !isManager },
+                        { id: 'manager' as DashboardTab, label: '⚙️ Settings', icon: ShieldCheck, hidden: !isManager },
                     ].map(tab => !tab.hidden && (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm ${activeTab === tab.id ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm ${activeTab === tab.id
+                                    ? (tab.id === 'manager' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' : 'bg-indigo-600 text-white')
+                                    : (tab.id === 'manager' ? 'bg-slate-900 border border-indigo-500/30 text-indigo-400 hover:bg-slate-800' : 'bg-slate-900 text-slate-400 hover:bg-slate-800')
+                                }`}
                         >
-                            <tab.icon size={14} />
+                            {tab.id !== 'manager' && <tab.icon size={14} />}
                             {tab.label}
                         </button>
                     ))}
@@ -364,6 +370,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     <div className="bg-red-900/30 border border-red-800 text-red-300 px-4 py-3 rounded-xl mb-6 text-sm">
                         {error}
                         <button onClick={() => setError(null)} className="ml-2 underline hover:text-red-200">Dismiss</button>
+                    </div>
+                )}
+
+                {/* Success Banner */}
+                {showSuccess && (
+                    <div className="bg-emerald-900/40 border border-emerald-800 text-emerald-300 px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-2 animate-in fade-in">
+                        <Check size={16} />
+                        Bracket submitted successfully!
                     </div>
                 )}
 
@@ -471,9 +485,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             <div key={entry.id} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
                                                 <div>
                                                     <div className="font-bold text-white">{entry.name}</div>
-                                                    <div className="text-xs text-slate-500">
+                                                    <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
                                                         {entry.status === 'SUBMITTED' ? (
-                                                            <span className="text-emerald-400">✓ Submitted — Score: {entry.score || 0}</span>
+                                                            <>
+                                                                <span className="text-emerald-400">✓ Submitted — Score: {entry.score || 0}</span>
+                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.paidStatus === 'PAID' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                                                    {entry.paidStatus === 'PAID' ? 'PAID' : 'PENDING'}
+                                                                </span>
+                                                            </>
                                                         ) : (
                                                             <span className="text-amber-400">Draft — {Object.keys(entry.picks || {}).length}/{requiredPicks} picks</span>
                                                         )}
