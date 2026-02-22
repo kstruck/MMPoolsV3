@@ -32,7 +32,15 @@ export const lockPool = onCall(async (request) => {
 
 
     // 2. Permission Check - Owner or Super Admin
-    assertPoolOwnerOrSuperAdmin(poolData, request.auth.uid, request.auth.token.role);
+    try {
+        assertPoolOwnerOrSuperAdmin(poolData, request.auth.uid, request.auth.token.role);
+    } catch (e) {
+        // Fallback for Super Admin check if token claim is missing
+        const userDoc = await db.collection("users").doc(request.auth.uid).get();
+        if (userDoc.data()?.role !== 'SUPER_ADMIN') {
+            throw e; // Re-throw original permission-denied error
+        }
+    }
 
     // 3. Generate Digits (Random or Fixed for Testing) - ONLY FOR SQUARES
     let axisNumbers;

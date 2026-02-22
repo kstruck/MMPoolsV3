@@ -9,9 +9,10 @@ const assertPoolOwnerOrSuperAdmin = (pool, uid, userRole) => {
     // If Super Admin, allow
     if (userRole === 'SUPER_ADMIN')
         return;
-    // Use createdByUid if available, fallback to ownerId for legacy/migration
-    const owner = pool.createdByUid || pool.ownerId;
-    if (owner !== uid) {
+    // Use createdByUid if available, fallback to ownerId / managerUid for legacy/migration
+    const owner = pool.createdByUid || pool.ownerId || pool.managerUid;
+    const isCoManager = pool.participantIds && pool.participantIds.includes(uid) && pool.coManagers && pool.coManagers.includes(uid);
+    if (owner !== uid && !isCoManager) {
         throw new https_1.HttpsError('permission-denied', 'You do not have permission to manage this pool.');
     }
 };

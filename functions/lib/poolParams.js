@@ -5,6 +5,7 @@ const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const poolOps_1 = require("./poolOps");
 exports.lockPool = (0, https_1.onCall)(async (request) => {
+    var _a;
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
     // 1. Auth Check - Must be logged in
@@ -22,7 +23,16 @@ exports.lockPool = (0, https_1.onCall)(async (request) => {
     }
     const poolData = poolSnap.data();
     // 2. Permission Check - Owner or Super Admin
-    (0, poolOps_1.assertPoolOwnerOrSuperAdmin)(poolData, request.auth.uid, request.auth.token.role);
+    try {
+        (0, poolOps_1.assertPoolOwnerOrSuperAdmin)(poolData, request.auth.uid, request.auth.token.role);
+    }
+    catch (e) {
+        // Fallback for Super Admin check if token claim is missing
+        const userDoc = await db.collection("users").doc(request.auth.uid).get();
+        if (((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) !== 'SUPER_ADMIN') {
+            throw e; // Re-throw original permission-denied error
+        }
+    }
     // 3. Generate Digits (Random or Fixed for Testing) - ONLY FOR SQUARES
     let axisNumbers;
     const type = poolData.type || 'SQUARES';
