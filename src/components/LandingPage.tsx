@@ -3,7 +3,6 @@ import type { User } from '../types';
 import { Trophy, LayoutGrid, CheckCircle2, Heart, BarChart3, Users } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
-import { Link } from 'react-router-dom';
 
 interface LandingPageProps {
   user?: User | null;
@@ -141,19 +140,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         </div>
       </section>
 
-      {/* Cross-Link to Squares */}
-      <section className="py-12 border-t border-b border-slate-800 bg-slate-900/50">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div>
-            <h3 className="text-2xl font-bold text-white mb-2">Looking to run a Super Bowl Squares pool?</h3>
-            <p className="text-slate-400">We have a dedicated platform for 10x10 grids with live ESPN sync.</p>
-          </div>
-          <Link to="/gameday-squares" className="px-6 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors flex items-center gap-2 shrink-0">
-            <LayoutGrid size={20} />
-            Go to Gameday Squares
-          </Link>
-        </div>
-      </section>
+
 
       {/* Feature Showcase Section */}
       <section className="py-24 relative overflow-hidden" style={{ backgroundColor: BRAND.navy }}>
