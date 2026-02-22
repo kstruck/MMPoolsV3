@@ -112,10 +112,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             <div className="absolute inset-0 bg-gradient-to-b from-[#0A192F] via-transparent to-transparent z-20"></div>
             <div className="rounded-2xl p-2 shadow-2xl" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
               <div className="rounded-xl overflow-hidden relative group" style={{ backgroundColor: BRAND.navy }}>
-                {/* Fallback to hero-ui for now if bracket specific not available, strictly speaking user asked for 'bracket challenge' images, 
-                    since generation failed we use existing assets or placeholders. */}
                 <img
-                  src="/hero-ui.png"
+                  src="/bracket-app-hero.png"
                   alt="March Melee Pools Tournament Dashboard with Bracket View"
                   loading="lazy"
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
