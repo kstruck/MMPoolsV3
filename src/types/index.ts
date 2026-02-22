@@ -42,6 +42,8 @@ export interface PlayoffPool {
   league: 'NFL';
   name: string;
   ownerId: string;
+  managerUid: string;
+  participantIds?: string[];
   urlSlug?: string;
   season: string;
   createdAt: number;
@@ -115,6 +117,8 @@ export interface PropsPool {
   type: 'PROPS';
   name: string;
   ownerId: string;
+  managerUid: string;
+  participantIds?: string[];
   createdAt: number;
 
   // Custom Branding
@@ -313,6 +317,8 @@ export interface GameState {
   };
   contactEmail: string;
   managerName: string; // Name of the pool manager
+  managerUid: string; // User ID of the pool manager
+  participantIds?: string[]; // Users who have joined the pool
   paymentInstructions: string; // Instructions for payment (Venmo, etc.)
   theme: string;
   branding?: {
@@ -595,6 +601,7 @@ export interface BracketPool {
   description?: string;
   managerUid: string;
   ownerId?: string; // Back-compat / Rules
+  participantIds?: string[];
   seasonYear: number;
   gender: 'mens' | 'womens';
   tournamentId?: string; // Links to tournaments/{id} in Firestore

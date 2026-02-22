@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { User, GameState, Winner, Pool, PlayoffPool } from '../types';
+import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool } from '../types';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
 import { LayoutGrid, User as UserIcon, Search, ChevronRight, Loader, Calendar, Shield, DollarSign, Trophy, TrendingUp } from 'lucide-react';
@@ -23,14 +23,14 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     useEffect(() => {
         setIsLoading(true);
-        let unsubPublic: () => void = () => { };
+        let unsubParticipating: () => void = () => { };
         let unsubOwned: () => void = () => { };
         let unsubAll: () => void = () => { };
 
         // Helper to process and filter pools
         const processPools = (allPools: Pool[]) => {
             const participating = allPools.filter(p => {
-                const isOwner = p.ownerId === user.id || (p as any).managerName === user.name;
+                const isOwner = p.ownerId === user.id || p.managerUid === user.id;
 
                 // Squares Logic - Only show if user currently owns at least one square
                 if (p.type === 'SQUARES') {
@@ -39,28 +39,21 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         // Square must have an owner (not released)
                         if (!s.owner) return false;
 
-                        // Check if this user owns it
-                        return (
-                            s.reservedByUid === user.id ||
-                            s.owner === user.name ||
-                            (user.email && (
-                                s.owner === user.email ||
-                                s.owner.toLowerCase() === user.email.split('@')[0].toLowerCase()
-                            ))
-                        );
+                        // Check if this user owns it securely
+                        return s.reservedByUid === user.id;
                     });
-                    return isOwner || ownsActiveSquare;
+                    return isOwner || ownsActiveSquare || (p.participantIds || []).includes(user.id);
                 }
 
                 // Playoff Logic
                 if (p.type === 'NFL_PLAYOFFS') {
                     const pool = p as unknown as PlayoffPool;
                     const entries = pool.entries ? Object.values(pool.entries) : [];
-                    return isOwner || entries.some(e => e.userId === user.id);
+                    return isOwner || entries.some(e => e.userId === user.id) || (p.participantIds || []).includes(user.id);
                 }
 
                 // Bracket/Props etc (Future proofing)
-                return isOwner;
+                return isOwner || (p.participantIds || []).includes(user.id);
             });
 
             // Deduplicate by ID just in case
@@ -84,23 +77,23 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 setIsLoading(false);
             });
         } else {
-            // Regular User: Fetch Public + Owned logic
+            // Regular User: Fetch Participating + Owned logic
             // We need to maintain a local cache to merge updates
-            let publicPools: Pool[] = [];
+            let participatingPools: Pool[] = [];
             let ownedPools: Pool[] = [];
 
             const mergeAndUpdate = () => {
-                const merged = [...publicPools, ...ownedPools];
+                const merged = [...participatingPools, ...ownedPools];
                 // Unique by ID
                 const uniqueAll = Array.from(new Map(merged.map(p => [p.id, p])).values());
                 processPools(uniqueAll);
             };
 
-            unsubPublic = dbService.subscribeToPools((pools) => {
-                publicPools = pools;
+            unsubParticipating = dbService.subscribeToParticipatingPools(user.id, (pools) => {
+                participatingPools = pools;
                 mergeAndUpdate();
             }, (err) => {
-                console.error("Public Pools Error", err);
+                console.error("Participating Pools Error", err);
                 setIsLoading(false);
             });
 
@@ -109,22 +102,17 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 mergeAndUpdate();
             }, (err) => {
                 console.error("Owned Pools Error", err);
-                // Don't verify loading false here strictly, wait for public? 
-                // Actually relying on public to finish first or second. 
-                // It's safe to let either update UI.
             }, user.id);
         }
 
         return () => {
-            unsubPublic();
+            unsubParticipating();
             unsubOwned();
             unsubAll();
         };
-    }, [user.id, user.role, user.name, user.email]);
+    }, [user.id, user.role]);
 
-    // Lifetime Stats Calculation
     const lifetimeStats = useMemo(() => {
-        const emailPrefix = user.email ? user.email.split('@')[0].toLowerCase() : '';
         let totalSquares = 0;
         let totalWinnings = 0;
         let totalWins = 0;
@@ -132,11 +120,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         myPools.forEach(pool => {
             if (pool.type === 'SQUARES') {
                 const sPool = pool as GameState;
-                const userSquares = sPool.squares.filter(s =>
-                    s.reservedByUid === user.id ||
-                    s.owner === user.name ||
-                    (emailPrefix && s.owner?.toLowerCase() === emailPrefix)
-                );
+                const userSquares = sPool.squares.filter(s => s.reservedByUid === user.id);
                 totalSquares += userSquares.length;
 
                 // Check winners for this pool (Squares only logic)
@@ -165,7 +149,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             totalWins,
             totalWinnings
         };
-    }, [myPools, poolWinners, user.id, user.name, user.email]);
+    }, [myPools, poolWinners, user.id]);
 
     // Derived State for Filtering
     const filteredPools = useMemo(() => {
@@ -290,7 +274,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     ].map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
+                            onClick={() => setActiveTab(tab.id as 'live' | 'open' | 'completed' | 'all')}
                             className={`px-4 py-3 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id
                                 ? 'border-emerald-500 text-white'
                                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -346,12 +330,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
                             if (isSquares) {
                                 const sPool = pool as GameState;
-                                const emailPrefix = user.email ? user.email.split('@')[0] : '';
-                                userEntryCount = sPool.squares.filter(s =>
-                                    s.reservedByUid === user.id ||
-                                    s.owner === user.name ||
-                                    (emailPrefix && s.owner === emailPrefix)
-                                ).length;
+                                userEntryCount = sPool.squares.filter(s => s.reservedByUid === user.id).length;
                                 percentFull = (sPool.squares.filter(s => s.owner).length / 100) * 100;
                                 costDisplay = `$${sPool.costPerSquare}/sq`;
                             } else if (isPlayoff) {
@@ -365,7 +344,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             return (
                                 <div
                                     key={pool.id}
-                                    onClick={() => navigate(`/pool/${(pool as any).urlSlug || pool.id}`)}
+                                    onClick={() => navigate(`/pool/${(pool as BracketPool).slug || (pool as GameState).urlSlug || pool.id}`)}
                                     className="group bg-slate-800/50 border border-slate-700 hover:border-emerald-500/50 hover:bg-slate-800 rounded-xl p-5 transition-all cursor-pointer relative overflow-hidden"
                                 >
                                     <div className="flex justify-between items-start mb-4">

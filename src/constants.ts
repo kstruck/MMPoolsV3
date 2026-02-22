@@ -88,7 +88,9 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
     scoreChangePayout: false,
     unclaimedFinalPrizeStrategy: 'last_winner',
   },
-  ownerId
+  ownerId,
+  managerUid: ownerId || '',
+  participantIds: []
 });
 
 export const PERIOD_LABELS: Record<string, string> = {
@@ -136,7 +138,7 @@ export const NFL_TEAMS: Record<string, { name: string; abbr: string; logo: strin
 
 // NCAA Team Data for Logos (Top teams)
 // NCAA Team Data for Logos (Comprehensive)
-export const NCAA_TEAMS: Record<string, {name: string, id: string, logo: string}> = {
+export const NCAA_TEAMS: Record<string, { name: string, id: string, logo: string }> = {
   'abilenechrstn': { name: "Abilene Christian Wildcats", id: "2000", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2000.png" },
   'acu': { name: "Abilene Christian Wildcats", id: "2000", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2000.png" },
   'airforce': { name: "Air Force Falcons", id: "2005", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2005.png" },
