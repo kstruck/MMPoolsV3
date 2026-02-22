@@ -28,10 +28,83 @@ const BRAND = {
   lightGray: '#E5E7EB',
 };
 
+import { SEO } from './SEO';
+
+const landingPageSchemas = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "url": "https://www.marchmeleepools.com",
+    "name": "March Melee Pools",
+    "description": "Easy online Super Bowl squares and sports betting pools",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://www.marchmeleepools.com/#browse?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "March Melee Pools",
+    "applicationCategory": "WebApplication",
+    "description": "Online platform for sports pools and betting squares",
+    "url": "https://www.marchmeleepools.com"
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Is it free to start a pool?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! You can create a pool for free. We also offer premium features for advanced customization."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do payouts work?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Platform managers can record payments manually. We calculate exactly who is owed what based on the game results."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I run a charity pool?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Absolutely. You can set a percentage of the pot to go to a specific cause, and we'll display a donation tracker."
+        }
+      }
+    ]
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "March Melee Pools",
+    "url": "https://www.marchmeleepools.com",
+    "logo": "https://www.marchmeleepools.com/logo.png",
+    "description": "Online platform for creating and hosting Super Bowl squares, NFL pools, and sports betting pools",
+    "sameAs": [
+      "https://twitter.com/marchmeleepools",
+      "https://www.facebook.com/marchmeleepools"
+    ]
+  }
+];
+
 export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0, isLoggedIn }) => {
 
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
+      <SEO
+        title="March Melee Pools - Free Online Super Bowl Squares & Sports Pools"
+        description="Create and host free NFL pools, Super Bowl squares, March Madness brackets & sports betting pools online. Real-time scoring, secure transactions, and charity options available."
+        keywords="Super Bowl Squares, NFL Playoff Pool, March Madness Bracket, Sports Betting, Office Sports Pools, Host Sports Pools, Online Pool Manager, free online pools, football pool software"
+        schemas={landingPageSchemas}
+      />
 
       {/* Shared Header for Consistency */}
       <Header
@@ -75,8 +148,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           </div>
 
           <h1 className="text-4xl md:text-7xl font-black text-white tracking-tight mb-6 md:mb-8 leading-tight animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ fontFamily: "'Montserrat', sans-serif" }}>
-            The Ultimate Platform for <br />
-            <span style={{ color: BRAND.orange }}>March Madness Pools</span>
+            Free Online Sports Pools & <br />
+            <span style={{ color: BRAND.orange }}>March Madness Brackets</span>
           </h1>
 
           {/* Stat Cards */}
@@ -139,9 +212,115 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           </div>
         </div>
       </section>
+      {/* How It Works Section */}
+      <section className="py-24 border-t border-b border-slate-800 bg-slate-900/50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-black text-white mb-6" style={{ fontFamily: "'Montserrat', sans-serif" }}>Get Started in 3 Simple Steps</h2>
+            <p className="text-xl text-slate-400 max-w-2xl mx-auto">Create Super Bowl squares free or setup a March Madness bracket pool with zero hassle. Here is how our online pool hosting works.</p>
+          </div>
 
+          <div className="grid md:grid-cols-3 gap-12 text-center">
+            <div className="relative">
+              <div className="w-16 h-16 mx-auto bg-orange-500 rounded-full flex items-center justify-center text-2xl font-black text-white mb-6 shadow-lg shadow-orange-500/20">1</div>
+              <h3 className="text-2xl font-bold text-white mb-4">Create Your Pool</h3>
+              <p className="text-slate-400 leading-relaxed">Customize your rules, scoring logic, and entry fees. Set up a free online sports pool in less than 2 minutes.</p>
+            </div>
+            <div className="relative">
+              <div className="w-16 h-16 mx-auto bg-emerald-500 rounded-full flex items-center justify-center text-2xl font-black text-white mb-6 shadow-lg shadow-emerald-500/20">2</div>
+              <h3 className="text-2xl font-bold text-white mb-4">Invite Friends</h3>
+              <p className="text-slate-400 leading-relaxed">Share your unique invite link with office colleagues, friends, or family. They can join instantly from any mobile device without downloading an app.</p>
+            </div>
+            <div className="relative">
+              <div className="w-16 h-16 mx-auto bg-blue-500 rounded-full flex items-center justify-center text-2xl font-black text-white mb-6 shadow-lg shadow-blue-500/20">3</div>
+              <h3 className="text-2xl font-bold text-white mb-4">Watch the Live Action</h3>
+              <p className="text-slate-400 leading-relaxed">As the games happen, our real-time scoring engine automatically updates standings, win probabilities, and payouts so you don't have to lift a finger.</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
+      {/* Why Choose Us & Use Cases Section */}
+      <section className="py-24 relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid md:grid-cols-2 gap-16 items-center">
+            <div>
+              <h2 className="text-3xl md:text-5xl font-black text-white mb-6" style={{ fontFamily: "'Montserrat', sans-serif" }}>Why Host With March Melee?</h2>
+              <p className="text-lg text-slate-400 mb-8 leading-relaxed">
+                We built March Melee Pools because other football pool software and sports betting pool platforms were stuck in the past. We offer the fastest, most beautiful, and secure online platform for your group.
+              </p>
+              <div className="space-y-6">
+                <div className="flex gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center shrink-0">
+                    <LayoutGrid className="text-orange-500" size={24} />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-bold text-white mb-2">Unmatched Customization</h4>
+                    <p className="text-slate-400">Whether you want traditional March Madness brackets or complex online betting pools with friends, our engine supports your house rules seamlessly.</p>
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <Users className="text-blue-500" size={24} />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-bold text-white mb-2">Perfect for Any Group</h4>
+                    <p className="text-slate-400">From competitive office sports pools to casual family tournaments and large-scale charity fundraisers, we scale to meet your needs.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 shadow-2xl">
+              <h3 className="text-2xl font-bold text-white mb-6 border-b border-slate-700 pb-4">Popular Pool Types</h3>
+              <ul className="space-y-4">
+                <li className="flex items-center justify-between p-4 bg-slate-900 rounded-xl">
+                  <span className="font-bold text-white">March Madness Bracket Pool</span>
+                  <span className="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full">Most Popular</span>
+                </li>
+                <li className="flex items-center justify-between p-4 bg-slate-900 rounded-xl">
+                  <span className="font-bold text-white">Super Bowl Squares Online</span>
+                  <span className="text-xs font-bold text-orange-400 bg-orange-400/10 px-3 py-1 rounded-full">Trending</span>
+                </li>
+                <li className="flex items-center justify-between p-4 bg-slate-900 rounded-xl">
+                  <span className="font-bold text-white">NFL Playoff Pools</span>
+                </li>
+                <li className="flex items-center justify-between p-4 bg-slate-900 rounded-xl">
+                  <span className="font-bold text-white">Charity Sports Betting Pools</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
 
+      {/* Expanded FAQ */}
+      <section className="py-24 border-t border-slate-800 bg-slate-900/50">
+        <div className="max-w-4xl mx-auto px-6">
+          <h2 className="text-3xl md:text-5xl font-black text-center text-white mb-16" style={{ fontFamily: "'Montserrat', sans-serif" }}>Sports Pool FAQs</h2>
+
+          <div className="space-y-6">
+            <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-3">Is it free to start an online sports pool?</h3>
+              <p className="text-slate-400 leading-relaxed">Yes! You can create a pool for free. Setting up a football pool or a bracket tournament costs nothing. We also offer premium features for advanced customization and massive groups.</p>
+            </div>
+
+            <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-3">How do payouts and entry fees work?</h3>
+              <p className="text-slate-400 leading-relaxed">Platform managers can set entry fees and record payments manually. Our automated system calculates exactly who is owed what based on the live game results and your custom payout structure.</p>
+            </div>
+
+            <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-3">Can I run a charity sports pool?</h3>
+              <p className="text-slate-400 leading-relaxed">Absolutely. March Melee is the best platform for charity sports pools. You can set a percentage of the total pot to go to a specific cause, and we'll display a transparent live donation tracker for all participants to see.</p>
+            </div>
+
+            <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-3">Are my transactions and data secure?</h3>
+              <p className="text-slate-400 leading-relaxed">Security is our top priority. We provide a transparent audit trail for all transactions within your pool, use bank-level encryption, and never share your participant data with third parties.</p>
+            </div>
+          </div>
+        </div>
+      </section>
       {/* Feature Showcase Section */}
       <section className="py-24 relative overflow-hidden" style={{ backgroundColor: BRAND.navy }}>
         <div className="absolute inset-0 pointer-events-none">
