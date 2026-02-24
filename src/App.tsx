@@ -38,6 +38,7 @@ import { TournamentSimulator } from './components/TournamentSimulator/Tournament
 import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
+import { isSuperAdmin } from './utils/auth';
 
 // Legacy Hash Handler - redirects old hash-based URLs to clean URLs
 const LegacyHashHandler = () => {
@@ -154,7 +155,7 @@ const App: React.FC = () => {
     navigate('/grid-wizard');
   };
 
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isAdmin = isSuperAdmin(user);
 
   if (isAuthLoading) {
     return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader className="animate-spin text-indigo-500" /></div>;
@@ -258,7 +259,7 @@ const App: React.FC = () => {
           <AdminRoute
             user={user}
             pools={pools}
-            isSuperAdmin={isSuperAdmin}
+            isSuperAdmin={isAdmin}
             onOpenAuth={handleOpenAuth}
             onLogout={handleLogout}
             onCreatePool={handleCreatePoolClick}
@@ -267,7 +268,7 @@ const App: React.FC = () => {
         } />
 
         <Route path="/super-admin" element={
-          isSuperAdmin ? (
+          isAdmin ? (
             <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
               <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
               <SuperAdmin />

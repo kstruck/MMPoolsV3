@@ -343,6 +343,8 @@ export interface Tournament {
     seasonYear: number;
     gender: 'mens' | 'womens';
     isFinalized: boolean; // Tournament over?
+    status?: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+    lockAt?: number; // Timestamp: auto-lock bracket entries at tournament start
 
     games: Record<string, Game>;
     slots: Record<string, TournamentSlot>;
@@ -350,6 +352,7 @@ export interface Tournament {
     // ESPN Import Data
     importedGames?: Record<string, Game>;
     importedTeams?: Record<string, Team>;
+    lastUpdated?: FirebaseFirestore.Timestamp;
 }
 
 export interface Game {

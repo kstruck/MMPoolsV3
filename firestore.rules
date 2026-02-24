@@ -47,11 +47,34 @@ service cloud.firestore {
       // Delete: Owner only OR SuperAdmin
       allow delete: if request.auth != null && (request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid || isSuperAdmin());
       
-      // Update: Owner only (filtered) OR SuperAdmin (unrestricted)
-      // Prevent CLIENTS from writing to 'squares', 'axisNumbers', 'participants' directly
-      // They must use Cloud Functions (reserveSquare, lockPool, etc.)
+      // Helper: is user the pool owner or manager?
+      function isPoolManager() {
+        return request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid;
+      }
+
+      // Protected fields that ONLY the Admin SDK (cloud functions) can write.
+      // Client-side manager edits must never overwrite these.
+      function protectedFieldsUnchanged() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return !changed.hasAny([
+          'managerUid', 'ownerId', 'createdAt', 'createdBy',
+          'axisNumbers', 'squares', 'participants'
+        ]);
+      }
+
+      // Pool is in an editable state (not locked or completed).
+      // Super Admins bypass this check.
+      function poolIsEditable() {
+        return resource.data.get('status', 'DRAFT') in ['DRAFT', 'PUBLISHED', 'OPEN'];
+      }
+
+      // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted)
+      // Managers cannot:
+      //   1. Overwrite identity/ownership fields
+      //   2. Edit pools that are LOCKED or COMPLETED
+      // SuperAdmins bypass ALL restrictions (for emergency fixes)
       allow update: if request.auth != null && (
-        ((request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['axisNumbers']))) 
+        (isPoolManager() && protectedFieldsUnchanged() && poolIsEditable())
         || isSuperAdmin()
       );
                     

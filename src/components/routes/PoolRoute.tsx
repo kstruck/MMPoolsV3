@@ -21,6 +21,7 @@ import { calculateScenarioWinners, getLastDigit } from '../../services/gameLogic
 import { shareTrackingService } from '../../services/shareTrackingService';
 import { getTeamLogo } from '../../constants';
 import { calculateQuarterlyPayouts } from '../../utils/payouts';
+import { isSuperAdmin, isPoolManager } from '../../utils/auth';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner } from '../../types';
 
 interface PoolRouteProps {
@@ -100,7 +101,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     // Calculate isManager
     const isManager = useMemo(() => {
         if (!user || !pool) return false;
-        return user.id === pool.ownerId || ('managerUid' in pool && user.id === pool.managerUid) || user.role === 'SUPER_ADMIN';
+        return isPoolManager(user, pool);
     }, [user, pool]);
 
     // State moved from App.tsx
@@ -204,7 +205,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         pool={pool as PropsPool}
                         user={user}
                         isManager={isManager}
-                        isAdmin={user?.role === 'SUPER_ADMIN'}
+                        isAdmin={isSuperAdmin(user)}
                         onBack={() => navigate('/')}
                         onOpenAuth={onOpenAuth}
                     />
@@ -372,7 +373,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     <p className="text-slate-400 text-sm font-medium">{squaresRemaining} Squares Remaining</p>
                 </div>
                 <div className="flex gap-2">
-                    {user && (user.id === squaresPool.ownerId || user.role === 'SUPER_ADMIN') && (
+                    {user && (user.id === squaresPool.ownerId || isSuperAdmin(user)) && (
                         <button onClick={() => navigate(`/admin/${squaresPool.id}`)} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2">
                             <Edit2 size={16} /> Manage Pool
                         </button>

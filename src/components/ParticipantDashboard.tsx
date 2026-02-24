@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool } from '../types';
+import { isSuperAdmin } from '../utils/auth';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
 import { LayoutGrid, User as UserIcon, Search, ChevronRight, Loader, Calendar, Shield, DollarSign, Trophy, TrendingUp } from 'lucide-react';
@@ -69,7 +70,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             });
         };
 
-        if (user.role === 'SUPER_ADMIN') {
+        if (isSuperAdmin(user)) {
             unsubAll = dbService.subscribeToAllPools((pools) => {
                 processPools(pools);
             }, (error) => {

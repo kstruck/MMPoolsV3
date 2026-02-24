@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { calculateCorrectPicks } from '../../utils/bracketScoring';
+import { isPoolManager, isSuperAdmin } from '../../utils/auth';
 import { DateTimePicker } from './DateTimePicker';
 import { PickHistory } from './PickHistory';
 import { WhoToRootFor } from './WhoToRootFor';
@@ -53,6 +54,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [editMaxTotal, setEditMaxTotal] = useState(pool.settings.maxEntriesTotal);
     const [editMaxPerUser, setEditMaxPerUser] = useState(pool.settings.maxEntriesPerUser);
     const [editScoring, setEditScoring] = useState(pool.settings.scoringSystem);
+    const [editCustomScoring, setEditCustomScoring] = useState<number[]>(pool.settings.customScoring || [1, 2, 4, 8, 16, 32]);
     const [editRegDeadline, setEditRegDeadline] = useState<number | undefined>(pool.registrationDeadline);
     const [editSubDeadline, setEditSubDeadline] = useState<number | undefined>(pool.submissionDeadline);
     const [editLockAt, setEditLockAt] = useState<number | undefined>(pool.lockAt);
@@ -60,7 +62,43 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [settingsSaved, setSettingsSaved] = useState(false);
     const [editingSettings, setEditingSettings] = useState(false);
 
-    const isManager = user ? (pool.managerUid === user.id || user.role === 'SUPER_ADMIN') : false;
+    // Pool Details
+    const [editPoolName, setEditPoolName] = useState(pool.name);
+    const [editManagerName, setEditManagerName] = useState(pool.managerName || '');
+    const [editContactEmail, setEditContactEmail] = useState(pool.contactEmail || '');
+    const [editIsPublic, setEditIsPublic] = useState(pool.isListedPublic);
+
+    // Payment Info
+    const [editVenmo, setEditVenmo] = useState(pool.venmo || '');
+    const [editZelle, setEditZelle] = useState(pool.zelle || '');
+    const [editCashapp, setEditCashapp] = useState(pool.cashapp || '');
+    const [editPaypal, setEditPaypal] = useState(pool.paypal || '');
+    const [editPaymentInstructions, setEditPaymentInstructions] = useState(pool.settings.paymentInstructions || '');
+
+    // Tiebreaker
+    const [editTiebreaker, setEditTiebreaker] = useState<'CLOSEST_ABSOLUTE' | 'CLOSEST_UNDER'>(
+        pool.settings.tieBreakers?.closestUnder ? 'CLOSEST_UNDER' : 'CLOSEST_ABSOLUTE'
+    );
+
+    // Payouts
+    const [editPayouts, setEditPayouts] = useState(pool.settings.payouts || { places: [{ rank: 1, percentage: 100 }], bonuses: [] });
+
+    // Branding
+    const [editBranding, setEditBranding] = useState(pool.branding || { bgColor: '#0f172a' });
+
+    // Reminders
+    const [editReminders, setEditReminders] = useState(pool.reminders || {
+        auto24h: true, auto1h: true, autoLock: true, announceWinner: true, recipientFilter: 'all' as const
+    });
+
+    // Access Control
+    const [editPassword, setEditPassword] = useState(pool.accessControl?.password || '');
+
+    // Collapsible section toggles
+    const [openSections, setOpenSections] = useState<Record<string, boolean>>({ details: true, rules: true });
+    const toggleSection = (key: string) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+    const isManager = isPoolManager(user, pool);
     const userEntries = entries.filter(e => e.ownerUid === user?.id);
     const maxEntriesPerUser = pool.settings?.maxEntriesPerUser || 1;
     const canCreateMore = userEntries.length < maxEntriesPerUser;
@@ -180,10 +218,36 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         setSavingSettings(true);
         try {
             const updates: Record<string, unknown> = {
+                // Pool Details
+                name: editPoolName,
+                managerName: editManagerName,
+                contactEmail: editContactEmail,
+                isListedPublic: editIsPublic,
+                // Payment Info
+                venmo: editVenmo,
+                zelle: editZelle,
+                cashapp: editCashapp,
+                paypal: editPaypal,
+                'settings.paymentInstructions': editPaymentInstructions,
+                // Rules
                 'settings.entryFee': editEntryFee,
                 'settings.maxEntriesTotal': editMaxTotal,
                 'settings.maxEntriesPerUser': editMaxPerUser,
                 'settings.scoringSystem': editScoring,
+                'settings.customScoring': editScoring === 'CUSTOM' ? editCustomScoring : null,
+                'settings.tieBreakers': {
+                    closestAbsolute: editTiebreaker === 'CLOSEST_ABSOLUTE',
+                    closestUnder: editTiebreaker === 'CLOSEST_UNDER',
+                },
+                // Payouts
+                'settings.payouts': editPayouts,
+                // Branding
+                branding: editBranding,
+                // Reminders
+                reminders: editReminders,
+                // Access Control
+                'accessControl.password': editPassword || null,
+                // Dates
                 registrationDeadline: editRegDeadline || null,
                 submissionDeadline: editSubDeadline || null,
                 lockAt: editLockAt || pool.lockAt,
@@ -198,7 +262,11 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         } finally {
             setSavingSettings(false);
         }
-    }, [pool.id, pool.lockAt, editEntryFee, editMaxTotal, editMaxPerUser, editScoring, editRegDeadline, editSubDeadline, editLockAt]);
+    }, [pool.id, pool.lockAt, editPoolName, editManagerName, editContactEmail, editIsPublic,
+        editVenmo, editZelle, editCashapp, editPaypal, editPaymentInstructions,
+        editEntryFee, editMaxTotal, editMaxPerUser, editScoring, editCustomScoring, editTiebreaker,
+        editPayouts, editBranding, editReminders, editPassword,
+        editRegDeadline, editSubDeadline, editLockAt]);
 
     // CSV Export
     const handleExportCSV = useCallback(() => {
@@ -810,7 +878,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-xl font-bold text-white">Pool Settings</h3>
                                 {!editingSettings ? (
-                                    ((pool.status !== 'LOCKED' && pool.status !== 'COMPLETED') || user?.role === 'SUPER_ADMIN') ? (
+                                    ((pool.status !== 'LOCKED' && pool.status !== 'COMPLETED') || isSuperAdmin(user)) ? (
                                         <button onClick={() => setEditingSettings(true)} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 px-3 py-1.5 border border-indigo-800 rounded-lg">
                                             <Edit3 size={12} /> Edit
                                         </button>
@@ -836,106 +904,387 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 <div className="space-y-3">
                                     {[
                                         { label: 'Status', value: pool.status, color: 'text-emerald-400' },
+                                        { label: 'Pool Name', value: pool.name, color: 'text-white' },
+                                        { label: 'Manager', value: pool.managerName || '—', color: 'text-white' },
+                                        { label: 'Contact', value: pool.contactEmail || '—', color: 'text-white' },
+                                        { label: 'Public', value: pool.isListedPublic ? 'Yes' : 'No', color: pool.isListedPublic ? 'text-emerald-400' : 'text-slate-500' },
                                         { label: 'Scoring', value: pool.settings.scoringSystem, color: 'text-white' },
                                         { label: 'Entries', value: `${entries.length} / ${pool.settings.maxEntriesTotal === -1 ? '\u221e' : pool.settings.maxEntriesTotal}`, color: 'text-white' },
                                         { label: 'Per User', value: pool.settings.maxEntriesPerUser === -1 ? 'Unlimited' : String(pool.settings.maxEntriesPerUser), color: 'text-white' },
                                         { label: 'Entry Fee', value: pool.settings.entryFee > 0 ? `$${pool.settings.entryFee}` : 'Free', color: 'text-white' },
+                                        { label: 'Tiebreaker', value: pool.settings.tieBreakers?.closestUnder ? 'Closest Under' : 'Closest Absolute', color: 'text-white' },
                                         { label: 'Lock Date', value: pool.lockAt ? new Date(pool.lockAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not set', color: pool.lockAt ? 'text-white' : 'text-slate-600' },
                                         { label: 'Registration', value: pool.registrationDeadline ? new Date(pool.registrationDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.registrationDeadline ? 'text-white' : 'text-slate-600' },
                                         { label: 'Submission', value: pool.submissionDeadline ? new Date(pool.submissionDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.submissionDeadline ? 'text-white' : 'text-slate-600' },
                                         { label: 'Tournament', value: pool.tournamentId || 'Not linked', color: 'text-slate-300' },
+                                        { label: 'Venmo', value: pool.venmo || '—', color: pool.venmo ? 'text-white' : 'text-slate-600' },
+                                        { label: 'Zelle', value: pool.zelle || '—', color: pool.zelle ? 'text-white' : 'text-slate-600' },
+                                        { label: 'CashApp', value: pool.cashapp || '—', color: pool.cashapp ? 'text-white' : 'text-slate-600' },
+                                        { label: 'PayPal', value: pool.paypal || '—', color: pool.paypal ? 'text-white' : 'text-slate-600' },
                                     ].map(row => (
                                         <div key={row.label} className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
                                             <span className="text-slate-400 text-sm">{row.label}</span>
                                             <span className={`font-mono text-sm ${row.color}`}>{row.value}</span>
                                         </div>
                                     ))}
+                                    {/* Payouts summary */}
+                                    {pool.settings.payouts?.places && pool.settings.payouts.places.length > 0 && (
+                                        <div className="p-3 bg-slate-950 rounded border border-slate-800">
+                                            <span className="text-slate-400 text-sm block mb-1">Payouts</span>
+                                            <div className="flex flex-wrap gap-2">
+                                                {pool.settings.payouts.places.map(p => (
+                                                    <span key={p.rank} className="text-xs bg-slate-800 text-white px-2 py-1 rounded">
+                                                        #{p.rank}: {p.percentage}%
+                                                    </span>
+                                                ))}
+                                                {pool.settings.payouts.bonuses?.map(b => (
+                                                    <span key={b.name} className="text-xs bg-emerald-800/50 text-emerald-300 px-2 py-1 rounded">
+                                                        {b.name}: {b.percentage}%
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
-                                /* Edit Mode */
-                                <div className="space-y-4">
-                                    {/* Status (read-only) */}
-                                    <div className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
-                                        <span className="text-slate-400 text-sm">Status</span>
-                                        <span className="font-mono text-sm text-emerald-400">{pool.status}</span>
+                                /* Edit Mode - Collapsible Sections */
+                                <div className="space-y-3">
+                                    {/* Cancel button */}
+                                    <button onClick={() => setEditingSettings(false)} className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 mb-2">
+                                        <X size={12} /> Cancel
+                                    </button>
+
+                                    {/* Section 1: Pool Details */}
+                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('details')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Globe size={14} className="text-blue-400" /> Pool Details</span>
+                                            {openSections.details ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                        </button>
+                                        {openSections.details && (
+                                            <div className="p-4 bg-slate-950 space-y-3">
+                                                <div>
+                                                    <label className="text-xs text-slate-500 block mb-1">Pool Name</label>
+                                                    <input value={editPoolName} onChange={e => setEditPoolName(e.target.value)}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="text-xs text-slate-500 block mb-1">Manager Name</label>
+                                                        <input value={editManagerName} onChange={e => setEditManagerName(e.target.value)}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-slate-500 block mb-1">Contact Email</label>
+                                                        <input type="email" value={editContactEmail} onChange={e => setEditContactEmail(e.target.value)}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between p-3 bg-slate-900 rounded border border-slate-800">
+                                                    <span className="text-sm text-slate-300">Publicly Listed</span>
+                                                    <button onClick={() => setEditIsPublic(!editIsPublic)}
+                                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editIsPublic ? 'bg-emerald-600' : 'bg-slate-700'}`}>
+                                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editIsPublic ? 'translate-x-6' : 'translate-x-1'}`} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* Scoring System */}
-                                    <div>
-                                        <label className="text-xs text-slate-500 block mb-1">Scoring System</label>
-                                        <select
-                                            value={editScoring}
-                                            onChange={e => setEditScoring(e.target.value as 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM')}
-                                            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
-                                        >
-                                            <option value="CLASSIC">Classic (1-2-4-8-16-32)</option>
-                                            <option value="ESPN">ESPN (10-20-40-80-160-320)</option>
-                                            <option value="FIBONACCI">Fibonacci (1-1-2-3-5-8)</option>
-                                            <option value="CUSTOM">Custom</option>
-                                        </select>
+                                    {/* Section 2: Rules */}
+                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('rules')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Target size={14} className="text-amber-400" /> Rules</span>
+                                            {openSections.rules ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                        </button>
+                                        {openSections.rules && (
+                                            <div className="p-4 bg-slate-950 space-y-3">
+                                                {/* Status (read-only) */}
+                                                <div className="flex justify-between items-center p-3 bg-slate-900 rounded border border-slate-800">
+                                                    <span className="text-slate-400 text-sm">Status</span>
+                                                    <span className="font-mono text-sm text-emerald-400">{pool.status}</span>
+                                                </div>
+                                                {/* Scoring System */}
+                                                <div>
+                                                    <label className="text-xs text-slate-500 block mb-1">Scoring System</label>
+                                                    <select value={editScoring} onChange={e => setEditScoring(e.target.value as 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM')}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm">
+                                                        <option value="CLASSIC">Classic (1-2-4-8-16-32)</option>
+                                                        <option value="ESPN">ESPN (10-20-40-80-160-320)</option>
+                                                        <option value="FIBONACCI">Fibonacci (1-1-2-3-5-8)</option>
+                                                        <option value="CUSTOM">Custom</option>
+                                                    </select>
+                                                </div>
+                                                {/* Custom Scoring Input */}
+                                                {editScoring === 'CUSTOM' && (
+                                                    <div>
+                                                        <label className="text-xs text-slate-500 block mb-1">Custom Points (R64, R32, S16, E8, F4, Champ)</label>
+                                                        <div className="grid grid-cols-6 gap-2">
+                                                            {['R64', 'R32', 'S16', 'E8', 'F4', 'CH'].map((label, i) => (
+                                                                <div key={label} className="text-center">
+                                                                    <span className="text-[10px] text-slate-500 block mb-0.5">{label}</span>
+                                                                    <input type="number" value={editCustomScoring[i] || 0}
+                                                                        onChange={e => { const c = [...editCustomScoring]; c[i] = Number(e.target.value); setEditCustomScoring(c); }}
+                                                                        className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-white text-sm text-center" min={0} />
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {/* Entry Limits */}
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="text-xs text-slate-500 block mb-1">Max Entries (Total)</label>
+                                                        <input type="number" value={editMaxTotal} onChange={e => setEditMaxTotal(Number(e.target.value))}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" min={-1} />
+                                                        <p className="text-[10px] text-slate-600 mt-1">-1 = unlimited</p>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-slate-500 block mb-1">Max Per User</label>
+                                                        <input type="number" value={editMaxPerUser} onChange={e => setEditMaxPerUser(Number(e.target.value))}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" min={-1} />
+                                                        <p className="text-[10px] text-slate-600 mt-1">-1 = unlimited</p>
+                                                    </div>
+                                                </div>
+                                                {/* Entry Fee */}
+                                                <div>
+                                                    <label className="text-xs text-slate-500 block mb-1">Entry Fee ($)</label>
+                                                    <input type="number" value={editEntryFee} onChange={e => setEditEntryFee(Number(e.target.value))}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" min={0} step={5} />
+                                                </div>
+                                                {/* Tiebreaker */}
+                                                <div>
+                                                    <label className="text-xs text-slate-500 block mb-1">Tiebreaker Rule</label>
+                                                    <select value={editTiebreaker} onChange={e => setEditTiebreaker(e.target.value as 'CLOSEST_ABSOLUTE' | 'CLOSEST_UNDER')}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm">
+                                                        <option value="CLOSEST_ABSOLUTE">Closest to Actual (over or under)</option>
+                                                        <option value="CLOSEST_UNDER">Closest Without Going Over</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* Entry Limits */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="text-xs text-slate-500 block mb-1">Max Entries (Total)</label>
-                                            <input
-                                                type="number"
-                                                value={editMaxTotal}
-                                                onChange={e => setEditMaxTotal(Number(e.target.value))}
-                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
-                                                min={-1}
-                                                placeholder="-1 for unlimited"
-                                            />
-                                            <p className="text-[10px] text-slate-600 mt-1">-1 = unlimited</p>
-                                        </div>
-                                        <div>
-                                            <label className="text-xs text-slate-500 block mb-1">Max Per User</label>
-                                            <input
-                                                type="number"
-                                                value={editMaxPerUser}
-                                                onChange={e => setEditMaxPerUser(Number(e.target.value))}
-                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
-                                                min={-1}
-                                                placeholder="-1 for unlimited"
-                                            />
-                                            <p className="text-[10px] text-slate-600 mt-1">-1 = unlimited</p>
-                                        </div>
+                                    {/* Section 3: Payouts */}
+                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('payouts')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Trophy size={14} className="text-yellow-400" /> Payouts</span>
+                                            {openSections.payouts ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                        </button>
+                                        {openSections.payouts && (
+                                            <div className="p-4 bg-slate-950 space-y-3">
+                                                <p className="text-xs text-slate-500 mb-2">Define how the prize pool is split. Percentages should total 100%.</p>
+                                                {/* Place payouts */}
+                                                {editPayouts.places.map((p, i) => (
+                                                    <div key={i} className="flex items-center gap-2">
+                                                        <span className="text-xs text-slate-400 w-16">#{p.rank}</span>
+                                                        <input type="number" value={p.percentage}
+                                                            onChange={e => {
+                                                                const updated = [...editPayouts.places];
+                                                                updated[i] = { ...p, percentage: Number(e.target.value) };
+                                                                setEditPayouts({ ...editPayouts, places: updated });
+                                                            }}
+                                                            className="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-white text-sm" min={0} max={100} />
+                                                        <span className="text-xs text-slate-500">%</span>
+                                                        <button onClick={() => {
+                                                            const updated = editPayouts.places.filter((_, j) => j !== i);
+                                                            setEditPayouts({ ...editPayouts, places: updated });
+                                                        }} className="text-red-400 hover:text-red-300"><X size={14} /></button>
+                                                    </div>
+                                                ))}
+                                                <button onClick={() => {
+                                                    const nextRank = editPayouts.places.length > 0 ? Math.max(...editPayouts.places.map(p => p.rank)) + 1 : 1;
+                                                    setEditPayouts({ ...editPayouts, places: [...editPayouts.places, { rank: nextRank, percentage: 0 }] });
+                                                }} className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+                                                    <PlusCircle size={12} /> Add place payout
+                                                </button>
+
+                                                {/* Bonuses */}
+                                                <div className="pt-2 border-t border-slate-800">
+                                                    <p className="text-xs text-slate-500 mb-2">Bonus Payouts</p>
+                                                    {editPayouts.bonuses.map((b, i) => (
+                                                        <div key={i} className="flex items-center gap-2 mb-2">
+                                                            <input value={b.name}
+                                                                onChange={e => {
+                                                                    const updated = [...editPayouts.bonuses];
+                                                                    updated[i] = { ...b, name: e.target.value };
+                                                                    setEditPayouts({ ...editPayouts, bonuses: updated });
+                                                                }}
+                                                                className="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-white text-sm" placeholder="Bonus name" />
+                                                            <input type="number" value={b.percentage}
+                                                                onChange={e => {
+                                                                    const updated = [...editPayouts.bonuses];
+                                                                    updated[i] = { ...b, percentage: Number(e.target.value) };
+                                                                    setEditPayouts({ ...editPayouts, bonuses: updated });
+                                                                }}
+                                                                className="w-20 bg-slate-900 border border-slate-700 rounded p-2 text-white text-sm" min={0} max={100} />
+                                                            <span className="text-xs text-slate-500">%</span>
+                                                            <button onClick={() => {
+                                                                const updated = editPayouts.bonuses.filter((_, j) => j !== i);
+                                                                setEditPayouts({ ...editPayouts, bonuses: updated });
+                                                            }} className="text-red-400 hover:text-red-300"><X size={14} /></button>
+                                                        </div>
+                                                    ))}
+                                                    <button onClick={() => {
+                                                        setEditPayouts({ ...editPayouts, bonuses: [...editPayouts.bonuses, { name: '', percentage: 0 }] });
+                                                    }} className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+                                                        <PlusCircle size={12} /> Add bonus
+                                                    </button>
+                                                </div>
+
+                                                {/* Total indicator */}
+                                                {(() => {
+                                                    const totalPct = editPayouts.places.reduce((s, p) => s + p.percentage, 0) + editPayouts.bonuses.reduce((s, b) => s + b.percentage, 0);
+                                                    return (
+                                                        <div className={`text-xs text-right font-mono ${totalPct === 100 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                            Total: {totalPct}% {totalPct !== 100 && '(should be 100%)'}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* Entry Fee */}
-                                    <div>
-                                        <label className="text-xs text-slate-500 block mb-1">Entry Fee ($)</label>
-                                        <input
-                                            type="number"
-                                            value={editEntryFee}
-                                            onChange={e => setEditEntryFee(Number(e.target.value))}
-                                            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
-                                            min={0}
-                                            step={5}
-                                        />
+                                    {/* Section 4: Payment Info */}
+                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('payment')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><CreditCard size={14} className="text-green-400" /> Payment Info</span>
+                                            {openSections.payment ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                        </button>
+                                        {openSections.payment && (
+                                            <div className="p-4 bg-slate-950 space-y-3">
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="text-xs text-slate-500 block mb-1">Venmo</label>
+                                                        <input value={editVenmo} onChange={e => setEditVenmo(e.target.value)} placeholder="@username"
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-slate-500 block mb-1">Zelle</label>
+                                                        <input value={editZelle} onChange={e => setEditZelle(e.target.value)} placeholder="email or phone"
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-slate-500 block mb-1">CashApp</label>
+                                                        <input value={editCashapp} onChange={e => setEditCashapp(e.target.value)} placeholder="$username"
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-slate-500 block mb-1">PayPal</label>
+                                                        <input value={editPaypal} onChange={e => setEditPaypal(e.target.value)} placeholder="email"
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-slate-500 block mb-1">Payment Instructions</label>
+                                                    <textarea value={editPaymentInstructions} onChange={e => setEditPaymentInstructions(e.target.value)}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" rows={3}
+                                                        placeholder="How should participants pay? e.g. 'Send $25 to @MyVenmo with Pool Name in the memo'" />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* Date Pickers */}
-                                    <div className="pt-3 border-t border-slate-800">
-                                        <h4 className="text-sm font-bold text-white mb-3">Dates & Deadlines</h4>
-                                        <div className="space-y-3">
-                                            <DateTimePicker
-                                                label="Lock Date (auto-lock entries)"
-                                                value={editLockAt}
-                                                onChange={ts => setEditLockAt(ts ?? undefined)}
-                                            />
-                                            <DateTimePicker
-                                                label="Registration Deadline (no new members)"
-                                                value={editRegDeadline}
-                                                onChange={ts => setEditRegDeadline(ts ?? undefined)}
-                                            />
-                                            <DateTimePicker
-                                                label="Submission Deadline (no new/edited brackets)"
-                                                value={editSubDeadline}
-                                                onChange={ts => setEditSubDeadline(ts ?? undefined)}
-                                            />
-                                        </div>
+                                    {/* Section 5: Branding */}
+                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('branding')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Palette size={14} className="text-purple-400" /> Branding</span>
+                                            {openSections.branding ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                        </button>
+                                        {openSections.branding && (
+                                            <div className="p-4 bg-slate-950 space-y-3">
+                                                <div>
+                                                    <label className="text-xs text-slate-500 block mb-1">Logo URL</label>
+                                                    <input value={editBranding.logo || ''} onChange={e => setEditBranding({ ...editBranding, logo: e.target.value })}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" placeholder="https://..." />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-slate-500 block mb-1">Background Color</label>
+                                                    <div className="flex items-center gap-3">
+                                                        <input type="color" value={editBranding.bgColor || '#0f172a'}
+                                                            onChange={e => setEditBranding({ ...editBranding, bgColor: e.target.value })}
+                                                            className="w-10 h-10 rounded border border-slate-700 cursor-pointer" />
+                                                        <input value={editBranding.bgColor || '#0f172a'}
+                                                            onChange={e => setEditBranding({ ...editBranding, bgColor: e.target.value })}
+                                                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm font-mono" />
+                                                    </div>
+                                                </div>
+                                                {editBranding.logo && (
+                                                    <div className="mt-2">
+                                                        <p className="text-xs text-slate-500 mb-1">Preview</p>
+                                                        <img src={editBranding.logo} alt="Pool logo" className="h-12 rounded" onError={e => (e.currentTarget.style.display = 'none')} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Section 6: Reminders */}
+                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('reminders')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Bell size={14} className="text-orange-400" /> Reminders</span>
+                                            {openSections.reminders ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                        </button>
+                                        {openSections.reminders && (
+                                            <div className="p-4 bg-slate-950 space-y-3">
+                                                {[
+                                                    { key: 'auto24h' as const, label: 'Send reminder 24 hours before lock' },
+                                                    { key: 'auto1h' as const, label: 'Send reminder 1 hour before lock' },
+                                                    { key: 'autoLock' as const, label: 'Auto-lock at tournament start' },
+                                                    { key: 'announceWinner' as const, label: 'Announce winner when tournament ends' },
+                                                ].map(item => (
+                                                    <div key={item.key} className="flex items-center justify-between p-3 bg-slate-900 rounded border border-slate-800">
+                                                        <span className="text-sm text-slate-300">{item.label}</span>
+                                                        <button onClick={() => setEditReminders({ ...editReminders, [item.key]: !editReminders[item.key] })}
+                                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editReminders[item.key] ? 'bg-emerald-600' : 'bg-slate-700'}`}>
+                                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editReminders[item.key] ? 'translate-x-6' : 'translate-x-1'}`} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                <div>
+                                                    <label className="text-xs text-slate-500 block mb-1">Reminder Recipient Filter</label>
+                                                    <select value={editReminders.recipientFilter || 'all'}
+                                                        onChange={e => setEditReminders({ ...editReminders, recipientFilter: e.target.value as 'all' | 'unpaid' | 'noentry' })}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm">
+                                                        <option value="all">All Participants</option>
+                                                        <option value="unpaid">Unpaid Only</option>
+                                                        <option value="noentry">No Entry Submitted</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Section 7: Access Control */}
+                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('access')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Key size={14} className="text-red-400" /> Access Control</span>
+                                            {openSections.access ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                        </button>
+                                        {openSections.access && (
+                                            <div className="p-4 bg-slate-950 space-y-3">
+                                                <div>
+                                                    <label className="text-xs text-slate-500 block mb-1">Pool Password</label>
+                                                    <input value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Leave blank for no password"
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                    <p className="text-[10px] text-slate-600 mt-1">Participants must enter this to join. Leave empty for open access.</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Section 8: Dates & Deadlines */}
+                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('dates')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Lock size={14} className="text-cyan-400" /> Dates & Deadlines</span>
+                                            {openSections.dates ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                        </button>
+                                        {openSections.dates && (
+                                            <div className="p-4 bg-slate-950 space-y-3">
+                                                <DateTimePicker label="Lock Date (auto-lock entries)" value={editLockAt} onChange={ts => setEditLockAt(ts ?? undefined)} />
+                                                <DateTimePicker label="Registration Deadline (no new members)" value={editRegDeadline} onChange={ts => setEditRegDeadline(ts ?? undefined)} />
+                                                <DateTimePicker label="Submission Deadline (no new/edited brackets)" value={editSubDeadline} onChange={ts => setEditSubDeadline(ts ?? undefined)} />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}

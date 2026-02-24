@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { PlayoffPool, User } from '../../types';
+import { isPoolManager } from '../../utils/auth';
 import { dbService } from '../../services/dbService';
 import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2, Share2, ExternalLink, Check, Copy } from 'lucide-react';
 import { RankingForm } from './RankingForm';
@@ -22,7 +23,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     // const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
     // const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Deprecated
 
-    const isManager = user ? (pool.ownerId === user.id || user.role === 'SUPER_ADMIN') : false;
+    const isManager = isPoolManager(user, pool);
     const canViewPicks = pool.isLocked || (pool.results && Object.values(pool.results).some(r => r && r.length > 0)) || isManager;
 
     // --- My Entries Logic ---

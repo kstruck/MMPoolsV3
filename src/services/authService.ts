@@ -12,6 +12,7 @@ import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
 import type { User } from "../types";
 import { emailService } from "./emailService";
+import { logger } from '../utils/logger';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -70,7 +71,7 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
         const referrerRef = doc(db, 'users', referredBy);
         await updateDoc(referrerRef, { referralCount: increment(1) });
       } catch (e) {
-        console.warn('Could not increment referrer count:', e);
+        logger.warn('Could not increment referrer count:', e);
       }
     }
 
@@ -93,7 +94,7 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
     // Check for Verification Event
     let welcomeSent = existingData.welcomeEmailSent;
     if (user.emailVerified && !welcomeSent) {
-      console.log("User verified! Sending welcome email...");
+      logger.log("User verified! Sending welcome email...");
       await emailService.sendWelcomeEmail(user.email, user.name || existingData.name, user.id);
       welcomeSent = true;
     }
@@ -199,13 +200,6 @@ export const authService = {
 
   // Login with Email/Password
   login: async (email: string, password?: string): Promise<User> => {
-    // Handle Demo Login specifically for testing
-    if (email === 'admin@test.com' && password === 'password') {
-      const demoUser: User = { id: 'demo_admin', name: 'Demo Admin', email: 'admin@test.com', role: 'SUPER_ADMIN', provider: 'password', registrationMethod: 'email' };
-      localStorage.setItem('sbSquaresUser', JSON.stringify(demoUser));
-      return demoUser;
-    }
-
     if (!password) throw new Error("Password required");
 
     try {

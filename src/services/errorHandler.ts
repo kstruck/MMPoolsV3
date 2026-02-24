@@ -1,5 +1,6 @@
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { logger } from '../utils/logger';
 
 export const ErrorSeverity = {
     LOW: 'low',
@@ -63,7 +64,7 @@ class ErrorHandler {
             url: window.location.href,
         };
 
-        console.error(`[ErrorHandler] ${severity.toUpperCase()}:`, message, error, context);
+        logger.error(`[ErrorHandler] ${severity.toUpperCase()}:`, message, error, context);
 
         if (notify) {
             // Logic for showing a toast or notification could go here
@@ -75,7 +76,7 @@ class ErrorHandler {
                 type: 'error'
             });
         } catch (e) {
-            console.warn('Failed to log error to Firestore:', e);
+            logger.warn('Failed to log error to Firestore:', e);
         }
     }
 }

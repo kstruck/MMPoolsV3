@@ -703,6 +703,8 @@ export interface Tournament {
   seasonYear: number;
   gender: 'mens' | 'womens';
   isFinalized: boolean; // Tournament over?
+  status?: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  lockAt?: number; // Timestamp: auto-lock bracket entries at tournament start
 
   // Conference tournament support
   tournamentType?: 'ncaa' | 'conference';

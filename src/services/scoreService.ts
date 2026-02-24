@@ -1,4 +1,5 @@
 import type { Scores, GameState } from '../types';
+import { logger } from '../utils/logger';
 
 export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Partial<Scores>, status: string } | null> => {
   try {
@@ -163,7 +164,7 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     return { scores: newScores, status: matchedGame.shortName || 'Game' };
 
   } catch (e) {
-    console.error("Score fetch failed", e);
+    logger.error("Score fetch failed", e);
     return null;
   }
 };

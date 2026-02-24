@@ -1,12 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { getFirestore, doc, onSnapshot } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, updateDoc, collection, getDocs } from 'firebase/firestore';
 import {
     Trophy, Download, RefreshCw, AlertTriangle, Check,
-    Calendar, Users, Activity
+    Calendar, Users, Activity, Clock
 } from 'lucide-react';
 import type { Tournament } from '../../types';
+
+interface TournamentOption {
+    id: string;
+    label: string;
+    seasonYear: number;
+    gender: string;
+    isFinalized: boolean;
+}
 
 export const TournamentManager: React.FC = () => {
     const [tournament, setTournament] = useState<Tournament | null>(null);
@@ -15,21 +23,73 @@ export const TournamentManager: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-    // Tournament Config
-    const TOURNAMENT_ID = 'mens-2025';
-    const YEAR = 2025;
+    // Lock-at editing state
+    const [editLockAt, setEditLockAt] = useState<string>(''); // ISO datetime-local format
+    const [savingLockAt, setSavingLockAt] = useState(false);
 
+    // Dynamic tournament selection
+    const [tournamentList, setTournamentList] = useState<TournamentOption[]>([]);
+    const [selectedTournamentId, setSelectedTournamentId] = useState<string>('');
+    const [loadingList, setLoadingList] = useState(true);
+
+    // Fetch available tournaments on mount
     useEffect(() => {
+        const fetchTournaments = async () => {
+            setLoadingList(true);
+            const db = getFirestore();
+            const snapshot = await getDocs(collection(db, 'tournaments'));
+            const options: TournamentOption[] = [];
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                options.push({
+                    id: docSnap.id,
+                    label: `${data.gender === 'womens' ? "Women's" : "Men's"} ${data.seasonYear}${data.isFinalized ? ' (Finalized)' : ''}`,
+                    seasonYear: data.seasonYear || 0,
+                    gender: data.gender || 'mens',
+                    isFinalized: data.isFinalized || false,
+                });
+            });
+            // Sort: active first, then by year descending
+            options.sort((a, b) => {
+                if (a.isFinalized !== b.isFinalized) return a.isFinalized ? 1 : -1;
+                return b.seasonYear - a.seasonYear;
+            });
+            setTournamentList(options);
+            // Auto-select first active tournament, or first in list
+            if (options.length > 0 && !selectedTournamentId) {
+                setSelectedTournamentId(options[0].id);
+            }
+            setLoadingList(false);
+        };
+        fetchTournaments();
+    }, [selectedTournamentId]);
+
+    // Subscribe to selected tournament
+    useEffect(() => {
+        if (!selectedTournamentId) return;
         const db = getFirestore();
-        const unsub = onSnapshot(doc(db, 'tournaments', TOURNAMENT_ID), (docSnap) => {
+        const unsub = onSnapshot(doc(db, 'tournaments', selectedTournamentId), (docSnap) => {
             if (docSnap.exists()) {
-                setTournament({ id: docSnap.id, ...docSnap.data() } as Tournament);
+                const data = { id: docSnap.id, ...docSnap.data() } as Tournament;
+                setTournament(data);
+                // Initialize lockAt editor with current value
+                if (data.lockAt) {
+                    const d = new Date(data.lockAt);
+                    setEditLockAt(d.toISOString().slice(0, 16)); // yyyy-MM-ddTHH:mm
+                } else {
+                    setEditLockAt('');
+                }
             } else {
                 setTournament(null);
+                setEditLockAt('');
             }
         });
         return () => unsub();
-    }, []);
+    }, [selectedTournamentId]);
+
+    // Derive year from selected tournament
+    const selectedOption = tournamentList.find(t => t.id === selectedTournamentId);
+    const selectedYear = selectedOption?.seasonYear || 2025;
 
     const handleImport = async () => {
         setImporting(true);
@@ -39,8 +99,8 @@ export const TournamentManager: React.FC = () => {
             const functions = getFunctions();
             const importFn = httpsCallable(functions, 'importTournamentFromESPN');
             const result = await importFn({
-                tournamentId: TOURNAMENT_ID,
-                seasonYear: YEAR
+                tournamentId: selectedTournamentId,
+                seasonYear: selectedYear
             }) as { data: { success: boolean, count: number, teams: number, message?: string } };
 
             if (result.data.success) {
@@ -65,17 +125,34 @@ export const TournamentManager: React.FC = () => {
             const functions = getFunctions();
             const initFn = httpsCallable(functions, 'adminInitTournament');
             await initFn({
-                tournamentId: TOURNAMENT_ID,
-                seasonYear: YEAR,
-                gender: 'mens',
-                teams: [] // Empty teams to trigger skeleton build? Or should we pass teams if we have them?
-                // The backend logic for adminInitTournament re-builds skeleton.
+                tournamentId: selectedTournamentId,
+                seasonYear: selectedYear,
+                gender: selectedOption?.gender || 'mens',
+                teams: [],
             });
             setSuccessMsg('Tournament skeleton re-initialized.');
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Unknown error during reset');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleSaveLockAt = async () => {
+        if (!editLockAt) return;
+        setSavingLockAt(true);
+        setError(null);
+        try {
+            const db = getFirestore();
+            const lockAtMs = new Date(editLockAt).getTime();
+            await updateDoc(doc(db, 'tournaments', selectedTournamentId), {
+                lockAt: lockAtMs,
+            });
+            setSuccessMsg(`Lock date updated to ${new Date(lockAtMs).toLocaleString()}`);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to update lock date');
+        } finally {
+            setSavingLockAt(false);
         }
     };
 
@@ -95,6 +172,11 @@ export const TournamentManager: React.FC = () => {
     };
     const lastUpdated = getLastUpdated();
 
+    // LockAt display helper
+    const lockAtDisplay = tournament?.lockAt
+        ? new Date(tournament.lockAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+        : 'Not set';
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -102,17 +184,30 @@ export const TournamentManager: React.FC = () => {
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Trophy className="text-amber-500" /> Tournament Manager
                     </h2>
-                    <p className="text-slate-400 text-sm">Manage data for {YEAR} NCAA Tournament</p>
+                    <p className="text-slate-400 text-sm">Manage NCAA Tournament data</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                    <select
+                        value={selectedTournamentId}
+                        onChange={e => setSelectedTournamentId(e.target.value)}
+                        disabled={loadingList || tournamentList.length === 0}
+                        className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent appearance-none pr-8"
+                        style={{ backgroundImage: 'none' }}
+                    >
+                        {loadingList && <option>Loading...</option>}
+                        {tournamentList.map(t => (
+                            <option key={t.id} value={t.id}>{t.label}</option>
+                        ))}
+                        {!loadingList && tournamentList.length === 0 && <option>No tournaments</option>}
+                    </select>
                     <span className={`px-3 py-1 rounded-full text-xs font-bold border ${tournament ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
-                        {tournament ? 'Active' : 'Not Found'}
+                        {tournament ? (tournament.isFinalized ? 'Finalized' : 'Active') : 'Not Found'}
                     </span>
                 </div>
             </div>
 
             {/* Status Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
                     <div className="flex justify-between items-start mb-2">
                         <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400"><Users size={20} /></div>
@@ -136,6 +231,44 @@ export const TournamentManager: React.FC = () => {
                     </div>
                     <div className="text-lg font-bold text-white truncate">{lastUpdated}</div>
                     <div className="text-xs text-slate-400">From ESPN</div>
+                </div>
+                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                    <div className="flex justify-between items-start mb-2">
+                        <div className="p-2 bg-cyan-500/20 rounded-lg text-cyan-400"><Clock size={20} /></div>
+                        <span className="text-xs font-bold text-slate-500 uppercase">Lock Date</span>
+                    </div>
+                    <div className="text-sm font-bold text-white truncate">{lockAtDisplay}</div>
+                    <div className="text-xs text-slate-400">Entries lock at this time</div>
+                </div>
+            </div>
+
+            {/* Lock Date Editor */}
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <Clock size={18} className="text-cyan-400" /> Tournament Lock Date
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">
+                    All bracket pools linked to this tournament will auto-lock entries at this time.
+                    Typically set to the first game of the NCAA Tournament.
+                </p>
+                <div className="flex items-end gap-4">
+                    <div className="flex-1">
+                        <label className="text-xs text-slate-400 block mb-1">Lock Date & Time</label>
+                        <input
+                            type="datetime-local"
+                            value={editLockAt}
+                            onChange={e => setEditLockAt(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                        />
+                    </div>
+                    <button
+                        onClick={handleSaveLockAt}
+                        disabled={savingLockAt || !editLockAt}
+                        className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2.5 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all text-sm"
+                    >
+                        {savingLockAt ? <RefreshCw className="animate-spin" size={14} /> : <Check size={14} />}
+                        Save
+                    </button>
                 </div>
             </div>
 

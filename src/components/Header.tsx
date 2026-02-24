@@ -3,6 +3,7 @@ import { Logo } from './Logo';
 import type { User } from '../types';
 import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { authService } from '../services/authService';
+import { isSuperAdmin, canCreatePool } from '../utils/auth';
 import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
@@ -108,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     <LayoutGrid size={14} /> My Entries
                                 </button>
 
-                                {(isManager || user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') && (
+                                {(isManager || canCreatePool(user)) && (
                                     <button
                                         onClick={() => navigate('/participant')}
                                         className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
@@ -123,10 +124,10 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     className="text-xs bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold"
                                     title="Create a new pool"
                                 >
-                                    <LayoutGrid size={14} /> {(isManager || user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN') ? "Create a New Pool" : "Create your own pool"}
+                                    <LayoutGrid size={14} /> {(isManager || canCreatePool(user)) ? "Create a New Pool" : "Create your own pool"}
                                 </button>
 
-                                {user.role === 'SUPER_ADMIN' && (
+                                {isSuperAdmin(user) && (
                                     <button onClick={() => navigate('/super-admin')} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold">
                                         <Shield size={12} /> SuperAdmin Dashboard
                                     </button>
