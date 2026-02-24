@@ -41,7 +41,7 @@ export const BracketPoolGuideArticle: React.FC = () => {
 
             {/* Content Container */}
             <div className="max-w-3xl mx-auto px-6 py-12">
-                <article className="prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-bold prose-headings:text-white prose-p:text-slate-300 prose-a:text-indigo-400 hover:prose-a:text-indigo-300 prose-strong:text-white prose-img:rounded-xl prose-img:border prose-img:border-slate-800 prose-img:shadow-2xl">
+                <article className="prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-bold prose-headings:text-white prose-headings:mt-16 prose-headings:mb-6 prose-p:text-slate-300 prose-p:mb-8 prose-p:leading-relaxed prose-a:text-indigo-400 hover:prose-a:text-indigo-300 prose-strong:text-white prose-img:rounded-xl prose-img:border prose-img:border-slate-800 prose-img:shadow-2xl">
 
                     <p className="lead text-lg md:text-xl text-slate-300 mb-8">
                         In 2026, March Madness bracket pools are bigger than ever, with more than 34 million brackets submitted across major platforms in the most recent tournament season, and your group expects a smooth, fair pool experience. We will walk you through exactly how to host a March Madness Bracket Pool, keep it legal for your group, and make scoring and payouts easy from Selection Sunday through the championship game.
@@ -54,11 +54,11 @@ export const BracketPoolGuideArticle: React.FC = () => {
                             {[
                                 {
                                     q: "What is a March Madness Bracket Pool?",
-                                    a: <>A shared contest where everyone fills out NCAA tournament brackets and earns points for correct picks. You can host it online with real-time scoring using platforms like <a href="https://www.marchmeleepools.com/" target="_blank" rel="noopener noreferrer nofollow" className="text-indigo-400 hover:text-indigo-300">March Melee Pools</a>.</>
+                                    a: <>A shared contest where everyone fills out NCAA tournament brackets and earns points for correct picks. You can host it online with real-time scoring using platforms like <Link to="/" className="text-indigo-400 hover:text-indigo-300">March Melee Pools</Link>.</>
                                 },
                                 {
                                     q: "How do I set up a bracket pool in 2026?",
-                                    a: <>Choose a hosting platform, define entry rules, scoring, and payouts, then invite participants. Our how-to section aligns with tools explained on <a href="https://www.marchmeleepools.com/how-it-works" target="_blank" rel="noopener noreferrer nofollow" className="text-indigo-400 hover:text-indigo-300">March Melee Pools' How It Works page</a>.</>
+                                    a: <>Choose a hosting platform, define entry rules, scoring, and payouts, then invite participants. Our how-to section aligns with tools explained on our <Link to="/how-it-works?sport=brackets" className="text-indigo-400 hover:text-indigo-300">How It Works page</Link>.</>
                                 },
                                 {
                                     q: "Is a March Madness Bracket Pool Legal?",
@@ -101,7 +101,7 @@ export const BracketPoolGuideArticle: React.FC = () => {
                         Once the games start, participants earn points for each correct pick, usually with later rounds worth more. The host or platform tracks points, ranks everyone in a leaderboard, and pays out based on the pool's prize structure when the tournament ends.
                     </p>
                     <p>
-                        Online tools such as <a href="https://www.marchmeleepools.com/" target="_blank" rel="noopener noreferrer nofollow">March Melee Pools</a> make the process easy by handling bracket collection, live scoring, and tiebreakers automatically so you can focus on building office or friend rivalries instead of updating spreadsheets.
+                        Online tools such as <Link to="/" className="text-indigo-400 hover:text-indigo-300">March Melee Pools</Link> make the process easy by handling bracket collection, live scoring, and tiebreakers automatically so you can focus on building office or friend rivalries instead of updating spreadsheets.
                     </p>
 
 
@@ -133,7 +133,7 @@ export const BracketPoolGuideArticle: React.FC = () => {
                         <strong>March Melee Pools</strong> is designed specifically as an online sports pool host, described on its homepage as the professional choice for office pools with real-time scoring, "Who to Root For" analytics, and commission-free charity fundraising. You can create and join March Madness brackets online with a free-to-start model, then scale up to bigger groups without adding tech overhead.
                     </p>
                     <p>
-                        The platform's <a href="https://www.marchmeleepools.com/how-it-works" target="_blank" rel="noopener noreferrer nofollow">How It Works</a> content emphasizes secure and auditable transactions, which is important if you are handling money. In a 2026 environment where more pools involve cash or charity contributions, traceable transactions add credibility for your group.
+                        The platform's <Link to="/how-it-works?sport=brackets" className="text-indigo-400 hover:text-indigo-300">How It Works</Link> content emphasizes secure and auditable transactions, which is important if you are handling money. In a 2026 environment where more pools involve cash or charity contributions, traceable transactions add credibility for your group.
                     </p>
 
                     <figure className="my-12">
