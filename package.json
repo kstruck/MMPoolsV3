@@ -54,6 +54,7 @@
     "react-helmet-async": {
       "react": "$react",
       "react-dom": "$react-dom"
-    }
+    },
+    "minimatch": ">=10.2.1"
   }
 }
