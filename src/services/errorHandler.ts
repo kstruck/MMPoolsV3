@@ -15,7 +15,7 @@ interface ErrorLog {
     message: string;
     code?: string;
     stack?: string;
-    context?: any;
+    context?: Record<string, unknown>;
     severity: ErrorSeverity;
     timestamp: number;
     userId?: string;
@@ -38,10 +38,10 @@ class ErrorHandler {
      * Logs an error to Firestore and optionally shows a UI notification
      */
     public async handleError(
-        error: any,
+        error: unknown,
         options: {
             severity?: ErrorSeverity;
-            context?: any;
+            context?: Record<string, unknown>;
             notify?: boolean;
             customMessage?: string;
         } = {}
@@ -53,11 +53,12 @@ class ErrorHandler {
             customMessage
         } = options;
 
-        const message = customMessage || error.message || 'An unexpected error occurred';
+        const message = customMessage || (error instanceof Error ? error.message : String(error)) || 'An unexpected error occurred';
+        const errObj = error as { code?: string; stack?: string };
         const errorLog: ErrorLog = {
             message,
-            code: error.code || 'UNKNOWN',
-            stack: error.stack,
+            code: errObj.code || 'UNKNOWN',
+            stack: errObj.stack,
             context,
             severity,
             timestamp: Date.now(),

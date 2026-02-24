@@ -122,7 +122,7 @@ service cloud.firestore {
       // ANNOUNCEMENTS
       match /announcements/{announcementId} {
         allow read: if true;
-        allow create: if request.auth != null && (
+        allow create, update, delete: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
           isSuperAdmin()
@@ -142,6 +142,7 @@ service cloud.firestore {
         allow read: if request.auth != null;
         allow write: if isSuperAdmin() || (
           request.auth != null && 
+          request.resource.data.ownerUid == request.auth.uid &&
           get(/databases/$(database)/documents/pools/$(poolId)).data.slug.matches('^sim-.*')
         );
       }
@@ -194,16 +195,17 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // SYSTEM LOGS
+    // SYSTEM LOGS (ErrorBoundary + errorHandler write here)
     match /system_logs/{document=**} {
       allow read: if isSuperAdmin();
-      allow write: if false; 
+      allow create: if request.auth != null;
+      allow update, delete: if false;
     }
 
     // TOURNAMENTS (March Madness Data)
     match /tournaments/{tournamentId} {
       allow read: if true;
-      allow write: if isSuperAdmin() || (tournamentId == 'mens-2025-sim' && request.auth != null);
+      allow write: if isSuperAdmin();
     }
 
     // STATS:

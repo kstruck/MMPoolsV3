@@ -1,6 +1,41 @@
 import type { Scores, GameState } from '../types';
 import { logger } from '../utils/logger';
 
+// ESPN API response types (subset of fields we use)
+interface ESPNTeam {
+  displayName: string;
+  name: string;
+  abbreviation: string;
+}
+interface ESPNCompetitor {
+  team: ESPNTeam;
+  homeAway: 'home' | 'away';
+  score: string;
+  linescores?: ESPNLinescore[];
+}
+interface ESPNLinescore {
+  period?: number;
+  value?: number | string;
+  displayValue?: string;
+}
+interface ESPNStatus {
+  type?: { state?: string; completed?: boolean };
+  period?: number;
+  displayClock?: string;
+}
+interface ESPNCompetition {
+  competitors: ESPNCompetitor[];
+  date?: string;
+  status?: ESPNStatus;
+}
+interface ESPNEvent {
+  id: string;
+  competitions: ESPNCompetition[];
+  status: ESPNStatus;
+  shortName?: string;
+  date?: string;
+}
+
 export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Partial<Scores>, status: string } | null> => {
   try {
     // Determine League Path
@@ -14,25 +49,26 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     const response = await fetch(url);
     if (!response.ok) throw new Error('Network response was not ok');
     const data = await response.json();
-    let matchedGame: any = null;
+    let matchedGame: ESPNEvent | null = null;
 
     if (gameState.gameId) {
       if (data.header) {
         // Fix: Check for status inside competitions if not on header
         const comp = data.header.competitions?.[0];
         matchedGame = {
+          id: gameState.gameId!,
           competitions: data.header.competitions,
           status: data.header.status || comp?.status,
           shortName: data.header.name || "Game"
         };
       } else {
-        matchedGame = data.events?.find((e: any) => e.id === gameState.gameId);
+        matchedGame = data.events?.find((e: ESPNEvent) => e.id === gameState.gameId);
       }
     } else {
       const games = data.events || [];
       const poolHome = gameState.homeTeam.toLowerCase();
       const poolAway = gameState.awayTeam.toLowerCase();
-      matchedGame = games.find((g: any) => {
+      matchedGame = games.find((g: ESPNEvent) => {
         const competitions = g.competitions || [];
         if (competitions.length === 0) return false;
         const competitors = competitions[0].competitors;
@@ -57,15 +93,15 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
     if (!competition) return null;
 
     const competitors = competition.competitors;
-    const apiHomeComp = competitors.find((c: any) => c.homeAway === 'home');
-    const apiAwayComp = competitors.find((c: any) => c.homeAway === 'away');
+    const apiHomeComp = competitors.find((c: ESPNCompetitor) => c.homeAway === 'home');
+    const apiAwayComp = competitors.find((c: ESPNCompetitor) => c.homeAway === 'away');
 
     if (!apiHomeComp || !apiAwayComp) return null;
 
     // Helper to prevent NaN
-    const safeInt = (val: any) => {
+    const safeInt = (val: unknown) => {
       if (val === null || val === undefined) return 0;
-      const parsed = parseInt(val);
+      const parsed = parseInt(String(val));
       return isNaN(parsed) ? 0 : parsed;
     };
 
@@ -74,10 +110,10 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
 
     // Robust Helper to find score by period number
     // ESPN API format: { period: 1, value: 7, ... } or implied order
-    const getPeriodScore = (lines: any[], p: number) => {
+    const getPeriodScore = (lines: ESPNLinescore[], p: number) => {
       let val;
       // 1. Try finding by period property (loose equality for string/number match)
-      const found = lines.find((l: any) => l.period == p);
+      const found = lines.find((l: ESPNLinescore) => l.period == p);
       if (found) {
         val = found.value ?? found.displayValue;
       } else {
@@ -145,7 +181,7 @@ export const fetchGameScore = async (gameState: GameState): Promise<{ scores: Pa
       gameStatus: statusState as 'pre' | 'in' | 'post',
       clock: clock,
       period: period,
-      startTime: date
+      startTime: date ?? undefined
     };
 
     // Update state based on game progress

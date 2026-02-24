@@ -51,7 +51,7 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
     // NEW USER - Create document
     const referredBy = localStorage.getItem(REFERRAL_STORAGE_KEY);
 
-    const newUserData: any = {
+    const newUserData: Record<string, unknown> = {
       id: user.id,
       email: user.email,
       name: user.name,
@@ -148,10 +148,11 @@ export const authService = {
         return await syncUserToFirestore(user);
       }
       return null;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const firebaseError = error as { code?: string };
       console.error("Google Sign-In Popup Error", error);
       // Fallback to redirect if popup is blocked or closed
-      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/popup-blocked') {
+      if (firebaseError.code === 'auth/popup-closed-by-user' || firebaseError.code === 'auth/popup-blocked') {
         const { signInWithRedirect } = await import('firebase/auth');
         await signInWithRedirect(auth, googleProvider);
         return null; // The page will redirect
@@ -178,7 +179,7 @@ export const authService = {
     }
   },
 
-  sendVerificationEmail: async (user: any) => {
+  sendVerificationEmail: async (user: FirebaseUser) => {
     try {
       const { sendEmailVerification } = await import('firebase/auth');
       // [Reverted] Removed actionCodeSettings because it causes 'auth/unauthorized-continue-uri' 
