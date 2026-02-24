@@ -41,7 +41,7 @@ export const BracketPoolGuideArticle: React.FC = () => {
 
             {/* Content Container */}
             <div className="max-w-3xl mx-auto px-6 py-12">
-                <article className="prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-bold prose-headings:text-white prose-headings:mt-16 prose-headings:mb-6 prose-p:text-slate-300 prose-p:mb-8 prose-p:leading-relaxed prose-a:text-indigo-400 hover:prose-a:text-indigo-300 prose-strong:text-white prose-img:rounded-xl prose-img:border prose-img:border-slate-800 prose-img:shadow-2xl">
+                <article className="prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-bold prose-headings:text-white prose-headings:mt-20 prose-headings:mb-8 prose-p:text-slate-300 prose-p:mb-12 prose-p:leading-[2] prose-a:text-indigo-400 hover:prose-a:text-indigo-300 prose-strong:text-white prose-img:rounded-xl prose-img:border prose-img:border-slate-800 prose-img:shadow-2xl">
 
                     <p className="lead text-lg md:text-xl text-slate-300 mb-8">
                         In 2026, March Madness bracket pools are bigger than ever, with more than 34 million brackets submitted across major platforms in the most recent tournament season, and your group expects a smooth, fair pool experience. We will walk you through exactly how to host a March Madness Bracket Pool, keep it legal for your group, and make scoring and payouts easy from Selection Sunday through the championship game.
