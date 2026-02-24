@@ -1,39 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Loader } from 'lucide-react';
 
-// Components
+// Eagerly loaded components (needed on first paint)
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LandingPage } from './components/LandingPage';
-import { GamedaySquaresLanding } from './components/GamedaySquaresLanding';
 import { AuthModal } from './components/modals';
-import { CreatePoolSelection } from './components/CreatePoolSelection';
-import { BrowsePools } from './components/BrowsePools';
-import { ParticipantDashboard } from './components/ParticipantDashboard';
-import { FeaturesPage } from './components/FeaturesPage';
-import { PrivacyPage } from './components/PrivacyPage';
-import { TermsPage } from './components/TermsPage';
-import { HowItWorksPage } from './components/HowItWorksPage';
-import { SupportPage } from './components/SupportPage';
-import { UserProfile } from './components/UserProfile';
-import { Scoreboard } from './components/Scoreboard';
-import { SuperBowlOddsArticle } from './components/articles/SuperBowlOddsArticle';
-import { BracketPoolGuideArticle } from './components/articles/BracketPoolGuideArticle';
 
-// Routes
-import { PoolRoute } from './components/routes/PoolRoute';
-import { AdminRoute } from './components/routes/AdminRoute';
+// Lazy-loaded route components (loaded on demand)
+const GamedaySquaresLanding = React.lazy(() => import('./components/GamedaySquaresLanding').then(m => ({ default: m.GamedaySquaresLanding })));
+const CreatePoolSelection = React.lazy(() => import('./components/CreatePoolSelection').then(m => ({ default: m.CreatePoolSelection })));
+const BrowsePools = React.lazy(() => import('./components/BrowsePools').then(m => ({ default: m.BrowsePools })));
+const ParticipantDashboard = React.lazy(() => import('./components/ParticipantDashboard').then(m => ({ default: m.ParticipantDashboard })));
+const FeaturesPage = React.lazy(() => import('./components/FeaturesPage').then(m => ({ default: m.FeaturesPage })));
+const PrivacyPage = React.lazy(() => import('./components/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
+const TermsPage = React.lazy(() => import('./components/TermsPage').then(m => ({ default: m.TermsPage })));
+const HowItWorksPage = React.lazy(() => import('./components/HowItWorksPage').then(m => ({ default: m.HowItWorksPage })));
+const SupportPage = React.lazy(() => import('./components/SupportPage').then(m => ({ default: m.SupportPage })));
+const UserProfile = React.lazy(() => import('./components/UserProfile').then(m => ({ default: m.UserProfile })));
+const Scoreboard = React.lazy(() => import('./components/Scoreboard').then(m => ({ default: m.Scoreboard })));
+const SuperBowlOddsArticle = React.lazy(() => import('./components/articles/SuperBowlOddsArticle').then(m => ({ default: m.SuperBowlOddsArticle })));
+const BracketPoolGuideArticle = React.lazy(() => import('./components/articles/BracketPoolGuideArticle').then(m => ({ default: m.BracketPoolGuideArticle })));
 
-// Wizards
-import { BracketWizard } from './components/BracketWizard/BracketWizard';
-import { PlayoffWizard } from './components/PlayoffPool/PlayoffWizard';
-import { PropsWizard } from './components/PropsWizard/PropsWizard';
-import { SetupWizard } from './components/SetupWizard';
+// Lazy-loaded routes
+const PoolRoute = React.lazy(() => import('./components/routes/PoolRoute').then(m => ({ default: m.PoolRoute })));
+const AdminRoute = React.lazy(() => import('./components/routes/AdminRoute').then(m => ({ default: m.AdminRoute })));
 
-// Admin / SuperAdmin
-import { SuperAdmin } from './components/SuperAdmin';
-import { TournamentSimulator } from './components/TournamentSimulator/TournamentSimulator';
+// Lazy-loaded wizards
+const BracketWizard = React.lazy(() => import('./components/BracketWizard/BracketWizard').then(m => ({ default: m.BracketWizard })));
+const PlayoffWizard = React.lazy(() => import('./components/PlayoffPool/PlayoffWizard').then(m => ({ default: m.PlayoffWizard })));
+const PropsWizard = React.lazy(() => import('./components/PropsWizard/PropsWizard').then(m => ({ default: m.PropsWizard })));
+const SetupWizard = React.lazy(() => import('./components/SetupWizard').then(m => ({ default: m.SetupWizard })));
+
+// Lazy-loaded admin
+const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
+const TournamentSimulator = React.lazy(() => import('./components/TournamentSimulator/TournamentSimulator').then(m => ({ default: m.TournamentSimulator })));
 
 // Services & Objects
 import { authService } from './services/authService';
@@ -41,6 +43,13 @@ import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
 import { isSuperAdmin } from './utils/auth';
 import { logger } from './utils/logger';
+
+// Loading spinner for lazy-loaded routes
+const RouteLoader = () => (
+  <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+    <Loader className="animate-spin text-indigo-500 w-8 h-8" />
+  </div>
+);
 
 // Legacy Hash Handler - redirects old hash-based URLs to clean URLs
 const LegacyHashHandler = () => {
@@ -167,185 +176,187 @@ const App: React.FC = () => {
   return (
     <>
       <LegacyHashHandler />
-      <Routes>
-        {/* Landing / Home */}
-        <Route path="/" element={
-          <>
-            <LandingPage
-              user={user}
-              isLoggedIn={!!user}
-              onLogin={() => handleOpenAuth('login')}
-              onSignup={() => handleOpenAuth('register')}
-              onLogout={handleLogout}
-              onCreatePool={handleCreatePoolClick}
-              onBrowse={() => navigate('/browse')}
-              totalPrizes={stats?.totalRevenue || 0}
-              totalDonated={stats?.totalDonated || 0}
-            />
-          </>
-        } />
+      <Suspense fallback={<RouteLoader />}>
+        <Routes>
+          {/* Landing / Home */}
+          <Route path="/" element={
+            <>
+              <LandingPage
+                user={user}
+                isLoggedIn={!!user}
+                onLogin={() => handleOpenAuth('login')}
+                onSignup={() => handleOpenAuth('register')}
+                onLogout={handleLogout}
+                onCreatePool={handleCreatePoolClick}
+                onBrowse={() => navigate('/browse')}
+                totalPrizes={stats?.totalRevenue || 0}
+                totalDonated={stats?.totalDonated || 0}
+              />
+            </>
+          } />
 
-        {/* Squares Landing */}
-        <Route path="/gameday-squares" element={
-          <>
-            <GamedaySquaresLanding
-              user={user}
-              isLoggedIn={!!user}
-              onLogin={() => handleOpenAuth('login')}
-              onSignup={() => handleOpenAuth('register')}
-              onLogout={handleLogout}
-              onCreatePool={handleCreatePoolClick}
-              onBrowse={() => navigate('/browse')}
-              totalPrizes={stats?.totalRevenue || 0}
-              totalDonated={stats?.totalDonated || 0}
-            />
-          </>
-        } />
+          {/* Squares Landing */}
+          <Route path="/gameday-squares" element={
+            <>
+              <GamedaySquaresLanding
+                user={user}
+                isLoggedIn={!!user}
+                onLogin={() => handleOpenAuth('login')}
+                onSignup={() => handleOpenAuth('register')}
+                onLogout={handleLogout}
+                onCreatePool={handleCreatePoolClick}
+                onBrowse={() => navigate('/browse')}
+                totalPrizes={stats?.totalRevenue || 0}
+                totalDonated={stats?.totalDonated || 0}
+              />
+            </>
+          } />
 
-        {/* Global Pages */}
-        <Route path="/browse" element={
-          <BrowsePools user={user} pools={pools} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-        } />
+          {/* Global Pages */}
+          <Route path="/browse" element={
+            <BrowsePools user={user} pools={pools} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+          } />
 
-        <Route path="/features" element={<FeaturesPage user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} />} />
-        <Route path="/how-it-works" element={<HowItWorksPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
-        <Route path="/privacy" element={<PrivacyPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
-        <Route path="/terms" element={<TermsPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
-        <Route path="/support" element={
-          <>
-            <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-            <SupportPage />
-            <Footer />
-          </>
-        } />
-        <Route path="/profile" element={
-          user ? (
+          <Route path="/features" element={<FeaturesPage user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} />} />
+          <Route path="/how-it-works" element={<HowItWorksPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+          <Route path="/privacy" element={<PrivacyPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+          <Route path="/terms" element={<TermsPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+          <Route path="/support" element={
             <>
               <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-              <UserProfile user={user} onUpdate={(u) => setUser(u)} />
+              <SupportPage />
               <Footer />
             </>
-          ) : <Navigate to="/" replace />
-        } />
-        <Route path="/scoreboard" element={<Scoreboard user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
-        <Route path="/odds/super-bowl-squares" element={
-          <>
-            <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-            <SuperBowlOddsArticle />
-            <Footer />
-          </>
-        } />
-        <Route path="/articles/bracket-pool-guide" element={
-          <>
-            <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-            <BracketPoolGuideArticle />
-            <Footer />
-          </>
-        } />
-
-        {/* User Dashboard */}
-        <Route path="/participant" element={
-          user ? (
-            <ParticipantDashboard user={user} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-          ) : (
-            <Navigate to="/" replace />
-          )
-        } />
-
-        {/* Pool View */}
-        <Route path="/pool/:id" element={
-          <PoolRoute
-            user={user}
-            pools={pools}
-            isLoading={false}
-            onOpenAuth={handleOpenAuth}
-            onLogout={handleLogout}
-            onCreatePool={handleCreatePoolClick}
-          />
-        } />
-
-        {/* Admin Views */}
-        <Route path="/admin/:id" element={
-          <AdminRoute
-            user={user}
-            pools={pools}
-            isSuperAdmin={isAdmin}
-            onOpenAuth={handleOpenAuth}
-            onLogout={handleLogout}
-            onCreatePool={handleCreatePoolClick}
-            updatePool={(id, updates) => dbService.updatePool(id, updates)}
-          />
-        } />
-
-        <Route path="/super-admin" element={
-          isAdmin ? (
-            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+          } />
+          <Route path="/profile" element={
+            user ? (
+              <>
+                <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <UserProfile user={user} onUpdate={(u) => setUser(u)} />
+                <Footer />
+              </>
+            ) : <Navigate to="/" replace />
+          } />
+          <Route path="/scoreboard" element={<Scoreboard user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+          <Route path="/odds/super-bowl-squares" element={
+            <>
               <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-              <SuperAdmin />
+              <SuperBowlOddsArticle />
               <Footer />
-            </div>
-          ) : <Navigate to="/" />
-        } />
+            </>
+          } />
+          <Route path="/articles/bracket-pool-guide" element={
+            <>
+              <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+              <BracketPoolGuideArticle />
+              <Footer />
+            </>
+          } />
 
-        {/* Tournament Simulator */}
-        <Route path="/tournament-sim" element={
-          <TournamentSimulator user={user} />
-        } />
+          {/* User Dashboard */}
+          <Route path="/participant" element={
+            user ? (
+              <ParticipantDashboard user={user} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          } />
 
-        {/* Creation Wizards */}
-        <Route path="/create-pool" element={
-          <CreatePoolSelection
-            user={user}
-            isManager={false}
-            onSelectSquares={handleSquaresPoolCreate}
-            onSelectBracket={() => navigate('/bracket-wizard')}
-            onSelectPlayoff={() => navigate('/playoff-wizard')}
-            onSelectProps={() => navigate('/props-wizard')}
-            onOpenAuth={handleOpenAuth}
-            onLogout={handleLogout}
-            onCreatePool={handleCreatePoolClick}
-          />
-        } />
-        <Route path="/bracket-wizard" element={
-          user ? (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-              <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-              <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
-              <Footer />
-            </div>
-          ) : <Navigate to="/create-pool" />
-        } />
-        <Route path="/playoff-wizard" element={
-          user ? (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-              <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-              <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
-              <Footer />
-            </div>
-          ) : <Navigate to="/create-pool" />
-        } />
-        <Route path="/props-wizard" element={
-          user ? (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-              <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-              <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
-              <Footer />
-            </div>
-          ) : <Navigate to="/create-pool" />
-        } />
+          {/* Pool View */}
+          <Route path="/pool/:id" element={
+            <PoolRoute
+              user={user}
+              pools={pools}
+              isLoading={false}
+              onOpenAuth={handleOpenAuth}
+              onLogout={handleLogout}
+              onCreatePool={handleCreatePoolClick}
+            />
+          } />
 
-        <Route path="/grid-wizard" element={
-          user ? (
-            <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-              <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-              <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
-              <Footer />
-            </div>
-          ) : <Navigate to="/create-pool" />
-        } />
+          {/* Admin Views */}
+          <Route path="/admin/:id" element={
+            <AdminRoute
+              user={user}
+              pools={pools}
+              isSuperAdmin={isAdmin}
+              onOpenAuth={handleOpenAuth}
+              onLogout={handleLogout}
+              onCreatePool={handleCreatePoolClick}
+              updatePool={(id, updates) => dbService.updatePool(id, updates)}
+            />
+          } />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="/super-admin" element={
+            isAdmin ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+                <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <SuperAdmin />
+                <Footer />
+              </div>
+            ) : <Navigate to="/" />
+          } />
+
+          {/* Tournament Simulator */}
+          <Route path="/tournament-sim" element={
+            <TournamentSimulator user={user} />
+          } />
+
+          {/* Creation Wizards */}
+          <Route path="/create-pool" element={
+            <CreatePoolSelection
+              user={user}
+              isManager={false}
+              onSelectSquares={handleSquaresPoolCreate}
+              onSelectBracket={() => navigate('/bracket-wizard')}
+              onSelectPlayoff={() => navigate('/playoff-wizard')}
+              onSelectProps={() => navigate('/props-wizard')}
+              onOpenAuth={handleOpenAuth}
+              onLogout={handleLogout}
+              onCreatePool={handleCreatePoolClick}
+            />
+          } />
+          <Route path="/bracket-wizard" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                <Footer />
+              </div>
+            ) : <Navigate to="/create-pool" />
+          } />
+          <Route path="/playoff-wizard" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                <Footer />
+              </div>
+            ) : <Navigate to="/create-pool" />
+          } />
+          <Route path="/props-wizard" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                <Footer />
+              </div>
+            ) : <Navigate to="/create-pool" />
+          } />
+
+          <Route path="/grid-wizard" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
+                <Footer />
+              </div>
+            ) : <Navigate to="/create-pool" />
+          } />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
 
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
     </>

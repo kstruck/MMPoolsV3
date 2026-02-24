@@ -2,15 +2,10 @@
 <html lang="en">
 
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-V051BTG0JZ"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag() { dataLayer.push(arguments); }
-    gtag('js', new Date());
-
-    gtag('config', 'G-V051BTG0JZ');
-  </script>
+  <!-- Preconnect to critical origins (saves DNS+TLS handshake time) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://a.espncdn.com" />
   <!-- Character Encoding (CRITICAL) -->
   <meta charset="UTF-8" />
 
@@ -45,9 +40,17 @@
   <meta name="keywords"
     content="Super Bowl Squares, NFL Playoff Pool, March Madness Bracket, Sports Betting, Office Sports Pools, Host Sports Pools, Online Pool Manager, free online pools, football pool software" />
 
+  <!-- Non-blocking Google Fonts (prevents render-blocking) -->
+  <link rel="preload" as="style"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Montserrat:wght@700;800;900&display=swap" />
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Montserrat:wght@700;800;900&display=swap"
-    rel="stylesheet" />
+    rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Montserrat:wght@700;800;900&display=swap"
+      rel="stylesheet" />
+  </noscript>
 </head>
 
 <body class="bg-slate-900 text-slate-100">
@@ -79,6 +82,15 @@
   </noscript>
 
   <script type="module" src="/src/main.tsx"></script>
+
+  <!-- Deferred Google Analytics (moved to end of body to avoid render-blocking) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-V051BTG0JZ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-V051BTG0JZ');
+  </script>
 
 </body>
 

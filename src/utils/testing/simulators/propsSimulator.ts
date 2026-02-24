@@ -12,7 +12,7 @@ export interface PropsTestResult {
         step: string;
         status: 'success' | 'failed' | 'skipped';
         message: string;
-        data?: any;
+        data?: unknown;
     }>;
 }
 
@@ -27,7 +27,7 @@ export interface PropsScenarioSettings {
         tiebreakerVal?: number;
     }>;
     grading?: Record<string, number>; // questionId -> correct option index
-    _fullScenario?: any; // From scenario JSON
+    _fullScenario?: Record<string, unknown>; // From scenario JSON
 }
 
 export async function runScenario(
@@ -38,13 +38,16 @@ export async function runScenario(
     const steps: PropsTestResult['steps'] = [];
     let poolId: string = '';
 
-    const addStep = (step: string, status: 'success' | 'failed' | 'skipped', message: string, data?: any) => {
+    const addStep = (step: string, status: 'success' | 'failed' | 'skipped', message: string, data?: unknown) => {
         steps.push({ step, status, message, data });
         logger.log(`${status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏭️'} [PropsTest] [${step}] ${message}`);
     };
 
-    // Extract full scenario if passed
-    const scenarioData = settings?._fullScenario || settings;
+    // Extract full scenario if passed, with fallback to settings
+    const scenarioQuestions = (settings?._fullScenario?.['questions'] ?? settings?.questions) as PropQuestion[] | undefined;
+    const scenarioEntries = (settings?._fullScenario?.['testEntries'] ?? settings?.testEntries) as PropsScenarioSettings['testEntries'] | undefined;
+    const scenarioGrading = (settings?._fullScenario?.['grading'] ?? settings?.grading) as Record<string, number> | undefined;
+    const scenarioPoolConfig = (settings?._fullScenario?.['poolConfig'] ?? {}) as Record<string, number>;
 
     try {
         const db = getFirestore();
@@ -53,14 +56,15 @@ export async function runScenario(
         const poolName = settings?.name || `Props Test - ${new Date().toISOString().slice(11, 23)}`;
         addStep('Create Pool', 'success', `Creating props pool: ${poolName}`);
 
-        const questions: PropQuestion[] = scenarioData?.questions || [
+        const questions: PropQuestion[] = scenarioQuestions || [
             { id: 'q1', text: 'Default Question 1?', options: ['A', 'B', 'C', 'D'], points: 1 },
             { id: 'q2', text: 'Default Question 2?', options: ['Yes', 'No'], points: 1 }
         ];
 
-        const poolConfig = scenarioData?.poolConfig || {};
+        const costVal = scenarioPoolConfig.cost || settings?.cost || 10;
+        const maxCardsVal = scenarioPoolConfig.maxCards || settings?.maxCards || 10;
 
-        const poolData: any = {
+        const poolData: Record<string, unknown> = {
             type: 'PROPS',
             name: poolName,
             createdAt: Date.now(),
@@ -69,8 +73,8 @@ export async function runScenario(
             isPublic: false,
             props: {
                 enabled: true,
-                cost: poolConfig.cost || settings?.cost || 10,
-                maxCards: poolConfig.maxCards || settings?.maxCards || 10,  // Default to 10 for tests
+                cost: costVal,
+                maxCards: maxCardsVal,  // Default to 10 for tests
                 questions: questions
             },
             entryCount: 0,
@@ -84,7 +88,7 @@ export async function runScenario(
         addStep('Create Pool', 'success', `Pool created with ID: ${poolId}`);
 
         // === B. ADD TEST ENTRIES (Prop Cards) via Cloud Function ===
-        const testEntries = scenarioData?.testEntries || [];
+        const testEntries = scenarioEntries || [];
 
         if (testEntries.length > 0) {
             addStep('Add Entries', 'success', `Adding ${testEntries.length} test prop cards...`);
@@ -100,9 +104,9 @@ export async function runScenario(
                         `${entry.userName}'s Card`,
                         `${entry.userName.toLowerCase()}@test.com`
                     );
-                } catch (e: any) {
+                } catch (err) {
                     // If purchasePropCard fails (maybe auth issue), log and continue
-                    addStep('Add Entry Warning', 'skipped', `Could not add ${entry.userName}: ${e.message}`);
+                    addStep('Add Entry Warning', 'skipped', `Could not add ${entry.userName}: ${err instanceof Error ? err.message : String(err)}`);
                 }
             }
 
@@ -110,7 +114,7 @@ export async function runScenario(
         }
 
         // === C. GRADE QUESTIONS (SuperAdmin can update pool via rules) ===
-        const grading = scenarioData?.grading || {};
+        const grading = scenarioGrading || {};
 
         if (Object.keys(grading).length > 0) {
             addStep('Grade Questions', 'success', 'Grading questions and calculating scores...');
@@ -130,8 +134,8 @@ export async function runScenario(
             try {
                 await dbService.updatePool(poolId, {
                     'props.questions': updatedQuestions
-                } as any);
-            } catch (e) {
+                } as Record<string, unknown>);
+            } catch {
                 // Fallback to direct update (requires SuperAdmin)
                 await updateDoc(doc(db, 'pools', poolId), {
                     'props.questions': updatedQuestions
@@ -154,7 +158,7 @@ export async function runScenario(
                 // Use gradeProp Cloud Function or direct update
                 try {
                     await updateDoc(cardDoc.ref, { score });
-                } catch (e) {
+                } catch {
                     addStep('Grade Warning', 'skipped', `Could not update score for ${card.userName}`);
                 }
             }
@@ -165,7 +169,7 @@ export async function runScenario(
         // === D. LOCK POOL ===
         try {
             await dbService.updatePool(poolId, { isLocked: true });
-        } catch (e) {
+        } catch {
             await updateDoc(doc(db, 'pools', poolId), { isLocked: true });
         }
         addStep('Lock Pool', 'success', 'Pool locked for final results');
@@ -190,8 +194,8 @@ export async function runScenario(
         const leaderboard = cards.map((c, i) => `${i + 1}. ${c.userName}: ${c.score} pts`).join(' | ');
         addStep('Verification', 'success', `Leaderboard: ${leaderboard}`);
 
-    } catch (error: any) {
-        addStep('Error', 'failed', error.message);
+    } catch (error) {
+        addStep('Error', 'failed', error instanceof Error ? error.message : String(error));
         throw error;
     }
 
