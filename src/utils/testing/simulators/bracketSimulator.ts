@@ -5,6 +5,7 @@ import { getFirestore, doc, collection, getDocs, updateDoc, setDoc, addDoc } fro
 import { dbService } from '../../../services/dbService';
 import type { BracketEntry, Tournament, Game, TournamentSlot, BracketPool } from '../../../types';
 import { calculateScore } from '../../../components/BracketPoolDashboard/bracketScoring';
+import { logger } from '../../logger';
 
 export interface BracketTestResult {
     poolId: string;
@@ -54,7 +55,7 @@ export async function runScenario(
 
     const addStep = (step: string, status: 'success' | 'failed' | 'skipped', message: string, data?: unknown) => {
         steps.push({ step, status, message, data });
-        console.log(`${status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏭️'} [BracketTest] [${step}] ${message}`);
+        logger.log(`${status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏭️'} [BracketTest] [${step}] ${message}`);
     };
 
     const scenarioData = settings?._fullScenario || {};

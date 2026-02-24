@@ -19,6 +19,7 @@ import { SupportPage } from './components/SupportPage';
 import { UserProfile } from './components/UserProfile';
 import { Scoreboard } from './components/Scoreboard';
 import { SuperBowlOddsArticle } from './components/articles/SuperBowlOddsArticle';
+import { BracketPoolGuideArticle } from './components/articles/BracketPoolGuideArticle';
 
 // Routes
 import { PoolRoute } from './components/routes/PoolRoute';
@@ -39,6 +40,7 @@ import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
 import { isSuperAdmin } from './utils/auth';
+import { logger } from './utils/logger';
 
 // Legacy Hash Handler - redirects old hash-based URLs to clean URLs
 const LegacyHashHandler = () => {
@@ -47,7 +49,7 @@ const LegacyHashHandler = () => {
   useEffect(() => {
     const hash = window.location.hash;
     if (hash && hash.length > 1) {
-      console.log('Migrating legacy hash:', hash);
+      logger.log('Migrating legacy hash:', hash);
       const cleanHash = hash.substring(1); // remove #
       let targetPath: string | null = null;
 
@@ -62,6 +64,7 @@ const LegacyHashHandler = () => {
       else if (cleanHash === 'privacy') targetPath = '/privacy';
       else if (cleanHash === 'scoreboard') targetPath = '/scoreboard';
       else if (cleanHash === 'super-bowl-squares-odds') targetPath = '/odds/super-bowl-squares';
+      else if (cleanHash === 'bracket-pool-guide') targetPath = '/articles/bracket-pool-guide';
       else if (cleanHash === 'super-admin') targetPath = '/super-admin';
 
       // Dynamic Routes
@@ -229,6 +232,13 @@ const App: React.FC = () => {
           <>
             <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
             <SuperBowlOddsArticle />
+            <Footer />
+          </>
+        } />
+        <Route path="/articles/bracket-pool-guide" element={
+          <>
+            <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+            <BracketPoolGuideArticle />
             <Footer />
           </>
         } />

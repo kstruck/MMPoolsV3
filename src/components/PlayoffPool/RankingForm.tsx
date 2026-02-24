@@ -6,6 +6,7 @@ import { httpsCallable } from 'firebase/functions';
 import { getTeamLogo } from '../../constants';
 import { ScheduleDisplay } from './ScheduleDisplay';
 import { AuthModal } from '../modals/AuthModal';
+import { logger } from '../../utils/logger';
 
 interface RankingFormProps {
     pool: PlayoffPool;
@@ -158,7 +159,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                 entryId: entryId, // Pass entryId to backend (null = new, string = edit)
                 entryName: entryName.trim() || user.name // Pass entry name
             });
-            console.log("Submitting picks:", { poolId: pool.id, entryId, rankings: rankingsMap });
+            logger.log("Submitting picks:", { poolId: pool.id, entryId, rankings: rankingsMap });
 
             setSuccess(true);
             setIsConfirming(false); // Close modal

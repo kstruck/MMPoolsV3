@@ -1,6 +1,7 @@
 import type { GameState, Winner } from '../types';
 import { getLastDigit } from '../services/gameLogic';
 import { PERIOD_LABELS } from '../constants';
+import { logger } from '../utils/logger';
 
 export interface PeriodCard {
     period: string;
@@ -26,7 +27,7 @@ const sanitize = (n: string | number | undefined | null) => {
 
 export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winner[]): PeriodCard[] => {
     // DEBUG: ENTRY LOG
-    console.error(`[PayoutCalc] ENTRY. PoolId: ${squaresPool?.id}`);
+    logger.error(`[PayoutCalc] ENTRY. PoolId: ${squaresPool?.id}`);
 
     if (!squaresPool || (squaresPool.type && squaresPool.type !== 'SQUARES' && squaresPool.type !== 'PROPS')) return []; // Allow PROPS if they use this structure?
     // Note: If PROPS pool uses this, ensure logic valid. 
@@ -46,8 +47,8 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
     return periods.map(period => {
         // DEBUG: Logging to trace $0 payout issue
         if (period === 'half' || period === 'final') {
-            console.log(`[PayoutCalc] Processing ${period}. Strategy: ${squaresPool.ruleVariations?.scoreChangePayoutStrategy}`);
-            console.log(`[PayoutCalc] Weights:`, squaresPool.ruleVariations?.scoreChangeHybridWeights);
+            logger.log(`[PayoutCalc] Processing ${period}. Strategy: ${squaresPool.ruleVariations?.scoreChangePayoutStrategy}`);
+            logger.log(`[PayoutCalc] Weights:`, squaresPool.ruleVariations?.scoreChangeHybridWeights);
         }
 
         // CRITICAL FIX: For hybrid strategy, use hybrid weights instead of payouts
@@ -84,7 +85,7 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
         }
 
         if (period === 'half' || period === 'final') {
-            console.log(`[PayoutCalc] ${period} -> FINISHING Percent: ${percent}, NetPot: ${netPot}`);
+            logger.log(`[PayoutCalc] ${period} -> FINISHING Percent: ${percent}, NetPot: ${netPot}`);
         }
 
         const baseAmount = Math.floor(netPot * (percent / 100));

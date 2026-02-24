@@ -3,6 +3,7 @@
 
 import React, { useState } from 'react';
 import { Play, CheckCircle, XCircle, AlertTriangle, Clock, ChevronDown } from 'lucide-react';
+import { logger } from '../utils/logger';
 import {
     runPredefinedTest,
     getAvailableScenarios,
@@ -17,7 +18,7 @@ export const SimpleTestingDashboard: React.FC = () => {
     const [allResults, setAllResults] = useState<SimpleTestResult[] | null>(null);
 
     const scenarios = getAvailableScenarios();
-    console.log('Available Scenarios:', scenarios); // Debug: Check if new scenarios are loaded
+    logger.log('Available Scenarios:', scenarios); // Debug: Check if new scenarios are loaded
 
     const handleRunSingle = async () => {
         if (!selectedScenario) return;

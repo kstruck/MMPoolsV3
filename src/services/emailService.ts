@@ -1,5 +1,6 @@
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { logger } from '../utils/logger';
 
 // Generate promo signature with optional referral link
 const getPromoSignature = (ownerReferralCode?: string) => {
@@ -53,10 +54,10 @@ export const emailService = {
             }
 
             await addDoc(collection(db, 'mail'), emailData);
-            console.log(`Email trigger created for: ${to}`);
+            logger.log(`Email trigger created for: ${to}`);
             return { success: true };
         } catch (error) {
-            console.error('Error creating email trigger:', error);
+            logger.error('Error creating email trigger:', error);
             // Non-blocking error
             return { success: false, error };
         }

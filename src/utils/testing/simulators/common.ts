@@ -4,6 +4,7 @@
  */
 
 import { dbService } from '../../../services/dbService';
+import { logger } from '../../logger';
 
 // ===== TEST USER GENERATION =====
 
@@ -107,9 +108,9 @@ export function assertExists<T>(value: T | null | undefined, message: string): a
 export async function deleteTestPool(poolId: string): Promise<void> {
     try {
         await dbService.deletePool(poolId);
-        console.log(`✅ Deleted test pool: ${poolId}`);
+        logger.log(`✅ Deleted test pool: ${poolId}`);
     } catch (error) {
-        console.error(`❌ Failed to delete pool ${poolId}:`, error);
+        logger.error(`❌ Failed to delete pool ${poolId}:`, error);
         throw error;
     }
 }
@@ -118,9 +119,9 @@ export async function deleteTestUsers(userIds: string[]): Promise<void> {
     const promises = userIds.map(async (userId) => {
         try {
             await dbService.deleteUser(userId);
-            console.log(`✅ Deleted test user: ${userId}`);
+            logger.log(`✅ Deleted test user: ${userId}`);
         } catch (error) {
-            console.error(`❌ Failed to delete user ${userId}:`, error);
+            logger.error(`❌ Failed to delete user ${userId}:`, error);
         }
     });
 
@@ -128,7 +129,7 @@ export async function deleteTestUsers(userIds: string[]): Promise<void> {
 }
 
 export async function cleanupTestResources(resources: CreatedResource[]): Promise<void> {
-    console.log(`🧹 Cleaning up ${resources.length} test resources...`);
+    logger.log(`🧹 Cleaning up ${resources.length} test resources...`);
 
     // Group by type
     const poolIds = resources.filter(r => r.type === 'pool').map(r => r.id);
@@ -144,7 +145,7 @@ export async function cleanupTestResources(resources: CreatedResource[]): Promis
         await deleteTestUsers(userIds);
     }
 
-    console.log('✅ Cleanup complete!');
+    logger.log('✅ Cleanup complete!');
 }
 
 // ===== LOGGING HELPERS =====
@@ -174,7 +175,7 @@ export function log(level: TestLog['level'], message: string, data?: any): void 
         error: '❌'
     }[level];
 
-    console.log(`${emoji} [Test] ${message}`, data || '');
+    logger.log(`${emoji} [Test] ${message}`, data || '');
 }
 
 export function getLogs(): TestLog[] {

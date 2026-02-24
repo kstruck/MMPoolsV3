@@ -20,6 +20,7 @@ import {
     TOTAL_GAMES,
 } from '../data/tournament2025';
 import { generateEntries, generateControlEntries } from '../data/testEntryGenerator';
+import { logger } from '../../logger';
 
 // ─── TYPES ───────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ export async function runE2EBracketSimulation(config: {
             addStep('Create Tournament', 'success', `Tournament created: ${TOTAL_GAMES} games across 6 rounds (all SCHEDULED)`);
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
-            console.error('[E2E] Tournament creation failed:', errMsg);
+            logger.error('[E2E] Tournament creation failed:', errMsg);
             addStep('Create Tournament', 'skipped', `Could not create tournament: ${errMsg}`);
             // Don't throw — continue anyway (tournament may already exist from prior run)
         }
@@ -186,7 +187,7 @@ export async function runE2EBracketSimulation(config: {
             } catch (e: unknown) {
                 entryErrors++;
                 const errMsg = e instanceof Error ? e.message : String(e);
-                console.error(`[E2E] Entry creation failed for ${entry.userName}:`, errMsg);
+                logger.error(`[E2E] Entry creation failed for ${entry.userName}:`, errMsg);
                 // Only log first 3 errors to avoid spam
                 if (entryErrors <= 3) {
                     addStep('Entry Error', 'failed', `Failed to create entry for ${entry.userName}: ${errMsg}`);
@@ -209,7 +210,7 @@ export async function runE2EBracketSimulation(config: {
             });
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
-            console.error('[E2E] Entry count update failed:', errMsg);
+            logger.error('[E2E] Entry count update failed:', errMsg);
             // Non-critical
         }
 
@@ -233,7 +234,7 @@ export async function runE2EBracketSimulation(config: {
                 await setDoc(doc(db, 'tournaments', 'mens-2025'), tournament);
             } catch (e: unknown) {
                 const errMsg = e instanceof Error ? e.message : String(e);
-                console.error(`[E2E] Round ${round} tournament update failed:`, errMsg);
+                logger.error(`[E2E] Round ${round} tournament update failed:`, errMsg);
                 addStep(`Round ${round} Tournament`, 'failed', errMsg, round);
                 continue;
             }
@@ -253,8 +254,8 @@ export async function runE2EBracketSimulation(config: {
                 if (round === 6 && entry.name?.includes('PerfectBracket')) {
                     const pickCount = entry.picks ? Object.keys(entry.picks).length : 0;
                     const slotCount = tournament.slots ? Object.keys(tournament.slots).length : 0;
-                    console.log(`[E2E DEBUG] PerfectBracket: score=${scoringResult.score}, correct=${scoringResult.correctPicks}, maxPossible=${scoringResult.maxPossibleScore}, pickCount=${pickCount}, slotCount=${slotCount}`);
-                    console.log(`[E2E DEBUG] PerfectBracket roundBreakdown:`, JSON.stringify(scoringResult.roundBreakdown));
+                    logger.log(`[E2E DEBUG] PerfectBracket: score=${scoringResult.score}, correct=${scoringResult.correctPicks}, maxPossible=${scoringResult.maxPossibleScore}, pickCount=${pickCount}, slotCount=${slotCount}`);
+                    logger.log(`[E2E DEBUG] PerfectBracket roundBreakdown:`, JSON.stringify(scoringResult.roundBreakdown));
                 }
 
                 try {
@@ -334,7 +335,7 @@ export async function runE2EBracketSimulation(config: {
             addStep('Complete Pool', 'success', 'Pool status updated to COMPLETED');
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
-            console.error('[E2E] Pool COMPLETED update failed:', errMsg);
+            logger.error('[E2E] Pool COMPLETED update failed:', errMsg);
             addStep('Complete Pool', 'failed', errMsg);
         }
 
@@ -350,8 +351,8 @@ export async function runE2EBracketSimulation(config: {
         // Debug: log PerfectBracket's score from Firestore vs others
         const perfectFromFS = finalEntries.find(e => e.name?.includes('PerfectBracket'));
         const reboundFromFS = finalEntries.find(e => e.name?.includes('Rebound King'));
-        console.log(`[E2E DEBUG] FROM FIRESTORE: PerfectBracket score=${perfectFromFS?.score}, Rebound King score=${reboundFromFS?.score}`);
-        console.log(`[E2E DEBUG] Top 5 raw scores:`, finalEntries.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5).map(e => `${e.name}:${e.score}`));
+        logger.log(`[E2E DEBUG] FROM FIRESTORE: PerfectBracket score=${perfectFromFS?.score}, Rebound King score=${reboundFromFS?.score}`);
+        logger.log(`[E2E DEBUG] Top 5 raw scores:`, finalEntries.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5).map(e => `${e.name}:${e.score}`));
 
         // Sort by score desc, then tiebreaker proximity
         const champTotal = getChampionshipTotal(); // 128 (Florida 65 + Houston 63)
@@ -421,7 +422,7 @@ export async function runE2EBracketSimulation(config: {
 
     } catch (error: unknown) {
         const errMsg = error instanceof Error ? error.message : String(error);
-        console.error('[E2E] Fatal error:', errMsg, error);
+        logger.error('[E2E] Fatal error:', errMsg, error);
         addStep('Fatal Error', 'failed', errMsg);
         return {
             poolId,

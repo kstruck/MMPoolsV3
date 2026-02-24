@@ -1,4 +1,5 @@
 import { db } from '../firebase';
+import { logger } from '../utils/logger';
 import { collection, addDoc, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 
 export interface ShareClick {
@@ -28,7 +29,7 @@ export const shareTrackingService = {
             });
         } catch (err) {
             // Silently fail — tracking should never block UX
-            console.warn('[ShareTracking] Failed to record click:', err);
+            logger.warn('[ShareTracking] Failed to record click:', err);
         }
     },
 
@@ -57,7 +58,7 @@ export const shareTrackingService = {
 
             return { total, byPlatform, last7Days };
         } catch (err) {
-            console.warn('[ShareTracking] Failed to get stats:', err);
+            logger.warn('[ShareTracking] Failed to get stats:', err);
             return { total: 0, byPlatform: {}, last7Days: 0 };
         }
     }

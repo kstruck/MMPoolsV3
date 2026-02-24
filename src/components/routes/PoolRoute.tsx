@@ -22,6 +22,7 @@ import { shareTrackingService } from '../../services/shareTrackingService';
 import { getTeamLogo } from '../../constants';
 import { calculateQuarterlyPayouts } from '../../utils/payouts';
 import { isSuperAdmin, isPoolManager } from '../../utils/auth';
+import { logger } from '../../utils/logger';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner } from '../../types';
 
 interface PoolRouteProps {
@@ -130,11 +131,11 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     // Quarterly Payouts (Moved to top)
     const quarterlyPayouts = useMemo(() => {
         if (!pool || pool.type !== 'SQUARES') {
-            console.log('[PoolRoute] Quarterly Payouts: Pool not SQUARES or null', pool?.type);
+            logger.log('[PoolRoute] Quarterly Payouts: Pool not SQUARES or null', pool?.type);
             return [];
         }
         const res = calculateQuarterlyPayouts(pool as GameState, winners);
-        console.log('[PoolRoute] Quarterly Payouts Calculated:', res.length, 'First:', res[0]?.amount);
+        logger.log('[PoolRoute] Quarterly Payouts Calculated:', res.length, 'First:', res[0]?.amount);
         return res;
     }, [pool, winners]);
 

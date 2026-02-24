@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { dbService } from '../services/dbService';
+import { logger } from '../utils/logger';
 
 import type { GameState, PoolTheme } from "../types";
 import type { User } from '../types';
@@ -30,7 +31,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
     const TOTAL_STEPS = 9;
-    console.log('[SetupWizard] Initialized - Version 1.1 (9 Steps, New Defaults)');
+    logger.log('[SetupWizard] Initialized - Version 1.1 (9 Steps, New Defaults)');
     const [isCreating, setIsCreating] = useState(false);
 
     // Initial Draft State

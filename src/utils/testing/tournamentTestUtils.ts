@@ -8,6 +8,7 @@
 import { getFirestore, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { generateTournament2025, revealRound } from './data/tournament2025';
 import type { Tournament } from '../../types';
+import { logger } from '../../utils/logger';
 
 /**
  * Load the 2025 NCAA tournament data to Firestore.
@@ -22,7 +23,7 @@ export async function loadTournament2025(tournamentId: string = 'mens-2025'): Pr
 
     await setDoc(doc(db, 'tournaments', tournamentId), tournament);
 
-    console.log(`[TournamentTestUtils] Loaded 2025 tournament to Firestore: ${tournamentId}`);
+    logger.log(`[TournamentTestUtils] Loaded 2025 tournament to Firestore: ${tournamentId}`);
     return tournament;
 }
 
@@ -49,7 +50,7 @@ export async function loadTournamentAtRound(round: number, tournamentId: string 
 
     await setDoc(doc(db, 'tournaments', tournamentId), tournament);
 
-    console.log(`[TournamentTestUtils] Loaded tournament at Round ${round} to Firestore: ${tournamentId}`);
+    logger.log(`[TournamentTestUtils] Loaded tournament at Round ${round} to Firestore: ${tournamentId}`);
     return tournament;
 }
 
@@ -62,7 +63,7 @@ export async function clearTournament(tournamentId: string = 'mens-2025'): Promi
     const db = getFirestore();
     await deleteDoc(doc(db, 'tournaments', tournamentId));
 
-    console.log(`[TournamentTestUtils] Cleared tournament from Firestore: ${tournamentId}`);
+    logger.log(`[TournamentTestUtils] Cleared tournament from Firestore: ${tournamentId}`);
 }
 
 /**
@@ -79,7 +80,7 @@ export async function getCurrentTournament(tournamentId: string = 'mens-2025'): 
         return { id: docSnap.id, ...docSnap.data() } as Tournament;
     }
 
-    console.log(`[TournamentTestUtils] Tournament not found: ${tournamentId}`);
+    logger.log(`[TournamentTestUtils] Tournament not found: ${tournamentId}`);
     return null;
 }
 

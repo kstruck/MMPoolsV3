@@ -4,6 +4,7 @@
 import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { dbService } from '../../../services/dbService';
 import type { PlayoffPool, PlayoffEntry, PlayoffTeam } from '../../../types';
+import { logger } from '../../logger';
 
 export interface PlayoffTestResult {
     poolId: string;
@@ -43,7 +44,7 @@ export async function runScenario(
 
     const addStep = (step: string, status: 'success' | 'failed' | 'skipped', message: string, data?: any) => {
         steps.push({ step, status, message, data });
-        console.log(`${status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏭️'} [PlayoffTest] [${step}] ${message}`);
+        logger.log(`${status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏭️'} [PlayoffTest] [${step}] ${message}`);
     };
 
     const scenarioData = settings?._fullScenario || {};

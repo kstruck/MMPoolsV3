@@ -5,6 +5,7 @@
 
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
+import { logger } from '../utils/logger';
 import type { PoolType } from '../types';
 import type { TestResult } from '../utils/testing/testingOrchestrator';
 
@@ -170,11 +171,11 @@ export async function runAIEnhancedTest(
     report: TestReport;
 }> {
     // 1. Generate scenario with AI
-    console.log('🤖 Generating test scenario with AI...');
+    logger.log('🤖 Generating test scenario with AI...');
     const scenario = await generateTestScenario(poolType, userRequest);
 
     // 2. Run test (import orchestrator dynamically to avoid circular deps)
-    console.log('🧪 Running test...');
+    logger.log('🧪 Running test...');
     const { runTest } = await import('../utils/testing/testingOrchestrator');
     const testResult = await runTest({
         poolType,
@@ -187,11 +188,11 @@ export async function runAIEnhancedTest(
     });
 
     // 3. Validate results with AI
-    console.log('✅ Validating results with AI...');
+    logger.log('✅ Validating results with AI...');
     const validation = await validateTestResults(scenario, testResult);
 
     // 4. Generate report with AI
-    console.log('📊 Generating report with AI...');
+    logger.log('📊 Generating report with AI...');
     const report = await generateTestReport(scenario, testResult, validation);
 
     return { scenario, testResult, validation, report };

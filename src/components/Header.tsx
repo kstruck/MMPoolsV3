@@ -4,6 +4,7 @@ import type { User } from '../types';
 import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { authService } from '../services/authService';
 import { isSuperAdmin, canCreatePool } from '../utils/auth';
+import { logger } from '../utils/logger';
 import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
@@ -34,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
         }
     };
 
-    console.log('Header Rendered. User:', user, 'Role:', user?.role);
+    logger.log('Header Rendered. User:', user, 'Role:', user?.role);
     return (
         <>
             {user && !user.emailVerified && user.provider === 'password' && (
@@ -73,8 +74,8 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     How it Works
                                 </button>
-                                <button onClick={() => navigate('/odds/super-bowl-squares')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
-                                    Odds & Stats
+                                <button onClick={() => navigate('/articles/bracket-pool-guide')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                    Bracket Guide
                                 </button>
                                 <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Public Pools
@@ -91,8 +92,8 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     How it Works
                                 </button>
-                                <button onClick={() => navigate('/odds/super-bowl-squares')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
-                                    Odds & Stats
+                                <button onClick={() => navigate('/articles/bracket-pool-guide')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                    Bracket Guide
                                 </button>
                                 <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     Public Pools

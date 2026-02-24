@@ -4,6 +4,7 @@
 import { getFirestore, doc, getDoc, getDocs, collection, updateDoc } from 'firebase/firestore';
 import { dbService } from '../../../services/dbService';
 import type { PropsPool, PropQuestion, PropCard } from '../../../types';
+import { logger } from '../../logger';
 
 export interface PropsTestResult {
     poolId: string;
@@ -39,7 +40,7 @@ export async function runScenario(
 
     const addStep = (step: string, status: 'success' | 'failed' | 'skipped', message: string, data?: any) => {
         steps.push({ step, status, message, data });
-        console.log(`${status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏭️'} [PropsTest] [${step}] ${message}`);
+        logger.log(`${status === 'success' ? '✅' : status === 'failed' ? '❌' : '⏭️'} [PropsTest] [${step}] ${message}`);
     };
 
     // Extract full scenario if passed
