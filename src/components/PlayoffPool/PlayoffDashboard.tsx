@@ -22,7 +22,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     // const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
     // const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Deprecated
 
-    const isManager = user?.id === pool.ownerId || user?.role === 'SUPER_ADMIN';
+    const isManager = user ? (pool.ownerId === user.id || user.role === 'SUPER_ADMIN') : false;
     const canViewPicks = pool.isLocked || (pool.results && Object.values(pool.results).some(r => r && r.length > 0)) || isManager;
 
     // --- My Entries Logic ---

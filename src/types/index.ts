@@ -475,6 +475,8 @@ export interface User {
   createdAt?: number; // Timestamp of account creation
   emailVerified?: boolean; // Is email verified by Firebase?
   welcomeEmailSent?: boolean; // Has the welcome email been sent?
+  updatedAt?: number; // Timestamp of last profile update
+  lastLogin?: number | { seconds: number; nanoseconds: number }; // Last login timestamp
 }
 
 export interface Winner {

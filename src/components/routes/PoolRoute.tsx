@@ -100,7 +100,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     // Calculate isManager
     const isManager = useMemo(() => {
         if (!user || !pool) return false;
-        return user.id === pool.ownerId || ('managerUid' in pool && user.id === pool.managerUid);
+        return user.id === pool.ownerId || ('managerUid' in pool && user.id === pool.managerUid) || user.role === 'SUPER_ADMIN';
     }, [user, pool]);
 
     // State moved from App.tsx

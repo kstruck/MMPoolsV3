@@ -15,12 +15,15 @@
     "dependencies": {
         "@google/generative-ai": "^0.24.1",
         "firebase-admin": "^12.7.0",
-        "firebase-functions": "^6.1.1"
+        "firebase-functions": "^7.0.5"
     },
     "devDependencies": {
         "@types/node": "^22.0.0",
-        "firebase-functions-test": "^2.1.0",
+        "firebase-functions-test": "^3.1.1",
         "typescript": "^5.0.0"
+    },
+    "overrides": {
+        "minimatch": "^10.2.1"
     },
     "private": true
 }

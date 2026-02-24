@@ -373,8 +373,8 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 {!loading && games.length > 0 && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                         {renderGameSection('Live Games', categorizedGames.live, <PlayCircle className="text-emerald-500 animate-pulse" />, 'border-emerald-500/30')}
-                        {renderGameSection('Upcoming Games', categorizedGames.upcoming, <Calendar className="text-amber-500" />, 'border-amber-500/30')}
                         {renderGameSection('Completed Games - Recent', categorizedGames.completed, <Trophy className="text-slate-500" />)}
+                        {renderGameSection('Upcoming Games', categorizedGames.upcoming, <Calendar className="text-amber-500" />, 'border-amber-500/30')}
                     </div>
                 )}
             </main>

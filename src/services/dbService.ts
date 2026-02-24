@@ -18,6 +18,9 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
+import { poolRepository } from "./poolRepository";
+import { userRepository } from "./userRepository";
+import { errorHandler, ErrorSeverity } from "./errorHandler";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament } from "../types";
 
@@ -34,19 +37,13 @@ export interface GlobalStats {
 export const dbService = {
     // --- POOLS ---
     async getPoolById(poolId: string): Promise<GameState | null> {
-        const d = await getDoc(doc(db, "pools", poolId));
-        return d.exists() ? (d.data() as GameState) : null;
+        return poolRepository.getById(poolId) as Promise<GameState | null>;
     },
 
     async getPoolBySlug(slug: string): Promise<Pool | null> {
-        const q = query(collection(db, "pools"), where("urlSlug", "==", slug), limit(1));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-            const doc = snapshot.docs[0];
-            return { ...doc.data(), id: doc.id } as Pool;
-        }
-        return null;
+        return poolRepository.getBySlug(slug);
     },
+
     onGlobalStatsUpdate: (callback: (stats: GlobalStats | null) => void, onError?: (error: Error) => void) => {
         return onSnapshot(doc(db, 'stats', 'global'), (doc) => {
             callback(doc.exists() ? doc.data() as GlobalStats : null);
@@ -63,32 +60,28 @@ export const dbService = {
             const { poolId } = result.data;
             return poolId;
         } catch (error) {
-            console.error("Error creating pool:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'createPool', pool }
+            });
             throw error;
         }
     },
 
     updatePool: async <T extends Pool>(poolId: string, updates: Partial<T> | Record<string, unknown>) => {
-        console.log('[dbService] updatePool called', { poolId, updates });
-        try {
-            const poolRef = doc(db, "pools", poolId);
-            await updateDoc(poolRef, {
-                ...updates,
-                updatedAt: Timestamp.now()
-            });
-            console.log('[dbService] updatePool SUCCESS');
-        } catch (error) {
-            console.error("[dbService] Error updating pool:", error);
-            throw error;
+        const success = await poolRepository.update(poolId, {
+            ...updates,
+            updatedAt: Timestamp.now()
+        } as Partial<Pool>);
+        if (!success) {
+            throw new Error(`Failed to update pool ${poolId}`);
         }
     },
 
     deletePool: async (poolId: string) => {
-        try {
-            await deleteDoc(doc(db, "pools", poolId));
-        } catch (error) {
-            console.error("Error deleting pool:", error);
-            throw error;
+        const success = await poolRepository.delete(poolId);
+        if (!success) {
+            throw new Error(`Failed to delete pool ${poolId}`);
         }
     },
 
@@ -100,7 +93,10 @@ export const dbService = {
                 updatedAt: Timestamp.now()
             });
         } catch (error) {
-            console.error("Error archiving pool:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'archivePool', poolId, archive }
+            });
             throw error;
         }
     },
@@ -108,17 +104,16 @@ export const dbService = {
     addToWaitlist: async (poolId: string, email: string, name: string) => {
         try {
             const poolRef = doc(db, "pools", poolId);
-            const waitlistEntry = {
-                email,
-                name,
-                timestamp: Date.now()
-            };
+            const waitlistEntry = { email, name, timestamp: Date.now() };
             await updateDoc(poolRef, {
                 waitlist: arrayUnion(waitlistEntry),
                 updatedAt: Timestamp.now()
             });
         } catch (error) {
-            console.error("Error adding to waitlist:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.LOW,
+                context: { operation: 'addToWaitlist', poolId, email }
+            });
             throw error;
         }
     },
@@ -134,8 +129,6 @@ export const dbService = {
         await fn({ poolId, questionId, correctOptionIndex });
     },
 
-
-
     getPropCards: async (poolId: string) => {
         const q = collection(db, 'pools', poolId, 'propCards');
         const snap = await getDocs(q);
@@ -149,8 +142,6 @@ export const dbService = {
     },
 
     // ===== BRACKET POOL METHODS =====
-
-    /** Real-time listener for bracket entries subcollection */
     subscribeToBracketEntries: (poolId: string, callback: (entries: BracketEntry[]) => void) => {
         const q = query(collection(db, 'pools', poolId, 'entries'), orderBy('score', 'desc'));
         return onSnapshot(q, (snapshot) => {
@@ -162,19 +153,20 @@ export const dbService = {
         });
     },
 
-    /** One-time fetch of tournament data */
     getTournament: async (tournamentId: string): Promise<Tournament | null> => {
         try {
             const docRef = doc(db, 'tournaments', tournamentId);
             const snap = await getDoc(docRef);
             return snap.exists() ? { id: snap.id, ...snap.data() } as Tournament : null;
         } catch (error) {
-            console.error('[dbService] getTournament error:', error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.LOW,
+                context: { operation: 'getTournament', tournamentId }
+            });
             return null;
         }
     },
 
-    /** Real-time listener for tournament data (scores, game results) */
     subscribeToBracketTournament: (tournamentId: string, callback: (tournament: Tournament | null) => void) => {
         const docRef = doc(db, 'tournaments', tournamentId);
         return onSnapshot(docRef, (snap) => {
@@ -185,52 +177,56 @@ export const dbService = {
         });
     },
 
-    /** Create a new bracket entry via Cloud Function */
     createBracketEntry: async (poolId: string, data: { name: string; tiebreakerScore?: number }): Promise<{ success: boolean; entryId?: string; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'createBracketEntry');
             const result = await fn({ poolId, ...data });
             return result.data as { success: boolean; entryId?: string; message?: string };
         } catch (error: unknown) {
-            console.error('[dbService] createBracketEntry error:', error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'createBracketEntry', poolId, data }
+            });
             const msg = error instanceof Error ? error.message : 'Failed to create entry';
             return { success: false, message: msg };
         }
     },
 
-    /** Submit bracket picks via Cloud Function */
-    submitBracketEntry: async (poolId: string, entryId: string, picks: Record<string, string>, tiebreakerScore?: number): Promise<{ success: boolean; message?: string }> => {
-        try {
-            const fn = httpsCallable(functions, 'submitBracketEntry');
-            const result = await fn({ poolId, entryId, picks, tiebreakerScore });
-            return result.data as { success: boolean; message?: string };
-        } catch (error: unknown) {
-            console.error('[dbService] submitBracketEntry error:', error);
-            const msg = error instanceof Error ? error.message : 'Failed to submit entry';
-            return { success: false, message: msg };
-        }
-    },
-
-    /** Update bracket picks (draft save, before submission) */
     updateBracketPicks: async (poolId: string, entryId: string, picks: Record<string, string>): Promise<{ success: boolean; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'updateBracketPicks');
             const result = await fn({ poolId, entryId, picks });
             return result.data as { success: boolean; message?: string };
         } catch (error: unknown) {
-            console.error('[dbService] updateBracketPicks error:', error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'updateBracketPicks', poolId, entryId }
+            });
             const msg = error instanceof Error ? error.message : 'Failed to update picks';
             return { success: false, message: msg };
         }
     },
 
-    /** Update bracket pool fields (manager-only: deadlines, commissioner message, etc.) */
+    submitBracketEntry: async (poolId: string, entryId: string, picks: Record<string, string>): Promise<{ success: boolean; message?: string }> => {
+        try {
+            const fn = httpsCallable(functions, 'submitBracketEntry');
+            const result = await fn({ poolId, entryId, picks });
+            return result.data as { success: boolean; message?: string };
+        } catch (error: unknown) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'submitBracketEntry', poolId, entryId }
+            });
+            const msg = error instanceof Error ? error.message : 'Failed to submit bracket';
+            return { success: false, message: msg };
+        }
+    },
+
     updateBracketPool: async (poolId: string, updates: Record<string, unknown>): Promise<void> => {
         const poolRef = doc(db, 'pools', poolId);
         await updateDoc(poolRef, { ...updates, updatedAt: Date.now() });
     },
 
-    /** Update a bracket entry's payment status */
     updateBracketEntryPayment: async (poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID'): Promise<void> => {
         const entryRef = doc(db, 'pools', poolId, 'entries', entryId);
         await updateDoc(entryRef, { paidStatus, updatedAt: Date.now() });
@@ -252,10 +248,7 @@ export const dbService = {
     },
 
     subscribeToUserPropCards: (poolId: string, userId: string, callback: (cards: PropCard[]) => void) => {
-        const q = query(
-            collection(db, 'pools', poolId, 'propCards'),
-            where('userId', '==', userId)
-        );
+        const q = query(collection(db, 'pools', poolId, 'propCards'), where('userId', '==', userId));
         return onSnapshot(q, (snapshot) => {
             const cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PropCard));
             callback(cards);
@@ -277,9 +270,11 @@ export const dbService = {
         try {
             const cardRef = doc(db, 'pools', poolId, 'propCards', cardId);
             await deleteDoc(cardRef);
-            console.log('[dbService] Prop card deleted:', cardId);
         } catch (error) {
-            console.error("[dbService] Error deleting prop card:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'deletePropCard', poolId, cardId }
+            });
             throw error;
         }
     },
@@ -288,24 +283,27 @@ export const dbService = {
         try {
             const cardRef = doc(db, 'pools', poolId, 'propCards', cardId);
             await updateDoc(cardRef, updates);
-            console.log('[dbService] Prop card updated:', cardId);
         } catch (error) {
-            console.error("[dbService] Error updating prop card:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'updatePropCard', poolId, cardId }
+            });
             throw error;
         }
     },
 
-    // Alias for Grid component compatibility - uses Cloud Function to bypass security rules
     joinWaitlist: async (poolId: string, entry: { email: string; name: string; timestamp: number }) => {
         try {
             const fn = httpsCallable(functions, 'joinWaitlist');
             await fn({ poolId, name: entry.name, email: entry.email });
         } catch (error) {
-            console.error("Error joining waitlist:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.LOW,
+                context: { operation: 'joinWaitlist', poolId, entry }
+            });
             throw error;
         }
     },
-
 
     // --- CLOUD FUNCTIONS ---
     toggleWinnerPaid: async (poolId: string, winnerId: string): Promise<{ success: boolean; isPaid: boolean }> => {
@@ -314,7 +312,10 @@ export const dbService = {
             const result = await fn({ poolId, winnerId });
             return result.data as { success: boolean; isPaid: boolean };
         } catch (error) {
-            console.error("Error calling toggleWinnerPaid:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'toggleWinnerPaid', poolId, winnerId }
+            });
             throw error;
         }
     },
@@ -325,7 +326,10 @@ export const dbService = {
             const result = await syncFn();
             return result.data as { success: boolean; count: number };
         } catch (error) {
-            console.error("Error calling syncAllUsers function:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'syncAllUsers' }
+            });
             throw error;
         }
     },
@@ -336,7 +340,10 @@ export const dbService = {
             const result = await recalcFn();
             return result.data;
         } catch (error) {
-            console.error("Error calling recalculateGlobalStats:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'recalculateGlobalStats' }
+            });
             throw error;
         }
     },
@@ -346,7 +353,10 @@ export const dbService = {
             const lockPoolFn = httpsCallable(functions, 'lockPool');
             await lockPoolFn({ poolId, forceAxis });
         } catch (error) {
-            console.error("Error calling lockPool function:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'lockPool', poolId }
+            });
             throw error;
         }
     },
@@ -357,7 +367,10 @@ export const dbService = {
             const result = await fn({ dryRun });
             return result.data;
         } catch (error) {
-            console.error("Error calling fixParticipantIds:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'fixParticipantIds', dryRun }
+            });
             throw error;
         }
     },
@@ -367,7 +380,10 @@ export const dbService = {
             const reserveSquareFn = httpsCallable(functions, 'reserveSquare');
             await reserveSquareFn({ poolId, squareId, customerDetails, guestDeviceKey, pickedAsName });
         } catch (error) {
-            console.error("Error calling reserveSquare function:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'reserveSquare', poolId, squareId }
+            });
             throw error;
         }
     },
@@ -378,7 +394,10 @@ export const dbService = {
             const result = await confirmPaymentFn({ poolId, squareIds });
             return result.data;
         } catch (error) {
-            console.error("Error calling confirmPayment function:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'confirmPayment', poolId, squareIds }
+            });
             throw error;
         }
     },
@@ -389,7 +408,10 @@ export const dbService = {
             const result = await fn({ poolId, guestDeviceKey });
             return result.data as { claimCode: string; claimId: string };
         } catch (error) {
-            console.error("Error creating claim code:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'createClaimCode', poolId }
+            });
             throw error;
         }
     },
@@ -400,7 +422,10 @@ export const dbService = {
             const snapshot = await getDocs(collection(db, 'prop_questions'));
             return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PropSeed));
         } catch (error) {
-            console.error("Error fetching prop seeds:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.LOW,
+                context: { operation: 'getPropSeeds' }
+            });
             return [];
         }
     },
@@ -409,7 +434,10 @@ export const dbService = {
         try {
             await addDoc(collection(db, 'prop_questions'), seed);
         } catch (error) {
-            console.error("Error creating prop seed:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'createPropSeed', seed }
+            });
             throw error;
         }
     },
@@ -420,7 +448,10 @@ export const dbService = {
             const result = await fn({ poolId, guestDeviceKey });
             return result.data as { success: boolean; warnings: string[] };
         } catch (error) {
-            console.error("Error claiming guest squares:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'claimMySquares', poolId }
+            });
             throw error;
         }
     },
@@ -431,19 +462,19 @@ export const dbService = {
             const result = await fn({ claimCode });
             return result.data as { success: boolean; poolId: string };
         } catch (error) {
-            console.error("Error claiming by code:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'claimByCode' }
+            });
             throw error;
         }
     },
 
-    // Real-time listener for ALL public pools OR user's pools
-    // Real-time listener for ALL public pools OR user's pools
     subscribeToPools: (callback: (pools: Pool[]) => void, onError?: (error: Error) => void, ownerId?: string) => {
         let q;
         if (ownerId) {
             q = query(collection(db, "pools"), or(where("ownerId", "==", ownerId), where("managerUid", "==", ownerId)));
         } else {
-            // Default: Fetch only PUBLIC pools (compliance with security rules)
             q = query(collection(db, "pools"), where("isPublic", "==", true));
         }
         return onSnapshot(q, (snapshot) => {
@@ -455,12 +486,8 @@ export const dbService = {
         });
     },
 
-    // Real-time listener for pools user has JOINED (as participant)
     subscribeToParticipatingPools: (userId: string, callback: (pools: Pool[]) => void, onError?: (error: Error) => void) => {
-        const q = query(
-            collection(db, "pools"),
-            where("participantIds", "array-contains", userId)
-        );
+        const q = query(collection(db, "pools"), where("participantIds", "array-contains", userId));
         return onSnapshot(q, (snapshot) => {
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
             callback(pools);
@@ -470,7 +497,6 @@ export const dbService = {
         });
     },
 
-    // Admin: Fetch ALL pools (relies on SuperAdmin permissions)
     subscribeToAllPools: (callback: (pools: Pool[]) => void, onError?: (error: Error) => void) => {
         const q = query(collection(db, "pools"));
         return onSnapshot(q, (snapshot) => {
@@ -482,20 +508,13 @@ export const dbService = {
         });
     },
 
-
-
-    // Real-time listener for a SINGLE pool (Robust deep-linking)
     subscribeToPool: (identifier: string, callback: (pool: Pool | null) => void, onError?: (error: Error) => void) => {
-        // Heuristic: Documents IDs are 20 alphanumeric chars. Slugs are usually custom.
         const isLikelyDocId = identifier.length === 20;
-
         if (isLikelyDocId) {
             return onSnapshot(doc(db, "pools", identifier), (docSnap) => {
                 if (docSnap.exists()) {
                     callback({ ...docSnap.data(), id: docSnap.id } as Pool);
                 } else {
-                    // Fallback: It might be a 20-char slug, but for now assumption simplifies logic.
-                    // If needed, we could chain a query here.
                     callback(null);
                 }
             }, (error) => {
@@ -504,22 +523,12 @@ export const dbService = {
                 else callback(null);
             });
         }
-
-        // Treat as Slug Query - check both urlSlug and slug fields
-        const q = query(
-            collection(db, "pools"),
-            or(
-                where("urlSlug", "==", identifier),
-                where("slug", "==", identifier)
-            ),
-            limit(1)
-        );
+        const q = query(collection(db, "pools"), or(where("urlSlug", "==", identifier), where("slug", "==", identifier)), limit(1));
         return onSnapshot(q, (snap) => {
             if (!snap.empty) {
                 const d = snap.docs[0];
                 callback({ ...d.data(), id: d.id } as Pool);
             } else {
-                // Fallback: try direct document lookup in case identifier IS the document ID despite length
                 getDoc(doc(db, "pools", identifier)).then((docSnap) => {
                     if (docSnap.exists()) {
                         callback({ ...docSnap.data(), id: docSnap.id } as Pool);
@@ -537,21 +546,13 @@ export const dbService = {
         });
     },
 
-    // Winners Subcollection Listener
     subscribeToWinners: (poolId: string, callback: (winners: Winner[]) => void) => {
         const q = query(collection(db, "pools", poolId, "winners"));
         return onSnapshot(q, (snapshot) => {
             const winners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as Winner);
-
-            // Sort winners chronologically for "Event" winners
-            // Document IDs for events are in format "event_[home]_[away]" which naturally sorts chronologically
             const sorted = winners.sort((a, b) => {
-                // Keep quarterly winners in their natural order (q1, half, q3, final)
                 const periodOrder: Record<string, number> = { 'q1': 1, 'half': 2, 'q3': 3, 'final': 4 };
-
                 if (a.period === 'Event' && b.period === 'Event') {
-                    // Sort by total score (Home + Away) to ensure chronological order
-                    // ID format: event_HOME_AWAY
                     const getReq = (id: string = '') => {
                         const parts = id.replace('event_', '').split('_');
                         const h = parseInt(parts[0]) || 0;
@@ -560,19 +561,14 @@ export const dbService = {
                     };
                     const scoreA = getReq(a.id);
                     const scoreB = getReq(b.id);
-
                     if (scoreA.total !== scoreB.total) return scoreA.total - scoreB.total;
-                    // Tie-breaker: just standard string compare if totals equal (rare/impossible for sequential scoring unless correction)
                     return (a.id || '').localeCompare(b.id || '');
                 } else if (a.period !== 'Event' && b.period !== 'Event') {
-                    // For quarterly winners, use period order
                     return (periodOrder[a.period] || 99) - (periodOrder[b.period] || 99);
                 } else {
-                    // Event winners come after quarterly winners
                     return a.period === 'Event' ? 1 : -1;
                 }
             });
-
             callback(sorted);
         }, (error) => {
             console.error("Error subscribing to winners:", error);
@@ -580,24 +576,21 @@ export const dbService = {
         });
     },
 
-    // Fetch Winners Once (Promise-based)
     getWinners: async (poolId: string): Promise<Winner[]> => {
         const q = query(collection(db, "pools", poolId, "winners"));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as Winner);
     },
 
-    // Update winner paid status
-    // Update winner paid status (via Cloud Function)
     updateWinnerPaidStatus: async (poolId: string, winnerId: string, _isPaid: boolean, _paidByUid?: string) => {
         try {
-            console.log(`[dbService] Toggling paid status (current request: ${_isPaid}, by: ${_paidByUid})`);
             const fn = httpsCallable(functions, 'toggleWinnerPaid');
-            // Cloud function toggles based on current state, so isPaid arg is technically ignored but good for intent.
-            // Actually, my CF is a toggle. UI passes !win.isPaid. So calling toggle is correct.
             await fn({ poolId, winnerId });
         } catch (error) {
-            console.error("Error updating winner paid status:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'updateWinnerPaidStatus', poolId, winnerId }
+            });
             throw error;
         }
     },
@@ -605,46 +598,33 @@ export const dbService = {
     // --- USERS ---
     saveUser: async (user: User) => {
         try {
-            const userRef = doc(db, "users", user.id);
-            await setDoc(userRef, {
+            const success = await userRepository.save(user.id, {
                 ...user,
-                lastLogin: Timestamp.now()
-            }, { merge: true });
+                lastLogin: Date.now()
+            });
+            if (!success) throw new Error('Failed to save user via repository');
         } catch (error) {
-            console.error("Error saving user:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'saveUser', user }
+            });
         }
+    },
+
+    getUser: async (uid: string): Promise<User | null> => {
+        return userRepository.getById(uid);
+    },
+
+    updateUser: async (uid: string, updates: Partial<User>) => {
+        return userRepository.update(uid, updates);
     },
 
     getAllUsers: async (): Promise<User[]> => {
-        try {
-            const snapshot = await getDocs(collection(db, "users"));
-            return snapshot.docs.map(doc => doc.data() as User);
-        } catch (error) {
-            console.error("Error fetching users:", error);
-            return [];
-        }
-    },
-
-    updateUser: async (userId: string, updates: Partial<User>) => {
-        try {
-            const userRef = doc(db, "users", userId);
-            await updateDoc(userRef, {
-                ...updates,
-                updatedAt: Timestamp.now()
-            });
-        } catch (error) {
-            console.error("Error updating user:", error);
-            throw error;
-        }
+        return userRepository.find();
     },
 
     deleteUser: async (userId: string) => {
-        try {
-            await deleteDoc(doc(db, "users", userId));
-        } catch (error) {
-            console.error("Error deleting user:", error);
-            throw error;
-        }
+        return userRepository.delete(userId);
     },
 
     deleteUserAccount: async (targetUid: string): Promise<Record<string, unknown>> => {
@@ -653,7 +633,10 @@ export const dbService = {
             const result = await fn({ targetUid });
             return result.data;
         } catch (error) {
-            console.error("Error deleting user account:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.CRITICAL,
+                context: { operation: 'deleteUserAccount', targetUid }
+            });
             throw error;
         }
     },
@@ -664,7 +647,10 @@ export const dbService = {
             const result = await fn({ email });
             return result.data;
         } catch (error) {
-            console.error("Error sending admin password reset:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'sendAdminPasswordReset', email }
+            });
             throw error;
         }
     },
@@ -676,7 +662,10 @@ export const dbService = {
             const snapshot = await getDocs(q);
             return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
         } catch (error) {
-            console.error("Error fetching system logs:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.LOW,
+                context: { operation: 'getSystemLogs' }
+            });
             return [];
         }
     },
@@ -687,7 +676,10 @@ export const dbService = {
             const result = await fn({ poolId });
             return result.data;
         } catch (error) {
-            console.error("Error fixing pool scores:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'fixPoolScores', poolId }
+            });
             throw error;
         }
     },
@@ -710,7 +702,10 @@ export const dbService = {
             const snapshot = await getDocs(q);
             return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PoolTheme));
         } catch (error) {
-            console.error("Error fetching active themes:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.LOW,
+                context: { operation: 'getActiveThemes' }
+            });
             return [];
         }
     },
@@ -726,7 +721,10 @@ export const dbService = {
             }, { merge: true });
             return themeId;
         } catch (error) {
-            console.error("Error saving theme:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'saveTheme', theme }
+            });
             throw error;
         }
     },
@@ -735,14 +733,16 @@ export const dbService = {
         try {
             await deleteDoc(doc(db, "themes", themeId));
         } catch (error) {
-            console.error("Error deleting theme:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'deleteTheme', themeId }
+            });
             throw error;
         }
     },
 
     setDefaultTheme: async (themeId: string): Promise<void> => {
         try {
-            // First, unset any existing default
             const q = query(collection(db, "themes"), where("isDefault", "==", true));
             const snapshot = await getDocs(q);
             for (const docSnap of snapshot.docs) {
@@ -750,10 +750,12 @@ export const dbService = {
                     await updateDoc(doc(db, "themes", docSnap.id), { isDefault: false });
                 }
             }
-            // Set the new default
             await updateDoc(doc(db, "themes", themeId), { isDefault: true });
         } catch (error) {
-            console.error("Error setting default theme:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'setDefaultTheme', themeId }
+            });
             throw error;
         }
     },
@@ -781,7 +783,10 @@ export const dbService = {
             }, { merge: true });
             return id;
         } catch (error) {
-            console.error("Error saving prop seed:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'savePropSeed', seed }
+            });
             throw error;
         }
     },
@@ -790,7 +795,10 @@ export const dbService = {
         try {
             await deleteDoc(doc(db, "prop_questions", id));
         } catch (error) {
-            console.error("Error deleting prop seed:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'deletePropSeed', id }
+            });
             throw error;
         }
     },
@@ -813,7 +821,10 @@ export const dbService = {
                 updatedAt: Date.now()
             });
         } catch (error) {
-            console.error("Error saving playoff config:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'savePlayoffConfig' }
+            });
             throw error;
         }
     },
@@ -824,7 +835,10 @@ export const dbService = {
             const result = await fn();
             return result.data as { success: boolean; count: number; message: string };
         } catch (error) {
-            console.error("Error syncing playoff pools:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'syncPlayoffPools' }
+            });
             throw error;
         }
     },
@@ -835,7 +849,10 @@ export const dbService = {
             const result = await fn({ poolId, entryId, action, value });
             return result.data as { success: boolean; message: string };
         } catch (error) {
-            console.error("Error managing playoff entry:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'managePlayoffEntry', poolId, entryId, action }
+            });
             throw error;
         }
     },
@@ -846,7 +863,10 @@ export const dbService = {
             const result = await fn({ poolId, squareIds, isPaid });
             return result.data as { success: boolean };
         } catch (error) {
-            console.error("Error marking squares paid:", error);
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'markSquarePaid', poolId, squareIds }
+            });
             throw error;
         }
     }

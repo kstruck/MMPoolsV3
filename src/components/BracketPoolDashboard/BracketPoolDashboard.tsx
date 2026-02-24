@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
@@ -42,10 +42,6 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     // Entry Viewing Modal
     const [viewingEntry, setViewingEntry] = useState<BracketEntry | null>(null);
 
-    const handleViewEntry = useCallback((entry: BracketEntry) => {
-        setViewingEntry(entry);
-    }, []);
-
     // Manager tab interactive state
     const [commissionerDraft, setCommissionerDraft] = useState(pool.commissionerMessage || '');
     const [savingMessage, setSavingMessage] = useState(false);
@@ -64,17 +60,26 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [settingsSaved, setSettingsSaved] = useState(false);
     const [editingSettings, setEditingSettings] = useState(false);
 
-    const isManager = user ? pool.managerUid === user.id : false;
+    const isManager = user ? (pool.managerUid === user.id || user.role === 'SUPER_ADMIN') : false;
     const userEntries = entries.filter(e => e.ownerUid === user?.id);
     const maxEntriesPerUser = pool.settings?.maxEntriesPerUser || 1;
     const canCreateMore = userEntries.length < maxEntriesPerUser;
 
     // Bracket Visibility Rules: Show brackets only when pool is locked and tournament has started
     const shouldShowBrackets = useMemo(() => {
+        if (isManager) return true;
         const isLocked = pool.status === 'LOCKED' || pool.status === 'COMPLETED';
         const tournamentStarted = tournament?.games ? Object.values(tournament.games).some(g => g.winnerTeamId) : false;
         return isLocked && tournamentStarted;
-    }, [pool.status, tournament]);
+    }, [pool.status, tournament, isManager]);
+
+    const handleViewEntry = useCallback((entry: BracketEntry) => {
+        if (entry.ownerUid !== user?.id && !isManager && !shouldShowBrackets) {
+            alert("This bracket is hidden until the pool locks and the tournament begins.");
+            return;
+        }
+        setViewingEntry(entry);
+    }, [user?.id, isManager, shouldShowBrackets]);
 
     // Subscribe to bracket entries
     useEffect(() => {
@@ -355,8 +360,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm ${activeTab === tab.id
-                                    ? (tab.id === 'manager' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' : 'bg-indigo-600 text-white')
-                                    : (tab.id === 'manager' ? 'bg-slate-900 border border-indigo-500/30 text-indigo-400 hover:bg-slate-800' : 'bg-slate-900 text-slate-400 hover:bg-slate-800')
+                                ? (tab.id === 'manager' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' : 'bg-indigo-600 text-white')
+                                : (tab.id === 'manager' ? 'bg-slate-900 border border-indigo-500/30 text-indigo-400 hover:bg-slate-800' : 'bg-slate-900 text-slate-400 hover:bg-slate-800')
                                 }`}
                         >
                             {tab.id !== 'manager' && <tab.icon size={14} />}
@@ -509,8 +514,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                     </button>
                                                     <button
                                                         onClick={() => handleEditEntry(entry)}
-                                                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold"
-                                                        disabled={entry.status === 'SUBMITTED' && pool.status !== 'DRAFT'}
+                                                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold"
+                                                        disabled={(entry.status === 'SUBMITTED' && pool.status !== 'DRAFT') || pool.status === 'LOCKED' || pool.status === 'COMPLETED'}
                                                     >
                                                         {entry.status === 'SUBMITTED' ? 'Edit' : 'Edit Draft'}
                                                     </button>
@@ -805,9 +810,15 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-xl font-bold text-white">Pool Settings</h3>
                                 {!editingSettings ? (
-                                    <button onClick={() => setEditingSettings(true)} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 px-3 py-1.5 border border-indigo-800 rounded-lg">
-                                        <Edit3 size={12} /> Edit
-                                    </button>
+                                    ((pool.status !== 'LOCKED' && pool.status !== 'COMPLETED') || user?.role === 'SUPER_ADMIN') ? (
+                                        <button onClick={() => setEditingSettings(true)} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 px-3 py-1.5 border border-indigo-800 rounded-lg">
+                                            <Edit3 size={12} /> Edit
+                                        </button>
+                                    ) : (
+                                        <span className="text-xs text-slate-500 font-bold px-3 py-1.5 border border-slate-800 rounded-lg flex items-center gap-1">
+                                            <Lock size={12} /> Locked
+                                        </span>
+                                    )
                                 ) : (
                                     <button
                                         onClick={handleSaveSettings}

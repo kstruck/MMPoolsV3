@@ -12,8 +12,10 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { getFirestore, collection, addDoc, getDocs, updateDoc, setDoc, doc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, updateDoc, setDoc, doc, getDoc, writeBatch } from 'firebase/firestore';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
+import { Header } from '../Header';
+import { Footer } from '../Footer';
 import { calculateScore } from '../BracketPoolDashboard/bracketScoring';
 import {
     generateTournament2025,
@@ -188,6 +190,9 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             // The scoring engine (calculateScore) iterates tournament.slots and 
             // looks up entry.picks[slot.id], so picks MUST be keyed by slot.id.
             // The test data generator already uses slot-prefixed keys via getCorrectPicks(), so they're correct.
+            const batch = writeBatch(db);
+            const entriesCollection = collection(db, 'pools', newPoolId, 'entries');
+
             for (const entry of allEntries) {
                 const entryData: Omit<BracketEntry, 'id'> = {
                     poolId: newPoolId,
@@ -201,8 +206,10 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
                 };
-                await addDoc(collection(db, 'pools', newPoolId, 'entries'), entryData);
+                const entryRef = doc(entriesCollection);
+                batch.set(entryRef, entryData);
             }
+            await batch.commit();
 
             setEntryCount(allEntries.length);
             setPhase('BRACKET');
@@ -562,181 +569,185 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
     // ─── RENDER ─────────────────────────────────────────────────
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100">
-            {/* Header */}
-            <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-20">
-                <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <Trophy className="w-6 h-6 text-amber-400" />
-                        <h1 className="text-xl font-bold tracking-tight">Tournament Simulator</h1>
-                        <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
-                            2025 NCAA Men's
-                        </span>
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            <Header user={user || null} isManager={true} onOpenAuth={() => { }} onLogout={() => { }} />
+            <div className="flex-1">
+                {/* Header */}
+                <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-20">
+                    <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <Trophy className="w-6 h-6 text-amber-400" />
+                            <h1 className="text-xl font-bold tracking-tight">Tournament Simulator</h1>
+                            <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
+                                2025 NCAA Men's
+                            </span>
+                        </div>
+                        {phase !== 'SETUP' && (
+                            <button
+                                onClick={handleReset}
+                                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+                            >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                Reset
+                            </button>
+                        )}
                     </div>
-                    {phase !== 'SETUP' && (
-                        <button
-                            onClick={handleReset}
-                            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
-                        >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            Reset
-                        </button>
-                    )}
-                </div>
 
-                {/* Phase Stepper */}
-                <div className="max-w-7xl mx-auto px-4 pb-3">
-                    <div className="flex gap-1">
-                        {(['SETUP', 'BRACKET', 'SIMULATION', 'RESULTS'] as SimPhase[]).map((p, i) => {
-                            const phases: SimPhase[] = ['SETUP', 'BRACKET', 'SIMULATION', 'RESULTS'];
-                            const currentIdx = phases.indexOf(phase);
-                            const isComplete = i < currentIdx;
-                            const isCurrent = i === currentIdx;
+                    {/* Phase Stepper */}
+                    <div className="max-w-7xl mx-auto px-4 pb-3">
+                        <div className="flex gap-1">
+                            {(['SETUP', 'BRACKET', 'SIMULATION', 'RESULTS'] as SimPhase[]).map((p, i) => {
+                                const phases: SimPhase[] = ['SETUP', 'BRACKET', 'SIMULATION', 'RESULTS'];
+                                const currentIdx = phases.indexOf(phase);
+                                const isComplete = i < currentIdx;
+                                const isCurrent = i === currentIdx;
 
-                            return (
-                                <div key={p} className="flex items-center flex-1">
-                                    <div className={`
+                                return (
+                                    <div key={p} className="flex items-center flex-1">
+                                        <div className={`
                                         flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium flex-1 transition-all
                                         ${isCurrent ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : ''}
                                         ${isComplete ? 'bg-emerald-500/10 text-emerald-400' : ''}
                                         ${!isCurrent && !isComplete ? 'text-slate-600' : ''}
                                     `}>
-                                        {isComplete ? (
-                                            <Check className="w-3.5 h-3.5" />
-                                        ) : (
-                                            <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px]">
-                                                {i + 1}
-                                            </span>
-                                        )}
-                                        {PHASE_LABELS[p]}
-                                        {p === 'SIMULATION' && currentRound > 0 && isCurrent && (
-                                            <span className="text-[10px] opacity-70">R{currentRound}/6</span>
-                                        )}
+                                            {isComplete ? (
+                                                <Check className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px]">
+                                                    {i + 1}
+                                                </span>
+                                            )}
+                                            {PHASE_LABELS[p]}
+                                            {p === 'SIMULATION' && currentRound > 0 && isCurrent && (
+                                                <span className="text-[10px] opacity-70">R{currentRound}/6</span>
+                                            )}
+                                        </div>
+                                        {i < 3 && <ChevronRight className="w-3 h-3 text-slate-700 mx-1 flex-shrink-0" />}
                                     </div>
-                                    {i < 3 && <ChevronRight className="w-3 h-3 text-slate-700 mx-1 flex-shrink-0" />}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </header>
-
-            {/* Error Banner */}
-            {error && (
-                <div className="max-w-7xl mx-auto px-4 mt-4">
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-center gap-2 text-red-300 text-sm">
-                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                        {error}
-                    </div>
-                </div>
-            )}
-
-            {/* Main Content */}
-            <div className="max-w-7xl mx-auto px-4 py-6">
-                {phase === 'SETUP' && (
-                    <SetupPhase
-                        onSetup={handleSetup}
-                        onLoadTournamentOnly={handleLoadTournamentOnly}
-                        onLoadRound={handleLoadRound}
-                        onClearTournament={handleClearTournament}
-                        isLoading={isLoading}
-                    />
-                )}
-
-                {phase === 'BRACKET' && tournament && (
-                    <BracketPhase
-                        tournament={tournament}
-                        picks={userPicks}
-                        onPick={handlePick}
-                        pickCount={userPickCount}
-                        totalPicks={totalPicks}
-                        tieBreakerInput={tieBreakerInput}
-                        onTieBreakerChange={setTieBreakerInput}
-                        onSubmit={handleSubmitBracket}
-                        onSkip={handleSkipBracket}
-                        onRandomFill={handleRandomFill}
-                        onClear={handleClear}
-                        isLoading={isLoading}
-                    />
-                )}
-
-                {(phase === 'SIMULATION' || phase === 'RESULTS') && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* LEFT: Main content */}
-                        <div className="lg:col-span-2 space-y-4">
-                            {phase === 'SIMULATION' && (
-                                <SimulationControls
-                                    currentRound={currentRound}
-                                    onSimulate={handleSimulateRound}
-                                    isLoading={isLoading}
-                                />
-                            )}
-
-                            {phase === 'RESULTS' && leaderboard.length > 0 && (
-                                <ResultsBanner
-                                    winner={leaderboard[0]}
-                                    champTotal={getChampionshipTotal()}
-                                />
-                            )}
-
-                            {/* Round Results History */}
-                            {roundResults.map(result => (
-                                <RoundResultCard key={result.round} result={result} />
-                            ))}
-
-                            {/* Control Entry Validation (Results phase) */}
-                            {phase === 'RESULTS' && <ControlValidation leaderboard={leaderboard} />}
+                                );
+                            })}
                         </div>
+                    </div>
+                </header>
 
-                        {/* RIGHT: Leaderboard sidebar */}
-                        <div className="lg:col-span-1">
-                            <LeaderboardSidebar
-                                leaderboard={leaderboard}
-                                currentRound={currentRound}
-                                entryCount={entryCount}
-                                onEntryClick={handleEntryClick}
-                            />
+                {/* Error Banner */}
+                {error && (
+                    <div className="max-w-7xl mx-auto px-4 mt-4">
+                        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-center gap-2 text-red-300 text-sm">
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                            {error}
+                        </div>
+                    </div>
+                )}
+
+                {/* Main Content */}
+                <div className="max-w-7xl mx-auto px-4 py-6">
+                    {phase === 'SETUP' && (
+                        <SetupPhase
+                            onSetup={handleSetup}
+                            onLoadTournamentOnly={handleLoadTournamentOnly}
+                            onLoadRound={handleLoadRound}
+                            onClearTournament={handleClearTournament}
+                            isLoading={isLoading}
+                        />
+                    )}
+
+                    {phase === 'BRACKET' && tournament && (
+                        <BracketPhase
+                            tournament={tournament}
+                            picks={userPicks}
+                            onPick={handlePick}
+                            pickCount={userPickCount}
+                            totalPicks={totalPicks}
+                            tieBreakerInput={tieBreakerInput}
+                            onTieBreakerChange={setTieBreakerInput}
+                            onSubmit={handleSubmitBracket}
+                            onSkip={handleSkipBracket}
+                            onRandomFill={handleRandomFill}
+                            onClear={handleClear}
+                            isLoading={isLoading}
+                        />
+                    )}
+
+                    {(phase === 'SIMULATION' || phase === 'RESULTS') && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* LEFT: Main content */}
+                            <div className="lg:col-span-2 space-y-4">
+                                {phase === 'SIMULATION' && (
+                                    <SimulationControls
+                                        currentRound={currentRound}
+                                        onSimulate={handleSimulateRound}
+                                        isLoading={isLoading}
+                                    />
+                                )}
+
+                                {phase === 'RESULTS' && leaderboard.length > 0 && (
+                                    <ResultsBanner
+                                        winner={leaderboard[0]}
+                                        champTotal={getChampionshipTotal()}
+                                    />
+                                )}
+
+                                {/* Round Results History */}
+                                {roundResults.map(result => (
+                                    <RoundResultCard key={result.round} result={result} />
+                                ))}
+
+                                {/* Control Entry Validation (Results phase) */}
+                                {phase === 'RESULTS' && <ControlValidation leaderboard={leaderboard} />}
+                            </div>
+
+                            {/* RIGHT: Leaderboard sidebar */}
+                            <div className="lg:col-span-1">
+                                <LeaderboardSidebar
+                                    leaderboard={leaderboard}
+                                    currentRound={currentRound}
+                                    entryCount={entryCount}
+                                    onEntryClick={handleEntryClick}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Entry View Modal */}
+                {viewingEntry && tournament && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-7xl max-h-[95vh] flex flex-col shadow-2xl">
+                            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                                <div>
+                                    <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                                        {viewingEntry.name}
+                                        <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
+                                            Score: {viewingEntry.score}
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-slate-400">Tiebreaker: {viewingEntry.tieBreakerPrediction}</p>
+                                </div>
+                                <button
+                                    onClick={() => setViewingEntry(null)}
+                                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-auto p-4 bg-slate-950/50">
+                                {/* We re-use BracketBuilder in read-only mode */}
+                                <BracketBuilder
+                                    tournament={tournament}
+                                    picks={Object.fromEntries(
+                                        Object.entries(viewingEntry.picks).map(([k, v]) => [k.replace('slot-', ''), v])
+                                    )}
+                                    onPick={() => { }} // Read-only
+                                    readOnly={true}
+                                    viewMode="full"
+                                />
+                            </div>
                         </div>
                     </div>
                 )}
             </div>
-
-            {/* Entry View Modal */}
-            {viewingEntry && tournament && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-7xl max-h-[95vh] flex flex-col shadow-2xl">
-                        <div className="flex items-center justify-between p-4 border-b border-slate-700">
-                            <div>
-                                <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                                    {viewingEntry.name}
-                                    <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
-                                        Score: {viewingEntry.score}
-                                    </span>
-                                </h3>
-                                <p className="text-xs text-slate-400">Tiebreaker: {viewingEntry.tieBreakerPrediction}</p>
-                            </div>
-                            <button
-                                onClick={() => setViewingEntry(null)}
-                                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-auto p-4 bg-slate-950/50">
-                            {/* We re-use BracketBuilder in read-only mode */}
-                            <BracketBuilder
-                                tournament={tournament}
-                                picks={Object.fromEntries(
-                                    Object.entries(viewingEntry.picks).map(([k, v]) => [k.replace('slot-', ''), v])
-                                )}
-                                onPick={() => { }} // Read-only
-                                readOnly={true}
-                                viewMode="full"
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
+            <Footer />
         </div>
     );
 };
