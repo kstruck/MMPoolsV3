@@ -7,9 +7,11 @@ interface BracketComparisonProps {
     tournament: Tournament;
     allEntries: BracketEntry[];
     initialEntry1Id?: string;
+    initialEntry2Id?: string;
+    hideSelectors?: boolean;
 }
 
-export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament, allEntries, initialEntry1Id }) => {
+export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament, allEntries, initialEntry1Id, initialEntry2Id, hideSelectors }) => {
     // Determine initial selections
     const validEntries = allEntries.filter(e => e.status === 'SUBMITTED' || e.picks['R5-1']); // Ensure they have picks (using R5-1 as a rough check, or just user filter)
 
@@ -20,7 +22,9 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
     );
 
     const [entry2Id, setEntry2Id] = useState<string>(
-        validEntries.find(e => e.id !== entry1Id)?.id || ''
+        initialEntry2Id && validEntries.find(e => e.id === initialEntry2Id)
+            ? initialEntry2Id
+            : validEntries.find(e => e.id !== entry1Id)?.id || ''
     );
 
     const entry1 = validEntries.find(e => e.id === entry1Id);
@@ -72,67 +76,69 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
     return (
         <div className="flex flex-col gap-6">
             {/* Header / Selectors */}
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 md:p-6 shadow-xl">
-                <div className="flex gap-2 items-center mb-6 text-slate-300">
-                    <Info className="w-5 h-5 text-indigo-400" />
-                    <h2 className="text-lg font-bold text-white">Compare Brackets</h2>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                    {/* Entry 1 Selector */}
-                    <div className="flex flex-col gap-2">
-                        <label className="text-sm font-bold text-slate-400">First Bracket (Green = Match)</label>
-                        <select
-                            value={entry1Id}
-                            onChange={(e) => setEntry1Id(e.target.value)}
-                            className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 font-medium"
-                        >
-                            {validEntries.map(entry => (
-                                <option key={entry.id} value={entry.id}>{entry.name}</option>
-                            ))}
-                        </select>
+            {!hideSelectors && (
+                <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 md:p-6 shadow-xl">
+                    <div className="flex gap-2 items-center mb-6 text-slate-300">
+                        <Info className="w-5 h-5 text-indigo-400" />
+                        <h2 className="text-lg font-bold text-white">Compare Brackets</h2>
                     </div>
 
-                    {/* Entry 2 Selector */}
-                    <div className="flex flex-col gap-2">
-                        <label className="text-sm font-bold text-slate-400">Second Bracket (Red = Difference)</label>
-                        <select
-                            value={entry2Id}
-                            onChange={(e) => setEntry2Id(e.target.value)}
-                            className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-rose-500 font-medium"
-                        >
-                            {validEntries.map(entry => (
-                                <option key={entry.id} value={entry.id} disabled={entry.id === entry1Id}>
-                                    {entry.name}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-
-                {/* Stats Summary */}
-                {comparisonStats && (
-                    <div className="mt-6 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 flex flex-col md:flex-row gap-4 justify-between items-center text-sm">
-                        <div className="flex items-center gap-2">
-                            <span className="font-mono text-xl font-bold text-white">{comparisonStats.matchCount}</span>
-                            <span className="text-slate-400">/ {comparisonStats.totalPicks} matching picks</span>
-                            <span className="ml-2 px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300">
-                                {Math.round((comparisonStats.matchCount / Math.max(1, comparisonStats.totalPicks)) * 100)}% Similarity
-                            </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                        {/* Entry 1 Selector */}
+                        <div className="flex flex-col gap-2">
+                            <label className="text-sm font-bold text-slate-400">First Bracket (Green = Match)</label>
+                            <select
+                                value={entry1Id}
+                                onChange={(e) => setEntry1Id(e.target.value)}
+                                className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 font-medium"
+                            >
+                                {validEntries.map(entry => (
+                                    <option key={entry.id} value={entry.id}>{entry.name}</option>
+                                ))}
+                            </select>
                         </div>
-                        {comparisonStats.champDiff && (
-                            <div className="text-rose-400 font-semibold px-3 py-1 bg-rose-500/10 rounded border border-rose-500/20">
-                                ⚠ Different Champion Picks
-                            </div>
-                        )}
-                        {!comparisonStats.champDiff && (
-                            <div className="text-emerald-400 font-semibold px-3 py-1 bg-emerald-500/10 rounded border border-emerald-500/20">
-                                ✓ Same Champion Pick
-                            </div>
-                        )}
+
+                        {/* Entry 2 Selector */}
+                        <div className="flex flex-col gap-2">
+                            <label className="text-sm font-bold text-slate-400">Second Bracket (Red = Difference)</label>
+                            <select
+                                value={entry2Id}
+                                onChange={(e) => setEntry2Id(e.target.value)}
+                                className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-rose-500 font-medium"
+                            >
+                                {validEntries.map(entry => (
+                                    <option key={entry.id} value={entry.id} disabled={entry.id === entry1Id}>
+                                        {entry.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
+
+            {/* Stats Summary */}
+            {comparisonStats && (
+                <div className="mt-6 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 flex flex-col md:flex-row gap-4 justify-between items-center text-sm">
+                    <div className="flex items-center gap-2">
+                        <span className="font-mono text-xl font-bold text-white">{comparisonStats.matchCount}</span>
+                        <span className="text-slate-400">/ {comparisonStats.totalPicks} matching picks</span>
+                        <span className="ml-2 px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300">
+                            {Math.round((comparisonStats.matchCount / Math.max(1, comparisonStats.totalPicks)) * 100)}% Similarity
+                        </span>
+                    </div>
+                    {comparisonStats.champDiff && (
+                        <div className="text-rose-400 font-semibold px-3 py-1 bg-rose-500/10 rounded border border-rose-500/20">
+                            ⚠ Different Champion Picks
+                        </div>
+                    )}
+                    {!comparisonStats.champDiff && (
+                        <div className="text-emerald-400 font-semibold px-3 py-1 bg-emerald-500/10 rounded border border-emerald-500/20">
+                            ✓ Same Champion Pick
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Brackets Side-by-Side */}
             {entry1 && entry2 && (
@@ -169,7 +175,8 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
                         </div>
                     </div>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 };

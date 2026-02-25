@@ -15,13 +15,15 @@ import { WhatIfSimulator } from './WhatIfSimulator';
 import { BracketComparison } from './BracketComparison';
 import { BracketShareModal } from './BracketShareCard';
 import { PoolAnalytics } from './PoolAnalytics';
+import { BracketAwards } from './BracketAwards';
+import { ChalkComparison } from './ChalkComparison';
 import { ReportsTab } from './ReportsTab';
 import { LiveScoreTicker } from './LiveScoreTicker';
 import { EliminationTracker } from './EliminationTracker';
 import { BracketCountdown } from './BracketCountdown';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager';
-type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'analytics';
+type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'chalk' | 'analytics';
 
 interface BracketPoolDashboardProps {
     pool: BracketPool;
@@ -715,7 +717,10 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 {/* Standings Tab */}
                 {!loading && activeTab === 'standings' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4">
+                    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
+                        {tournament?.isFinalized && entries.length > 0 && (
+                            <BracketAwards tournament={tournament} entries={entries} />
+                        )}
                         {tournament ? (
                             <StandingsTable
                                 entries={entries}
@@ -801,6 +806,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 { id: 'rootfor' as BracketSubTab, label: 'Who to Root For' },
                                 { id: 'whatif' as BracketSubTab, label: 'What-If Simulator' },
                                 { id: 'compare' as BracketSubTab, label: 'Compare Brackets' },
+                                { id: 'chalk' as BracketSubTab, label: 'Vs. Chalk' },
                                 { id: 'analytics' as BracketSubTab, label: 'Analytics' },
                             ].map(sub => (
                                 <button
@@ -909,6 +915,19 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             ) : (
                                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
                                     <p>{!tournament ? 'Tournament data not yet available.' : 'Need at least 2 entries to compare.'}</p>
+                                </div>
+                            )
+                        )}
+
+                        {/* Vs Chalk */}
+                        {bracketSubTab === 'chalk' && (
+                            tournament && userEntries.length > 0 ? (
+                                <div className="animate-in fade-in slide-in-from-bottom-4">
+                                    <ChalkComparison tournament={tournament} userEntry={userEntries[0]} />
+                                </div>
+                            ) : (
+                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                    <p>{!tournament ? 'Tournament data not yet available.' : 'Submit a bracket to compare.'}</p>
                                 </div>
                             )
                         )}

@@ -7,10 +7,11 @@ import { Bot, Gavel, HelpCircle, CheckCircle, ChevronDown, ChevronUp, Loader } f
 interface AICommissionerProps {
     poolId: string;
     userId?: string;
+    poolType?: string;
 }
 
-export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId }) => {
-    const [activeTab, setActiveTab] = useState<'UPDATES' | 'DISPUTE' | 'DETAILS'>('UPDATES');
+export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, poolType }) => {
+    const [activeTab, setActiveTab] = useState<'UPDATES' | 'DISPUTE' | 'DETAILS' | 'INSIGHTS'>(poolType === 'BRACKET' ? 'INSIGHTS' : 'UPDATES');
     const [artifacts, setArtifacts] = useState<AIArtifact[]>([]);
     const [question, setQuestion] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -66,6 +67,28 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId }
             setIsSubmitting(false);
         }
     };
+    const submitInsight = async (promptMsg: string) => {
+        if (!promptMsg.trim() || !userId) return;
+        setIsSubmitting(true);
+        try {
+            await addDoc(collection(db, `pools/${poolId}/ai_requests`), {
+                userId,
+                poolId,
+                question: promptMsg.trim(),
+                category: 'INSIGHT',
+                status: 'PENDING',
+                createdAt: Date.now()
+            });
+            // We can switch to DISPUTE or keep in INSIGHTS if we want to show history there
+            // Let's just switch to DISPUTE where history is currently shown, or better yet, history shows everything
+            setActiveTab('DISPUTE');
+        } catch (e) {
+            console.error("Error submitting insight", e);
+            alert("Failed to request insight. Try again.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     const getArtifactForRequest = (req: AIRequest) => {
         if (!req.responseArtifactId) return null;
@@ -102,6 +125,14 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId }
                 >
                     Dispute Helper
                 </button>
+                {poolType === 'BRACKET' && (
+                    <button
+                        onClick={() => setActiveTab('INSIGHTS')}
+                        className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'INSIGHTS' ? 'text-white border-b-2 border-indigo-500 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                        Bracket Insights
+                    </button>
+                )}
             </div>
 
             {/* Content */}
@@ -193,6 +224,58 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId }
                                     </div>
                                 );
                             })}
+                        </div>
+                    </div>
+                )}
+
+                {/* INSIGHTS TAB */}
+                {activeTab === 'INSIGHTS' && (
+                    <div className="space-y-6 animate-in fade-in">
+                        <div className="bg-indigo-900/20 p-4 rounded-lg border border-indigo-500/30">
+                            <h3 className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-2">
+                                <Bot size={16} /> AI Bracket Analysis
+                            </h3>
+                            <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                                Get personalized insights about your bracket strategy. The AI Commissioner will analyze your picks against the rest of the pool and historical data.
+                            </p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <button
+                                    onClick={() => submitInsight("Analyze my bracket strategy. What is my chalk vs upset balance?")}
+                                    disabled={isSubmitting}
+                                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50"
+                                >
+                                    <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Strategy Analysis</div>
+                                    <div className="text-xs text-slate-500">Chalk vs upset balance & risk profile</div>
+                                </button>
+
+                                <button
+                                    onClick={() => submitInsight("How do my picks compare to the rest of the pool?")}
+                                    disabled={isSubmitting}
+                                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50"
+                                >
+                                    <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Pool Consensus</div>
+                                    <div className="text-xs text-slate-500">How do I compare to the field?</div>
+                                </button>
+
+                                <button
+                                    onClick={() => submitInsight("What scenarios need to happen for me to win the pool?")}
+                                    disabled={isSubmitting}
+                                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50"
+                                >
+                                    <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Path to Victory</div>
+                                    <div className="text-xs text-slate-500">What do I need to win?</div>
+                                </button>
+
+                                <button
+                                    onClick={() => submitInsight("Who is my biggest threat in this pool and where do our brackets differ most?")}
+                                    disabled={isSubmitting}
+                                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50"
+                                >
+                                    <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Biggest Threat</div>
+                                    <div className="text-xs text-slate-500">Who is my main competition?</div>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
