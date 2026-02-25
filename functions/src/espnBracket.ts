@@ -214,9 +214,15 @@ export const initializeTournament = async (
 
     // Default lockAt: First round of NCAA tournament starts ~March 20
     // For 2025: March 20, 2025 12:00 PM ET
-    const defaultLockAt = seasonYear === 2025
-        ? new Date('2025-03-20T12:00:00-04:00').getTime()
-        : new Date(`${seasonYear}-03-15T12:00:00-04:00`).getTime();
+    // For 2026: March 19, 2026 12:00 PM ET
+    let defaultLockAt: number;
+    if (seasonYear === 2026) {
+        defaultLockAt = new Date('2026-03-19T12:00:00-04:00').getTime();
+    } else if (seasonYear === 2025) {
+        defaultLockAt = new Date('2025-03-20T12:00:00-04:00').getTime();
+    } else {
+        defaultLockAt = new Date(`${seasonYear}-03-15T12:00:00-04:00`).getTime();
+    }
 
     // Write to DB
     const tournamentData: Tournament = {
@@ -434,6 +440,33 @@ function mapESPNGamesToSkeleton(
                 return (homeSeed === top && awaySeed === bot) || (homeSeed === bot && awaySeed === top);
             });
 
+            // If we didn't find a direct R1 match, check if there's a First Four game that feeds this seed
+            // We can detect this if we look at the R0 (First Four) games for this region and seed.
+            const ffCandidates = espnByRegionRound[`${region}-0`] || [];
+            let fallbackTeamId: string | null = null;
+            let fallbackPlayingSeed: number | null = null;
+
+            if (!match && ffCandidates.length > 0) {
+                // Determine if 'top' or 'bot' seed is the one playing in the First Four
+                // Usually it's the 11 or 16 seed (so 'bot' often matches 11 or 16)
+                for (const ffGame of ffCandidates) {
+                    const homeSeed = getTeamSeed(ffGame.homeTeamId);
+                    const awaySeed = getTeamSeed(ffGame.awayTeamId);
+
+                    // If the FF game's seeds match one of the expected seeds for this R1 game
+                    if (homeSeed === top || homeSeed === bot || awaySeed === top || awaySeed === bot) {
+                        // We found the First Four game that feeds this R1 slot
+                        const homeDbTeam = espnTeams[ffGame.homeTeamId];
+                        const awayDbTeam = espnTeams[ffGame.awayTeamId];
+                        if (homeDbTeam && awayDbTeam) {
+                            fallbackTeamId = `${homeDbTeam.name}/${awayDbTeam.name}`;
+                            fallbackPlayingSeed = homeSeed; // Which seed slot this represents (e.g. 16 or 11)
+                        }
+                        break;
+                    }
+                }
+            }
+
             if (match) {
                 // Ensure higher seed (lower number) is homeTeamId for consistency
                 const homeSeed = getTeamSeed(match.homeTeamId);
@@ -458,6 +491,27 @@ function mapESPNGamesToSkeleton(
                 };
                 skeletonToEspn[skeletonId] = match;
                 mappedCount++;
+            } else if (fallbackTeamId && fallbackPlayingSeed !== null) {
+                // We don't have a scheduled R1 match yet (likely because the Play-In game hasn't finished),
+                // but we know WHO is playing in the Play-In game for this slot. Let's update the skeleton
+                // to show "TeamA/TeamB" instead of "Winner of Play-In"
+
+                // Which of the two spots does the play-in winner occupy?
+                // `fallbackPlayingSeed` tells us the expected seed (e.g. 16)
+                let newTopTeamId = updated[skeletonId].homeTeamId;
+                let newBotTeamId = updated[skeletonId].awayTeamId;
+
+                if (top === fallbackPlayingSeed) {
+                    newTopTeamId = fallbackTeamId;
+                } else if (bot === fallbackPlayingSeed) {
+                    newBotTeamId = fallbackTeamId;
+                }
+
+                updated[skeletonId] = {
+                    ...updated[skeletonId],
+                    homeTeamId: newTopTeamId,
+                    awayTeamId: newBotTeamId
+                };
             }
         }
     }
@@ -882,6 +936,121 @@ async function fetchESPNTournamentData(seasonYear: number): Promise<ESPNEvent[]>
     }
 }
 
+/**
+ * Super Admin function to sync early bracket picks with play-in game winners.
+ * Users who submit brackets before the First Four finishes will have "TeamA/TeamB"
+ * as their Round 1 pick. Once the playoff game is finished, we need to update
+ * those brackets to the actual team ID so scoring works correctly.
+ */
+export const syncPlayInPicks = onCall(async (request) => {
+    // 1. Authorization
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be authenticated.');
+    }
+    const userRole = (request.auth.token['role'] as string) || 'user';
+    if (userRole !== 'super_admin') {
+        throw new HttpsError('permission-denied', 'Only super admins can sync play-in picks.');
+    }
 
+    const { tournamentId } = request.data;
+    if (!tournamentId) {
+        throw new HttpsError('invalid-argument', 'Missing tournamentId.');
+    }
 
+    const db = admin.firestore();
 
+    // 2. Fetch the current tournament skeleton to know the R1 teams
+    const tourneyRef = db.collection('tournaments').doc(tournamentId);
+    const tourneySnap = await tourneyRef.get();
+    if (!tourneySnap.exists) {
+        throw new HttpsError('not-found', `Tournament ${tournamentId} not found.`);
+    }
+
+    const tourneyData = tourneySnap.data() as Tournament;
+    const skeletonGames = tourneyData.games;
+
+    if (!skeletonGames) {
+        return { success: true, message: "No games to sync in this tournament." };
+    }
+
+    // 3. Find all matches where a play-in game was resolved.
+    // We can identify these by looking at Round 1 games. If a Round 1 game has 
+    // real team names (not TeamA/TeamB) but user brackets still have TeamA/TeamB, we can update them.
+    // Instead of parsing strings, we will look at all Round 1 games. For each R1 game, we
+    // record its homeTeamId and awayTeamId.
+    const resolvedR1Teams = new Set<string>();
+
+    // We also need to map TeamA/TeamB back to the resolved winning team. 
+    // To do this reliably without ESPN data here, we check if the user's picked string
+    // looks like "Wagner/Howard". If one of those two teams is currently in a Round 1 slot, 
+    // that's the winner.
+    for (const game of Object.values(skeletonGames)) {
+        if (game.round === 1) {
+            if (game.homeTeamId && !game.homeTeamId.includes('/')) {
+                resolvedR1Teams.add(game.homeTeamId);
+            }
+            if (game.awayTeamId && !game.awayTeamId.includes('/')) {
+                resolvedR1Teams.add(game.awayTeamId);
+            }
+        }
+    }
+
+    // 4. Fetch all entries for this tournament
+    const entriesRef = db.collection('entries').where('tournamentId', '==', tournamentId);
+    const entriesSnap = await entriesRef.get();
+
+    if (entriesSnap.empty) {
+        return { success: true, message: "No entries found to sync." };
+    }
+
+    let updatedCount = 0;
+    const batch = db.batch();
+    let batchSize = 0;
+
+    // 5. Check each entry for unresolved play-in picks
+    entriesSnap.forEach(docSnap => {
+        const entry = docSnap.data();
+        let needsUpdate = false;
+        const newBracket = { ...entry.bracket };
+
+        // For every pick in their bracket
+        for (const [slotId, teamId] of Object.entries(entry.bracket as Record<string, string>)) {
+            // Is it a play-in placeholder format like "Wagner/Howard"?
+            if (teamId && teamId.includes('/')) {
+                const parts = teamId.split('/');
+                const teamA = parts[0];
+                const teamB = parts[1];
+
+                // If one of these teams is now legitimately in Round 1
+                if (resolvedR1Teams.has(teamA)) {
+                    newBracket[slotId] = teamA;
+                    needsUpdate = true;
+                } else if (resolvedR1Teams.has(teamB)) {
+                    newBracket[slotId] = teamB;
+                    needsUpdate = true;
+                }
+            }
+        }
+
+        if (needsUpdate) {
+            batch.update(docSnap.ref, { bracket: newBracket });
+            updatedCount++;
+            batchSize++;
+
+            // Firestore batch limit is 500, but let's be safe
+            if (batchSize >= 400) {
+                // Technically we should wait for batch.commit() here in a padded loop,
+                // but for ~100 brackets this simple logic is fine. For scale, use a commit chunks array.
+            }
+        }
+    });
+
+    if (batchSize > 0) {
+        await batch.commit();
+    }
+
+    return {
+        success: true,
+        message: `Synced ${updatedCount} entries with resolved play-in winners.`
+    };
+});

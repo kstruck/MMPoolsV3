@@ -4,6 +4,7 @@ import type { GameState, Pool, User } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
+import { isSuperAdmin } from '../utils/auth';
 import { Loader } from 'lucide-react';
 
 interface ManagerDashboardProps {
@@ -83,19 +84,17 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                 let isLive = false;
                 let isLocked = false;
 
-                if (isBracket) {
-                    const bp = p as any; // BracketPool
-                    isClosed = bp.status === 'COMPLETED';
-                    isLocked = bp.status === 'LOCKED' || bp.status === 'COMPLETED';
+                if (p.type === 'BRACKET') {
+                    isClosed = p.status === 'COMPLETED';
+                    isLocked = p.status === 'LOCKED' || p.status === 'COMPLETED';
                 } else if (p.type === 'SQUARES') {
-                    const sp = p as GameState;
-                    isClosed = sp.scores?.gameStatus === 'post';
-                    isLive = sp.scores?.gameStatus === 'in';
-                    isLocked = sp.isLocked;
+                    isClosed = p.scores?.gameStatus === 'post';
+                    isLive = p.scores?.gameStatus === 'in';
+                    isLocked = p.isLocked;
                 } else {
                     isClosed = false;
                     isLive = false;
-                    isLocked = (p as any).isLocked || false;
+                    isLocked = p.isLocked || false;
                 }
 
                 if (filterStatus === 'open' && isLocked) return false;
@@ -106,7 +105,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
 
             // Price Filter
             if (filterPrice !== 'all') {
-                const cost = isBracket ? (p as any).settings?.entryFee : (p as GameState).costPerSquare;
+                let cost = 0;
+                if (p.type === 'BRACKET' || p.type === 'NFL_PLAYOFFS') cost = p.settings?.entryFee || 0;
+                else if (p.type === 'SQUARES') cost = p.costPerSquare;
+                else if (p.type === 'PROPS') cost = p.props?.cost || 0;
+
                 if (filterPrice === 'low' && cost >= 20) return false;
                 if (filterPrice === 'mid' && (cost < 20 || cost > 50)) return false;
                 if (filterPrice === 'high' && cost <= 50) return false;
@@ -119,8 +122,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                 } else if (selectedLeague === 'props') {
                     if (p.type !== 'PROPS') return false;
                 } else {
-                    if (isBracket || p.type === 'PROPS') return false;
-                    const poolLeague = (p as any).league || 'nfl';
+                    if (p.type === 'BRACKET' || p.type === 'PROPS') return false;
+                    const poolLeague = p.type === 'SQUARES' ? p.league || 'nfl' : p.type === 'NFL_PLAYOFFS' ? p.league || 'nfl' : 'nfl';
                     const isCollege = poolLeague === 'college' || poolLeague === 'ncaa';
 
                     // Allow NFL_PLAYOFFS to show up under NFL filter
@@ -145,8 +148,16 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                 return bDate - aDate;
             }
             if (sortBy === 'price') {
-                const aPrice = aIsBracket ? ((a as any).settings?.entryFee || 0) : (a as GameState).costPerSquare;
-                const bPrice = bIsBracket ? ((b as any).settings?.entryFee || 0) : (b as GameState).costPerSquare;
+                let aPrice = 0;
+                if (a.type === 'BRACKET' || a.type === 'NFL_PLAYOFFS') aPrice = a.settings?.entryFee || 0;
+                else if (a.type === 'SQUARES') aPrice = a.costPerSquare;
+                else if (a.type === 'PROPS') aPrice = a.props?.cost || 0;
+
+                let bPrice = 0;
+                if (b.type === 'BRACKET' || b.type === 'NFL_PLAYOFFS') bPrice = b.settings?.entryFee || 0;
+                else if (b.type === 'SQUARES') bPrice = b.costPerSquare;
+                else if (b.type === 'PROPS') bPrice = b.props?.cost || 0;
+
                 return bPrice - aPrice;
             }
             if (sortBy === 'fill') {
@@ -187,7 +198,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                         </h2>
                         <p className="text-slate-400 mt-2">Create, edit, and manage your Game Day Squares pools.</p>
                     </div>
-                    <button onClick={onCreatePool} className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
+                    <button
+                        onClick={isSuperAdmin(user) ? onCreatePool : undefined}
+                        disabled={!isSuperAdmin(user)}
+                        className={`px-6 py-3 rounded-lg font-bold flex items-center gap-2 shadow-lg transition-all ${isSuperAdmin(user)
+                            ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20 hover:scale-105"
+                            : "bg-slate-800 text-slate-500 cursor-not-allowed opacity-80"
+                            }`}
+                        title={isSuperAdmin(user) ? "Create a new pool" : "Pool creation is coming soon"}
+                    >
                         <Plus size={20} /> Create New Pool
                     </button>
                 </div>
@@ -212,7 +231,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                         <Globe size={48} className="mx-auto text-slate-600 mb-4" />
                         <h3 className="text-xl font-bold text-white mb-2">No Pools Yet</h3>
                         <p className="text-slate-400 font-medium mb-6">Get started by creating your first Game Day Squares pool!</p>
-                        <button onClick={onCreatePool} className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2 rounded-lg font-bold transition-colors">
+                        <button
+                            onClick={isSuperAdmin(user) ? onCreatePool : undefined}
+                            disabled={!isSuperAdmin(user)}
+                            className={`px-6 py-2 rounded-lg font-bold transition-colors ${isSuperAdmin(user)
+                                ? "bg-slate-700 hover:bg-slate-600 text-white"
+                                : "bg-slate-800 text-slate-500 cursor-not-allowed opacity-80"
+                                }`}
+                            title={isSuperAdmin(user) ? "Create a pool" : "Pool creation is coming soon"}
+                        >
                             Create Pool
                         </button>
                     </div>
@@ -247,7 +274,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                     ].map((type) => (
                                         <button
                                             key={type.id}
-                                            onClick={() => setFilterType(type.id as any)}
+                                            onClick={() => setFilterType(type.id as 'all' | 'squares' | 'props' | 'bracket' | 'playoff')}
                                             className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all flex justify-between items-center ${filterType === type.id
                                                 ? 'bg-indigo-600 text-white'
                                                 : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -309,7 +336,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                 <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${filterStatus === stat.id ? 'border-indigo-500 bg-indigo-500' : 'border-slate-600 bg-transparent'}`}>
                                                     {filterStatus === stat.id && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                                                 </div>
-                                                <input type="radio" name="status" className="hidden" checked={filterStatus === stat.id} onChange={() => setFilterStatus(stat.id as any)} />
+                                                <input type="radio" name="status" className="hidden" checked={filterStatus === stat.id} onChange={() => setFilterStatus(stat.id as 'all' | 'open' | 'locked' | 'live' | 'final')} />
                                                 <span className={`text-sm font-medium ${filterStatus === stat.id ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`}>{stat.label}</span>
                                             </div>
                                             <span className="text-xs bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full">{stat.count}</span>
@@ -332,7 +359,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                     ].map((price) => (
                                         <button
                                             key={price.id}
-                                            onClick={() => setFilterPrice(price.id as any)}
+                                            onClick={() => setFilterPrice(price.id as 'all' | 'low' | 'mid' | 'high')}
                                             className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-all ${filterPrice === price.id ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'}`}
                                         >
                                             {price.label}
@@ -380,7 +407,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                     <ArrowUpDown size={14} className="text-slate-500" />
                                     <select
                                         value={sortBy}
-                                        onChange={(e) => setSortBy(e.target.value as any)}
+                                        onChange={(e) => setSortBy(e.target.value as 'name' | 'date' | 'price' | 'fill')}
                                         className="bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500"
                                     >
                                         <option value="date">Sort by Date</option>
@@ -414,34 +441,38 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         let isLocked = false;
                                         let charityEnabled = false;
 
-                                        if (isBracket) {
-                                            const bp = pool as any;
-                                            filled = bp.entryCount || 0;
-                                            const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal;
-                                            pct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round((filled / max) * 100);
+                                        if (pool.type === 'BRACKET') {
+                                            filled = pool.entryCount || 0;
+                                            const max = pool.settings.maxEntriesTotal === -1 ? 100 : pool.settings.maxEntriesTotal;
+                                            pct = pool.settings.maxEntriesTotal === -1 ? 0 : Math.round((filled / max) * 100);
                                             homeTeam = 'Tournament';
                                             awayTeam = 'Bracket';
-                                            cost = bp.settings.entryFee;
-                                            isLocked = bp.status !== 'DRAFT' && bp.status !== 'PUBLISHED';
+                                            cost = pool.settings.entryFee;
+                                            isLocked = pool.status !== 'DRAFT' && pool.status !== 'PUBLISHED';
                                         } else if (pool.type === 'SQUARES') {
-                                            const sp = pool as GameState;
-                                            filled = sp.squares?.filter(s => s.owner).length || 0;
+                                            filled = pool.squares?.filter(s => s.owner).length || 0;
                                             pct = Math.round((filled / 100) * 100);
-                                            homeTeam = sp.homeTeam;
-                                            awayTeam = sp.awayTeam;
-                                            homeLogo = sp.homeTeamLogo || getTeamLogo(sp.homeTeam);
-                                            awayLogo = sp.awayTeamLogo || getTeamLogo(sp.awayTeam);
-                                            cost = sp.costPerSquare;
-                                            isLocked = sp.isLocked;
-                                            charityEnabled = !!sp.charity?.enabled;
-                                        } else {
-                                            const pp = pool as any;
-                                            filled = Object.keys(pp.entries || {}).length || pp.entryCount || 0;
+                                            homeTeam = pool.homeTeam;
+                                            awayTeam = pool.awayTeam;
+                                            homeLogo = pool.homeTeamLogo || getTeamLogo(pool.homeTeam);
+                                            awayLogo = pool.awayTeamLogo || getTeamLogo(pool.awayTeam);
+                                            cost = pool.costPerSquare;
+                                            isLocked = pool.isLocked;
+                                            charityEnabled = !!pool.charity?.enabled;
+                                        } else if (pool.type === 'NFL_PLAYOFFS') {
+                                            filled = Object.keys(pool.entries || {}).length || 0;
                                             pct = 0;
-                                            homeTeam = pp.name || 'Pool';
-                                            awayTeam = pool.type === 'NFL_PLAYOFFS' ? 'Playoffs' : 'Props';
-                                            cost = pp.settings?.entryFee || 0;
-                                            isLocked = pp.isLocked || false;
+                                            homeTeam = pool.name || 'Pool';
+                                            awayTeam = 'Playoffs';
+                                            cost = pool.settings?.entryFee || 0;
+                                            isLocked = pool.isLocked || false;
+                                        } else if (pool.type === 'PROPS') {
+                                            filled = pool.entryCount || 0;
+                                            pct = 0;
+                                            homeTeam = pool.name || 'Pool';
+                                            awayTeam = 'Props';
+                                            cost = pool.props?.cost || 0;
+                                            isLocked = pool.isLocked || false;
                                         }
 
                                         return (
@@ -461,7 +492,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                             <div>
                                                                 <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1 flex items-center gap-2">
                                                                     {pool.name}
-                                                                    {!(isBracket ? (pool as any).isListedPublic : (pool as GameState).isPublic) && <Lock size={12} className="text-amber-500" />}
+                                                                    {!(pool.type === 'BRACKET' ? pool.isListedPublic : pool.isPublic) && <Lock size={12} className="text-amber-500" />}
                                                                 </h3>
                                                                 <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
                                                                     <span>{isBracket ? 'Bracket Pool' : pool.type === 'PROPS' ? 'Side Hustle' : pool.type === 'NFL_PLAYOFFS' ? 'Playoff Pool' : 'Squares Pool'}</span>
@@ -491,11 +522,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                             <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
                                                                 {(() => {
                                                                     if (pool.type === 'BRACKET') {
-                                                                        return (pool as any).lockAt ? new Date((pool as any).lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD';
+                                                                        return pool.lockAt ? new Date(pool.lockAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD';
                                                                     } else if (pool.type === 'NFL_PLAYOFFS') {
-                                                                        return (pool as any).lockDate ? new Date((pool as any).lockDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD';
-                                                                    } else if (pool.type === 'SQUARES' && (pool as GameState).scores?.startTime) {
-                                                                        return new Date((pool as GameState).scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                                                                        return pool.lockDate ? new Date(pool.lockDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Date TBD';
+                                                                    } else if (pool.type === 'SQUARES' && pool.scores?.startTime) {
+                                                                        return new Date(pool.scores.startTime!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                                                                     } else {
                                                                         return 'Date TBD';
                                                                     }

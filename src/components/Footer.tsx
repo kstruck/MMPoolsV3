@@ -11,7 +11,7 @@ export const Footer: React.FC = () => {
                         <h4 className="text-white font-bold mb-4">Products</h4>
                         <div className="flex flex-col gap-2">
                             <Link to="/march-madness" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">March Madness Pools</Link>
-                            <Link to="/super-bowl-squares" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Super Bowl Squares</Link>
+                            <Link to="/gameday-squares" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Super Bowl Squares</Link>
                             <Link to="/nfl-playoffs" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">NFL Playoff Pools</Link>
                             <Link to="/custom-sports" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Custom Sports Betting</Link>
                         </div>
@@ -21,7 +21,7 @@ export const Footer: React.FC = () => {
                         <div className="flex flex-col gap-2">
                             <Link to="/how-it-works" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">How It Works</Link>
                             <Link to="/pricing" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Pricing</Link>
-                            <Link to="/blog/pool-hosting-guide" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Blog & Guides</Link>
+                            <Link to="/articles/bracket-pool-guide" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Blog & Guides</Link>
                             <Link to="/support" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Help Center & FAQ</Link>
                         </div>
                     </div>

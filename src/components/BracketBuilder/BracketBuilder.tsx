@@ -210,7 +210,8 @@ const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right'; el
     const r4Games = getGames(4); // 1 game
 
     // Dynamic classes based on alignment
-    const containerClasses = `flex gap-2 sm:gap-4 justify-center scale-90 sm:scale-100 origin-top ${align === 'right' ? 'flex-row-reverse' : ''}`;
+    // Use scale-75 or scale-x to shrink nicely without horizontal scrolling out of bounds on standard sizes
+    const containerClasses = `flex gap-2 sm:gap-4 justify-center scale-[0.65] sm:scale-75 md:scale-90 xl:scale-75 2xl:scale-100 origin-top ${align === 'right' ? 'flex-row-reverse' : ''}`;
 
     return (
         <div className={containerClasses}>

@@ -49,8 +49,11 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
 
     const diffStatus = (comparisonPicks && game && pickedTeamId) ? (pickedTeamId === comparisonPicks[game.id] ? 'same' : 'diff') : null;
 
+    // Make nodes slightly narrower if we are in comparison mode to fit two brackets better
+    const nodeWidth = comparisonPicks ? 'w-32 sm:w-36' : 'w-40';
+
     return (
-        <div className={`flex flex-col border border-slate-700 bg-slate-900 rounded overflow-hidden w-40 shadow-sm transition-all ${isChampionship ? 'scale-110 border-amber-500/50 shadow-amber-900/20' : 'hover:border-slate-600'} ${diffStatus ? 'z-10' : ''}`}>
+        <div className={`flex flex-col border border-slate-700 bg-slate-900 rounded overflow-hidden ${nodeWidth} shadow-sm transition-all ${isChampionship ? 'scale-110 border-amber-500/50 shadow-amber-900/20' : 'hover:border-slate-600'} ${diffStatus ? 'z-10' : ''}`}>
             <TeamSlot
                 teamId={displayHomeId}
                 seed={undefined}
@@ -111,7 +114,7 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
             onClick={onClick}
             disabled={disabled}
             className={`
-                w-full px-2 h-9 flex items-center justify-between transition-colors text-left relative overflow-hidden
+                w-full px-1 sm:px-2 h-9 flex items-center justify-between transition-colors text-left relative overflow-hidden
                 ${isPicked
                     ? pickStatus === 'incorrect' ? 'bg-red-500/20 text-red-200' : 'bg-amber-600/90 text-white'
                     : 'hover:bg-slate-800 text-slate-300'
@@ -122,20 +125,20 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
                 ${diffStatus === 'same' ? 'ring-2 ring-emerald-500 relative z-20' : diffStatus === 'diff' ? 'ring-2 ring-rose-500 relative z-20' : ''}
             `}
         >
-            <div className="flex items-center gap-2 w-full overflow-hidden z-10">
+            <div className="flex items-center gap-1 sm:gap-2 w-full overflow-hidden z-10">
                 {logoUrl ? (
-                    <img src={logoUrl} alt={teamName} className="w-5 h-5 object-contain" />
+                    <img src={logoUrl} alt={teamName} className="w-4 h-4 sm:w-5 sm:h-5 object-contain" />
                 ) : (
                     seed && <span className="text-[10px] font-mono opacity-60 w-3">{seed}</span>
                 )}
 
-                <span className={`text-xs font-bold truncate tracking-tight flex-1 ${!teamId ? 'italic opacity-40' : ''} ${isEliminated ? 'line-through decoration-red-500/50' : ''}`}>
+                <span className={`text-[10px] sm:text-xs font-bold truncate tracking-tight flex-1 ${!teamId ? 'italic opacity-40' : ''} ${isEliminated ? 'line-through decoration-red-500/50' : ''}`}>
                     {teamName}
                 </span>
             </div>
 
             {/* Status Icons */}
-            <div className="z-10 ml-1">
+            <div className="z-10 ml-0.5 sm:ml-1 shrink-0">
                 {pickStatus === 'correct' && <Check className="w-3.5 h-3.5 text-white" />}
                 {pickStatus === 'incorrect' && <X className="w-3.5 h-3.5 text-red-500" />}
                 {isWinner && !pickStatus && <Check className="w-3.5 h-3.5 text-emerald-400" />}

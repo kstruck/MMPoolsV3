@@ -21,9 +21,10 @@ import { ReportsTab } from './ReportsTab';
 import { LiveScoreTicker } from './LiveScoreTicker';
 import { EliminationTracker } from './EliminationTracker';
 import { BracketCountdown } from './BracketCountdown';
+import { AICommissioner } from '../AICommissioner';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager';
-type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'chalk' | 'analytics';
+type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'chalk' | 'analytics' | 'insights';
 
 interface BracketPoolDashboardProps {
     pool: BracketPool;
@@ -808,6 +809,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 { id: 'compare' as BracketSubTab, label: 'Compare Brackets' },
                                 { id: 'chalk' as BracketSubTab, label: 'Vs. Chalk' },
                                 { id: 'analytics' as BracketSubTab, label: 'Analytics' },
+                                { id: 'insights' as BracketSubTab, label: '✨ AI Insights' },
                             ].map(sub => (
                                 <button
                                     key={sub.id}
@@ -943,6 +945,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     <p>{!tournament ? 'Tournament data not yet available.' : 'Need at least 1 entry for analytics.'}</p>
                                 </div>
                             )
+                        )}
+
+                        {/* AI Insights */}
+                        {bracketSubTab === 'insights' && (
+                            <div className="animate-in fade-in slide-in-from-bottom-4">
+                                <AICommissioner poolId={pool.id} userId={user?.id} poolType="BRACKET" />
+                            </div>
                         )}
                     </div>
                 )}

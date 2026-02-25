@@ -143,7 +143,7 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
             {/* Brackets Side-by-Side */}
             {entry1 && entry2 && (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex flex-col">
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-w-0">
                         <div className="bg-slate-900/80 p-3 border-b border-slate-700 text-center font-bold truncate">
                             {entry1.name}
                         </div>
@@ -159,7 +159,7 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
                         </div>
                     </div>
 
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex flex-col">
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-w-0">
                         <div className="bg-slate-900/80 p-3 border-b border-slate-700 text-center font-bold truncate">
                             {entry2.name}
                         </div>

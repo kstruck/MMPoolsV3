@@ -217,7 +217,7 @@ const App: React.FC = () => {
             <BrowsePools user={user} pools={pools} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
           } />
 
-          <Route path="/features" element={<FeaturesPage user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} />} />
+          <Route path="/features" element={<FeaturesPage user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/how-it-works" element={<HowItWorksPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/privacy" element={<PrivacyPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/terms" element={<TermsPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
@@ -304,54 +304,56 @@ const App: React.FC = () => {
 
           {/* Creation Wizards */}
           <Route path="/create-pool" element={
-            <CreatePoolSelection
-              user={user}
-              isManager={false}
-              onSelectSquares={handleSquaresPoolCreate}
-              onSelectBracket={() => navigate('/bracket-wizard')}
-              onSelectPlayoff={() => navigate('/playoff-wizard')}
-              onSelectProps={() => navigate('/props-wizard')}
-              onOpenAuth={handleOpenAuth}
-              onLogout={handleLogout}
-              onCreatePool={handleCreatePoolClick}
-            />
+            isAdmin ? (
+              <CreatePoolSelection
+                user={user}
+                isManager={false}
+                onSelectSquares={handleSquaresPoolCreate}
+                onSelectBracket={() => navigate('/bracket-wizard')}
+                onSelectPlayoff={() => navigate('/playoff-wizard')}
+                onSelectProps={() => navigate('/props-wizard')}
+                onOpenAuth={handleOpenAuth}
+                onLogout={handleLogout}
+                onCreatePool={handleCreatePoolClick}
+              />
+            ) : <Navigate to="/" replace />
           } />
           <Route path="/bracket-wizard" element={
-            user ? (
+            isAdmin && user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
-            ) : <Navigate to="/create-pool" />
+            ) : <Navigate to="/" replace />
           } />
           <Route path="/playoff-wizard" element={
-            user ? (
+            isAdmin && user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
-            ) : <Navigate to="/create-pool" />
+            ) : <Navigate to="/" replace />
           } />
           <Route path="/props-wizard" element={
-            user ? (
+            isAdmin && user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
-            ) : <Navigate to="/create-pool" />
+            ) : <Navigate to="/" replace />
           } />
 
           <Route path="/grid-wizard" element={
-            user ? (
+            isAdmin && user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
                 <Footer />
               </div>
-            ) : <Navigate to="/create-pool" />
+            ) : <Navigate to="/" replace />
           } />
 
           <Route path="*" element={<Navigate to="/" replace />} />

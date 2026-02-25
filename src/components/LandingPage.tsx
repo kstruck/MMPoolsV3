@@ -4,6 +4,7 @@ import { Trophy, LayoutGrid, CheckCircle2, Heart, BarChart3, Users } from 'lucid
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { Countdown } from './Countdown';
+import { isSuperAdmin } from '../utils/auth';
 
 interface LandingPageProps {
   user?: User | null;
@@ -137,9 +138,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200 mb-8">
             <button
-              onClick={onCreatePool}
-              className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-2 hover:brightness-110"
+              onClick={isSuperAdmin(user) ? onCreatePool : undefined}
+              disabled={!isSuperAdmin(user)}
+              className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
               style={{ backgroundColor: BRAND.orange, boxShadow: `0 10px 40px ${BRAND.orange}40` }}
+              title={isSuperAdmin(user) ? "Create a Bracket Pool" : "Pool creation is coming soon"}
             >
               <Trophy size={20} /> Create a Bracket Pool
             </button>
@@ -394,9 +397,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-5xl font-black text-white mb-8" style={{ fontFamily: "'Montserrat', sans-serif" }}>Ready to Fill Your Bracket?</h2>
           <button
-            onClick={isLoggedIn ? onCreatePool : onSignup}
-            className="text-white px-10 py-5 rounded-full text-xl font-black transition-all transform hover:scale-105 mb-4 hover:brightness-110"
+            onClick={isSuperAdmin(user) ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
+            disabled={!isSuperAdmin(user)}
+            className="text-white px-10 py-5 rounded-full text-xl font-black transition-all transform hover:scale-105 mb-4 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:brightness-100"
             style={{ backgroundColor: BRAND.orange, boxShadow: `0 0 40px ${BRAND.orange}50` }}
+            title={isSuperAdmin(user) ? "Create Your Free Pool Now" : "Pool creation is coming soon"}
           >
             Create Your Free Pool Now
           </button>

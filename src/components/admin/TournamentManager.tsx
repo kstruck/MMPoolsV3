@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirestore, doc, onSnapshot, updateDoc, collection, getDocs } from 'firebase/firestore';
@@ -20,6 +19,7 @@ export const TournamentManager: React.FC = () => {
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [importing, setImporting] = useState(false);
+    const [syncingPlayIns, setSyncingPlayIns] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -49,6 +49,18 @@ export const TournamentManager: React.FC = () => {
                     isFinalized: data.isFinalized || false,
                 });
             });
+
+            // Inject 2026 Men's if not present so it can be initialized
+            if (!options.some(o => o.id === 'mens-2026')) {
+                options.push({
+                    id: 'mens-2026',
+                    label: "Men's 2026 (Uninitialized)",
+                    seasonYear: 2026,
+                    gender: 'mens',
+                    isFinalized: false
+                });
+            }
+
             // Sort: active first, then by year descending
             options.sort((a, b) => {
                 if (a.isFinalized !== b.isFinalized) return a.isFinalized ? 1 : -1;
@@ -306,10 +318,34 @@ export const TournamentManager: React.FC = () => {
                         <RefreshCw className={isLoading ? "animate-spin" : ""} />
                         Re-Initialize Skeleton
                     </button>
+
+                    <button
+                        onClick={async () => {
+                            setSyncingPlayIns(true);
+                            setError(null);
+                            setSuccessMsg('');
+                            try {
+                                const functions = getFunctions();
+                                const syncFn = httpsCallable(functions, 'syncPlayInPicks');
+                                const res = await syncFn({ tournamentId: selectedTournamentId });
+                                setSuccessMsg((res.data as { message?: string })?.message || 'Play-in picks synced successfully!');
+                            } catch (err: unknown) {
+                                setError(err instanceof Error ? err.message : 'Error syncing play-in picks.');
+                            } finally {
+                                setSyncingPlayIns(false);
+                            }
+                        }}
+                        disabled={syncingPlayIns || importing}
+                        className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+                    >
+                        {syncingPlayIns ? <RefreshCw className="animate-spin" /> : <Users />}
+                        {syncingPlayIns ? 'Syncing...' : 'Sync Early Bracket Picks'}
+                    </button>
                 </div>
                 <p className="mt-2 text-xs text-slate-500 text-center">
                     Importing will fetch live data from ESPN and update the tournament document.
                     Re-initializing will reset the bracket structure to a clean state.
+                    Sync Early Bracket Picks will process brackets submitted prior to the play-in games.
                 </p>
             </div>
 

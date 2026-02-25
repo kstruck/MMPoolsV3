@@ -4,6 +4,7 @@ import { Trophy, Zap, Shield, LayoutGrid, CheckCircle2, Heart, Globe, ArrowRight
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { Link } from 'react-router-dom';
+import { isSuperAdmin } from '../utils/auth';
 
 interface GamedaySquaresLandingProps {
     user?: User | null;
@@ -59,9 +60,11 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200 mb-8">
                         <button
-                            onClick={onCreatePool}
-                            className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-2 hover:brightness-110"
+                            onClick={isSuperAdmin(user) ? onCreatePool : undefined}
+                            disabled={!isSuperAdmin(user)}
+                            className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
                             style={{ backgroundColor: BRAND.orange, boxShadow: `0 10px 40px ${BRAND.orange}40` }}
+                            title={isSuperAdmin(user) ? "Create a Squares Pool" : "Pool creation is coming soon"}
                         >
                             <LayoutGrid size={20} /> Create a Squares Pool
                         </button>
@@ -200,9 +203,11 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                                 Ready to host? Our intuitive Setup Wizard guides you through every step: selecting the game matchup, configuring payout percentages, setting reminder limits, and more. Creating a professional sports pool has never been easier.
                             </p>
                             <button
-                                onClick={isLoggedIn ? onCreatePool : onSignup}
-                                className="mt-4 px-8 py-3 rounded-full font-bold text-white transition-transform hover:scale-105 shadow-lg shadow-pink-500/25"
+                                onClick={isSuperAdmin(user) ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
+                                disabled={!isSuperAdmin(user)}
+                                className="mt-4 px-8 py-3 rounded-full font-bold text-white transition-transform hover:scale-105 shadow-lg shadow-pink-500/25 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                                 style={{ backgroundColor: '#DB2777' }} // Pink-600
+                                title={isSuperAdmin(user) ? "Create Your Pool" : "Pool creation is coming soon"}
                             >
                                 Create Your Pool
                             </button>
@@ -252,9 +257,11 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         </div>
 
                         <button
-                            onClick={isLoggedIn ? onCreatePool : onSignup}
-                            className="text-white px-10 py-5 rounded-full text-xl font-black transition-all transform hover:scale-105 mb-4 hover:brightness-110"
+                            onClick={isSuperAdmin(user) ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
+                            disabled={!isSuperAdmin(user)}
+                            className="text-white px-10 py-5 rounded-full text-xl font-black transition-all transform hover:scale-105 mb-4 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:brightness-100"
                             style={{ backgroundColor: BRAND.orange, boxShadow: `0 0 40px ${BRAND.orange}50` }}
+                            title={isSuperAdmin(user) ? "Create Your Grid Now" : "Pool creation is coming soon"}
                         >
                             Create Your Grid Now
                         </button>

@@ -4,14 +4,16 @@ import { Shield, Brain, Zap, Lock, Mail, Layout, Users, Trophy, MessageCircle, S
 import { Header } from './Header';
 import type { User } from '../types';
 import { Footer } from './Footer';
+import { isSuperAdmin } from '../utils/auth';
 
 interface FeaturesPageProps {
     user: User | null;
     onOpenAuth: () => void;
     onLogout: () => void;
+    onCreatePool: () => void;
 }
 
-export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, onLogout }) => {
+export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, onLogout, onCreatePool }) => {
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
             <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} />
@@ -33,7 +35,12 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                             Featuring AI-driven dispute resolution, military-grade audit logs, and real-time live scoring.
                         </p>
                         <div className="flex flex-col sm:flex-row justify-center gap-4">
-                            <button onClick={onOpenAuth} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-transform hover:scale-105 shadow-lg shadow-indigo-500/20 flex items-center gap-2">
+                            <button
+                                onClick={isSuperAdmin(user) ? (user ? onCreatePool : onOpenAuth) : undefined}
+                                disabled={!isSuperAdmin(user)}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-transform hover:scale-105 shadow-lg shadow-indigo-500/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:bg-indigo-600"
+                                title={isSuperAdmin(user) ? "Create Your Pool" : "Pool creation is coming soon"}
+                            >
                                 <Trophy size={20} /> Create Your Pool
                             </button>
                             <button onClick={() => window.location.href = '/browse'} className="bg-white hover:bg-slate-50 text-slate-900 px-8 py-4 rounded-xl font-bold text-lg border border-slate-200 transition-colors flex items-center gap-2">
@@ -306,7 +313,12 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <h2 className="text-3xl md:text-5xl font-black text-white mb-6 relative z-10">Ready to Start?</h2>
                         <p className="text-indigo-100 text-lg mb-8 relative z-10">Create your pool in seconds. No spreadsheets, no stress.</p>
 
-                        <button onClick={onOpenAuth} className="bg-white text-indigo-600 px-8 py-3 rounded-xl font-bold text-lg hover:bg-indigo-50 transition-colors relative z-10 shadow-xl">
+                        <button
+                            onClick={isSuperAdmin(user) ? (user ? onCreatePool : onOpenAuth) : undefined}
+                            disabled={!isSuperAdmin(user)}
+                            className="bg-white text-indigo-600 px-8 py-3 rounded-xl font-bold text-lg hover:bg-indigo-50 transition-colors relative z-10 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+                            title={isSuperAdmin(user) ? "Create Your Pool Free" : "Pool creation is coming soon"}
+                        >
                             Create Your Pool Free
                         </button>
                     </div>

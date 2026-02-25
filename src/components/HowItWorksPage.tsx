@@ -4,6 +4,7 @@ import { Footer } from './Footer';
 import type { User } from '../types';
 import { HelpCircle, CheckCircle, Shield, Trophy, LayoutGrid } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
+import { isSuperAdmin } from '../utils/auth';
 
 interface Props {
     user: User | null;
@@ -89,16 +90,16 @@ export const HowItWorksPage: React.FC<Props> = (props) => {
                     } to-transparent pointer-events-none`} />
                 <div className="max-w-4xl mx-auto px-6 py-20 relative z-10">
                     <div className={`inline-block px-3 py-1 border rounded-full text-xs font-bold uppercase tracking-wider mb-6 ${activeSport === 'squares'
-                            ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400'
-                            : 'bg-orange-500/10 border-orange-500/20 text-orange-400'
+                        ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400'
+                        : 'bg-orange-500/10 border-orange-500/20 text-orange-400'
                         }`}>
                         {activeSport === 'squares' ? 'Squares Guide' : 'Bracket Guide'}
                     </div>
                     <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6 leading-tight">
                         How{' '}
                         <span className={`text-transparent bg-clip-text bg-gradient-to-r ${activeSport === 'squares'
-                                ? 'from-indigo-400 to-blue-400'
-                                : 'from-orange-400 to-amber-400'
+                            ? 'from-indigo-400 to-blue-400'
+                            : 'from-orange-400 to-amber-400'
                             }`}>
                             {activeSport === 'squares' ? 'Squares Pools' : 'Bracket Pools'}
                         </span>{' '}
@@ -120,8 +121,8 @@ export const HowItWorksPage: React.FC<Props> = (props) => {
                         <button
                             onClick={() => handleSportChange('brackets')}
                             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeSport === 'brackets'
-                                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
-                                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                                : 'text-slate-400 hover:text-white hover:bg-slate-800'
                                 }`}
                         >
                             <Trophy size={16} />
@@ -130,8 +131,8 @@ export const HowItWorksPage: React.FC<Props> = (props) => {
                         <button
                             onClick={() => handleSportChange('squares')}
                             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeSport === 'squares'
-                                    ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                                : 'text-slate-400 hover:text-white hover:bg-slate-800'
                                 }`}
                         >
                             <LayoutGrid size={16} />
@@ -150,8 +151,8 @@ export const HowItWorksPage: React.FC<Props> = (props) => {
                         {steps.map((step, idx) => (
                             <div key={idx} className="flex gap-4 items-start p-4 rounded-xl hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all">
                                 <div className={`${accentColor === 'indigo'
-                                        ? 'bg-indigo-900/30 text-indigo-400'
-                                        : 'bg-orange-900/30 text-orange-400'
+                                    ? 'bg-indigo-900/30 text-indigo-400'
+                                    : 'bg-orange-900/30 text-orange-400'
                                     } font-black text-xl w-10 h-10 rounded-full flex items-center justify-center shrink-0`}>
                                     {idx + 1}
                                 </div>
@@ -264,8 +265,8 @@ export const HowItWorksPage: React.FC<Props> = (props) => {
 
                 {/* Fairness */}
                 <div className={`flex gap-4 p-6 rounded-xl mb-20 border ${activeSport === 'squares'
-                        ? 'bg-amber-900/10 border-amber-800'
-                        : 'bg-orange-900/10 border-orange-800'
+                    ? 'bg-amber-900/10 border-amber-800'
+                    : 'bg-orange-900/10 border-orange-800'
                     }`}>
                     <Shield className={activeSport === 'squares' ? 'text-amber-500' : 'text-orange-500'} size={32} />
                     <div>
@@ -291,7 +292,12 @@ export const HowItWorksPage: React.FC<Props> = (props) => {
                             }
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                            <button onClick={props.onCreatePool} className="inline-flex items-center gap-2 bg-white text-orange-900 hover:bg-orange-50 px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-xl shadow-orange-900/20">
+                            <button
+                                onClick={isSuperAdmin(props.user) ? props.onCreatePool : undefined}
+                                disabled={!isSuperAdmin(props.user)}
+                                className="inline-flex items-center gap-2 bg-white text-orange-900 hover:bg-orange-50 px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-xl shadow-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:bg-white"
+                                title={isSuperAdmin(props.user) ? (activeSport === 'squares' ? 'Create a Squares Pool' : 'Create a Bracket Pool') : "Pool creation is coming soon"}
+                            >
                                 {activeSport === 'squares' ? 'Create a Squares Pool' : 'Create a Bracket Pool'}
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
                             </button>

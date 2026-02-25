@@ -121,9 +121,13 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 )}
 
                                 <button
-                                    onClick={onCreatePool}
-                                    className="text-xs bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold"
-                                    title="Create a new pool"
+                                    onClick={isSuperAdmin(user) ? onCreatePool : undefined}
+                                    disabled={!isSuperAdmin(user)}
+                                    className={`text-xs px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-bold ${isSuperAdmin(user)
+                                        ? "bg-orange-500 hover:bg-orange-600 text-white"
+                                        : "bg-slate-700 text-slate-400 cursor-not-allowed opacity-70"
+                                        }`}
+                                    title={isSuperAdmin(user) ? "Create a new pool" : "Pool creation is coming soon"}
                                 >
                                     <LayoutGrid size={14} /> {(isManager || canCreatePool(user)) ? "Create a New Pool" : "Create your own pool"}
                                 </button>
