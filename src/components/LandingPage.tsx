@@ -3,6 +3,7 @@ import type { User } from '../types';
 import { Trophy, LayoutGrid, CheckCircle2, Heart, BarChart3, Users } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
+import { Countdown } from './Countdown';
 
 interface LandingPageProps {
   user?: User | null;
@@ -128,6 +129,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ backgroundColor: `${BRAND.orange}20`, border: `1px solid ${BRAND.orange}40` }}>
             <span className="flex h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: BRAND.orange }}></span>
             <span className="text-xs font-bold tracking-wide uppercase" style={{ color: BRAND.orange }}>2026 Tournament Registration Open</span>
+          </div>
+
+          <div className="flex justify-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
+            <Countdown />
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200 mb-8">
