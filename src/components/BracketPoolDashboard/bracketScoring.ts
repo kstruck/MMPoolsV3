@@ -14,6 +14,8 @@ export interface ScoringResult {
     score: number;
     maxPossibleScore: number;
     correctPicks: number;
+    upsetBonusPoints?: number;
+    upsetCount?: number;
     /** Per-round breakdown: { round: number, correct: number, possible: number, points: number } */
     roundBreakdown: RoundBreakdown[];
 }
@@ -58,6 +60,15 @@ export function isTeamAlive(teamId: string, tournament: Tournament): boolean {
     return true;
 }
 
+export function extractSeedFromTeamId(teamId: string | undefined | null): number | null {
+    if (!teamId) return null;
+    // Expected format: "E1-Duke" or "S10-NorthCarolina"
+    const match = teamId.match(/^[A-Za-z]+(\d+)-/);
+    if (match) return parseInt(match[1], 10);
+    return null;
+}
+
+
 export function calculateScore(
     entry: BracketEntry,
     tournament: Tournament,
@@ -66,6 +77,8 @@ export function calculateScore(
     let totalScore = 0;
     let maxPossible = 0;
     let correctPicks = 0;
+    let upsetBonusPoints = 0;
+    let upsetCount = 0;
     const roundMap = new Map<number, { correct: number; possible: number; points: number; maxPoints: number }>();
 
     // Init rounds
@@ -74,6 +87,8 @@ export function calculateScore(
     }
 
     const allSlots = Object.values(tournament.slots);
+    const upsetBonusEnabled = settings.upsetBonus?.enabled;
+    const upsetMultiplier = settings.upsetBonus?.multiplier || 0;
 
     for (const slot of allSlots) {
         const pickedTeamId = entry.picks[slot.id];
@@ -97,11 +112,51 @@ export function calculateScore(
                 rd.correct++;
                 rd.points += pointsValue;
                 rd.maxPoints += pointsValue;
+
+                // Upset Bonus Logic (Calculated on actual match outcome)
+                if (upsetBonusEnabled) {
+                    // Lower rank = bigger upset, so winnerSeed > loserSeed
+                    const winnerSeed = extractSeedFromTeamId(game.winnerTeamId);
+                    const loserId = game.homeTeamId === game.winnerTeamId ? game.awayTeamId : game.homeTeamId;
+                    const loserSeed = extractSeedFromTeamId(loserId);
+
+                    if (winnerSeed && loserSeed && winnerSeed > loserSeed) {
+                        const bonus = (winnerSeed - loserSeed) * upsetMultiplier;
+                        upsetBonusPoints += bonus;
+                        totalScore += bonus;
+                        maxPossible += bonus;
+                        upsetCount++;
+                        rd.points += bonus;
+                        rd.maxPoints += bonus;
+                    }
+                }
             }
         } else {
             if (isTeamAlive(pickedTeamId, tournament)) {
                 maxPossible += pointsValue;
                 rd.maxPoints += pointsValue;
+
+                // Max possible upset bonus (Optimistic)
+                if (upsetBonusEnabled) {
+                    const pickSeed = extractSeedFromTeamId(pickedTeamId);
+                    if (pickSeed) {
+                        const opponentId = game.homeTeamId === pickedTeamId ? game.awayTeamId : (game.awayTeamId === pickedTeamId ? game.homeTeamId : null);
+                        if (opponentId && isTeamAlive(opponentId, tournament)) {
+                            // Known opponent
+                            const oppSeed = extractSeedFromTeamId(opponentId);
+                            if (oppSeed && pickSeed > oppSeed) {
+                                const bonus = (pickSeed - oppSeed) * upsetMultiplier;
+                                maxPossible += bonus;
+                                rd.maxPoints += bonus;
+                            }
+                        } else if (!opponentId && pickSeed > 1) {
+                            // Unknown opponent - assume best case upset scenario (playing a 1 seed)
+                            const bonus = (pickSeed - 1) * upsetMultiplier;
+                            maxPossible += bonus;
+                            rd.maxPoints += bonus;
+                        }
+                    }
+                }
             }
         }
     }
@@ -116,7 +171,7 @@ export function calculateScore(
         });
     }
 
-    return { score: totalScore, maxPossibleScore: maxPossible, correctPicks, roundBreakdown };
+    return { score: totalScore, maxPossibleScore: maxPossible, correctPicks, upsetBonusPoints, upsetCount, roundBreakdown };
 }
 
 /**

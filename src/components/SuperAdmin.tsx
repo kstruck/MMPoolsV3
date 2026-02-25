@@ -151,6 +151,48 @@ export const SuperAdmin: React.FC = () => {
         });
     };
 
+    const handleSeedNCAAProps = async () => {
+        if (!confirm('Seed NCAA March Madness props into the library?')) return;
+
+        const ncaaProps = [
+            { text: "Who will win the National Championship?", options: ["Favorite", "Field"], categories: ["NCAA"] },
+            { text: "Will a 1-seed win the tournament?", options: ["Yes", "No"], categories: ["NCAA", "Tournament"] },
+            { text: "How many 1-seeds reach the Final Four?", options: ["Over 1.5", "Under 1.5"], categories: ["NCAA", "Final Four"] },
+            { text: "Will there be a buzzer-beater in the Round of 64?", options: ["Yes", "No"], categories: ["NCAA", "Game"] },
+            { text: "Will a 12-seed or lower reach the Sweet 16?", options: ["Yes", "No"], categories: ["NCAA", "Upset"] },
+            { text: "Which conference will have more teams in the Final Four?", options: ["Big East/Big Ten/ACC", "SEC/Big 12/Other"], categories: ["NCAA", "Conference"] },
+            { text: "Will the Championship game go to overtime?", options: ["Yes", "No"], categories: ["NCAA", "Finals"] },
+            { text: "Total points in the Championship Game?", options: ["Over 145.5", "Under 145.5"], categories: ["NCAA", "Finals"] },
+            { text: "Will any player score 40+ points in a single game?", options: ["Yes", "No"], categories: ["NCAA", "Player"] },
+            { text: "Will the Most Outstanding Player be a guard or a forward/center?", options: ["Guard", "Forward/Center"], categories: ["NCAA", "Player"] }
+        ];
+
+        let added = 0;
+        for (const p of ncaaProps) {
+            const exists = propSeeds.some(s => s.text === p.text);
+            if (!exists) {
+                await dbService.savePropSeed({
+                    text: p.text,
+                    options: p.options,
+                    categories: p.categories,
+                    category: p.categories[0] // Legacy fallback
+                });
+                added++;
+            }
+        }
+
+        if (settings) {
+            const currentCats = settings.propCategories || [];
+            const newCats = ['NCAA', 'Tournament', 'Final Four', 'Upset', 'Conference', 'Finals'];
+            const combined = [...currentCats, ...newCats].filter((v, idx, arr) => arr.indexOf(v) === idx);
+            if (combined.length !== currentCats.length) {
+                settingsService.update({ propCategories: combined });
+            }
+        }
+
+        alert(`Seeded ${added} NCAA props!`);
+    };
+
 
 
     const handleSaveSeed = async () => {
@@ -2459,7 +2501,15 @@ export const SuperAdmin: React.FC = () => {
 
                         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
                             <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex flex-col md:flex-row gap-4 justify-between items-center">
-                                <h3 className="font-bold">Seed Library ({propSeeds.length})</h3>
+                                <div className="flex items-center gap-4">
+                                    <h3 className="font-bold">Seed Library ({propSeeds.length})</h3>
+                                    <button
+                                        onClick={handleSeedNCAAProps}
+                                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded text-xs font-bold transition-colors shadow-lg shadow-emerald-500/20"
+                                    >
+                                        Seed NCAA Props
+                                    </button>
+                                </div>
                                 <div className="flex gap-2 text-xs overflow-x-auto max-w-full pb-2 md:pb-0">
                                     <button
                                         onClick={() => setSeedCategoryFilter('All')}

@@ -13,9 +13,10 @@ interface MatchNodeProps {
     awayTeamIdOverride?: string;
     dynamicParticipants?: boolean;
     eliminatedTeamIds?: Set<string>;
+    comparisonPicks?: Record<string, string>;
 }
 
-export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readOnly, isChampionship, homeTeamIdOverride, awayTeamIdOverride, dynamicParticipants, eliminatedTeamIds }) => {
+export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readOnly, isChampionship, homeTeamIdOverride, awayTeamIdOverride, dynamicParticipants, eliminatedTeamIds, comparisonPicks }) => {
     // If no game yet (e.g. waiting for previous round), show placeholder
     if (!game) {
         return (
@@ -46,8 +47,10 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
         return game.winnerTeamId === teamId ? 'correct' : 'incorrect';
     };
 
+    const diffStatus = (comparisonPicks && game && pickedTeamId) ? (pickedTeamId === comparisonPicks[game.id] ? 'same' : 'diff') : null;
+
     return (
-        <div className={`flex flex-col border border-slate-700 bg-slate-900 rounded overflow-hidden w-40 shadow-sm transition-all ${isChampionship ? 'scale-110 border-amber-500/50 shadow-amber-900/20' : 'hover:border-slate-600'}`}>
+        <div className={`flex flex-col border border-slate-700 bg-slate-900 rounded overflow-hidden w-40 shadow-sm transition-all ${isChampionship ? 'scale-110 border-amber-500/50 shadow-amber-900/20' : 'hover:border-slate-600'} ${diffStatus ? 'z-10' : ''}`}>
             <TeamSlot
                 teamId={displayHomeId}
                 seed={undefined}
@@ -58,6 +61,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
                 onClick={() => !readOnly && displayHomeId && onPick(game.id, displayHomeId)}
                 disabled={readOnly || !displayHomeId}
                 isEliminated={displayHomeId ? eliminatedTeamIds?.has(displayHomeId) : false}
+                diffStatus={isHomePicked ? diffStatus : null}
             />
             <div className="border-t border-slate-800 relative"></div>
             <TeamSlot
@@ -70,6 +74,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
                 onClick={() => !readOnly && displayAwayId && onPick(game.id, displayAwayId)}
                 disabled={readOnly || !displayAwayId}
                 isEliminated={displayAwayId ? eliminatedTeamIds?.has(displayAwayId) : false}
+                diffStatus={isAwayPicked ? diffStatus : null}
             />
         </div>
     );
@@ -85,9 +90,10 @@ interface TeamSlotProps {
     onClick: () => void;
     disabled?: boolean;
     isEliminated?: boolean;
+    diffStatus?: 'same' | 'diff' | null;
 }
 
-const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus, isWinner, logoUrl, onClick, disabled, isEliminated }) => {
+const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus, isWinner, logoUrl, onClick, disabled, isEliminated, diffStatus }) => {
     // Extract team name from ID (e.g., "E1-Duke" -> "Duke")
     // Assuming format RegionSeed-Name or just Name
     let teamName = 'TBD';
@@ -113,6 +119,7 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
                 ${isWinner && !isPicked ? 'bg-emerald-500/10' : ''}
                 ${disabled ? 'cursor-default' : 'cursor-pointer'}
                 ${isEliminated ? 'opacity-50 grayscale-[0.5]' : ''}
+                ${diffStatus === 'same' ? 'ring-2 ring-emerald-500 relative z-20' : diffStatus === 'diff' ? 'ring-2 ring-rose-500 relative z-20' : ''}
             `}
         >
             <div className="flex items-center gap-2 w-full overflow-hidden z-10">

@@ -12,11 +12,16 @@ import { DateTimePicker } from './DateTimePicker';
 import { PickHistory } from './PickHistory';
 import { WhoToRootFor } from './WhoToRootFor';
 import { WhatIfSimulator } from './WhatIfSimulator';
+import { BracketComparison } from './BracketComparison';
+import { BracketShareModal } from './BracketShareCard';
+import { PoolAnalytics } from './PoolAnalytics';
 import { ReportsTab } from './ReportsTab';
 import { LiveScoreTicker } from './LiveScoreTicker';
+import { EliminationTracker } from './EliminationTracker';
+import { BracketCountdown } from './BracketCountdown';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager';
-type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif';
+type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'analytics';
 
 interface BracketPoolDashboardProps {
     pool: BracketPool;
@@ -40,8 +45,9 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [bracketSubTab, setBracketSubTab] = useState<BracketSubTab>('poolwide');
     const [showSuccess, setShowSuccess] = useState(false);
 
-    // Entry Viewing Modal
+    // Entry Viewing/Sharing Modal
     const [viewingEntry, setViewingEntry] = useState<BracketEntry | null>(null);
+    const [sharingEntry, setSharingEntry] = useState<BracketEntry | null>(null);
 
     // Manager tab interactive state
     const [commissionerDraft, setCommissionerDraft] = useState(pool.commissionerMessage || '');
@@ -79,6 +85,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [editTiebreaker, setEditTiebreaker] = useState<'CLOSEST_ABSOLUTE' | 'CLOSEST_UNDER'>(
         pool.settings.tieBreakers?.closestUnder ? 'CLOSEST_UNDER' : 'CLOSEST_ABSOLUTE'
     );
+    const [editUpsetBonusEnabled, setEditUpsetBonusEnabled] = useState(pool.settings.upsetBonus?.enabled || false);
+    const [editUpsetMultiplier, setEditUpsetMultiplier] = useState(pool.settings.upsetBonus?.multiplier || 5);
 
     // Payouts
     const [editPayouts, setEditPayouts] = useState(pool.settings.payouts || { places: [{ rank: 1, percentage: 100 }], bonuses: [] });
@@ -239,6 +247,10 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     closestAbsolute: editTiebreaker === 'CLOSEST_ABSOLUTE',
                     closestUnder: editTiebreaker === 'CLOSEST_UNDER',
                 },
+                'settings.upsetBonus': {
+                    enabled: editUpsetBonusEnabled,
+                    multiplier: editUpsetMultiplier,
+                },
                 // Payouts
                 'settings.payouts': editPayouts,
                 // Branding
@@ -266,7 +278,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         editVenmo, editZelle, editCashapp, editPaypal, editPaymentInstructions,
         editEntryFee, editMaxTotal, editMaxPerUser, editScoring, editCustomScoring, editTiebreaker,
         editPayouts, editBranding, editReminders, editPassword,
-        editRegDeadline, editSubDeadline, editLockAt]);
+        editRegDeadline, editSubDeadline, editLockAt, editUpsetBonusEnabled, editUpsetMultiplier]);
 
     // CSV Export
     const handleExportCSV = useCallback(() => {
@@ -462,6 +474,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     </div>
                 )}
 
+                {/* Countdown Timer */}
+                {pool.lockAt && pool.status !== 'COMPLETED' && (
+                    <div className="mb-6">
+                        <BracketCountdown lockAt={pool.lockAt} />
+                    </div>
+                )}
+
                 {/* Tab Content */}
                 {!loading && activeTab === 'dashboard' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4">
@@ -573,7 +592,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 </div>
                                                 <div className="flex gap-2">
                                                     <button
-                                                        onClick={() => handleViewEntry(entry)}
+                                                        onClick={(e) => { e.stopPropagation(); handleViewEntry(entry); }}
                                                         className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
                                                         title="View & Print"
                                                     >
@@ -581,7 +600,15 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         <span className="hidden sm:inline">View</span>
                                                     </button>
                                                     <button
-                                                        onClick={() => handleEditEntry(entry)}
+                                                        onClick={(e) => { e.stopPropagation(); setSharingEntry(entry); }}
+                                                        className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                                        title="Share"
+                                                    >
+                                                        <Share2 size={16} />
+                                                        <span className="hidden sm:inline">Share</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleEditEntry(entry); }}
                                                         className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold"
                                                         disabled={(entry.status === 'SUBMITTED' && pool.status !== 'DRAFT') || pool.status === 'LOCKED' || pool.status === 'COMPLETED'}
                                                     >
@@ -756,6 +783,16 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 {/* Brackets Tab */}
                 {!loading && activeTab === 'brackets' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
+                        {/* Elimination Tracker - Bracket Health */}
+                        {tournament && userEntries.length > 0 && userEntries[0].status === 'SUBMITTED' && (
+                            <EliminationTracker
+                                entry={userEntries[0]}
+                                allEntries={entries}
+                                tournament={tournament}
+                                pool={pool}
+                            />
+                        )}
+
                         {/* Brackets Sub-Navigation */}
                         <div className="flex gap-2 flex-wrap">
                             {[
@@ -763,6 +800,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 { id: 'history' as BracketSubTab, label: 'Pick History' },
                                 { id: 'rootfor' as BracketSubTab, label: 'Who to Root For' },
                                 { id: 'whatif' as BracketSubTab, label: 'What-If Simulator' },
+                                { id: 'compare' as BracketSubTab, label: 'Compare Brackets' },
+                                { id: 'analytics' as BracketSubTab, label: 'Analytics' },
                             ].map(sub => (
                                 <button
                                     key={sub.id}
@@ -860,6 +899,32 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </div>
                             )
                         )}
+
+                        {/* Compare Brackets */}
+                        {bracketSubTab === 'compare' && (
+                            tournament && entries.length > 0 ? (
+                                <div className="animate-in fade-in slide-in-from-bottom-4">
+                                    <BracketComparison tournament={tournament} allEntries={entries} initialEntry1Id={userEntries[0]?.id} />
+                                </div>
+                            ) : (
+                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                    <p>{!tournament ? 'Tournament data not yet available.' : 'Need at least 2 entries to compare.'}</p>
+                                </div>
+                            )
+                        )}
+
+                        {/* Analytics */}
+                        {bracketSubTab === 'analytics' && (
+                            tournament && entries.length > 0 ? (
+                                <div className="animate-in fade-in slide-in-from-bottom-4">
+                                    <PoolAnalytics tournament={tournament} entries={entries} />
+                                </div>
+                            ) : (
+                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                    <p>{!tournament ? 'Tournament data not yet available.' : 'Need at least 1 entry for analytics.'}</p>
+                                </div>
+                            )
+                        )}
                     </div>
                 )}
 
@@ -913,6 +978,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         { label: 'Per User', value: pool.settings.maxEntriesPerUser === -1 ? 'Unlimited' : String(pool.settings.maxEntriesPerUser), color: 'text-white' },
                                         { label: 'Entry Fee', value: pool.settings.entryFee > 0 ? `$${pool.settings.entryFee}` : 'Free', color: 'text-white' },
                                         { label: 'Tiebreaker', value: pool.settings.tieBreakers?.closestUnder ? 'Closest Under' : 'Closest Absolute', color: 'text-white' },
+                                        { label: 'Upset Bonus', value: pool.settings.upsetBonus?.enabled ? `${pool.settings.upsetBonus.multiplier}x multiplier` : 'Disabled', color: pool.settings.upsetBonus?.enabled ? 'text-amber-400' : 'text-slate-600' },
                                         { label: 'Lock Date', value: pool.lockAt ? new Date(pool.lockAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not set', color: pool.lockAt ? 'text-white' : 'text-slate-600' },
                                         { label: 'Registration', value: pool.registrationDeadline ? new Date(pool.registrationDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.registrationDeadline ? 'text-white' : 'text-slate-600' },
                                         { label: 'Submission', value: pool.submissionDeadline ? new Date(pool.submissionDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.submissionDeadline ? 'text-white' : 'text-slate-600' },
@@ -1059,6 +1125,26 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         <option value="CLOSEST_ABSOLUTE">Closest to Actual (over or under)</option>
                                                         <option value="CLOSEST_UNDER">Closest Without Going Over</option>
                                                     </select>
+                                                </div>
+                                                {/* Upset Bonus */}
+                                                <div className="pt-3 border-t border-slate-800">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-sm text-slate-300">Upset Bonus Scoring</span>
+                                                        <button onClick={() => setEditUpsetBonusEnabled(!editUpsetBonusEnabled)}
+                                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editUpsetBonusEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}>
+                                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editUpsetBonusEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                                        </button>
+                                                    </div>
+                                                    {editUpsetBonusEnabled && (
+                                                        <div className="bg-slate-900 p-3 rounded-lg border border-slate-800">
+                                                            <label className="text-[10px] text-slate-500 block mb-1">Points per Seed Difference</label>
+                                                            <input type="number" value={editUpsetMultiplier} onChange={e => setEditUpsetMultiplier(Number(e.target.value))}
+                                                                className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white text-sm" min={1} />
+                                                            <p className="text-[10px] text-slate-500 mt-2">
+                                                                If a #10 beats a #2, bonus is (10 - 2) × {editUpsetMultiplier} = <span className="text-amber-400 font-bold">{8 * editUpsetMultiplier} pts</span>
+                                                            </p>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -1569,9 +1655,23 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 </div>
             )}
 
-            {/* Hidden Printable View - Only visible when printing */}
+            {/* Printable Bracket View - Hidden on screen, visible when printing */}
             {viewingEntry && tournament && (shouldShowBrackets || isManager) && (
-                <div className="hidden print:block fixed inset-0 z-[100] bg-white">
+                <div
+                    id="bracket-print-view"
+                    style={{ position: 'absolute', left: '-9999px', top: 0 }}
+                >
+                    <div className="print-header" style={{ display: 'none' }}>
+                        <div>
+                            <strong style={{ fontSize: '18px' }}>{viewingEntry.name}</strong>
+                            <span style={{ marginLeft: '12px', fontSize: '14px', color: '#64748b' }}>
+                                {pool.name}
+                            </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                            Score: {viewingEntry.score || 0} • {new Date().toLocaleDateString()}
+                        </div>
+                    </div>
                     <BracketBuilder
                         tournament={tournament}
                         picks={viewingEntry.picks}
@@ -1580,6 +1680,15 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         viewMode="full"
                     />
                 </div>
+            )}
+
+            {sharingEntry && tournament && (
+                <BracketShareModal
+                    entry={sharingEntry}
+                    tournament={tournament}
+                    poolName={pool.name}
+                    onClose={() => setSharingEntry(null)}
+                />
             )}
         </div>
     );

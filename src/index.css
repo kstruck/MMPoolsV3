@@ -25,21 +25,32 @@ body {
   background: #64748b;
 }
 
-/* Print Styles - Clean grid output for printing */
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+/* Page settings */
+@page {
+  size: landscape;
+  margin: 0.25in;
+}
+
+/* ===========================================
+   SQUARES GRID PRINT STYLES
+   =========================================== */
 @media print {
 
-  /* Hide EVERYTHING by default */
-  body * {
+  /* By default, use body:has to scope hiding.
+     If the Squares grid is being printed: */
+  body:has(#printable-grid):not(:has(#bracket-print-view)) * {
     visibility: hidden;
   }
 
-  /* Only show the grid container and its children */
-  #printable-grid,
-  #printable-grid * {
+  body:has(#printable-grid):not(:has(#bracket-print-view)) #printable-grid,
+  body:has(#printable-grid):not(:has(#bracket-print-view)) #printable-grid * {
     visibility: visible;
   }
 
-  /* Position the grid at the top-left */
   #printable-grid {
     position: absolute;
     left: 0;
@@ -52,23 +63,14 @@ body {
     max-width: none !important;
   }
 
-  /* Reset backgrounds for printing */
-  body,
-  html {
-    background: white !important;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  /* Ensure grid squares print with borders and colors */
+  /* Squares grid cell borders */
   [class*="grid-cols-11"]>div {
     border: 1px solid #94a3b8 !important;
-    /* slate-400 */
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Force background colors to print */
+  /* Force Squares background colors to print */
   .bg-emerald-600 {
     background-color: #10b981 !important;
     color: white !important;
@@ -89,95 +91,156 @@ body {
     color: white !important;
   }
 
-  /* Text adjustments */
-  .text-white,
-  .text-slate-100 {
-    color: #000 !important;
-  }
-
-  .text-slate-200,
-  .text-slate-300,
-  .text-slate-400 {
-    color: #334155 !important;
-  }
-
-  /* slate-700 */
-}
-
-/* Page settings - Must be top level */
-@page {
-  size: landscape;
-  margin: 0.25in;
-}
-
-/* Bracket Print Styles */
-@media print {
-
-  /* Hide typical app shell elements if not already hidden by "body *" */
-  nav,
-  footer,
-  .sidebar,
-  .header-controls,
-  button,
+  /* Hide elements marked as no-print */
   .no-print {
     display: none !important;
   }
+}
 
-  /* Specific override for Bracket Printing */
-  body:has(#bracket-printable-area) * {
+/* ===========================================
+   BRACKET PRINT STYLES
+   =========================================== */
+@media print {
+
+  /* When the bracket print view is active, hide everything else */
+  body:has(#bracket-print-view) * {
     visibility: hidden;
   }
 
-  body:has(#bracket-printable-area) #bracket-printable-area,
-  body:has(#bracket-printable-area) #bracket-printable-area * {
-    visibility: visible;
+  /* Show only the bracket print view and ALL its children */
+  body:has(#bracket-print-view) #bracket-print-view,
+  body:has(#bracket-print-view) #bracket-print-view * {
+    visibility: visible !important;
   }
 
-  #bracket-printable-area {
+  /* Reset backgrounds for printing */
+  body:has(#bracket-print-view),
+  body:has(#bracket-print-view) html {
+    background: white !important;
+  }
+
+  /* Position the bracket print view */
+  #bracket-print-view {
     position: absolute;
     left: 0;
     top: 0;
     width: 100vw;
-    height: 100vh;
     margin: 0 !important;
-    padding: 10px !important;
+    padding: 8px !important;
     overflow: visible !important;
-    display: flex !important;
-    align-items: center;
-    /* Center vertically if possible */
-    justify-content: center;
+    display: block !important;
     background: white !important;
     color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Scale the bracket to fit perfectly on landscape */
-  #bracket-printable-area .bracket-container {
-    transform: scale(0.65);
-    /* Starting scale, adjust as needed */
+  /* Print header (pool name, entry name, date) */
+  #bracket-print-view .print-header {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    margin-bottom: 4px;
+    border-bottom: 2px solid #334155;
+    color: black !important;
+  }
+
+  /* Scale the bracket to fit on a landscape page */
+  #bracket-print-view .bracket-container {
+    transform: scale(0.52);
     transform-origin: top center;
-    width: 150%;
-    /* Compensate for scale down */
+    width: 190%;
+    margin-left: -45%;
   }
 
-  /* Color adjustments for printing */
-  #bracket-printable-area .bg-slate-900,
-  #bracket-printable-area .bg-slate-950 {
+  /* CRITICAL: Keep TeamSlot buttons visible — they render team picks */
+  #bracket-print-view button {
+    display: flex !important;
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Dark backgrounds → white for print */
+  #bracket-print-view .bg-slate-900,
+  #bracket-print-view .bg-slate-950,
+  #bracket-print-view [class*="bg-slate-900"],
+  #bracket-print-view [class*="bg-slate-950"] {
     background-color: white !important;
-    border-color: #cbd5e1 !important;
-    /* slate-300 */
-    color: black !important;
   }
 
-  #bracket-printable-area .text-white,
-  #bracket-printable-area .text-slate-200,
-  #bracket-printable-area .text-slate-300,
-  #bracket-printable-area .text-slate-400 {
-    color: black !important;
-  }
-
-  #bracket-printable-area .border-slate-700,
-  #bracket-printable-area .border-slate-800 {
+  /* Borders → visible gray */
+  #bracket-print-view .border-slate-700,
+  #bracket-print-view .border-slate-800,
+  #bracket-print-view [class*="border-slate-7"],
+  #bracket-print-view [class*="border-slate-8"] {
     border-color: #94a3b8 !important;
-    /* slate-400 */
+  }
+
+  /* Text → black */
+  #bracket-print-view .text-white,
+  #bracket-print-view .text-slate-200,
+  #bracket-print-view .text-slate-300,
+  #bracket-print-view .text-slate-400,
+  #bracket-print-view .text-slate-500,
+  #bracket-print-view [class*="text-slate-"],
+  #bracket-print-view [class*="text-indigo-"],
+  #bracket-print-view [class*="text-amber-4"],
+  #bracket-print-view [class*="text-amber-5"] {
+    color: #1e293b !important;
+  }
+
+  /* Picked team highlight (amber bg) → print-friendly yellow */
+  #bracket-print-view [class*="bg-amber-600"] {
+    background-color: #fef3c7 !important;
+    color: #92400e !important;
+    border-left: 3px solid #f59e0b !important;
+  }
+
+  /* Correct pick → green highlight */
+  #bracket-print-view [class*="bg-emerald-"] {
+    background-color: #d1fae5 !important;
+    color: #065f46 !important;
+  }
+
+  /* Incorrect pick → subtle red */
+  #bracket-print-view [class*="bg-red-500"] {
+    background-color: #fee2e2 !important;
+    color: #991b1b !important;
+  }
+
+  /* Region headers → bold black */
+  #bracket-print-view h3 {
+    color: #1e293b !important;
+    font-weight: 800 !important;
+  }
+
+  /* Championship title → standout */
+  #bracket-print-view .text-amber-400 {
+    color: #b45309 !important;
+    font-weight: 900 !important;
+  }
+
+  /* Winner highlight bar */
+  #bracket-print-view [class*="bg-emerald-500"] {
+    background-color: #10b981 !important;
+  }
+
+  /* Eliminated teams - keep the line-through styling */
+  #bracket-print-view .line-through {
+    text-decoration: line-through !important;
+    text-decoration-color: #ef4444 !important;
+  }
+
+  /* Team logos - ensure they print */
+  #bracket-print-view img {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Trophy icon - hide SVG animations */
+  #bracket-print-view .animate-pulse {
+    animation: none !important;
   }
 }

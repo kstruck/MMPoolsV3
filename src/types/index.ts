@@ -597,6 +597,10 @@ export interface BracketPool {
       closestUnder: boolean;
     };
     payouts: PayoutSettings;
+    upsetBonus?: {
+      enabled: boolean;
+      multiplier: number; // Points per seed differential (default: 5)
+    };
   };
 
   name: string;
