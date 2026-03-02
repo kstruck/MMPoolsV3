@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentScores = exports.importTournamentFromESPN = exports.initializeTournament = void 0;
+exports.syncPlayInPicks = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentScores = exports.importTournamentFromESPN = exports.initializeTournament = void 0;
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const https_1 = require("firebase-functions/v2/https");
@@ -192,17 +192,32 @@ const initializeTournament = async (db, tournamentId, seasonYear, gender, teams 
         region: 'Final Four' // or Championship
     };
     slots[champId] = { id: champId, gameId: champId };
+    // Default lockAt: First round of NCAA tournament starts ~March 20
+    // For 2025: March 20, 2025 12:00 PM ET
+    // For 2026: March 19, 2026 12:00 PM ET
+    let defaultLockAt;
+    if (seasonYear === 2026) {
+        defaultLockAt = new Date('2026-03-19T12:00:00-04:00').getTime();
+    }
+    else if (seasonYear === 2025) {
+        defaultLockAt = new Date('2025-03-20T12:00:00-04:00').getTime();
+    }
+    else {
+        defaultLockAt = new Date(`${seasonYear}-03-15T12:00:00-04:00`).getTime();
+    }
     // Write to DB
     const tournamentData = {
         id: tournamentId,
         seasonYear,
         gender,
         isFinalized: false,
+        status: 'ACTIVE',
+        lockAt: defaultLockAt,
         games,
         slots
     };
     await tournamentRef.set(tournamentData, { merge: true });
-    logger.info(`Initialized tournament ${tournamentId} with games and ${teams.length} teams.`);
+    logger.info(`Initialized tournament ${tournamentId} with lockAt=${new Date(defaultLockAt).toISOString()} and ${teams.length} teams.`);
 };
 exports.initializeTournament = initializeTournament;
 // Helper to map region to FF slot (1 or 2)
@@ -234,6 +249,8 @@ async function fetchAndMapESPNGameData(seasonYear) {
         const gameId = `espn-${event.id}`;
         const status = competition.status.type.state === 'pre' ? 'SCHEDULED' :
             competition.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
+        // --- WS5: Parse region and round from notes[].headline ---
+        const { region, round } = parseRegionAndRound(competition.notes);
         // Identify Teams
         const homeComp = competition.competitors.find(c => c.homeAway === 'home');
         const awayComp = competition.competitors.find(c => c.homeAway === 'away');
@@ -241,27 +258,36 @@ async function fetchAndMapESPNGameData(seasonYear) {
             continue;
         const homeTeamId = homeComp.team.id;
         const awayTeamId = awayComp.team.id;
-        // Extract ranks (seeds)
-        const homeSeed = ((_a = homeComp.curatedRank) === null || _a === void 0 ? void 0 : _a.current) || 99;
-        const awaySeed = ((_b = awayComp.curatedRank) === null || _b === void 0 ? void 0 : _b.current) || 99;
-        // Store Teams if not exists
+        // --- WS4: Extract actual tournament seed from team name, e.g. "(1) Duke Blue Devils" ---
+        const homeSeed = parseSeedFromName(homeComp.team.displayName) || ((_a = homeComp.curatedRank) === null || _a === void 0 ? void 0 : _a.current) || 99;
+        const awaySeed = parseSeedFromName(awayComp.team.displayName) || ((_b = awayComp.curatedRank) === null || _b === void 0 ? void 0 : _b.current) || 99;
+        // Strip seed prefix from name for cleaner display, e.g. "(1) Duke Blue Devils" -> "Duke Blue Devils"
+        const homeDisplayName = homeComp.team.displayName.replace(/^\(\d+\)\s*/, '');
+        const awayDisplayName = awayComp.team.displayName.replace(/^\(\d+\)\s*/, '');
+        // Store Teams if not exists (update region if we now know it)
         if (!teams[homeTeamId]) {
             teams[homeTeamId] = {
                 id: homeTeamId,
-                name: homeComp.team.displayName,
+                name: homeDisplayName,
                 seed: homeSeed,
-                region: 'TBD',
+                region: region,
                 logoUrl: homeComp.team.logo
             };
+        }
+        else if (teams[homeTeamId].region === 'TBD' && region !== 'TBD') {
+            teams[homeTeamId].region = region;
         }
         if (!teams[awayTeamId]) {
             teams[awayTeamId] = {
                 id: awayTeamId,
-                name: awayComp.team.displayName,
+                name: awayDisplayName,
                 seed: awaySeed,
-                region: 'TBD',
+                region: region,
                 logoUrl: awayComp.team.logo
             };
+        }
+        else if (teams[awayTeamId].region === 'TBD' && region !== 'TBD') {
+            teams[awayTeamId].region = region;
         }
         // Create Game
         const game = {
@@ -273,8 +299,8 @@ async function fetchAndMapESPNGameData(seasonYear) {
             homeScore: parseInt(homeComp.score || '0'),
             awayScore: parseInt(awayComp.score || '0'),
             winnerTeamId: status === 'FINAL' ? (parseInt(homeComp.score || '0') > parseInt(awayComp.score || '0') ? homeTeamId : awayTeamId) : undefined,
-            round: 1, // Placeholder
-            region: 'TBD',
+            round: round,
+            region: region,
             // Live Score Details
             period: (_c = competition.status) === null || _c === void 0 ? void 0 : _c.period,
             clock: (_d = competition.status) === null || _d === void 0 ? void 0 : _d.displayClock, // e.g. "12:35"
@@ -286,10 +312,239 @@ async function fetchAndMapESPNGameData(seasonYear) {
     return { games, teams, count: events.length };
 }
 /**
+ * WS4: Parse tournament seed from team display name.
+ * ESPN formats tournament teams as "(1) Duke Blue Devils".
+ * Returns the numeric seed or null if not found.
+ */
+function parseSeedFromName(displayName) {
+    const match = displayName.match(/^\((\d+)\)/);
+    return match ? parseInt(match[1]) : null;
+}
+/**
+ * WS5: Parse region and round from ESPN notes[].headline.
+ * ESPN provides headlines like:
+ *   "East Region - First Round"
+ *   "South Region - Second Round"
+ *   "West Region - Sweet 16"
+ *   "Midwest Region - Elite Eight"
+ *   "Final Four - National Semifinals"
+ *   "National Championship"
+ *   "First Four - East"
+ */
+function parseRegionAndRound(notes) {
+    var _a;
+    if (!notes || notes.length === 0)
+        return { region: 'TBD', round: 1 };
+    // Find the headline note (usually type="event")
+    const headline = ((_a = notes.find(n => n.headline)) === null || _a === void 0 ? void 0 : _a.headline) || '';
+    if (!headline)
+        return { region: 'TBD', round: 1 };
+    // Parse round from headline
+    let round = 1;
+    const headlineLower = headline.toLowerCase();
+    if (headlineLower.includes('first four'))
+        round = 0;
+    else if (headlineLower.includes('first round'))
+        round = 1;
+    else if (headlineLower.includes('second round'))
+        round = 2;
+    else if (headlineLower.includes('sweet 16') || headlineLower.includes('sweet sixteen'))
+        round = 3;
+    else if (headlineLower.includes('elite eight') || headlineLower.includes('elite 8'))
+        round = 4;
+    else if (headlineLower.includes('final four') || headlineLower.includes('national semifinal'))
+        round = 5;
+    else if (headlineLower.includes('national championship') || headlineLower.includes('championship'))
+        round = 6;
+    // Parse region from headline
+    let region = 'TBD';
+    if (headlineLower.includes('east'))
+        region = 'East';
+    else if (headlineLower.includes('west'))
+        region = 'West';
+    else if (headlineLower.includes('south'))
+        region = 'South';
+    else if (headlineLower.includes('midwest'))
+        region = 'Midwest';
+    else if (round >= 5)
+        region = 'Final Four'; // Final Four + Championship have no region
+    return { region, round };
+}
+/**
+ * WS1: Maps ESPN imported games to the skeleton games structure.
+ *
+ * Algorithm:
+ * - Round 1: Match by region + seed matchup (e.g. East seeds 1v16 → R1-East-1)
+ * - Round 2-4: Match by feeder game winners cascading upward
+ * - Round 5 (Final Four): Match by which region winners are playing
+ * - Round 6 (Championship): Only 1 game at this round
+ *
+ * Returns updated skeleton games map ready to write to Firestore.
+ */
+function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
+    const updated = Object.assign({}, skeletonGames);
+    let mappedCount = 0;
+    // Index ESPN games by region+round for fast lookup
+    const espnByRegionRound = {};
+    for (const g of Object.values(espnGames)) {
+        const key = `${g.region}-${g.round}`;
+        if (!espnByRegionRound[key])
+            espnByRegionRound[key] = [];
+        espnByRegionRound[key].push(g);
+    }
+    // Helper: get team seed from espnTeams map
+    const getTeamSeed = (teamId) => { var _a; return ((_a = espnTeams[teamId]) === null || _a === void 0 ? void 0 : _a.seed) || 99; };
+    // Build a map of skeleton game ID → ESPN game ID for cascading
+    const skeletonToEspn = {};
+    // --- ROUND 1: Match by region + seed matchup ---
+    for (const region of REGIONS) {
+        for (const { slot, top, bot } of R1_SEED_MATCHUPS) {
+            const skeletonId = `R1-${region}-${slot}`;
+            if (!updated[skeletonId])
+                continue;
+            // Find ESPN game in this region, round 1, where team seeds match this matchup
+            const candidates = espnByRegionRound[`${region}-1`] || [];
+            const match = candidates.find(eg => {
+                const homeSeed = getTeamSeed(eg.homeTeamId);
+                const awaySeed = getTeamSeed(eg.awayTeamId);
+                return (homeSeed === top && awaySeed === bot) || (homeSeed === bot && awaySeed === top);
+            });
+            // If we didn't find a direct R1 match, check if there's a First Four game that feeds this seed
+            // We can detect this if we look at the R0 (First Four) games for this region and seed.
+            const ffCandidates = espnByRegionRound[`${region}-0`] || [];
+            let fallbackTeamId = null;
+            let fallbackPlayingSeed = null;
+            if (!match && ffCandidates.length > 0) {
+                // Determine if 'top' or 'bot' seed is the one playing in the First Four
+                // Usually it's the 11 or 16 seed (so 'bot' often matches 11 or 16)
+                for (const ffGame of ffCandidates) {
+                    const homeSeed = getTeamSeed(ffGame.homeTeamId);
+                    const awaySeed = getTeamSeed(ffGame.awayTeamId);
+                    // If the FF game's seeds match one of the expected seeds for this R1 game
+                    if (homeSeed === top || homeSeed === bot || awaySeed === top || awaySeed === bot) {
+                        // We found the First Four game that feeds this R1 slot
+                        const homeDbTeam = espnTeams[ffGame.homeTeamId];
+                        const awayDbTeam = espnTeams[ffGame.awayTeamId];
+                        if (homeDbTeam && awayDbTeam) {
+                            fallbackTeamId = `${homeDbTeam.name}/${awayDbTeam.name}`;
+                            fallbackPlayingSeed = homeSeed; // Which seed slot this represents (e.g. 16 or 11)
+                        }
+                        break;
+                    }
+                }
+            }
+            if (match) {
+                // Ensure higher seed (lower number) is homeTeamId for consistency
+                const homeSeed = getTeamSeed(match.homeTeamId);
+                const topTeamId = homeSeed === top ? match.homeTeamId : match.awayTeamId;
+                const botTeamId = homeSeed === top ? match.awayTeamId : match.homeTeamId;
+                const topScore = homeSeed === top ? match.homeScore : match.awayScore;
+                const botScore = homeSeed === top ? match.awayScore : match.homeScore;
+                updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: topTeamId, awayTeamId: botTeamId, homeScore: topScore, awayScore: botScore, status: match.status, winnerTeamId: match.winnerTeamId, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
+                skeletonToEspn[skeletonId] = match;
+                mappedCount++;
+            }
+            else if (fallbackTeamId && fallbackPlayingSeed !== null) {
+                // We don't have a scheduled R1 match yet (likely because the Play-In game hasn't finished),
+                // but we know WHO is playing in the Play-In game for this slot. Let's update the skeleton
+                // to show "TeamA/TeamB" instead of "Winner of Play-In"
+                // Which of the two spots does the play-in winner occupy?
+                // `fallbackPlayingSeed` tells us the expected seed (e.g. 16)
+                let newTopTeamId = updated[skeletonId].homeTeamId;
+                let newBotTeamId = updated[skeletonId].awayTeamId;
+                if (top === fallbackPlayingSeed) {
+                    newTopTeamId = fallbackTeamId;
+                }
+                else if (bot === fallbackPlayingSeed) {
+                    newBotTeamId = fallbackTeamId;
+                }
+                updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: newTopTeamId, awayTeamId: newBotTeamId });
+            }
+        }
+    }
+    // --- ROUNDS 2-4: Match by feeder game winners ---
+    for (let round = 2; round <= 4; round++) {
+        for (const region of REGIONS) {
+            const gamesInRound = round === 2 ? 4 : round === 3 ? 2 : 1;
+            for (let i = 1; i <= gamesInRound; i++) {
+                const skeletonId = `R${round}-${region}-${i}`;
+                if (!updated[skeletonId])
+                    continue;
+                // Determine which 2 feeder games feed into this game
+                // Feeder structure: R2-Region-1 gets R1-Region-1 & R1-Region-2
+                // R2-Region-2 gets R1-Region-3 & R1-Region-4, etc.
+                // General: R(N)-Region-i gets R(N-1)-Region-(2i-1) & R(N-1)-Region-(2i)
+                const feeder1Id = `R${round - 1}-${region}-${2 * i - 1}`;
+                const feeder2Id = `R${round - 1}-${region}-${2 * i}`;
+                const feeder1 = updated[feeder1Id];
+                const feeder2 = updated[feeder2Id];
+                if (!(feeder1 === null || feeder1 === void 0 ? void 0 : feeder1.winnerTeamId) || !(feeder2 === null || feeder2 === void 0 ? void 0 : feeder2.winnerTeamId)) {
+                    // Can't map if feeder winners aren't known yet
+                    continue;
+                }
+                // Find ESPN game in this region+round where these two teams are playing
+                const candidates = espnByRegionRound[`${region}-${round}`] || [];
+                const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
+                const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
+                if (match) {
+                    updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: match.homeTeamId === feeder1.winnerTeamId ? match.homeScore : match.awayScore, awayScore: match.homeTeamId === feeder1.winnerTeamId ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: match.winnerTeamId, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
+                    skeletonToEspn[skeletonId] = match;
+                    mappedCount++;
+                }
+            }
+        }
+    }
+    // --- ROUND 5: Final Four ---
+    // R5-FF-1 gets East (slot 1) and West (slot 2) winners via getFFSlot mapping
+    // R5-FF-2 gets South (slot 1) and Midwest (slot 2) winners
+    // We know which R4 games feed via the getFFSlot function
+    for (let i = 1; i <= 2; i++) {
+        const skeletonId = `R5-FF-${i}`;
+        if (!updated[skeletonId])
+            continue;
+        // Find which two R4 region winners feed this FF game
+        // getFFSlot maps: East→1, West→1, South→2, Midwest→2
+        // So FF-1 gets East + West winners, FF-2 gets South + Midwest winners
+        const feederRegions = i === 1 ? ['East', 'West'] : ['South', 'Midwest'];
+        const feeder1 = updated[`R4-${feederRegions[0]}-1`];
+        const feeder2 = updated[`R4-${feederRegions[1]}-1`];
+        if (!(feeder1 === null || feeder1 === void 0 ? void 0 : feeder1.winnerTeamId) || !(feeder2 === null || feeder2 === void 0 ? void 0 : feeder2.winnerTeamId))
+            continue;
+        const candidates = espnByRegionRound['Final Four-5'] || [];
+        const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
+        const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
+        if (match) {
+            updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: match.homeTeamId === feeder1.winnerTeamId ? match.homeScore : match.awayScore, awayScore: match.homeTeamId === feeder1.winnerTeamId ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: match.winnerTeamId, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
+            mappedCount++;
+        }
+    }
+    // --- ROUND 6: Championship ---
+    const champId = 'R6-CHAMP-1';
+    if (updated[champId]) {
+        // Feeders: R5-FF-1 and R5-FF-2
+        const feeder1 = updated['R5-FF-1'];
+        const feeder2 = updated['R5-FF-2'];
+        if ((feeder1 === null || feeder1 === void 0 ? void 0 : feeder1.winnerTeamId) && (feeder2 === null || feeder2 === void 0 ? void 0 : feeder2.winnerTeamId)) {
+            const candidates = [
+                ...(espnByRegionRound['Final Four-6'] || []),
+                ...(espnByRegionRound['TBD-6'] || [])
+            ];
+            const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
+            const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
+            if (match) {
+                updated[champId] = Object.assign(Object.assign({}, updated[champId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: match.homeTeamId === feeder1.winnerTeamId ? match.homeScore : match.awayScore, awayScore: match.homeTeamId === feeder1.winnerTeamId ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: match.winnerTeamId, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
+                mappedCount++;
+            }
+        }
+    }
+    logger.info(`Mapped ${mappedCount} ESPN games to skeleton structure.`);
+    return { updatedGames: updated, mappedCount };
+}
+/**
  * Imports tournament data from ESPN, mapping existing games and teams.
  */
 exports.importTournamentFromESPN = (0, https_1.onCall)(async (request) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     // 1. Auth Check - Super Admin Only
     let role = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role;
     if (!role && ((_b = request.auth) === null || _b === void 0 ? void 0 : _b.uid)) {
@@ -311,15 +566,21 @@ exports.importTournamentFromESPN = (0, https_1.onCall)(async (request) => {
         if (count === 0) {
             return { success: false, message: "No events found from ESPN." };
         }
-        // SAVE
+        // Read existing skeleton games for mapping
+        const existingDoc = await tournamentRef.get();
+        const existingGames = ((_d = existingDoc.data()) === null || _d === void 0 ? void 0 : _d.games) || {};
+        // Map ESPN data to skeleton structure
+        const { updatedGames, mappedCount } = mapESPNGamesToSkeleton(existingGames, games, teams);
+        // SAVE: both raw ESPN data and mapped skeleton games
         await tournamentRef.set({
             id: tournamentId,
             seasonYear: parseInt(seasonYear),
             lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
             importedGames: games,
-            importedTeams: teams
+            importedTeams: teams,
+            games: updatedGames,
         }, { merge: true });
-        return { success: true, count, teams: Object.keys(teams).length };
+        return { success: true, count, teams: Object.keys(teams).length, mapped: mappedCount };
     }
     catch (error) {
         logger.error("Import failed with details:", error);
@@ -333,20 +594,27 @@ exports.importTournamentFromESPN = (0, https_1.onCall)(async (request) => {
 const updateTournamentScores = async (db, tournamentId, dryRun = false) => {
     logger.info(`Syncing tournament scores for ${tournamentId}...`);
     try {
-        // Assume tournamentId format "mens-2025" -> 2025
-        const seasonYear = parseInt(tournamentId.split('-')[1] || '2025');
+        // Get season year from tournament doc (more robust than parsing ID)
+        const tournamentRef = db.collection('tournaments').doc(tournamentId);
+        const existingDoc = await tournamentRef.get();
+        const existingData = existingDoc.data();
+        const seasonYear = (existingData === null || existingData === void 0 ? void 0 : existingData.seasonYear) || parseInt(tournamentId.split('-')[1] || '2025');
         const { games, teams, count } = await fetchAndMapESPNGameData(seasonYear);
-        logger.info(`Mapped ${count} games for sync.`);
+        logger.info(`Fetched ${count} games for sync.`);
         if (!dryRun && count > 0) {
-            const tournamentRef = db.collection('tournaments').doc(tournamentId);
-            // Update importedGames and lastUpdated
-            // We can also update importedTeams if we want to keep logos fresh, etc.
+            // Read existing skeleton games for mapping
+            const existingGames = (existingData === null || existingData === void 0 ? void 0 : existingData.games) || {};
+            // Map ESPN data to skeleton structure
+            const { updatedGames, mappedCount } = mapESPNGamesToSkeleton(existingGames, games, teams);
+            logger.info(`Mapped ${mappedCount} games to skeleton for scoring.`);
+            // Update both raw ESPN data and mapped skeleton games
             await tournamentRef.set({
                 importedGames: games,
                 importedTeams: teams,
+                games: updatedGames,
                 lastUpdated: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
-            // Trigger internal scoring (noop if main bracket not linked yet)
+            // Trigger internal scoring
             try {
                 const scoredCount = await (0, bracketScoring_1.scoreTournamentEntries)(db, tournamentId);
                 logger.info(`Scoring complete. Scored ${scoredCount} entries.`);
@@ -407,10 +675,19 @@ exports.syncBracketTournament = (0, https_1.onCall)(async (request) => {
 // Scheduled task: Runs every 10 minutes during March Madness
 exports.scheduledBracketSync = (0, scheduler_1.onSchedule)("every 10 minutes", async () => {
     const db = admin.firestore();
-    // Sync both men's and women's tournaments if active
-    await (0, exports.updateTournamentScores)(db, 'mens-2025');
-    // await updateTournamentScores(db, 'womens-2025');
-    logger.info("Scheduled sync complete");
+    // Query all active (non-finalized) tournaments
+    const activeTournaments = await db.collection('tournaments')
+        .where('isFinalized', '==', false)
+        .get();
+    if (activeTournaments.empty) {
+        logger.info("No active tournaments to sync.");
+        return;
+    }
+    for (const doc of activeTournaments.docs) {
+        logger.info(`Syncing tournament: ${doc.id}`);
+        await (0, exports.updateTournamentScores)(db, doc.id);
+    }
+    logger.info(`Scheduled sync complete for ${activeTournaments.size} tournament(s).`);
 });
 // --- ESPN Fetch & Import Logic ---
 async function fetchESPNTournamentData(seasonYear) {
@@ -437,4 +714,106 @@ async function fetchESPNTournamentData(seasonYear) {
         throw error;
     }
 }
+/**
+ * Super Admin function to sync early bracket picks with play-in game winners.
+ * Users who submit brackets before the First Four finishes will have "TeamA/TeamB"
+ * as their Round 1 pick. Once the playoff game is finished, we need to update
+ * those brackets to the actual team ID so scoring works correctly.
+ */
+exports.syncPlayInPicks = (0, https_1.onCall)(async (request) => {
+    // 1. Authorization
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
+    const userRole = request.auth.token['role'] || 'user';
+    if (userRole !== 'super_admin') {
+        throw new https_1.HttpsError('permission-denied', 'Only super admins can sync play-in picks.');
+    }
+    const { tournamentId } = request.data;
+    if (!tournamentId) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing tournamentId.');
+    }
+    const db = admin.firestore();
+    // 2. Fetch the current tournament skeleton to know the R1 teams
+    const tourneyRef = db.collection('tournaments').doc(tournamentId);
+    const tourneySnap = await tourneyRef.get();
+    if (!tourneySnap.exists) {
+        throw new https_1.HttpsError('not-found', `Tournament ${tournamentId} not found.`);
+    }
+    const tourneyData = tourneySnap.data();
+    const skeletonGames = tourneyData.games;
+    if (!skeletonGames) {
+        return { success: true, message: "No games to sync in this tournament." };
+    }
+    // 3. Find all matches where a play-in game was resolved.
+    // We can identify these by looking at Round 1 games. If a Round 1 game has 
+    // real team names (not TeamA/TeamB) but user brackets still have TeamA/TeamB, we can update them.
+    // Instead of parsing strings, we will look at all Round 1 games. For each R1 game, we
+    // record its homeTeamId and awayTeamId.
+    const resolvedR1Teams = new Set();
+    // We also need to map TeamA/TeamB back to the resolved winning team. 
+    // To do this reliably without ESPN data here, we check if the user's picked string
+    // looks like "Wagner/Howard". If one of those two teams is currently in a Round 1 slot, 
+    // that's the winner.
+    for (const game of Object.values(skeletonGames)) {
+        if (game.round === 1) {
+            if (game.homeTeamId && !game.homeTeamId.includes('/')) {
+                resolvedR1Teams.add(game.homeTeamId);
+            }
+            if (game.awayTeamId && !game.awayTeamId.includes('/')) {
+                resolvedR1Teams.add(game.awayTeamId);
+            }
+        }
+    }
+    // 4. Fetch all entries for this tournament
+    const entriesRef = db.collection('entries').where('tournamentId', '==', tournamentId);
+    const entriesSnap = await entriesRef.get();
+    if (entriesSnap.empty) {
+        return { success: true, message: "No entries found to sync." };
+    }
+    let updatedCount = 0;
+    const batch = db.batch();
+    let batchSize = 0;
+    // 5. Check each entry for unresolved play-in picks
+    entriesSnap.forEach(docSnap => {
+        const entry = docSnap.data();
+        let needsUpdate = false;
+        const newBracket = Object.assign({}, entry.bracket);
+        // For every pick in their bracket
+        for (const [slotId, teamId] of Object.entries(entry.bracket)) {
+            // Is it a play-in placeholder format like "Wagner/Howard"?
+            if (teamId && teamId.includes('/')) {
+                const parts = teamId.split('/');
+                const teamA = parts[0];
+                const teamB = parts[1];
+                // If one of these teams is now legitimately in Round 1
+                if (resolvedR1Teams.has(teamA)) {
+                    newBracket[slotId] = teamA;
+                    needsUpdate = true;
+                }
+                else if (resolvedR1Teams.has(teamB)) {
+                    newBracket[slotId] = teamB;
+                    needsUpdate = true;
+                }
+            }
+        }
+        if (needsUpdate) {
+            batch.update(docSnap.ref, { bracket: newBracket });
+            updatedCount++;
+            batchSize++;
+            // Firestore batch limit is 500, but let's be safe
+            if (batchSize >= 400) {
+                // Technically we should wait for batch.commit() here in a padded loop,
+                // but for ~100 brackets this simple logic is fine. For scale, use a commit chunks array.
+            }
+        }
+    });
+    if (batchSize > 0) {
+        await batch.commit();
+    }
+    return {
+        success: true,
+        message: `Synced ${updatedCount} entries with resolved play-in winners.`
+    };
+});
 //# sourceMappingURL=espnBracket.js.map

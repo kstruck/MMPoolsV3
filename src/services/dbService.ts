@@ -582,7 +582,7 @@ export const dbService = {
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as Winner);
     },
 
-    updateWinnerPaidStatus: async (poolId: string, winnerId: string, _isPaid: boolean, _paidByUid?: string) => {
+    updateWinnerPaidStatus: async (poolId: string, winnerId: string) => {
         try {
             const fn = httpsCallable(functions, 'toggleWinnerPaid');
             await fn({ poolId, winnerId });

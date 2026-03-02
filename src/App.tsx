@@ -22,6 +22,13 @@ const UserProfile = React.lazy(() => import('./components/UserProfile').then(m =
 const Scoreboard = React.lazy(() => import('./components/Scoreboard').then(m => ({ default: m.Scoreboard })));
 const SuperBowlOddsArticle = React.lazy(() => import('./components/articles/SuperBowlOddsArticle').then(m => ({ default: m.SuperBowlOddsArticle })));
 const BracketPoolGuideArticle = React.lazy(() => import('./components/articles/BracketPoolGuideArticle').then(m => ({ default: m.BracketPoolGuideArticle })));
+const MarchMadnessLanding = React.lazy(() => import('./components/MarchMadnessLanding').then(m => ({ default: m.MarchMadnessLanding })));
+const NFLPlayoffsLanding = React.lazy(() => import('./components/NFLPlayoffsLanding').then(m => ({ default: m.NFLPlayoffsLanding })));
+const CustomSportsLanding = React.lazy(() => import('./components/CustomSportsLanding').then(m => ({ default: m.CustomSportsLanding })));
+const PricingPage = React.lazy(() => import('./components/PricingPage').then(m => ({ default: m.PricingPage })));
+const AboutPage = React.lazy(() => import('./components/AboutPage').then(m => ({ default: m.AboutPage })));
+const ContactPage = React.lazy(() => import('./components/ContactPage').then(m => ({ default: m.ContactPage })));
+const CharityPage = React.lazy(() => import('./components/CharityPage').then(m => ({ default: m.CharityPage })));
 
 // Lazy-loaded routes
 const PoolRoute = React.lazy(() => import('./components/routes/PoolRoute').then(m => ({ default: m.PoolRoute })));
@@ -212,7 +219,44 @@ const App: React.FC = () => {
             </>
           } />
 
+          {/* Additional Landing Pages */}
+          <Route path="/march-madness" element={
+            <MarchMadnessLanding
+              user={user}
+              isLoggedIn={!!user}
+              onLogin={() => handleOpenAuth('login')}
+              onSignup={() => handleOpenAuth('register')}
+              onLogout={handleLogout}
+              onCreatePool={handleCreatePoolClick}
+            />
+          } />
+          <Route path="/nfl-playoffs" element={
+            <NFLPlayoffsLanding
+              user={user}
+              isLoggedIn={!!user}
+              onLogin={() => handleOpenAuth('login')}
+              onSignup={() => handleOpenAuth('register')}
+              onLogout={handleLogout}
+              onCreatePool={handleCreatePoolClick}
+            />
+          } />
+          <Route path="/custom-sports" element={
+            <CustomSportsLanding
+              user={user}
+              isLoggedIn={!!user}
+              onLogin={() => handleOpenAuth('login')}
+              onSignup={() => handleOpenAuth('register')}
+              onLogout={handleLogout}
+              onCreatePool={handleCreatePoolClick}
+            />
+          } />
+
           {/* Global Pages */}
+          <Route path="/pricing" element={<PricingPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+          <Route path="/about" element={<AboutPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+          <Route path="/contact" element={<ContactPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+          <Route path="/charity" element={<CharityPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+
           <Route path="/browse" element={
             <BrowsePools user={user} pools={pools} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
           } />

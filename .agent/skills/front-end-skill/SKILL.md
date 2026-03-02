@@ -5,7 +5,7 @@ description: Generates placeholder images for frontend designs and landing pages
 # !/bin/bash
 set -e -E
 
-# Ensure an argument is provided
+## Ensure an argument is provided
 
 if [ -z "$1" ]; then
   echo "Error: Please provide a description for the image."
@@ -13,7 +13,7 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-# Load API key from .env file (gitignored) — NEVER hardcode keys here
+## Load API key from .env file (gitignored) — NEVER hardcode keys here
 
 if [ -f "$(git rev-parse --show-toplevel 2>/dev/null)/.env" ]; then
   GEMINI_API_KEY=$(grep '^GEMINI_API_KEY=' "$(git rev-parse --show-toplevel)/.env" | cut -d '=' -f2)
@@ -28,7 +28,7 @@ fi
 MODEL_ID="gemini-3-pro-image-preview"
 GENERATE_CONTENT_API="streamGenerateContent"
 
-# Create the JSON request, injecting the first argument ($1) as the prompt
+## Create the JSON request, injecting the first argument ($1) as the prompt
 
 cat << EOF > request.json
 {
@@ -56,7 +56,7 @@ cat << EOF > request.json
 }
 EOF
 
-# Call the API
+## Call the API
 
 curl \
 -X POST \

@@ -271,7 +271,7 @@ async function checkPaymentReminders(db, pool, now) {
                 });
                 // Notify waitlist if any
                 if (pool.waitlist && pool.waitlist.length > 0) {
-                    await notifyWaitlist(db, pool, squaresToRelease.length);
+                    // Waitlist notification is now handled by the onSquareReleased trigger.
                 }
                 // Notify host
                 const emailBody = `

@@ -4,6 +4,26 @@ exports.inspectPoolState = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 exports.inspectPoolState = (0, https_1.onRequest)(async (req, res) => {
+    var _a;
+    // Require Firebase Auth token
+    const authHeader = req.headers.authorization;
+    if (!(authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith('Bearer '))) {
+        res.status(401).send("Unauthorized: Missing Bearer token");
+        return;
+    }
+    try {
+        const token = authHeader.split('Bearer ')[1];
+        const decoded = await admin.auth().verifyIdToken(token);
+        const userDoc = await admin.firestore().collection("users").doc(decoded.uid).get();
+        if (((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) !== 'SUPER_ADMIN') {
+            res.status(403).send("Forbidden: Super Admin access required");
+            return;
+        }
+    }
+    catch (_b) {
+        res.status(401).send("Unauthorized: Invalid token");
+        return;
+    }
     const poolId = req.query.poolId;
     if (!poolId) {
         res.status(400).send("Missing poolId");

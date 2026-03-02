@@ -305,7 +305,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
 
                 // Notify waitlist if any
                 if (pool.waitlist && pool.waitlist.length > 0) {
-                    await notifyWaitlist(db, pool, squaresToRelease.length);
+                    // Waitlist notification is now handled by the onSquareReleased trigger.
                 }
 
                 // Notify host

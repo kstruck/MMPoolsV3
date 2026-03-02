@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.joinWaitlist = void 0;
+exports.onSquareReleased = exports.joinWaitlist = void 0;
 const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const reminders_1 = require("./reminders");
@@ -58,6 +58,40 @@ exports.joinWaitlist = functions.https.onCall(async (request) => {
             throw error;
         }
         throw new functions.https.HttpsError("internal", "Failed to join waitlist.");
+    }
+});
+const firestore_1 = require("firebase-functions/v2/firestore");
+const reminders_2 = require("./reminders");
+exports.onSquareReleased = (0, firestore_1.onDocumentUpdated)("pools/{poolId}", async (event) => {
+    var _a, _b;
+    if (!event.data)
+        return;
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    if (!before.squares || !after.squares)
+        return;
+    if (!after.waitlist || after.waitlist.length === 0)
+        return;
+    let releasedSquaresCount = 0;
+    // Determine how many squares went from having an owner to not having an owner
+    for (let i = 0; i < 100; i++) {
+        const ownerBefore = (_a = before.squares[i]) === null || _a === void 0 ? void 0 : _a.owner;
+        const ownerAfter = (_b = after.squares[i]) === null || _b === void 0 ? void 0 : _b.owner;
+        if (ownerBefore && !ownerAfter) {
+            releasedSquaresCount++;
+        }
+    }
+    if (releasedSquaresCount > 0) {
+        console.log(`[Waitlist] Detected ${releasedSquaresCount} released squares in pool ${event.params.poolId}. Notifying waitlist...`);
+        const db = admin.firestore();
+        try {
+            await (0, reminders_2.notifyWaitlist)(db, after, releasedSquaresCount);
+            // Note: If you want to automatically clear the waitlist or handle queuing logic,
+            // that logic could be added here. Currently, notifyWaitlist just sends emails.
+        }
+        catch (e) {
+            console.error(`[Waitlist] Error notifying waitlist for pool ${event.params.poolId}:`, e);
+        }
     }
 });
 //# sourceMappingURL=waitlist.js.map

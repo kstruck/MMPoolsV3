@@ -79,3 +79,42 @@ export const joinWaitlist = functions.https.onCall(async (request) => {
         throw new functions.https.HttpsError("internal", "Failed to join waitlist.");
     }
 });
+
+import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { notifyWaitlist } from "./reminders";
+import { GameState } from "./types";
+
+export const onSquareReleased = onDocumentUpdated("pools/{poolId}", async (event) => {
+    if (!event.data) return;
+
+    const before = event.data.before.data() as GameState;
+    const after = event.data.after.data() as GameState;
+
+    if (!before.squares || !after.squares) return;
+    if (!after.waitlist || after.waitlist.length === 0) return;
+
+    let releasedSquaresCount = 0;
+
+    // Determine how many squares went from having an owner to not having an owner
+    for (let i = 0; i < 100; i++) {
+        const ownerBefore = before.squares[i]?.owner;
+        const ownerAfter = after.squares[i]?.owner;
+
+        if (ownerBefore && !ownerAfter) {
+            releasedSquaresCount++;
+        }
+    }
+
+    if (releasedSquaresCount > 0) {
+        console.log(`[Waitlist] Detected ${releasedSquaresCount} released squares in pool ${event.params.poolId}. Notifying waitlist...`);
+        const db = admin.firestore();
+        try {
+            await notifyWaitlist(db, after, releasedSquaresCount);
+
+            // Note: If you want to automatically clear the waitlist or handle queuing logic,
+            // that logic could be added here. Currently, notifyWaitlist just sends emails.
+        } catch (e) {
+            console.error(`[Waitlist] Error notifying waitlist for pool ${event.params.poolId}:`, e);
+        }
+    }
+});
