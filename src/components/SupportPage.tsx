@@ -69,26 +69,26 @@ Sent via March Melee Pools Support Form
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+        <div className="min-h-screen bg-slate-950 text-slate-300">
             {/* Content */}
             <div className="max-w-3xl mx-auto px-6 py-16">
                 <div className="text-center mb-12">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 dark:bg-indigo-900/20 rounded-full mb-4">
-                        <Mail className="text-indigo-600 dark:text-indigo-400" size={32} />
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-900/20 rounded-full mb-4">
+                        <Mail className="text-indigo-400" size={32} />
                     </div>
-                    <h1 className="text-4xl font-black text-slate-900 dark:text-white mb-4">Contact Support</h1>
-                    <p className="text-lg text-slate-600 dark:text-slate-400">
+                    <h1 className="text-4xl font-black text-white mb-4">Contact Support</h1>
+                    <p className="text-lg text-slate-300">
                         We're here to help! Send us a message and we'll respond within 48 hours.
                     </p>
                 </div>
 
                 {/* Success Message */}
                 {submitStatus === 'success' && (
-                    <div className="mb-8 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-500/30 rounded-xl p-6 flex items-start gap-3">
-                        <CheckCircle className="text-emerald-600 dark:text-emerald-400 shrink-0" size={24} />
+                    <div className="mb-8 bg-emerald-900/20 border border-emerald-500/30 rounded-xl p-6 flex items-start gap-3">
+                        <CheckCircle className="text-emerald-400 shrink-0" size={24} />
                         <div>
-                            <h3 className="font-bold text-emerald-900 dark:text-emerald-100 mb-1">Message Sent Successfully!</h3>
-                            <p className="text-emerald-700 dark:text-emerald-300 text-sm">
+                            <h3 className="font-bold text-emerald-100 mb-1">Message Sent Successfully!</h3>
+                            <p className="text-emerald-300 text-sm">
                                 Thank you for contacting us. We'll get back to you within 48 hours.
                             </p>
                         </div>
@@ -97,11 +97,11 @@ Sent via March Melee Pools Support Form
 
                 {/* Error Message */}
                 {submitStatus === 'error' && (
-                    <div className="mb-8 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-500/30 rounded-xl p-6 flex items-start gap-3">
-                        <AlertCircle className="text-rose-600 dark:text-rose-400 shrink-0" size={24} />
+                    <div className="mb-8 bg-rose-900/20 border border-rose-500/30 rounded-xl p-6 flex items-start gap-3">
+                        <AlertCircle className="text-rose-400 shrink-0" size={24} />
                         <div>
-                            <h3 className="font-bold text-rose-900 dark:text-rose-100 mb-1">Error Sending Message</h3>
-                            <p className="text-rose-700 dark:text-rose-300 text-sm">
+                            <h3 className="font-bold text-rose-100 mb-1">Error Sending Message</h3>
+                            <p className="text-rose-300 text-sm">
                                 Something went wrong. Please try again or email us directly.
                             </p>
                         </div>
@@ -109,10 +109,10 @@ Sent via March Melee Pools Support Form
                 )}
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 space-y-6">
+                <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-8 space-y-6">
                     {/* Name */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                        <label className="block text-sm font-bold text-slate-300 mb-2">
                             Your Name <span className="text-rose-500">*</span>
                         </label>
                         <input
@@ -120,14 +120,14 @@ Sent via March Melee Pools Support Form
                             required
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
+                            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
                             placeholder="John Doe"
                         />
                     </div>
 
                     {/* Email */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                        <label className="block text-sm font-bold text-slate-300 mb-2">
                             Your Email <span className="text-rose-500">*</span>
                         </label>
                         <input
@@ -135,21 +135,21 @@ Sent via March Melee Pools Support Form
                             required
                             value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
+                            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
                             placeholder="john@example.com"
                         />
                     </div>
 
                     {/* Support Type */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                        <label className="block text-sm font-bold text-slate-300 mb-2">
                             Support Type <span className="text-rose-500">*</span>
                         </label>
                         <select
                             required
                             value={formData.supportType}
                             onChange={(e) => setFormData({ ...formData, supportType: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
+                            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
                         >
                             <option value="">Select a type...</option>
                             {supportTypes.map((type) => (
@@ -160,7 +160,7 @@ Sent via March Melee Pools Support Form
 
                     {/* Message */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                        <label className="block text-sm font-bold text-slate-300 mb-2">
                             Message <span className="text-rose-500">*</span>
                         </label>
                         <textarea
@@ -168,7 +168,7 @@ Sent via March Melee Pools Support Form
                             rows={6}
                             value={formData.message}
                             onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all resize-none"
+                            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all resize-none"
                             placeholder="Please describe your issue or question in detail..."
                         />
                     </div>
@@ -180,16 +180,16 @@ Sent via March Melee Pools Support Form
                             id="sendCopy"
                             checked={formData.sendCopy}
                             onChange={(e) => setFormData({ ...formData, sendCopy: e.target.checked })}
-                            className="mt-1 w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-700 rounded focus:ring-indigo-500"
+                            className="mt-1 w-4 h-4 text-indigo-600 bg-slate-950 border-slate-700 rounded focus:ring-indigo-500"
                         />
-                        <label htmlFor="sendCopy" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
+                        <label htmlFor="sendCopy" className="text-sm text-slate-300 cursor-pointer">
                             Send me a copy of this message for my records
                         </label>
                     </div>
 
                     {/* SLA Notice */}
-                    <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl p-4">
-                        <p className="text-sm text-indigo-900 dark:text-indigo-100 font-medium">
+                    <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-4">
+                        <p className="text-sm text-indigo-100 font-medium">
                             <strong>Response Time:</strong> We aim to respond to all support requests within 48 hours during business days.
                         </p>
                     </div>
@@ -198,7 +198,7 @@ Sent via March Melee Pools Support Form
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full bg-indigo-600 hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white py-4 rounded-xl font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="w-full bg-indigo-500 hover:bg-indigo-400 text-white py-4 rounded-xl font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         {isSubmitting ? (
                             <>

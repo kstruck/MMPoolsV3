@@ -25,8 +25,21 @@ export class ErrorBoundary extends React.Component<
     }
 
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+        const isChunkLoadError =
+            error.name === 'ChunkLoadError' ||
+            (error.message && error.message.includes('Failed to fetch dynamically imported module'));
+
+        if (isChunkLoadError) {
+            const reloadCount = parseInt(sessionStorage.getItem('chunk_load_reload_count') || '0', 10);
+            if (reloadCount < 1) {
+                sessionStorage.setItem('chunk_load_reload_count', (reloadCount + 1).toString());
+                window.location.reload();
+                return;
+            }
+        }
+
         errorHandler.handleError(error, {
-            severity: ErrorSeverity.CRITICAL,
+            severity: isChunkLoadError ? ErrorSeverity.MEDIUM : ErrorSeverity.CRITICAL,
             context: { componentStack: errorInfo.componentStack },
             notify: false, // We show our own fallback UI
         });
