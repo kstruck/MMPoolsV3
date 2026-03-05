@@ -19,7 +19,7 @@ service cloud.firestore {
     }
     
     function isSuperAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SUPER_ADMIN';
+      return request.auth != null && request.auth.token.get('role', '') == 'SUPER_ADMIN';
     }
 
     // POOLS:

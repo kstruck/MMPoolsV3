@@ -1,27 +1,27 @@
 
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { defineSecret } from "firebase-functions/params";
 
 export const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 const OUTPUT_SCHEMA = {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
-        headline: { type: SchemaType.STRING, description: "Short, punchy title for the update." },
+        headline: { type: Type.STRING, description: "Short, punchy title for the update." },
         summaryBullets: {
-            type: SchemaType.ARRAY,
-            items: { type: SchemaType.STRING },
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
             description: "2-3 key takeaway points."
         },
         explanationSteps: {
-            type: SchemaType.ARRAY,
-            items: { type: SchemaType.STRING },
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
             description: "Step-by-step logic explaining the result, citing numbers and teams."
         },
-        confidence: { type: SchemaType.NUMBER, description: "0.0 to 1.0 score of confidence based on facts provided." },
+        confidence: { type: Type.NUMBER, description: "0.0 to 1.0 score of confidence based on facts provided." },
         missingFacts: {
-            type: SchemaType.ARRAY,
-            items: { type: SchemaType.STRING },
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
             description: "List of any critical data points that were not provided."
         },
     },
@@ -66,19 +66,8 @@ export const generateAIResponse = async (
         throw new Error("GEMINI_API_KEY is not set.");
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-        model: selectedModelName,
-        generationConfig: {
-            temperature: 0.2,
-            responseMimeType: "application/json",
-            responseSchema: jsonSchema || undefined,
-        },
-        systemInstruction: {
-            role: "system",
-            parts: [{ text: systemInstruction + "\n\nIMPORTANT: You must return valid PURE JSON matching the provided schema." }]
-        }
-    });
+    const genAI = new GoogleGenAI({ apiKey });
+    const model = genAI.models;
 
     const prompt = `
     Analyze the following Verified Facts JSON payload. 
@@ -89,8 +78,22 @@ export const generateAIResponse = async (
     `;
 
     try {
-        const result = await model.generateContent(prompt);
-        let text = result.response.text();
+        const result = await model.generateContent({
+            model: selectedModelName,
+            contents: [
+                {
+                    role: "user",
+                    parts: [{ text: prompt }]
+                }
+            ],
+            config: {
+                temperature: 0.2,
+                responseMimeType: "application/json",
+                responseSchema: jsonSchema || undefined,
+                systemInstruction: systemInstruction + "\n\nIMPORTANT: You must return valid PURE JSON matching the provided schema.",
+            },
+        });
+        let text = result.text ?? '';
 
         // Robust JSON Cleaning
         text = text.replace(/```json/g, '').replace(/```/g, '').trim(); // Strip Markdown

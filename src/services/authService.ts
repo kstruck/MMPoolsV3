@@ -134,7 +134,7 @@ export const authService = {
       }
       return null;
     } catch (e) {
-      console.error('Error fetching user data:', e);
+      logger.error('Error fetching user data:', e);
       return null;
     }
   },
@@ -150,7 +150,7 @@ export const authService = {
       return null;
     } catch (error: unknown) {
       const firebaseError = error as { code?: string };
-      console.error("Google Sign-In Popup Error", error);
+      logger.error("Google Sign-In Popup Error", error);
       // Fallback to redirect if popup is blocked or closed
       if (firebaseError.code === 'auth/popup-closed-by-user' || firebaseError.code === 'auth/popup-blocked') {
         const { signInWithRedirect } = await import('firebase/auth');
@@ -174,7 +174,7 @@ export const authService = {
       const user = mapUser({ ...result.user, displayName: name }) as User;
       return await syncUserToFirestore(user);
     } catch (error) {
-      console.error("Registration Error", error);
+      logger.error("Registration Error", error);
       throw error;
     }
   },
@@ -186,7 +186,7 @@ export const authService = {
       // if the domain isn't whitelisted. Simpler to just send the basic email for now.
       await sendEmailVerification(user);
     } catch (e) {
-      console.error("Error sending verification email:", e);
+      logger.error("Error sending verification email:", e);
       throw e;
     }
   },
@@ -208,7 +208,7 @@ export const authService = {
       const user = mapUser(result.user) as User;
       return await syncUserToFirestore(user);
     } catch (error) {
-      console.error("Login Error", error);
+      logger.error("Login Error", error);
       throw error;
     }
   },
@@ -219,7 +219,7 @@ export const authService = {
       const { sendPasswordResetEmail } = await import('firebase/auth');
       await sendPasswordResetEmail(auth, email);
     } catch (error) {
-      console.error("[AuthService] Reset Password Error", error);
+      logger.error("[AuthService] Reset Password Error", error);
       throw error;
     }
   },
@@ -228,20 +228,16 @@ export const authService = {
   logout: async () => {
     try {
       await signOut(auth);
-      localStorage.removeItem('sbSquaresUser'); // Clear demo user if any
       window.location.reload();
     } catch (error) {
-      console.error("Logout Error", error);
+      logger.error("Logout Error", error);
     }
   },
 
   // Listener for Auth State
   onAuthStateChanged: (callback: (user: User | null) => void) => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
-      const demoUser = localStorage.getItem('sbSquaresUser');
-      if (demoUser && !firebaseUser) {
-        callback(JSON.parse(demoUser));
-      } else if (firebaseUser) {
+      if (firebaseUser) {
         const user = mapUser(firebaseUser);
         if (user) {
           // Sync to Firestore (will create if new)
@@ -249,7 +245,7 @@ export const authService = {
             const syncedUser = await syncUserToFirestore(user);
             callback(syncedUser);
           } catch (err) {
-            console.error("Auth Sync Failed", err);
+            logger.error("Auth Sync Failed", err);
             // Fallback: Proceed with basic user data so they aren't stuck "logged out"
             callback(user);
           }
@@ -275,7 +271,7 @@ export const authService = {
         await setDoc(userRef, { name, picture: photoURL || null }, { merge: true });
       }
     } catch (error) {
-      console.error("Update Profile Error", error);
+      logger.error("Update Profile Error", error);
       throw error;
     }
   },

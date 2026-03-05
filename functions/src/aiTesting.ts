@@ -6,69 +6,69 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { geminiApiKey, generateAIResponse } from "./gemini";
-import { SchemaType } from "@google/generative-ai";
+import { Type } from "@google/genai";
 
 // ===== SCENARIO GENERATION =====
 
 const SCENARIO_GENERATION_SCHEMA = {
 
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
-        scenarioName: { type: SchemaType.STRING },
-        description: { type: SchemaType.STRING },
+        scenarioName: { type: Type.STRING },
+        description: { type: Type.STRING },
         poolConfig: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
-                name: { type: SchemaType.STRING },
-                type: { type: SchemaType.STRING },
+                name: { type: Type.STRING },
+                type: { type: Type.STRING },
                 props: {
-                    type: SchemaType.OBJECT,
+                    type: Type.OBJECT,
                     properties: {
-                        costPerCard: { type: SchemaType.NUMBER },
-                        isLocked: { type: SchemaType.BOOLEAN }
+                        costPerCard: { type: Type.NUMBER },
+                        isLocked: { type: Type.BOOLEAN }
                     },
                     required: ["costPerCard", "isLocked"]
                 },
-                maxPlayers: { type: SchemaType.NUMBER }
+                maxPlayers: { type: Type.NUMBER }
             },
             required: ["name", "type", "props", "maxPlayers"]
         },
         testUsers: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             items: {
-                type: SchemaType.OBJECT,
+                type: Type.OBJECT,
                 properties: {
-                    name: { type: SchemaType.STRING },
-                    strategy: { type: SchemaType.STRING },
-                    behavior: { type: SchemaType.STRING },
+                    name: { type: Type.STRING },
+                    strategy: { type: Type.STRING },
+                    behavior: { type: Type.STRING },
                 },
                 required: ["name", "strategy", "behavior"]
             },
         },
         expectedOutcome: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
-                winner: { type: SchemaType.STRING },
-                topThree: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-                edgeCases: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+                winner: { type: Type.STRING },
+                topThree: { type: Type.ARRAY, items: { type: Type.STRING } },
+                edgeCases: { type: Type.ARRAY, items: { type: Type.STRING } },
             },
             required: ["winner", "topThree", "edgeCases"]
         },
         actions: {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             items: {
-                type: SchemaType.OBJECT,
+                type: Type.OBJECT,
                 properties: {
-                    actionType: { type: SchemaType.STRING, description: "Use 'SCORE_UPDATE' for score changes" },
-                    period: { type: SchemaType.STRING, description: "Q1, Q2, Q3, FINAL" },
-                    homeScore: { type: SchemaType.NUMBER },
-                    awayScore: { type: SchemaType.NUMBER },
-                    description: { type: SchemaType.STRING }
+                    actionType: { type: Type.STRING, description: "Use 'SCORE_UPDATE' for score changes" },
+                    period: { type: Type.STRING, description: "Q1, Q2, Q3, FINAL" },
+                    homeScore: { type: Type.NUMBER },
+                    awayScore: { type: Type.NUMBER },
+                    description: { type: Type.STRING }
                 },
                 required: ["actionType", "period", "homeScore", "awayScore"]
             }
         },
-        validationChecks: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+        validationChecks: { type: Type.ARRAY, items: { type: Type.STRING } },
     },
     required: ["scenarioName", "description", "poolConfig", "testUsers", "expectedOutcome", "validationChecks"],
 };
