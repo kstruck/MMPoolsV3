@@ -236,8 +236,8 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                     <div className={`flex items-center justify-between ${isFinal && !awayTeam?.winner ? 'opacity-50' : ''}`}>
                                         <div className="flex items-center gap-3">
                                             <img
-                                                src={awayTeam?.team.logo || getTeamLogo(awayTeam?.team.displayName || '') || ''}
-                                                alt={awayTeam?.team.abbreviation}
+                                                src={awayTeam?.team.logo || getTeamLogo(awayTeam?.team.displayName || '') || '/placeholder-team.png'}
+                                                alt={awayTeam?.team.abbreviation || 'TBD'}
                                                 className="w-8 h-8 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
@@ -255,8 +255,8 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                     <div className={`flex items-center justify-between ${isFinal && !homeTeam?.winner ? 'opacity-50' : ''}`}>
                                         <div className="flex items-center gap-3">
                                             <img
-                                                src={homeTeam?.team.logo || getTeamLogo(homeTeam?.team.displayName || '') || ''}
-                                                alt={homeTeam?.team.abbreviation}
+                                                src={homeTeam?.team.logo || getTeamLogo(homeTeam?.team.displayName || '') || '/placeholder-team.png'}
+                                                alt={homeTeam?.team.abbreviation || 'TBD'}
                                                 className="w-8 h-8 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />

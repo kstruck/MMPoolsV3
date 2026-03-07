@@ -69,18 +69,14 @@ export const LiveScoreTicker: React.FC<LiveScoreTickerProps> = ({ tournament }) 
                             {/* Teams */}
                             <div className="flex justify-between items-center text-sm">
                                 <span className={`font-bold flex items-center gap-2 ${game.winnerTeamId === game.awayTeamId ? 'text-emerald-400' : 'text-slate-200'}`}>
-                                    {game.awayTeam?.logoUrl ? (
-                                        <img src={game.awayTeam.logoUrl} alt="" className="w-5 h-5 object-contain" />
-                                    ) : null}
+                                    <img src={game.awayTeam?.logoUrl || '/placeholder-team.png'} alt="" className="w-5 h-5 object-contain" />
                                     {game.awayTeam?.name || 'TBD'}
                                 </span>
                                 <span className="font-mono font-bold">{game.awayScore}</span>
                             </div>
                             <div className="flex justify-between items-center text-sm">
                                 <span className={`font-bold flex items-center gap-2 ${game.winnerTeamId === game.homeTeamId ? 'text-emerald-400' : 'text-slate-200'}`}>
-                                    {game.homeTeam?.logoUrl ? (
-                                        <img src={game.homeTeam.logoUrl} alt="" className="w-5 h-5 object-contain" />
-                                    ) : null}
+                                    <img src={game.homeTeam?.logoUrl || '/placeholder-team.png'} alt="" className="w-5 h-5 object-contain" />
                                     {game.homeTeam?.name || 'TBD'}
                                 </span>
                                 <span className="font-mono font-bold">{game.homeScore}</span>
