@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import React, { useState } from 'react';
 import type { User } from '../../types';
 import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe, Share2, Copy, ExternalLink, AlertTriangle, Mail } from 'lucide-react';
@@ -25,7 +26,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         slug: string;
         seasonYear: number;
         gender: 'mens' | 'womens';
-        tournamentType: 'ncaa' | 'bigeast';
+        tournamentType: 'ncaa' | 'bigeast' | 'big12';
         isListedPublic: boolean;
         managerName: string;
         contactEmail: string;
@@ -275,7 +276,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                 setError(data.message || 'Failed to create pool');
             }
         } catch (err: unknown) {
-            console.error('Publish error:', err);
+            logger.error('Publish error:', err);
             const msg = err instanceof Error ? err.message : 'An error occurred';
             setError(msg);
         } finally {
@@ -471,19 +472,26 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                             <select
                                 value={formData.tournamentType}
                                 onChange={(e) => {
-                                    const type = e.target.value as 'ncaa' | 'bigeast';
-                                    const lockAt = type === 'bigeast'
-                                        ? new Date('2026-03-11T15:00:00').getTime() // Big East tipoff
-                                        : new Date('2026-03-17T12:00:00').getTime();
+                                    const type = e.target.value as 'ncaa' | 'bigeast' | 'big12';
+                                    let lockAt = new Date('2026-03-17T12:00:00').getTime(); // NCAA default
+                                    if (type === 'bigeast') {
+                                        lockAt = new Date('2026-03-11T15:00:00').getTime(); // Big East tipoff
+                                    } else if (type === 'big12') {
+                                        lockAt = new Date('2026-03-10T12:00:00').getTime(); // Big 12 tipoff
+                                    }
                                     update({ tournamentType: type, lockAt });
                                 }}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
                             >
                                 <option value="ncaa">NCAA March Madness 2026</option>
                                 <option value="bigeast">Big East Championship 2026</option>
+                                <option value="big12">Big 12 Championship 2026</option>
                             </select>
                             {formData.tournamentType === 'bigeast' && (
                                 <p className="text-[10px] text-amber-400 mt-1">🏀 Big East: 11 teams, 10 picks, lock date auto-set to Mar 11</p>
+                            )}
+                            {formData.tournamentType === 'big12' && (
+                                <p className="text-[10px] text-amber-400 mt-1">🏀 Big 12: 16 teams, 15 picks, lock date auto-set to Mar 10</p>
                             )}
                         </div>
 

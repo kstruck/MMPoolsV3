@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirestore, doc, onSnapshot, updateDoc, collection, getDocs } from 'firebase/firestore';
@@ -50,11 +51,29 @@ export const TournamentManager: React.FC = () => {
                 });
             });
 
-            // Inject 2026 Men's if not present so it can be initialized
+            // Inject Uninitialized Tournaments if not present
             if (!options.some(o => o.id === 'mens-2026')) {
                 options.push({
                     id: 'mens-2026',
                     label: "Men's 2026 (Uninitialized)",
+                    seasonYear: 2026,
+                    gender: 'mens',
+                    isFinalized: false
+                });
+            }
+            if (!options.some(o => o.id === 'bigeast-2026')) {
+                options.push({
+                    id: 'bigeast-2026',
+                    label: "Big East 2026 (Uninitialized)",
+                    seasonYear: 2026,
+                    gender: 'mens',
+                    isFinalized: false
+                });
+            }
+            if (!options.some(o => o.id === 'big12-2026')) {
+                options.push({
+                    id: 'big12-2026',
+                    label: "Big 12 2026 (Uninitialized)",
                     seasonYear: 2026,
                     gender: 'mens',
                     isFinalized: false
@@ -109,11 +128,19 @@ export const TournamentManager: React.FC = () => {
         setSuccessMsg(null);
         try {
             const functions = getFunctions();
-            const importFn = httpsCallable(functions, 'importTournamentFromESPN');
-            const result = await importFn({
+            let importFnName = 'importTournamentFromESPN';
+            const params: any = {
                 tournamentId: selectedTournamentId,
                 seasonYear: selectedYear
-            }) as { data: { success: boolean, count: number, teams: number, message?: string } };
+            };
+
+            if (selectedTournamentId.startsWith('bigeast') || selectedTournamentId.startsWith('big12')) {
+                importFnName = 'importConferenceTournamentFromESPN';
+                params.conferenceName = selectedTournamentId.split('-')[0];
+            }
+
+            const importFn = httpsCallable(functions, importFnName);
+            const result = await importFn(params) as { data: { success: boolean, count: number, teams: number, message?: string } };
 
             if (result.data.success) {
                 setSuccessMsg(`Successfully imported ${result.data.count} games and ${result.data.teams} teams.`);
@@ -121,7 +148,7 @@ export const TournamentManager: React.FC = () => {
                 setError(result.data.message || 'Import failed.');
             }
         } catch (err: unknown) {
-            console.error(err);
+            logger.error(err);
             setError(err instanceof Error ? err.message : 'Failed to call import function.');
         } finally {
             setImporting(false);
@@ -135,7 +162,11 @@ export const TournamentManager: React.FC = () => {
         setError(null);
         try {
             const functions = getFunctions();
-            const initFn = httpsCallable(functions, 'adminInitTournament');
+            let initFnName = 'adminInitTournament';
+            if (selectedTournamentId.startsWith('bigeast')) initFnName = 'initializeBigEastTournamentHttp';
+            if (selectedTournamentId.startsWith('big12')) initFnName = 'initializeBig12TournamentHttp';
+
+            const initFn = httpsCallable(functions, initFnName);
             await initFn({
                 tournamentId: selectedTournamentId,
                 seasonYear: selectedYear,
