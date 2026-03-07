@@ -13,6 +13,30 @@ interface BracketWizardProps {
     onSuccess: (poolId: string) => void;
 }
 
+// ---- Round configuration per tournament type ----
+const ROUND_CONFIG: Record<string, { labels: string[]; classic: number[]; espn: number[]; fibonacci: number[] }> = {
+    ncaa: {
+        labels: ['R64', 'R32', 'Sweet 16', 'Elite 8', 'Final 4', 'Champ'],
+        classic: [1, 2, 4, 8, 16, 32],
+        espn: [10, 20, 40, 80, 160, 320],
+        fibonacci: [1, 2, 3, 5, 8, 13],
+    },
+    big12: {
+        labels: ['Round 1', 'Quarterfinals', 'Semifinals', 'Final', 'Champ'],
+        classic: [1, 2, 4, 8, 16],
+        espn: [10, 20, 40, 80, 160],
+        fibonacci: [1, 2, 3, 5, 8],
+    },
+    bigeast: {
+        labels: ['First Round', 'Quarterfinals', 'Semifinals', 'Champ'],
+        classic: [1, 2, 4, 8],
+        espn: [10, 20, 40, 80],
+        fibonacci: [1, 2, 3, 5],
+    },
+};
+
+const getRoundConfig = (type: string) => ROUND_CONFIG[type] || ROUND_CONFIG.ncaa;
+
 export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, onSuccess }) => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -100,7 +124,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         maxEntriesPerUser: 3,
         entryFee: 20,
         scoringSystem: 'CLASSIC',
-        customScoring: [1, 2, 4, 8, 16, 32],
+        customScoring: [1, 2, 4, 8, 16, 32], // re-initialized when tournamentType changes
         tieBreaker: 'CLOSEST_ABSOLUTE',
         lockAt: new Date('2026-03-17T12:00:00').getTime(), // March Madness 2026
 
@@ -256,7 +280,9 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     entryFee: formData.entryFee,
                     paymentInstructions: formData.paymentInstructions,
                     scoringSystem: formData.scoringSystem,
-                    customScoring: formData.scoringSystem === 'CUSTOM' ? formData.customScoring : undefined,
+                    customScoring: formData.scoringSystem === 'CUSTOM'
+                        ? formData.customScoring.slice(0, getRoundConfig(formData.tournamentType).labels.length)
+                        : undefined,
                     tieBreakers: {
                         closestAbsolute: formData.tieBreaker === 'CLOSEST_ABSOLUTE',
                         closestUnder: formData.tieBreaker === 'CLOSEST_UNDER'
@@ -294,6 +320,16 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
             update({ slug: autoSlug });
         }
     }, [formData.name, formData.slug, update]);
+
+    // Re-initialize customScoring when tournament type changes
+    React.useEffect(() => {
+        const cfg = getRoundConfig(formData.tournamentType);
+        const roundCount = cfg.labels.length;
+        // Only resize if the current array doesn't match
+        if (formData.customScoring.length !== roundCount) {
+            update({ customScoring: cfg.classic.slice() });
+        }
+    }, [formData.tournamentType]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -626,42 +662,51 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
                         <div>
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Scoring System</label>
-                            <select
-                                value={formData.scoringSystem}
-                                onChange={(e) => update({ scoringSystem: e.target.value as 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM' })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
-                            >
-                                <option value="CLASSIC">Classic (1-2-4-8-16-32)</option>
-                                <option value="ESPN">ESPN (10-20-40-80-160-320)</option>
-                                <option value="FIBONACCI">Fibonacci (1-2-3-5-8-13)</option>
-                                <option value="CUSTOM">Custom</option>
-                            </select>
+                            {(() => {
+                                const cfg = getRoundConfig(formData.tournamentType);
+                                return (
+                                    <select
+                                        value={formData.scoringSystem}
+                                        onChange={(e) => update({ scoringSystem: e.target.value as 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM' })}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                                    >
+                                        <option value="CLASSIC">Classic ({cfg.classic.join('-')})</option>
+                                        <option value="ESPN">ESPN ({cfg.espn.join('-')})</option>
+                                        <option value="FIBONACCI">Fibonacci ({cfg.fibonacci.join('-')})</option>
+                                        <option value="CUSTOM">Custom</option>
+                                    </select>
+                                );
+                            })()}
                         </div>
 
-                        {formData.scoringSystem === 'CUSTOM' && (
-                            <div className="md:col-span-2 bg-slate-950 p-4 rounded-lg border border-amber-500/30">
-                                <label className="block text-xs font-bold text-amber-400 uppercase mb-3">⚡ Custom Points Per Round</label>
-                                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-                                    {['R64', 'R32', 'Sweet 16', 'Elite 8', 'Final 4', 'Champ'].map((label, i) => (
-                                        <div key={i}>
-                                            <label className="block text-[10px] text-slate-500 mb-1 text-center">{label}</label>
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                value={formData.customScoring[i]}
-                                                onChange={(e) => {
-                                                    const newScoring = [...formData.customScoring];
-                                                    newScoring[i] = parseInt(e.target.value) || 0;
-                                                    update({ customScoring: newScoring });
-                                                }}
-                                                className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-2 text-white text-sm text-center outline-none focus:border-amber-500"
-                                            />
-                                        </div>
-                                    ))}
+                        {formData.scoringSystem === 'CUSTOM' && (() => {
+                            const cfg = getRoundConfig(formData.tournamentType);
+                            const roundCount = cfg.labels.length;
+                            return (
+                                <div className="md:col-span-2 bg-slate-950 p-4 rounded-lg border border-amber-500/30">
+                                    <label className="block text-xs font-bold text-amber-400 uppercase mb-3">⚡ Custom Points Per Round ({roundCount} rounds)</label>
+                                    <div className={`grid grid-cols-3 sm:grid-cols-${Math.min(roundCount, 6)} gap-3`}>
+                                        {cfg.labels.map((label, i) => (
+                                            <div key={i}>
+                                                <label className="block text-[10px] text-slate-500 mb-1 text-center">{label}</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={formData.customScoring[i] ?? 0}
+                                                    onChange={(e) => {
+                                                        const newScoring = [...formData.customScoring];
+                                                        newScoring[i] = parseInt(e.target.value) || 0;
+                                                        update({ customScoring: newScoring });
+                                                    }}
+                                                    className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-2 text-white text-sm text-center outline-none focus:border-amber-500"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 mt-2">Points awarded per correct pick in each round.</p>
                                 </div>
-                                <p className="text-[10px] text-slate-500 mt-2">Points awarded per correct pick in each round.</p>
-                            </div>
-                        )}
+                            );
+                        })()}
 
                         <div>
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lock Date/Time</label>
