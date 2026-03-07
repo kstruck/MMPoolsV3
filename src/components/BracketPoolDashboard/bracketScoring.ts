@@ -30,6 +30,7 @@ export interface RoundBreakdown {
 }
 
 const ROUND_LABELS = ['R64', 'R32', 'S16', 'E8', 'F4', 'Champ'];
+const ROUND_LABEL_FALLBACK = (r: number) => `R${r}`;
 
 export function getPointsForRound(
     roundIndex: number,
@@ -81,8 +82,11 @@ export function calculateScore(
     let upsetCount = 0;
     const roundMap = new Map<number, { correct: number; possible: number; points: number; maxPoints: number }>();
 
-    // Init rounds
-    for (let r = 1; r <= 6; r++) {
+    // Determine the max round from the actual tournament data
+    const maxRound = Object.values(tournament.games).reduce((max, g) => Math.max(max, g.round), 0) || 6;
+
+    // Init rounds dynamically
+    for (let r = 1; r <= maxRound; r++) {
         roundMap.set(r, { correct: 0, possible: 0, points: 0, maxPoints: 0 });
     }
 
@@ -98,7 +102,7 @@ export function calculateScore(
         if (!game) continue;
 
         const roundIndex = game.round - 1;
-        if (roundIndex < 0 || roundIndex >= 6) continue;
+        if (roundIndex < 0 || roundIndex >= maxRound) continue;
 
         const pointsValue = getPointsForRound(roundIndex, settings);
         const rd = roundMap.get(game.round)!;
@@ -162,11 +166,11 @@ export function calculateScore(
     }
 
     const roundBreakdown: RoundBreakdown[] = [];
-    for (let r = 1; r <= 6; r++) {
+    for (let r = 1; r <= maxRound; r++) {
         const rd = roundMap.get(r)!;
         roundBreakdown.push({
             round: r,
-            label: ROUND_LABELS[r - 1],
+            label: ROUND_LABELS[r - 1] || ROUND_LABEL_FALLBACK(r),
             ...rd,
         });
     }

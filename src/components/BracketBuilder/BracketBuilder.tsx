@@ -96,7 +96,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                         {activeRegion === 'FF' ? 'Final Four' : activeRegion}
                     </h2>
                     <div className="text-sm text-slate-400 font-mono">
-                        Total Picks: {Object.values(picks).length} / 63
+                        Total Picks: {Object.values(picks).length} / {Object.keys(tournament.games).length}
                     </div>
                 </div>
 

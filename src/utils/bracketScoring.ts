@@ -40,7 +40,7 @@ export const calculateEntryMaxScore = (
     let multipliers = SCORING_Multipliers.CLASSIC;
 
     if (system === 'FIBONACCI') multipliers = SCORING_Multipliers.FIBONACCI;
-    if (system === 'CUSTOM' && settings.customScoring && settings.customScoring.length === 6) {
+    if (system === 'CUSTOM' && settings.customScoring && settings.customScoring.length > 0) {
         multipliers = settings.customScoring;
     }
 

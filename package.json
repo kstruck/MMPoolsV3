@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test": "vitest run",
     "deploy:backend": "firebase deploy --only functions,firestore:rules",
     "deploy:hosting": "firebase deploy --only hosting",
     "prepare": "husky"

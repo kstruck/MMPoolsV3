@@ -16,6 +16,17 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
     // Pre-calculate eliminated teams once
     const eliminatedTeams = React.useMemo(() => getEliminatedTeams(tournament), [tournament]);
 
+    // Pre-calculate actual total score for tiebreakers
+    const actualTotal = React.useMemo(() => {
+        const games = Object.values(tournament.games);
+        const maxRound = games.reduce((max, g) => Math.max(max, g.round), 0);
+        const championshipGame = games.find(g => g.round === maxRound);
+        if (championshipGame?.status === 'FINAL') {
+            return (championshipGame.homeScore || 0) + (championshipGame.awayScore || 0);
+        }
+        return null;
+    }, [tournament]);
+
     // Calculate derived stats for sorting
     const entriesWithStats = React.useMemo(() => {
         return entries.map(entry => {
@@ -25,10 +36,32 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
         }).sort((a, b) => {
             // Sort by current score desc
             if (b.score !== a.score) return b.score - a.score;
-            // Tiebreaker: Max possible desc
-            return b.max - a.max;
+
+            // Secondary sort: Max possible desc
+            if (b.max !== a.max) return b.max - a.max;
+
+            // Apply Tiebreaker if Championship is finalized
+            if (actualTotal !== null && a.tieBreakerPrediction !== undefined && b.tieBreakerPrediction !== undefined) {
+                const diffA = a.tieBreakerPrediction - actualTotal;
+                const diffB = b.tieBreakerPrediction - actualTotal;
+
+                if (pool.settings.tieBreakers?.closestUnder) {
+                    const aUnder = diffA <= 0;
+                    const bUnder = diffB <= 0;
+                    if (aUnder && !bUnder) return -1;
+                    if (!aUnder && bUnder) return 1;
+                    if (aUnder && bUnder) {
+                        return Math.abs(diffA) - Math.abs(diffB);
+                    }
+                }
+
+                // Fallback / Default: Closest Absolute
+                return Math.abs(diffA) - Math.abs(diffB);
+            }
+
+            return 0;
         });
-    }, [entries, tournament, pool.settings, eliminatedTeams]);
+    }, [entries, tournament, pool.settings, eliminatedTeams, actualTotal]);
 
     // Track previous ranks to show changes
     const prevRanksRef = useRef<Record<string, number>>({});

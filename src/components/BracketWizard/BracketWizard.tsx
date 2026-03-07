@@ -271,8 +271,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                 reminders: formData.reminders,
                 accessControl: {
                     ...formData.accessControl,
-                    requireEmail: formData.collectPhone,
-                    requirePhone: formData.collectAddress
+                    requireEmail: formData.accessControl.requireEmail,
+                    requirePhone: formData.accessControl.requirePhone
                 },
                 settings: {
                     maxEntriesTotal: formData.maxEntriesTotal,
