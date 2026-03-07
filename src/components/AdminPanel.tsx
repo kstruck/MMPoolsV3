@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry } from '../types';
@@ -226,7 +227,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
       setAiIdea(response.text || "Could not generate idea.");
     } catch (error) {
-      console.error("Gemini Error", error);
+      logger.error("Gemini Error", error);
       setAiIdea("Failed to connect to AI Commissioner.");
     setIsThinking(false);
   };
@@ -328,7 +329,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       setScheduleGames(upcoming);
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       // Sandbox fix: Remove alert
       setShowSchedule(false);
     }
@@ -414,7 +415,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         setFetchStatus({ type: 'error', msg: 'Repair Failed' });
       }
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       setFetchStatus({ type: 'error', msg: 'Repair Error' });
     }
     setIsFixing(false);

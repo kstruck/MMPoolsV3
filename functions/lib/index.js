@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.submitPlayoffPicks = exports.onAnnouncementCreated = exports.onGameComplete = exports.importTournamentFromESPN = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentData = exports.markEntryPaidStatus = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.fixParticipantIds = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.autoLockPools = exports.onWinnerComputed = exports.runReminders = exports.sendAdminPasswordReset = exports.deleteUserAccount = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = exports.confirmPayment = exports.markSquaresPaid = exports.reserveSquare = exports.lockPool = void 0;
-exports.initializeBigEastTournamentHttp = exports.inspectPoolState = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = void 0;
+exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.submitPlayoffPicks = exports.onAnnouncementCreated = exports.onGameComplete = exports.importConferenceTournamentFromESPN = exports.importTournamentFromESPN = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentData = exports.markEntryPaidStatus = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.fixParticipantIds = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.autoLockPools = exports.onWinnerComputed = exports.runReminders = exports.sendAdminPasswordReset = exports.deleteUserAccount = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = exports.confirmPayment = exports.markSquaresPaid = exports.reserveSquare = exports.lockPool = void 0;
+exports.initializeBig12TournamentHttp = exports.initializeBigEastTournamentHttp = exports.setSuperAdminClaim = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -68,6 +68,7 @@ Object.defineProperty(exports, "adminInitTournament", { enumerable: true, get: f
 Object.defineProperty(exports, "syncBracketTournament", { enumerable: true, get: function () { return espnBracket_1.syncBracketTournament; } });
 Object.defineProperty(exports, "scheduledBracketSync", { enumerable: true, get: function () { return espnBracket_1.scheduledBracketSync; } });
 Object.defineProperty(exports, "importTournamentFromESPN", { enumerable: true, get: function () { return espnBracket_1.importTournamentFromESPN; } });
+Object.defineProperty(exports, "importConferenceTournamentFromESPN", { enumerable: true, get: function () { return espnBracket_1.importConferenceTournamentFromESPN; } });
 var postGameEmail_1 = require("./postGameEmail");
 Object.defineProperty(exports, "onGameComplete", { enumerable: true, get: function () { return postGameEmail_1.onGameComplete; } });
 var announcements_1 = require("./announcements");
@@ -87,8 +88,9 @@ var aiTesting_1 = require("./aiTesting");
 Object.defineProperty(exports, "generateTestScenario", { enumerable: true, get: function () { return aiTesting_1.generateTestScenario; } });
 Object.defineProperty(exports, "validateTestResults", { enumerable: true, get: function () { return aiTesting_1.validateTestResults; } });
 Object.defineProperty(exports, "generateTestReport", { enumerable: true, get: function () { return aiTesting_1.generateTestReport; } });
-var debug_1 = require("./debug");
-Object.defineProperty(exports, "inspectPoolState", { enumerable: true, get: function () { return debug_1.inspectPoolState; } });
+var adminClaims_1 = require("./adminClaims");
+Object.defineProperty(exports, "setSuperAdminClaim", { enumerable: true, get: function () { return adminClaims_1.setSuperAdminClaim; } });
 var conferenceTournaments_1 = require("./conferenceTournaments");
 Object.defineProperty(exports, "initializeBigEastTournamentHttp", { enumerable: true, get: function () { return conferenceTournaments_1.initializeBigEastTournamentHttp; } });
+Object.defineProperty(exports, "initializeBig12TournamentHttp", { enumerable: true, get: function () { return conferenceTournaments_1.initializeBig12TournamentHttp; } });
 //# sourceMappingURL=index.js.map

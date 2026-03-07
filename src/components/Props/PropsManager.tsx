@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import { useState, useMemo, useEffect } from 'react';
 import { Plus, Trash2, Edit2, Check, Save, ChevronDown, ChevronUp, Search, Filter, X, Lightbulb } from 'lucide-react';
 import { dbService } from '../../services/dbService';
@@ -518,7 +519,7 @@ const SeedLibrary: React.FC<{
                 const data = await dbService.getPropSeeds();
                 setSeeds(data);
             } catch (err) {
-                console.error(err);
+                logger.error(err);
             } finally {
                 setLoading(false);
             }

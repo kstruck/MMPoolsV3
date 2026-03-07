@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
@@ -47,7 +48,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
             setEvents(evts);
             setLoading(false);
         }, (error) => {
-            console.error("Audit log subscription failed:", error);
+            logger.error("Audit log subscription failed:", error);
             setLoading(false);
         });
 

@@ -8,66 +8,66 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const gemini_1 = require("./gemini");
-const generative_ai_1 = require("@google/generative-ai");
+const genai_1 = require("@google/genai");
 // ===== SCENARIO GENERATION =====
 const SCENARIO_GENERATION_SCHEMA = {
-    type: generative_ai_1.SchemaType.OBJECT,
+    type: genai_1.Type.OBJECT,
     properties: {
-        scenarioName: { type: generative_ai_1.SchemaType.STRING },
-        description: { type: generative_ai_1.SchemaType.STRING },
+        scenarioName: { type: genai_1.Type.STRING },
+        description: { type: genai_1.Type.STRING },
         poolConfig: {
-            type: generative_ai_1.SchemaType.OBJECT,
+            type: genai_1.Type.OBJECT,
             properties: {
-                name: { type: generative_ai_1.SchemaType.STRING },
-                type: { type: generative_ai_1.SchemaType.STRING },
+                name: { type: genai_1.Type.STRING },
+                type: { type: genai_1.Type.STRING },
                 props: {
-                    type: generative_ai_1.SchemaType.OBJECT,
+                    type: genai_1.Type.OBJECT,
                     properties: {
-                        costPerCard: { type: generative_ai_1.SchemaType.NUMBER },
-                        isLocked: { type: generative_ai_1.SchemaType.BOOLEAN }
+                        costPerCard: { type: genai_1.Type.NUMBER },
+                        isLocked: { type: genai_1.Type.BOOLEAN }
                     },
                     required: ["costPerCard", "isLocked"]
                 },
-                maxPlayers: { type: generative_ai_1.SchemaType.NUMBER }
+                maxPlayers: { type: genai_1.Type.NUMBER }
             },
             required: ["name", "type", "props", "maxPlayers"]
         },
         testUsers: {
-            type: generative_ai_1.SchemaType.ARRAY,
+            type: genai_1.Type.ARRAY,
             items: {
-                type: generative_ai_1.SchemaType.OBJECT,
+                type: genai_1.Type.OBJECT,
                 properties: {
-                    name: { type: generative_ai_1.SchemaType.STRING },
-                    strategy: { type: generative_ai_1.SchemaType.STRING },
-                    behavior: { type: generative_ai_1.SchemaType.STRING },
+                    name: { type: genai_1.Type.STRING },
+                    strategy: { type: genai_1.Type.STRING },
+                    behavior: { type: genai_1.Type.STRING },
                 },
                 required: ["name", "strategy", "behavior"]
             },
         },
         expectedOutcome: {
-            type: generative_ai_1.SchemaType.OBJECT,
+            type: genai_1.Type.OBJECT,
             properties: {
-                winner: { type: generative_ai_1.SchemaType.STRING },
-                topThree: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
-                edgeCases: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+                winner: { type: genai_1.Type.STRING },
+                topThree: { type: genai_1.Type.ARRAY, items: { type: genai_1.Type.STRING } },
+                edgeCases: { type: genai_1.Type.ARRAY, items: { type: genai_1.Type.STRING } },
             },
             required: ["winner", "topThree", "edgeCases"]
         },
         actions: {
-            type: generative_ai_1.SchemaType.ARRAY,
+            type: genai_1.Type.ARRAY,
             items: {
-                type: generative_ai_1.SchemaType.OBJECT,
+                type: genai_1.Type.OBJECT,
                 properties: {
-                    actionType: { type: generative_ai_1.SchemaType.STRING, description: "Use 'SCORE_UPDATE' for score changes" },
-                    period: { type: generative_ai_1.SchemaType.STRING, description: "Q1, Q2, Q3, FINAL" },
-                    homeScore: { type: generative_ai_1.SchemaType.NUMBER },
-                    awayScore: { type: generative_ai_1.SchemaType.NUMBER },
-                    description: { type: generative_ai_1.SchemaType.STRING }
+                    actionType: { type: genai_1.Type.STRING, description: "Use 'SCORE_UPDATE' for score changes" },
+                    period: { type: genai_1.Type.STRING, description: "Q1, Q2, Q3, FINAL" },
+                    homeScore: { type: genai_1.Type.NUMBER },
+                    awayScore: { type: genai_1.Type.NUMBER },
+                    description: { type: genai_1.Type.STRING }
                 },
                 required: ["actionType", "period", "homeScore", "awayScore"]
             }
         },
-        validationChecks: { type: generative_ai_1.SchemaType.ARRAY, items: { type: generative_ai_1.SchemaType.STRING } },
+        validationChecks: { type: genai_1.Type.ARRAY, items: { type: genai_1.Type.STRING } },
     },
     required: ["scenarioName", "description", "poolConfig", "testUsers", "expectedOutcome", "validationChecks"],
 };

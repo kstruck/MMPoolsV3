@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import {
     Bot, Play, CheckCircle, AlertTriangle,
@@ -67,7 +68,7 @@ export const TestingDashboard: React.FC = () => {
             setReport(result.report);
 
         } catch (error) {
-            console.error("Test execution failed:", error);
+            logger.error("Test execution failed:", error);
         } finally {
             setIsRunning(false);
             setIsGenerating(false);

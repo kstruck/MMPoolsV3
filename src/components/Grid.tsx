@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import type { GameState, Winner, PlayerDetails, User, PropCard } from '../types';
 import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon, Zap, Printer, ZoomIn, ZoomOut, DollarSign } from 'lucide-react';
@@ -341,7 +342,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
             setPaymentConfirmMsg({ type: 'error', text: "Failed to confirm payment. Please try again." });
          }
       } catch (e) {
-         console.error(e);
+         logger.error(e);
          setPaymentConfirmMsg({ type: 'error', text: "An error occurred. Please contact the host directly." });
       } finally {
          setIsConfirmingPayment(false);
@@ -392,7 +393,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          const res = await onCreateClaimCode(guestKey);
          setGeneratedCode(res.claimCode);
       } catch (e) {
-         console.error(e);
+         logger.error(e);
          setClaimMsg({ type: 'error', text: 'Failed to generate code.' });
       }
    };
@@ -406,7 +407,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          setInputCode('');
          // Ideally reload or refetch?
       } catch (e) {
-         console.error(e);
+         logger.error(e);
          setClaimMsg({ type: 'error', text: 'Invalid code or failed to merge.' });
       } finally {
          setIsClaimingCode(false);

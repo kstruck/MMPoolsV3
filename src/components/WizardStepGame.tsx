@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState } from 'react';
 import { RefreshCw, Calendar, CheckCircle } from 'lucide-react';
 import type { GameState } from '../types';
@@ -93,7 +94,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
             setScheduleGames(upcoming);
 
         } catch (e) {
-            console.error("Schedule Fetch Error", e);
+            logger.error("Schedule Fetch Error", e);
         }
         setIsLoadingSchedule(false);
     };

@@ -28,7 +28,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
             setResendStatus('sent');
             setTimeout(() => setResendStatus('idle'), 5000); // Reset after 5s
         } catch (error) {
-            console.error(error);
+            logger.error(error);
             setResendStatus('error');
         } finally {
             setIsResending(false);

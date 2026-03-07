@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncPlayInPicks = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentScores = exports.importTournamentFromESPN = exports.initializeTournament = void 0;
+exports.syncPlayInPicks = exports.importConferenceTournamentFromESPN = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentScores = exports.importTournamentFromESPN = exports.initializeTournament = void 0;
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const https_1 = require("firebase-functions/v2/https");
@@ -589,38 +589,73 @@ exports.importTournamentFromESPN = (0, https_1.onCall)(async (request) => {
     }
 });
 /**
- * Updates scores for a tournament from ESPN API.
+ * Unified update function that delegates scoring based on tournamentType
  */
 const updateTournamentScores = async (db, tournamentId, dryRun = false) => {
     logger.info(`Syncing tournament scores for ${tournamentId}...`);
     try {
-        // Get season year from tournament doc (more robust than parsing ID)
         const tournamentRef = db.collection('tournaments').doc(tournamentId);
         const existingDoc = await tournamentRef.get();
         const existingData = existingDoc.data();
-        const seasonYear = (existingData === null || existingData === void 0 ? void 0 : existingData.seasonYear) || parseInt(tournamentId.split('-')[1] || '2025');
-        const { games, teams, count } = await fetchAndMapESPNGameData(seasonYear);
-        logger.info(`Fetched ${count} games for sync.`);
-        if (!dryRun && count > 0) {
-            // Read existing skeleton games for mapping
-            const existingGames = (existingData === null || existingData === void 0 ? void 0 : existingData.games) || {};
-            // Map ESPN data to skeleton structure
-            const { updatedGames, mappedCount } = mapESPNGamesToSkeleton(existingGames, games, teams);
-            logger.info(`Mapped ${mappedCount} games to skeleton for scoring.`);
-            // Update both raw ESPN data and mapped skeleton games
-            await tournamentRef.set({
-                importedGames: games,
-                importedTeams: teams,
-                games: updatedGames,
-                lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-            // Trigger internal scoring
-            try {
-                const scoredCount = await (0, bracketScoring_1.scoreTournamentEntries)(db, tournamentId);
-                logger.info(`Scoring complete. Scored ${scoredCount} entries.`);
+        if (!existingData) {
+            logger.info(`Tournament ${tournamentId} not found for sync.`);
+            return;
+        }
+        const seasonYear = existingData.seasonYear || parseInt(tournamentId.split('-')[1] || '2025');
+        const isConference = existingData.tournamentType === 'conference';
+        if (isConference) {
+            // Conference Sync
+            const confName = existingData.conferenceName;
+            let groupId = 100;
+            if (confName === 'Big 12')
+                groupId = 8;
+            else if (confName === 'Big East')
+                groupId = 4;
+            else {
+                logger.info(`Unsupported conference: ${confName}`);
+                return;
             }
-            catch (e) {
-                logger.error("Scoring failed after sync:", e);
+            const events = await fetchESPNConferenceTournamentData(seasonYear, groupId);
+            if (!dryRun && events.length > 0) {
+                const existingGames = existingData.games || {};
+                const slots = existingData.slots || {};
+                const { updatedGames, mappedCount } = mapESPNConferenceGamesToSkeleton(existingGames, slots, events);
+                logger.info(`[Conf Sync] Mapped ${mappedCount} games to skeleton for scoring.`);
+                await tournamentRef.set({
+                    importedEvents: events,
+                    games: updatedGames,
+                    lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                try {
+                    const scoredCount = await (0, bracketScoring_1.scoreTournamentEntries)(db, tournamentId);
+                    logger.info(`[Conf Sync] Scoring complete for ${tournamentId}. Scored ${scoredCount} entries.`);
+                }
+                catch (e) {
+                    logger.error(`[Conf Sync] Scoring failed for ${tournamentId}:`, e);
+                }
+            }
+        }
+        else {
+            // NCAA Sync
+            const { games, teams, count } = await fetchAndMapESPNGameData(seasonYear);
+            logger.info(`Fetched ${count} games for sync.`);
+            if (!dryRun && count > 0) {
+                const existingGames = existingData.games || {};
+                const { updatedGames, mappedCount } = mapESPNGamesToSkeleton(existingGames, games, teams);
+                logger.info(`Mapped ${mappedCount} games to skeleton for scoring.`);
+                await tournamentRef.set({
+                    importedGames: games,
+                    importedTeams: teams,
+                    games: updatedGames,
+                    lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                try {
+                    const scoredCount = await (0, bracketScoring_1.scoreTournamentEntries)(db, tournamentId);
+                    logger.info(`Scoring complete. Scored ${scoredCount} entries.`);
+                }
+                catch (e) {
+                    logger.error("Scoring failed after sync:", e);
+                }
             }
         }
     }
@@ -714,6 +749,143 @@ async function fetchESPNTournamentData(seasonYear) {
         throw error;
     }
 }
+async function fetchESPNConferenceTournamentData(seasonYear, groupId) {
+    const start = `${seasonYear}0305`;
+    const end = `${seasonYear}0318`; // Includes selection sunday margin
+    const limit = 50;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=${groupId}`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`ESPN API Error: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json();
+        // Postseason is type 3 in ESPN API (sometimes conference tourneys are marked 3, sometimes not, 
+        // but limiting by group + date range should guarantee only the tournament games are pulled).
+        return data.events || [];
+    }
+    catch (error) {
+        logger.error("Failed to fetch ESPN conf data:", error);
+        throw error;
+    }
+}
+function mapESPNConferenceGamesToSkeleton(existingGames, slots, espnEvents) {
+    const updated = Object.assign({}, existingGames);
+    let mappedCount = 0;
+    // Convert espnEvents to matches
+    const matches = espnEvents.map(e => {
+        var _a, _b, _c, _d, _e;
+        const comp = e.competitions[0];
+        const home = comp.competitors.find(c => c.homeAway === 'home');
+        const away = comp.competitors.find(c => c.homeAway === 'away');
+        if (!home || !away)
+            return null;
+        const homeScore = parseInt(home.score || '0');
+        const awayScore = parseInt(away.score || '0');
+        const status = comp.status.type.state === 'pre' ? 'SCHEDULED' :
+            comp.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
+        let winnerTeamId = undefined;
+        if (status === 'FINAL') {
+            winnerTeamId = homeScore > awayScore ? home.team.id : away.team.id;
+        }
+        return {
+            homeTeamId: home.team.id,
+            awayTeamId: away.team.id,
+            homeScore,
+            awayScore,
+            status,
+            winnerTeamId,
+            startTime: comp.date,
+            period: (_a = comp.status) === null || _a === void 0 ? void 0 : _a.period,
+            clock: (_b = comp.status) === null || _b === void 0 ? void 0 : _b.displayClock,
+            broadcast: (_e = (_d = (_c = comp.broadcasts) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.names) === null || _e === void 0 ? void 0 : _e[0],
+            externalId: e.id
+        };
+    }).filter(m => m !== null);
+    // Match by passing teams from feeders down
+    const maxRound = Math.max(...Object.values(updated).map(g => g.round));
+    for (let currentRound = 1; currentRound <= maxRound; currentRound++) {
+        for (const [id, game] of Object.entries(updated)) {
+            if (game.round !== currentRound)
+                continue;
+            let hId = game.homeTeamId;
+            let aId = game.awayTeamId;
+            const feeders = Object.values(slots).filter(s => s.nextSlotId === id);
+            if (feeders.length > 0) {
+                const winningTeams = feeders.map(f => { var _a; return (_a = updated[f.gameId]) === null || _a === void 0 ? void 0 : _a.winnerTeamId; }).filter(Boolean);
+                let nextWinningSlot = 0;
+                if ((!hId || hId.startsWith('SEED_')) && nextWinningSlot < winningTeams.length) {
+                    hId = winningTeams[nextWinningSlot++];
+                }
+                if ((!aId || aId.startsWith('SEED_')) && nextWinningSlot < winningTeams.length) {
+                    aId = winningTeams[nextWinningSlot++];
+                }
+            }
+            if (hId && !hId.startsWith('SEED_'))
+                updated[id].homeTeamId = hId;
+            if (aId && !aId.startsWith('SEED_'))
+                updated[id].awayTeamId = aId;
+            if (hId && aId && !hId.startsWith('SEED_') && !aId.startsWith('SEED_')) {
+                const expected = new Set([hId, aId]);
+                const match = matches.find(m => expected.has(m.homeTeamId) && expected.has(m.awayTeamId));
+                if (match) {
+                    updated[id] = Object.assign(Object.assign(Object.assign({}, updated[id]), match), { homeTeamId: hId, awayTeamId: aId, homeScore: match.homeTeamId === hId ? match.homeScore : match.awayScore, awayScore: match.homeTeamId === hId ? match.awayScore : match.homeScore });
+                    mappedCount++;
+                }
+            }
+        }
+    }
+    return { updatedGames: updated, mappedCount };
+}
+/**
+ * Imports tournament data from ESPN, mapping existing games and teams for Conference Tournaments.
+ */
+exports.importConferenceTournamentFromESPN = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c, _d, _e;
+    let role = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.role;
+    if (!role && ((_b = request.auth) === null || _b === void 0 ? void 0 : _b.uid)) {
+        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
+        role = (_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.role;
+    }
+    if (role !== 'SUPER_ADMIN') {
+        throw new https_1.HttpsError('permission-denied', 'Super Admin only.');
+    }
+    const { tournamentId, seasonYear, conferenceName } = request.data;
+    if (!tournamentId || !seasonYear || !conferenceName) {
+        return { success: false, message: 'Missing tournamentId, seasonYear, or conferenceName' };
+    }
+    let groupId = 100;
+    if (conferenceName === 'Big 12')
+        groupId = 8;
+    else if (conferenceName === 'Big East')
+        groupId = 4;
+    else
+        return { success: false, message: 'Unsupported conference.' };
+    const db = admin.firestore();
+    const tournamentRef = db.collection('tournaments').doc(tournamentId);
+    try {
+        const events = await fetchESPNConferenceTournamentData(parseInt(seasonYear), groupId);
+        if (events.length === 0) {
+            return { success: false, message: "No events found from ESPN." };
+        }
+        const existingDoc = await tournamentRef.get();
+        if (!existingDoc.exists)
+            return { success: false, message: "Tournament not initialized yet." };
+        const existingGames = ((_d = existingDoc.data()) === null || _d === void 0 ? void 0 : _d.games) || {};
+        const slots = ((_e = existingDoc.data()) === null || _e === void 0 ? void 0 : _e.slots) || {};
+        const { updatedGames, mappedCount } = mapESPNConferenceGamesToSkeleton(existingGames, slots, events);
+        await tournamentRef.set({
+            importedEvents: events,
+            games: updatedGames,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        await (0, bracketScoring_1.scoreTournamentEntries)(db, tournamentId);
+        return { success: true, count: events.length, mapped: mappedCount };
+    }
+    catch (error) {
+        return { success: false, message: `Import failed: ${error.message}` };
+    }
+});
 /**
  * Super Admin function to sync early bracket picks with play-in game winners.
  * Users who submit brackets before the First Four finishes will have "TeamA/TeamB"

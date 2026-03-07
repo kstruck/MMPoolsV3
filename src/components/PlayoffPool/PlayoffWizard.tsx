@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import React, { useState, useEffect } from 'react';
 import type { User, PlayoffTeam, PayoutSettings } from '../../types';
 import { dbService } from '../../services/dbService';
@@ -119,7 +120,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                     }));
                 }
             } catch (err) {
-                console.error("Failed to load pool for editing", err);
+                logger.error("Failed to load pool for editing", err);
                 setError("Failed to load pool data.");
             } finally {
                 setLoading(false);
@@ -412,7 +413,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                 onComplete(poolId);
             }
         } catch (err: any) {
-            console.error(err);
+            logger.error(err);
             setError(err.message || 'Failed to create pool.');
         } finally {
             setLoading(false);

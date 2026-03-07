@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { Send, Clock, CheckCircle, AlertCircle } from 'lucide-react'; // Using lucide-react as standard in this project
 import type { GameState, Announcement, User } from '../types';
@@ -60,7 +61,7 @@ export const AnnouncementManager: React.FC<AnnouncementManagerProps> = ({ pool, 
             setTimeout(() => setFeedback(null), 3000);
 
         } catch (e: any) {
-            console.error("Failed to send announcement:", e);
+            logger.error("Failed to send announcement:", e);
             setFeedback({ type: 'error', msg: 'Failed to post announcement. ' + e.message });
         } finally {
             setIsSending(false);

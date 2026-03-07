@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe } from 'lucide-react';
@@ -167,7 +168,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             setMessageSaved(true);
             setTimeout(() => setMessageSaved(false), 2000);
         } catch (err) {
-            console.error('[BracketPoolDashboard] Error saving commissioner message:', err);
+            logger.error('[BracketPoolDashboard] Error saving commissioner message:', err);
             setError('Failed to save commissioner message.');
         } finally {
             setSavingMessage(false);
@@ -185,7 +186,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             setSettingsSaved(true);
             setTimeout(() => setSettingsSaved(false), 2000);
         } catch (err) {
-            console.error('[BracketPoolDashboard] Error locking pool:', err);
+            logger.error('[BracketPoolDashboard] Error locking pool:', err);
             setError('Failed to lock pool.');
         } finally {
             setSavingSettings(false);
@@ -203,7 +204,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             setSettingsSaved(true);
             setTimeout(() => setSettingsSaved(false), 2000);
         } catch (err) {
-            console.error('[BracketPoolDashboard] Error saving lock time:', err);
+            logger.error('[BracketPoolDashboard] Error saving lock time:', err);
             setError('Failed to save lock time.');
         } finally {
             setSavingSettings(false);
@@ -217,7 +218,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             const newStatus = currentStatus === 'PAID' ? 'UNPAID' : 'PAID';
             await dbService.updateBracketEntryPayment(pool.id, entryId, newStatus);
         } catch (err) {
-            console.error('Failed to toggle payment:', err);
+            logger.error('Failed to toggle payment:', err);
             setError('Failed to update payment');
         } finally {
             setTogglingPayment(null);
@@ -272,7 +273,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             setEditingSettings(false);
             setTimeout(() => setSettingsSaved(false), 2000);
         } catch (err) {
-            console.error('Failed to save settings:', err);
+            logger.error('Failed to save settings:', err);
             setError('Failed to save settings');
         } finally {
             setSavingSettings(false);

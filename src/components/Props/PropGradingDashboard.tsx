@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import React, { useState, useEffect } from 'react';
 import type { GameState, PropCard } from '../../types';
 import { Check, Trophy, Award, Target } from 'lucide-react';
@@ -26,7 +27,7 @@ export const PropGradingDashboard: React.FC<PropGradingDashboardProps> = ({ game
         try {
             await dbService.gradeProp(gameState.id, qId, optIdx);
         } catch (e) {
-            console.error('Grading failed:', e);
+            logger.error('Grading failed:', e);
         } finally {
             setIsGrading(null);
         }

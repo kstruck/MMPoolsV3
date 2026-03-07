@@ -147,7 +147,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
 
             setScheduleGames(upcoming);
         } catch (e) {
-            console.error(e);
+            logger.error(e);
             setShowSchedule(false);
         }
         setIsLoadingSchedule(false);
@@ -253,7 +253,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
             navigate(`/pool/${poolId}`);
             onComplete();
         } catch (error) {
-            console.error("Failed to create pool", error);
+            logger.error("Failed to create pool", error);
             alert("Failed to create pool. Please try again.");
             setIsCreating(false);
         }

@@ -27,7 +27,6 @@ const NFLPlayoffsLanding = React.lazy(() => import('./components/NFLPlayoffsLand
 const CustomSportsLanding = React.lazy(() => import('./components/CustomSportsLanding').then(m => ({ default: m.CustomSportsLanding })));
 const PricingPage = React.lazy(() => import('./components/PricingPage').then(m => ({ default: m.PricingPage })));
 const AboutPage = React.lazy(() => import('./components/AboutPage').then(m => ({ default: m.AboutPage })));
-const ContactPage = React.lazy(() => import('./components/ContactPage').then(m => ({ default: m.ContactPage })));
 const CharityPage = React.lazy(() => import('./components/CharityPage').then(m => ({ default: m.CharityPage })));
 
 // Lazy-loaded routes
@@ -254,7 +253,6 @@ const App: React.FC = () => {
           {/* Global Pages */}
           <Route path="/pricing" element={<PricingPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/about" element={<AboutPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
-          <Route path="/contact" element={<ContactPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/charity" element={<CharityPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
 
           <Route path="/browse" element={
@@ -266,6 +264,13 @@ const App: React.FC = () => {
           <Route path="/privacy" element={<PrivacyPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/terms" element={<TermsPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/support" element={
+            <>
+              <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+              <SupportPage />
+              <Footer />
+            </>
+          } />
+          <Route path="/contact" element={
             <>
               <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
               <SupportPage />

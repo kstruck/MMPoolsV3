@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import React from 'react';
 import { Share2, Twitter, Facebook, MessageCircle, Link as LinkIcon, LogOut, Instagram } from 'lucide-react';
 
@@ -25,7 +26,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
                     url: cleanUrl,
                 });
             } catch (err) {
-                console.error('Error sharing:', err);
+                logger.error('Error sharing:', err);
             }
         } else {
             // Fallback for desktop if they clicked the mobile share icon (unlikely but safe)

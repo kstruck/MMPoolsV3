@@ -268,7 +268,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             ));
             await Promise.all(promises);
         } catch (error: unknown) {
-            console.error("Reserve failed", error);
+            logger.error("Reserve failed", error);
             const msg = error instanceof Error ? error.message : "Reservation failed.";
             return { success: false, message: msg };
         }
@@ -292,8 +292,8 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     },
                     ownerId,
                     squaresPool.paymentHandles
-                ).catch(err => console.error('[PoolRoute] Email failed', err));
-            }).catch(err => console.error('[PoolRoute] Failed to import emailService', err));
+                ).catch(err => logger.error('[PoolRoute] Email failed', err));
+            }).catch(err => logger.error('[PoolRoute] Failed to import emailService', err));
         }
 
         return { success: true };

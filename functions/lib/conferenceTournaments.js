@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.initializeBigEastTournamentHttp = exports.initializeBigEastTournament = exports.BIG_EAST_TEAMS_2026 = void 0;
+exports.initializeBig12TournamentHttp = exports.initializeBig12Tournament = exports.BIG_12_TEAMS_2026 = exports.initializeBigEastTournamentHttp = exports.initializeBigEastTournament = exports.BIG_EAST_TEAMS_2026 = void 0;
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const https_1 = require("firebase-functions/v2/https");
@@ -138,6 +138,149 @@ exports.initializeBigEastTournamentHttp = (0, https_1.onCall)(async (request) =>
     const tournamentId = ((_b = request.data) === null || _b === void 0 ? void 0 : _b.tournamentId) || 'bigeast-2026';
     const overwrite = ((_c = request.data) === null || _c === void 0 ? void 0 : _c.overwrite) === true;
     await (0, exports.initializeBigEastTournament)(db, tournamentId, overwrite);
+    return { success: true, tournamentId };
+});
+// ---------------------------------------------------------------------------
+// Big 12 2026 Team Data (16 teams)
+// Seeding is determined after the regular season, so we use placeholder seeds.
+// ---------------------------------------------------------------------------
+// 16 Big 12 teams for 2026 (seeds TBD; we store them seeded 1-16 as placeholder)
+exports.BIG_12_TEAMS_2026 = [
+    { id: 'HOU', name: 'Houston Cougars', shortName: 'Houston', espnId: '248', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/248.png', seed: 1 },
+    { id: 'KU', name: 'Kansas Jayhawks', shortName: 'Kansas', espnId: '2305', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png', seed: 2 },
+    { id: 'ISU', name: 'Iowa State Cyclones', shortName: 'Iowa State', espnId: '66', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/66.png', seed: 3 },
+    { id: 'BYU', name: 'BYU Cougars', shortName: 'BYU', espnId: '252', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/252.png', seed: 4 },
+    { id: 'ARIZ', name: 'Arizona Wildcats', shortName: 'Arizona', espnId: '12', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/12.png', seed: 5 },
+    { id: 'TCU', name: 'TCU Horned Frogs', shortName: 'TCU', espnId: '2628', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2628.png', seed: 6 },
+    { id: 'BAYLOR', name: 'Baylor Bears', shortName: 'Baylor', espnId: '239', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/239.png', seed: 7 },
+    { id: 'CINC', name: 'Cincinnati Bearcats', shortName: 'Cincinnati', espnId: '2132', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2132.png', seed: 8 },
+    { id: 'KSU', name: 'Kansas State Wildcats', shortName: 'Kansas State', espnId: '2306', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2306.png', seed: 9 },
+    { id: 'OKST', name: 'Oklahoma State Cowboys', shortName: 'Oklahoma State', espnId: '197', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/197.png', seed: 10 },
+    { id: 'COL', name: 'Colorado Buffaloes', shortName: 'Colorado', espnId: '38', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/38.png', seed: 11 },
+    { id: 'UCF', name: 'UCF Knights', shortName: 'UCF', espnId: '2116', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2116.png', seed: 12 },
+    { id: 'TTU', name: 'Texas Tech Red Raiders', shortName: 'Texas Tech', espnId: '2641', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2641.png', seed: 13 },
+    { id: 'UTAH', name: 'Utah Utes', shortName: 'Utah', espnId: '254', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/254.png', seed: 14 },
+    { id: 'ASU', name: 'Arizona State Sun Devils', shortName: 'Arizona State', espnId: '9', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/9.png', seed: 15 },
+    { id: 'WVU', name: 'West Virginia Mountaineers', shortName: 'West Virginia', espnId: '277', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/277.png', seed: 16 },
+];
+// ---------------------------------------------------------------------------
+// Big 12 Tournament Structure
+//
+// Round 1 (Mar 10): 8 games (1v16, 8v9, 5v12, 4v13, 6v11, 3v14, 7v10, 2v15)
+// Quarterfinals (Mar 11): 4 games
+// Semifinals (Mar 12): 2 games
+// Championship (Mar 13): 1 game
+//
+// Total: 15 games, 15 slots
+// No byes.
+// ---------------------------------------------------------------------------
+const initializeBig12Tournament = async (db, tournamentId, overwrite = false) => {
+    const tournamentRef = db.collection('tournaments').doc(tournamentId);
+    if (!overwrite) {
+        const doc = await tournamentRef.get();
+        if (doc.exists) {
+            logger.info(`Tournament ${tournamentId} already exists. Skipping init.`);
+            return;
+        }
+    }
+    const games = {};
+    const slots = {};
+    const startTime = '2026-03-10T12:00:00.000Z'; // placeholder; ESPN sync will update
+    // Helper to build a game
+    const makeGame = (id, round, homeId, awayId, startISO) => ({
+        id,
+        startTime: startISO,
+        status: 'SCHEDULED',
+        homeTeamId: homeId,
+        awayTeamId: awayId,
+        homeScore: 0,
+        awayScore: 0,
+        round,
+        region: 'Conference',
+    });
+    // ---- ROUND 1 (8 games, seeds 1-16) ----
+    const r1Matchups = [
+        { id: 'R1-CONF-1', home: 1, away: 16 },
+        { id: 'R1-CONF-2', home: 8, away: 9 },
+        { id: 'R1-CONF-3', home: 5, away: 12 },
+        { id: 'R1-CONF-4', home: 4, away: 13 },
+        { id: 'R1-CONF-5', home: 6, away: 11 },
+        { id: 'R1-CONF-6', home: 3, away: 14 },
+        { id: 'R1-CONF-7', home: 7, away: 10 },
+        { id: 'R1-CONF-8', home: 2, away: 15 },
+    ];
+    for (const m of r1Matchups) {
+        const homeTeam = exports.BIG_12_TEAMS_2026.find(t => t.seed === m.home);
+        const awayTeam = exports.BIG_12_TEAMS_2026.find(t => t.seed === m.away);
+        games[m.id] = makeGame(m.id, 1, (homeTeam === null || homeTeam === void 0 ? void 0 : homeTeam.id) || `SEED_${m.home}`, (awayTeam === null || awayTeam === void 0 ? void 0 : awayTeam.id) || `SEED_${m.away}`, startTime);
+    }
+    // ---- ROUND 2 — QUARTERFINALS (4 games) ----
+    const qfStartTime = '2026-03-11T12:00:00.000Z';
+    games['R2-CONF-1'] = makeGame('R2-CONF-1', 2, '', '', qfStartTime); // Winner 1v16 vs Winner 8v9
+    games['R2-CONF-2'] = makeGame('R2-CONF-2', 2, '', '', qfStartTime); // Winner 5v12 vs Winner 4v13
+    games['R2-CONF-3'] = makeGame('R2-CONF-3', 2, '', '', qfStartTime); // Winner 6v11 vs Winner 3v14
+    games['R2-CONF-4'] = makeGame('R2-CONF-4', 2, '', '', qfStartTime); // Winner 7v10 vs Winner 2v15
+    // ---- ROUND 3 — SEMIFINALS (2 games) ----
+    const sfStartTime = '2026-03-12T12:00:00.000Z';
+    games['R3-CONF-1'] = makeGame('R3-CONF-1', 3, '', '', sfStartTime);
+    games['R3-CONF-2'] = makeGame('R3-CONF-2', 3, '', '', sfStartTime);
+    // ---- ROUND 4 — CHAMPIONSHIP (1 game) ----
+    const champStartTime = '2026-03-13T14:00:00.000Z';
+    games['R4-CONF-1'] = makeGame('R4-CONF-1', 4, '', '', champStartTime);
+    // ---- SLOTS ----
+    // R1 slots → their winners go to QF
+    slots['R1-CONF-1'] = { id: 'R1-CONF-1', gameId: 'R1-CONF-1', nextSlotId: 'R2-CONF-1' };
+    slots['R1-CONF-2'] = { id: 'R1-CONF-2', gameId: 'R1-CONF-2', nextSlotId: 'R2-CONF-1' };
+    slots['R1-CONF-3'] = { id: 'R1-CONF-3', gameId: 'R1-CONF-3', nextSlotId: 'R2-CONF-2' };
+    slots['R1-CONF-4'] = { id: 'R1-CONF-4', gameId: 'R1-CONF-4', nextSlotId: 'R2-CONF-2' };
+    slots['R1-CONF-5'] = { id: 'R1-CONF-5', gameId: 'R1-CONF-5', nextSlotId: 'R2-CONF-3' };
+    slots['R1-CONF-6'] = { id: 'R1-CONF-6', gameId: 'R1-CONF-6', nextSlotId: 'R2-CONF-3' };
+    slots['R1-CONF-7'] = { id: 'R1-CONF-7', gameId: 'R1-CONF-7', nextSlotId: 'R2-CONF-4' };
+    slots['R1-CONF-8'] = { id: 'R1-CONF-8', gameId: 'R1-CONF-8', nextSlotId: 'R2-CONF-4' };
+    // QF slots → winners go to SF
+    slots['R2-CONF-1'] = { id: 'R2-CONF-1', gameId: 'R2-CONF-1', nextSlotId: 'R3-CONF-1' };
+    slots['R2-CONF-2'] = { id: 'R2-CONF-2', gameId: 'R2-CONF-2', nextSlotId: 'R3-CONF-1' };
+    slots['R2-CONF-3'] = { id: 'R2-CONF-3', gameId: 'R2-CONF-3', nextSlotId: 'R3-CONF-2' };
+    slots['R2-CONF-4'] = { id: 'R2-CONF-4', gameId: 'R2-CONF-4', nextSlotId: 'R3-CONF-2' };
+    // SF slots → winners go to Championship
+    slots['R3-CONF-1'] = { id: 'R3-CONF-1', gameId: 'R3-CONF-1', nextSlotId: 'R4-CONF-1' };
+    slots['R3-CONF-2'] = { id: 'R3-CONF-2', gameId: 'R3-CONF-2', nextSlotId: 'R4-CONF-1' };
+    // Championship slot (no next)
+    slots['R4-CONF-1'] = { id: 'R4-CONF-1', gameId: 'R4-CONF-1', nextSlotId: null };
+    // ---- WRITE TO FIRESTORE ----
+    await tournamentRef.set({
+        id: tournamentId,
+        seasonYear: 2026,
+        gender: 'mens',
+        isFinalized: false,
+        tournamentType: 'conference',
+        conferenceName: 'Big 12',
+        lockAt: new Date('2026-03-10T12:00:00.000Z').getTime(),
+        games,
+        slots,
+        createdAt: admin.firestore.Timestamp.now().toMillis(),
+    });
+    logger.info(`Big 12 tournament ${tournamentId} initialized with ${Object.keys(games).length} games.`);
+};
+exports.initializeBig12Tournament = initializeBig12Tournament;
+// ---------------------------------------------------------------------------
+// HTTPS Callable — SuperAdmin only
+// ---------------------------------------------------------------------------
+exports.initializeBig12TournamentHttp = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
+    }
+    // Verify caller is a SuperAdmin
+    const db = admin.firestore();
+    const userDoc = await db.collection('users').doc(request.auth.uid).get();
+    const role = (_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
+    if (role !== 'SUPER_ADMIN') {
+        throw new https_1.HttpsError('permission-denied', 'Super Admin only.');
+    }
+    const tournamentId = ((_b = request.data) === null || _b === void 0 ? void 0 : _b.tournamentId) || 'big12-2026';
+    const overwrite = ((_c = request.data) === null || _c === void 0 ? void 0 : _c.overwrite) === true;
+    await (0, exports.initializeBig12Tournament)(db, tournamentId, overwrite);
     return { success: true, tournamentId };
 });
 //# sourceMappingURL=conferenceTournaments.js.map

@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam, PoolTheme } from '../types';
@@ -78,7 +79,7 @@ export const SuperAdmin: React.FC = () => {
     const fetchUsers = () => {
         dbService.getAllUsers()
             .then(setUsers)
-            .catch(err => console.error("Failed to load users", err));
+            .catch(err => logger.error("Failed to load users", err));
     };
 
     // --- EFFECTS ---
@@ -90,7 +91,7 @@ export const SuperAdmin: React.FC = () => {
         // Load System Logs if on system tab
         if (activeTab === 'system') {
             if (dbService.getSystemLogs) {
-                dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
+                dbService.getSystemLogs().then(setSystemLogs).catch(logger.error);
             }
         }
 
@@ -232,7 +233,7 @@ export const SuperAdmin: React.FC = () => {
             await dbService.savePlayoffConfig(playoffTeams);
             alert("Playoff configuration saved!");
         } catch (error) {
-            console.error(error);
+            logger.error(error);
             alert("Failed to save playoff config.");
         } finally {
             setIsSavingPlayoffs(false);
@@ -284,7 +285,7 @@ export const SuperAdmin: React.FC = () => {
                 fetchUsers();
                 alert(`User ${user.name} deleted successfully.`);
             } catch (e: unknown) {
-                console.error("Delete failed", e);
+                logger.error("Delete failed", e);
                 alert("Error deleting user: " + (e instanceof Error ? e.message : String(e)));
             }
         }
@@ -297,7 +298,7 @@ export const SuperAdmin: React.FC = () => {
                 await dbService.sendAdminPasswordReset(user.email);
                 alert(`Reset email sent to ${user.email}`);
             } catch (e: unknown) {
-                console.error("Reset failed", e);
+                logger.error("Reset failed", e);
                 alert("Error sending reset email: " + (e instanceof Error ? e.message : String(e)));
             }
         }
@@ -461,7 +462,7 @@ export const SuperAdmin: React.FC = () => {
             }
 
         } catch (e: unknown) {
-            console.error(e);
+            logger.error(e);
             alert('Sim Failed: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
@@ -476,10 +477,10 @@ export const SuperAdmin: React.FC = () => {
             alert('Score fix initiated successfully. Check system logs for details.');
             // Refresh logs if on system tab
             if (activeTab === 'system') {
-                dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
+                dbService.getSystemLogs().then(setSystemLogs).catch(logger.error);
             }
         } catch (error: unknown) {
-            console.error('Fix Score Error:', error);
+            logger.error('Fix Score Error:', error);
             alert(`Failed to fix scores: ${error instanceof Error ? error.message : String(error)} `);
         }
     };
@@ -498,7 +499,7 @@ export const SuperAdmin: React.FC = () => {
             const result = await initFn({}) as { data?: { tournamentId?: string } };
             alert(`✅ Big East Tournament initialized!\nTournament ID: ${result.data?.tournamentId || 'N/A'}`);
         } catch (err: unknown) {
-            console.error('Big East init error:', err);
+            logger.error('Big East init error:', err);
             alert(`❌ Failed to initialize Big East Tournament:\n${err instanceof Error ? err.message : String(err)}`);
         } finally {
             setIsInitializingBigEast(false);
@@ -513,7 +514,7 @@ export const SuperAdmin: React.FC = () => {
             const result = await dbService.fixParticipantIds(dryRun);
             alert(`Participant ID Backfill Complete (${dryRun ? 'DRY RUN' : 'LIVE'}): \nProcessed: ${result.processed} pools \nUpdated: ${result.updated} pools`);
         } catch (error: unknown) {
-            console.error('Fix Participant IDs Error:', error);
+            logger.error('Fix Participant IDs Error:', error);
             alert(`Failed to fix participant IDs: ${error instanceof Error ? error.message : String(error)}`);
         }
     };
@@ -1796,7 +1797,7 @@ export const SuperAdmin: React.FC = () => {
                                     <button
                                         onClick={() => {
                                             if (dbService.getSystemLogs) {
-                                                dbService.getSystemLogs().then(setSystemLogs).catch(console.error);
+                                                dbService.getSystemLogs().then(setSystemLogs).catch(logger.error);
                                             }
                                         }}
                                         className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition-colors"
@@ -1999,7 +2000,7 @@ export const SuperAdmin: React.FC = () => {
                                                 const res = await simulateRound(2025);
                                                 alert(res);
                                             } catch (e: unknown) {
-                                                console.error(e);
+                                                logger.error(e);
                                                 alert("Error: " + (e instanceof Error ? e.message : String(e)));
                                             }
                                         }}
@@ -2166,7 +2167,7 @@ export const SuperAdmin: React.FC = () => {
                                                     });
                                                     alert('Success: Max entries updated to 50!');
                                                 } catch (err: unknown) {
-                                                    console.error(err);
+                                                    logger.error(err);
                                                     alert('Error: ' + (err instanceof Error ? err.message : String(err)));
                                                 }
                                             }}
@@ -2626,7 +2627,7 @@ export const SuperAdmin: React.FC = () => {
                                                 const res = await dbService.syncPlayoffPools();
                                                 alert(res.message);
                                             } catch (e: unknown) {
-                                                console.error(e);
+                                                logger.error(e);
                                                 alert("Sync Failed: " + (e instanceof Error ? e.message : String(e)));
                                             }
                                         }

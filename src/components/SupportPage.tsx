@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState } from 'react';
 import { Mail, CheckCircle, AlertCircle } from 'lucide-react';
 import { emailService } from '../services/emailService';
@@ -61,7 +62,7 @@ Sent via March Melee Pools Support Form
             setSubmitStatus('success');
             setFormData({ name: '', email: '', supportType: '', message: '', sendCopy: false });
         } catch (error) {
-            console.error('Support form error:', error);
+            logger.error('Support form error:', error);
             setSubmitStatus('error');
         } finally {
             setIsSubmitting(false);

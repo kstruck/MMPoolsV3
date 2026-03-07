@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useMemo, useState } from 'react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -37,7 +38,7 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
                 alert(`Failed: ${result.message}`);
             }
         } catch (error: any) {
-            console.error("Recalc failed", error);
+            logger.error("Recalc failed", error);
             alert(`Error: ${error.message}`);
         } finally {
             setIsRecalculating(false);

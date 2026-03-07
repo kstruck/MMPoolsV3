@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool } from '../types';
@@ -74,7 +75,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             unsubAll = dbService.subscribeToAllPools((pools) => {
                 processPools(pools);
             }, (error) => {
-                console.error("SuperAdmin Pool Fetch Error", error);
+                logger.error("SuperAdmin Pool Fetch Error", error);
                 setIsLoading(false);
             });
         } else {
@@ -94,7 +95,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 participatingPools = pools;
                 mergeAndUpdate();
             }, (err) => {
-                console.error("Participating Pools Error", err);
+                logger.error("Participating Pools Error", err);
                 setIsLoading(false);
             });
 
@@ -102,7 +103,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 ownedPools = pools;
                 mergeAndUpdate();
             }, (err) => {
-                console.error("Owned Pools Error", err);
+                logger.error("Owned Pools Error", err);
             }, user.id);
         }
 

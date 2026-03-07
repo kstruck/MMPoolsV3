@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import React, { useState, useEffect } from 'react';
 import type { PlayoffTeam } from '../../types';
 import { httpsCallable } from 'firebase/functions';
@@ -43,7 +44,7 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
                     }
                 }
             } catch (error) {
-                console.error("Error fetching global results:", error);
+                logger.error("Error fetching global results:", error);
             } finally {
                 setIsLoading(false);
             }
@@ -72,7 +73,7 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
 
             setTimeout(onClose, 1500);
         } catch (error) {
-            console.error(error);
+            logger.error(error);
         } finally {
             setIsSaving(false);
         }
@@ -97,7 +98,7 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
             setResults(emptyResults);
             setTimeout(onClose, 1500);
         } catch (error) {
-            console.error(error);
+            logger.error(error);
         } finally {
             setIsSaving(false);
         }

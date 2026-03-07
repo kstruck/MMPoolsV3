@@ -56,6 +56,8 @@
       "react": "$react",
       "react-dom": "$react-dom"
     },
-    "minimatch": ">=10.2.1"
+    "minimatch": ">=10.2.4",
+    "@tootallnate/once": ">=3.0.1",
+    "express-rate-limit": ">=8.2.2"
   }
 }

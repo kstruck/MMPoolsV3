@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import {
     collection,
     doc,
@@ -48,7 +49,7 @@ export const dbService = {
         return onSnapshot(doc(db, 'stats', 'global'), (doc) => {
             callback(doc.exists() ? doc.data() as GlobalStats : null);
         }, (err) => {
-            console.error("Global Stats Subscription Error:", err);
+            logger.error("Global Stats Subscription Error:", err);
             if (onError) onError(err);
         });
     },
@@ -148,7 +149,7 @@ export const dbService = {
             const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BracketEntry));
             callback(entries);
         }, (error) => {
-            console.error('[dbService] subscribeToBracketEntries error:', error);
+            logger.error('[dbService] subscribeToBracketEntries error:', error);
             callback([]);
         });
     },
@@ -172,7 +173,7 @@ export const dbService = {
         return onSnapshot(docRef, (snap) => {
             callback(snap.exists() ? { id: snap.id, ...snap.data() } as Tournament : null);
         }, (error) => {
-            console.error('[dbService] subscribeToBracketTournament error:', error);
+            logger.error('[dbService] subscribeToBracketTournament error:', error);
             callback(null);
         });
     },
@@ -261,7 +262,7 @@ export const dbService = {
             const cards = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as PropCard);
             callback(cards);
         }, (error) => {
-            console.error("Error subscribing to all prop cards:", error);
+            logger.error("Error subscribing to all prop cards:", error);
             callback([]);
         });
     },
@@ -481,7 +482,7 @@ export const dbService = {
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
             callback(pools);
         }, (error) => {
-            console.error("Pool Subscription Error:", error);
+            logger.error("Pool Subscription Error:", error);
             if (onError) onError(error);
         });
     },
@@ -492,7 +493,7 @@ export const dbService = {
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
             callback(pools);
         }, (error) => {
-            console.error("Participating Pool Subscription Error:", error);
+            logger.error("Participating Pool Subscription Error:", error);
             if (onError) onError(error);
         });
     },
@@ -503,7 +504,7 @@ export const dbService = {
             const pools = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Pool));
             callback(pools);
         }, (error) => {
-            console.error("Admin Pool Subscription Error:", error);
+            logger.error("Admin Pool Subscription Error:", error);
             if (onError) onError(error);
         });
     },
@@ -518,7 +519,7 @@ export const dbService = {
                     callback(null);
                 }
             }, (error) => {
-                console.error("Single Pool Subscription Error:", error);
+                logger.error("Single Pool Subscription Error:", error);
                 if (onError) onError(error);
                 else callback(null);
             });
@@ -540,7 +541,7 @@ export const dbService = {
                 });
             }
         }, (error) => {
-            console.error("Slug Subscription Error:", error);
+            logger.error("Slug Subscription Error:", error);
             if (onError) onError(error);
             else callback(null);
         });
@@ -571,7 +572,7 @@ export const dbService = {
             });
             callback(sorted);
         }, (error) => {
-            console.error("Error subscribing to winners:", error);
+            logger.error("Error subscribing to winners:", error);
             callback([]);
         });
     },
@@ -691,7 +692,7 @@ export const dbService = {
             const themes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PoolTheme));
             callback(themes);
         }, (error) => {
-            console.error("Error subscribing to themes:", error);
+            logger.error("Error subscribing to themes:", error);
             callback([]);
         });
     },
@@ -767,7 +768,7 @@ export const dbService = {
             const seeds = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PropSeed));
             callback(seeds);
         }, (error) => {
-            console.error("Error subscribing to prop seeds:", error);
+            logger.error("Error subscribing to prop seeds:", error);
             callback([]);
         });
     },

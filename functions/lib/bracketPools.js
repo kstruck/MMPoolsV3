@@ -28,6 +28,9 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
     if (tournamentType === 'bigeast') {
         resolvedTournamentId = `bigeast-${seasonYear}`;
     }
+    else if (tournamentType === 'big12') {
+        resolvedTournamentId = `big12-${seasonYear}`;
+    }
     else {
         resolvedTournamentId = `${gender || 'mens'}-${seasonYear}`;
     }
@@ -125,7 +128,7 @@ exports.publishBracketPool = (0, https_1.onCall)(async (request) => {
             passwordHash = `${salt}:${hash}`;
         }
         // Find Season Lock Time (Fetch from Tournament doc)
-        const tournamentRef = db.collection("tournaments").doc(`mens-${poolData.seasonYear}`);
+        const tournamentRef = db.collection("tournaments").doc(poolData.tournamentId || `mens-${poolData.seasonYear}`);
         const tournamentDoc = await transaction.get(tournamentRef);
         let lockAt = 0;
         if (tournamentDoc.exists) {

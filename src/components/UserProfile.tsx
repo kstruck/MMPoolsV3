@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types';
 import { dbService } from '../services/dbService';
@@ -81,7 +82,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
             onUpdate(updatedUser);
             setMessage({ type: 'success', text: 'Profile updated successfully!' });
         } catch (error) {
-            console.error('Error saving profile:', error);
+            logger.error('Error saving profile:', error);
             setMessage({ type: 'error', text: 'Failed to save changes. Please try again.' });
         } finally {
             setIsSaving(false);
@@ -99,7 +100,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                 setMessage({ type: 'error', text: 'Authentication session missing. Please refresh the page.' });
             }
         } catch (error) {
-            console.error('Error sending verification email:', error);
+            logger.error('Error sending verification email:', error);
             setMessage({ type: 'error', text: 'Failed to send verification email. Please try again later.' });
         } finally {
             setIsVerifying(false);

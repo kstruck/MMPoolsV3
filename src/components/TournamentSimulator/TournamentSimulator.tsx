@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 /**
  * Interactive Tournament Simulator
  * 
@@ -130,7 +131,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                 setViewingEntry({ id: entryDoc.id, ...entryDoc.data() } as BracketEntry);
             }
         } catch (e) {
-            console.error('Failed to load entry:', e);
+            logger.error('Failed to load entry:', e);
         }
     }, [poolId]);
 
@@ -215,7 +216,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             setPhase('BRACKET');
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
-            console.error('[Simulator] Setup failed:', e);
+            logger.error('[Simulator] Setup failed:', e);
             setError(`Setup failed: ${errMsg}`);
         } finally {
             setIsLoading(false);
@@ -273,7 +274,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             setPhase('SIMULATION');
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
-            console.error('[Simulator] Submit failed:', e);
+            logger.error('[Simulator] Submit failed:', e);
             setError(`Submit failed: ${errMsg}`);
         } finally {
             setIsLoading(false);
@@ -490,7 +491,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             }
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
-            console.error('[Simulator] Round simulation failed:', e);
+            logger.error('[Simulator] Round simulation failed:', e);
             setError(`Round ${nextRound} failed: ${errMsg}`);
         } finally {
             setIsLoading(false);
@@ -524,7 +525,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             alert('✅ Tournament data loaded successfully to tournaments/mens-2025');
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
-            console.error('[Simulator] Load tournament failed:', e);
+            logger.error('[Simulator] Load tournament failed:', e);
             setError(`Load failed: ${errMsg}`);
         } finally {
             setIsLoading(false);
@@ -541,7 +542,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             alert(`✅ Tournament loaded at Round ${round} to tournaments/mens-2025`);
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
-            console.error('[Simulator] Load round failed:', e);
+            logger.error('[Simulator] Load round failed:', e);
             setError(`Load failed: ${errMsg}`);
         } finally {
             setIsLoading(false);
@@ -559,7 +560,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             alert('✅ Tournament data cleared from Firestore');
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
-            console.error('[Simulator] Clear tournament failed:', e);
+            logger.error('[Simulator] Clear tournament failed:', e);
             setError(`Clear failed: ${errMsg}`);
         } finally {
             setIsLoading(false);

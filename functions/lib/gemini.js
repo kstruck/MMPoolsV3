@@ -1,34 +1,34 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.COMMISSIONER_SYSTEM_PROMPT = exports.generateAIResponse = exports.geminiApiKey = void 0;
-const generative_ai_1 = require("@google/generative-ai");
+const genai_1 = require("@google/genai");
 const params_1 = require("firebase-functions/params");
 exports.geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
 const OUTPUT_SCHEMA = {
-    type: generative_ai_1.SchemaType.OBJECT,
+    type: genai_1.Type.OBJECT,
     properties: {
-        headline: { type: generative_ai_1.SchemaType.STRING, description: "Short, punchy title for the update." },
+        headline: { type: genai_1.Type.STRING, description: "Short, punchy title for the update." },
         summaryBullets: {
-            type: generative_ai_1.SchemaType.ARRAY,
-            items: { type: generative_ai_1.SchemaType.STRING },
+            type: genai_1.Type.ARRAY,
+            items: { type: genai_1.Type.STRING },
             description: "2-3 key takeaway points."
         },
         explanationSteps: {
-            type: generative_ai_1.SchemaType.ARRAY,
-            items: { type: generative_ai_1.SchemaType.STRING },
+            type: genai_1.Type.ARRAY,
+            items: { type: genai_1.Type.STRING },
             description: "Step-by-step logic explaining the result, citing numbers and teams."
         },
-        confidence: { type: generative_ai_1.SchemaType.NUMBER, description: "0.0 to 1.0 score of confidence based on facts provided." },
+        confidence: { type: genai_1.Type.NUMBER, description: "0.0 to 1.0 score of confidence based on facts provided." },
         missingFacts: {
-            type: generative_ai_1.SchemaType.ARRAY,
-            items: { type: generative_ai_1.SchemaType.STRING },
+            type: genai_1.Type.ARRAY,
+            items: { type: genai_1.Type.STRING },
             description: "List of any critical data points that were not provided."
         },
     },
     required: ["headline", "summaryBullets", "explanationSteps", "confidence"],
 };
 const generateAIResponse = async (systemInstruction, facts, jsonSchema = OUTPUT_SCHEMA) => {
-    var _a;
+    var _a, _b;
     const apiKey = exports.geminiApiKey.value();
     let selectedModelName = "gemini-1.5-flash"; // Default fallback
     // Dynamic Model Discovery
@@ -58,19 +58,8 @@ const generateAIResponse = async (systemInstruction, facts, jsonSchema = OUTPUT_
     if (!apiKey) {
         throw new Error("GEMINI_API_KEY is not set.");
     }
-    const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-        model: selectedModelName,
-        generationConfig: {
-            temperature: 0.2,
-            responseMimeType: "application/json",
-            responseSchema: jsonSchema || undefined,
-        },
-        systemInstruction: {
-            role: "system",
-            parts: [{ text: systemInstruction + "\n\nIMPORTANT: You must return valid PURE JSON matching the provided schema." }]
-        }
-    });
+    const genAI = new genai_1.GoogleGenAI({ apiKey });
+    const model = genAI.models;
     const prompt = `
     Analyze the following Verified Facts JSON payload. 
     You must strictly adhere to the system instructions.
@@ -79,8 +68,22 @@ const generateAIResponse = async (systemInstruction, facts, jsonSchema = OUTPUT_
     ${JSON.stringify(facts, null, 2)}
     `;
     try {
-        const result = await model.generateContent(prompt);
-        let text = result.response.text();
+        const result = await model.generateContent({
+            model: selectedModelName,
+            contents: [
+                {
+                    role: "user",
+                    parts: [{ text: prompt }]
+                }
+            ],
+            config: {
+                temperature: 0.2,
+                responseMimeType: "application/json",
+                responseSchema: jsonSchema || undefined,
+                systemInstruction: systemInstruction + "\n\nIMPORTANT: You must return valid PURE JSON matching the provided schema.",
+            },
+        });
+        let text = (_b = result.text) !== null && _b !== void 0 ? _b : '';
         // Robust JSON Cleaning
         text = text.replace(/```json/g, '').replace(/```/g, '').trim(); // Strip Markdown
         // Attempt to fix common JSON errors

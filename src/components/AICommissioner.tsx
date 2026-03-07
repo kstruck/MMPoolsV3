@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService'; // Ensure this uses your shared db instance
 import { collection, query, orderBy, limit, onSnapshot, addDoc, where } from 'firebase/firestore';
@@ -61,7 +62,7 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
             setQuestion('');
             setActiveTab('DISPUTE'); // Switch to view status
         } catch (e) {
-            console.error("Error submitting dispute", e);
+            logger.error("Error submitting dispute", e);
             alert("Failed to submit. Try again.");
         } finally {
             setIsSubmitting(false);
@@ -83,7 +84,7 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
             // Let's just switch to DISPUTE where history is currently shown, or better yet, history shows everything
             setActiveTab('DISPUTE');
         } catch (e) {
-            console.error("Error submitting insight", e);
+            logger.error("Error submitting insight", e);
             alert("Failed to request insight. Try again.");
         } finally {
             setIsSubmitting(false);

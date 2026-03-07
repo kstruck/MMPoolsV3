@@ -53,7 +53,7 @@ export const SimpleTestingDashboard: React.FC = () => {
             const results = await runAllTests();
             setAllResults(results.results);
         } catch (error: unknown) {
-            console.error('Run all tests failed:', error);
+            logger.error('Run all tests failed:', error);
         } finally {
             setIsRunning(false);
         }

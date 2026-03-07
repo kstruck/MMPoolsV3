@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -48,7 +49,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
             const res = await actionFn();
             setSimStatus(res || `Success: ${actionName}`);
         } catch (e: any) {
-            console.error(e);
+            logger.error(e);
             setSimStatus(`Error: ${e.message}`);
         } finally {
             setIsLoading(false);

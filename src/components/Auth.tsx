@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authService } from '../services/authService';
@@ -48,7 +49,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
       }
       onLogin();
     } catch (err: any) {
-      console.error("Auth error", err);
+      logger.error("Auth error", err);
       // Map common Firebase errors to readable messages
       if (err.code === 'auth/email-already-in-use') {
         setError("This email is already registered. Please sign in.");
@@ -73,7 +74,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
       await authService.loginWithGoogle();
       onLogin();
     } catch (err: any) {
-      console.error("Google Auth error", err);
+      logger.error("Google Auth error", err);
       setError("Google Sign-In failed. Please try again.");
     } finally {
       setIsLoading(false);

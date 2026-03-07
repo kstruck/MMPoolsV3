@@ -169,7 +169,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
             setTimeout(() => setSuccess(false), 3000);
 
         } catch (err: any) {
-            console.error(err);
+            logger.error(err);
             setError(err.message || "Failed to save picks");
             setIsConfirming(false); // Close modal on error to show error message
         } finally {

@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import React, { useState } from 'react';
 import { X, Lock, Unlock, Save, Loader } from 'lucide-react';
 import type { PlayoffPool } from '../../types';
@@ -38,7 +39,7 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
                 onClose();
             }, 1000);
         } catch (err: any) {
-            console.error("Error updating pool:", err);
+            logger.error("Error updating pool:", err);
             setError("Failed to update settings. Please try again.");
         } finally {
             setIsSaving(false);

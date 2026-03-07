@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 import React, { useRef, useState, useEffect } from 'react';
 import type { BracketEntry, Tournament } from '../../types';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
@@ -42,7 +43,7 @@ export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tou
                 setImageUrl(dataUrl);
                 setIsGenerating(false);
             } catch (err) {
-                console.error("Failed to generate bracket image", err);
+                logger.error("Failed to generate bracket image", err);
                 setError("Failed to generate image. Please try again.");
                 setIsGenerating(false);
             }
@@ -74,7 +75,7 @@ export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tou
                 alert("Your browser doesn't support direct image sharing. Please use the Download button instead.");
             }
         } catch (err) {
-            console.error("Error sharing:", err);
+            logger.error("Error sharing:", err);
         }
     };
 
