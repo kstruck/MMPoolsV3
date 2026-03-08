@@ -88,6 +88,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
             autoLock: boolean;
             announceWinner: boolean;
             recipientFilter: 'all' | 'unpaid' | 'noentry';
+            smsEnabled?: boolean;
         };
 
         // Step 6: Advanced
@@ -150,7 +151,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
             auto1h: true,
             autoLock: true,
             announceWinner: true,
-            recipientFilter: 'all'
+            recipientFilter: 'all',
+            smsEnabled: false
         },
 
         // Advanced
@@ -168,11 +170,18 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         notifyAdminFull: true
     });
 
+    const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+    const handleBlur = (field: string) => {
+        setTouched(prev => ({ ...prev, [field]: true }));
+    };
+
     const TOTAL_STEPS = 8;
 
     const handleNext = () => {
-        // Validation before moving forward
+        // Mark all current step fields as touched
         if (step === 1) {
+            setTouched(prev => ({ ...prev, name: true, contactEmail: true }));
             if (!formData.name.trim()) {
                 setError('Pool name is required');
                 return;
@@ -475,14 +484,18 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="md:col-span-2">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name <span className="text-rose-500">*</span></label>
                             <input
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => update({ name: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
-                                placeholder="My March Madness Pool"
+                                onBlur={() => handleBlur('name')}
+                                className={`w-full bg-slate-950 border ${touched.name && !formData.name.trim() ? 'border-rose-500 bg-rose-500/5 focus:ring-rose-500' : 'border-slate-700 focus:ring-indigo-500'} rounded px-4 py-3 text-white focus:ring-1 outline-none transition-colors`}
+                                placeholder="e.g., The Office Pool 2026"
                             />
+                            {touched.name && !formData.name.trim() && (
+                                <p className="text-xs text-rose-400 mt-1">Pool name is required.</p>
+                            )}
                         </div>
 
                         <div>
@@ -497,7 +510,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                         update({ slug: safe });
                                     }}
                                     className="w-full bg-slate-950 border border-slate-700 rounded pl-6 pr-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
-                                    placeholder="my-pool"
+                                    placeholder="e.g., office-pool-26"
                                 />
                             </div>
                             <p className="text-slate-500 text-[10px] mt-1">Lowercase letters, numbers, and dashes only.</p>
@@ -557,46 +570,19 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                         </div>
 
                         <div className="md:col-span-1">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contact Email</label>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contact Email <span className="text-rose-500">*</span></label>
                             <input
                                 type="email"
                                 value={formData.contactEmail}
                                 onChange={(e) => update({ contactEmail: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                onBlur={() => handleBlur('contactEmail')}
+                                className={`w-full bg-slate-950 border ${touched.contactEmail && !formData.contactEmail.trim() ? 'border-rose-500 bg-rose-500/5 focus:ring-rose-500' : 'border-slate-700 focus:ring-indigo-500'} rounded px-4 py-3 text-white focus:ring-1 outline-none transition-colors`}
                                 placeholder="email@example.com"
                             />
-                        </div>
-
-                        <div className="md:col-span-1">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Venmo (@username)</label>
-                            <input
-                                type="text"
-                                value={formData.venmo}
-                                onChange={(e) => update({ venmo: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
-                                placeholder="@YourVenmo"
-                            />
-                        </div>
-
-                        <div className="md:col-span-1">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Zelle (@username/phone)</label>
-                            <input
-                                type="text"
-                                value={formData.zelle}
-                                onChange={(e) => update({ zelle: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
-                                placeholder="Enter Zelle Info"
-                            />
-                        </div>
-
-                        <div className="md:col-span-2">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payment Instructions</label>
-                            <textarea
-                                value={formData.paymentInstructions}
-                                onChange={(e) => update({ paymentInstructions: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-24 resize-none"
-                                placeholder="How should players pay you?"
-                            />
+                            {touched.contactEmail && !formData.contactEmail.trim() && (
+                                <p className="text-xs text-rose-400 mt-1">Contact email is required.</p>
+                            )}
+                            <p className="text-slate-500 text-[10px] mt-1">Visible to pool members so they can contact you.</p>
                         </div>
                     </div>
                 </div>
@@ -729,8 +715,51 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 <option value="CLOSEST_ABSOLUTE">Closest (Over/Under)</option>
                                 <option value="CLOSEST_UNDER">Closest Without Going Over</option>
                             </select>
+                            <p className="text-xs text-slate-500 mt-1">
+                                {formData.tieBreaker === 'CLOSEST_ABSOLUTE' && 'Wins if they are closest to the total score, regardless if they go over.'}
+                                {formData.tieBreaker === 'CLOSEST_UNDER' && 'Standard Price is Right rules. If everyone goes over, closest to total wins.'}
+                            </p>
                         </div>
                     </div>
+
+                    {formData.entryFee > 0 && (
+                        <div className="mt-6 pt-6 border-t border-slate-800 animate-in slide-in-from-top duration-300">
+                            <h4 className="text-sm font-bold text-white mb-4">Payment Information</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Venmo (@username)</label>
+                                    <input
+                                        type="text"
+                                        value={formData.venmo}
+                                        onChange={(e) => update({ venmo: e.target.value })}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                        placeholder="@YourVenmo"
+                                    />
+                                </div>
+
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Zelle (@username/phone)</label>
+                                    <input
+                                        type="text"
+                                        value={formData.zelle}
+                                        onChange={(e) => update({ zelle: e.target.value })}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                        placeholder="Enter Zelle Info"
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payment Instructions</label>
+                                    <textarea
+                                        value={formData.paymentInstructions}
+                                        onChange={(e) => update({ paymentInstructions: e.target.value })}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-24 resize-none"
+                                        placeholder="e.g., &quot;Venmo @Michael-Scott and put your bracket name in the memo. No refunds!&quot;"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -939,6 +968,19 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 type="checkbox"
                                 checked={formData.reminders.announceWinner}
                                 onChange={(e) => update({ reminders: { ...formData.reminders, announceWinner: e.target.checked } })}
+                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                            />
+                        </label>
+
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                            <div>
+                                <span className="font-bold text-slate-200 block">SMS Notifications</span>
+                                <span className="text-xs text-slate-500">Send text messages to players who opt-in</span>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={formData.reminders.smsEnabled || false}
+                                onChange={(e) => update({ reminders: { ...formData.reminders, smsEnabled: e.target.checked } })}
                                 className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
                             />
                         </label>

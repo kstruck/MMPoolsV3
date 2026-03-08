@@ -235,6 +235,8 @@ export interface ReminderSettings {
 export interface User {
     id: string;
     email: string;
+    phone?: string;
+    smsOptIn?: boolean;
     name: string;
     picture?: string | null; // Allow null for Firebase compatibility
     registrationMethod?: 'google' | 'email' | 'unknown';
@@ -471,6 +473,7 @@ export interface PlayoffPool {
         autoLock?: boolean; // Auto-lock at Wild Card start
         announceWinner?: boolean; // Auto-announce winner when complete
         recipientFilter?: 'all' | 'unpaid' | 'noentry'; // Who gets reminders
+        smsEnabled?: boolean; // SMS feature
     };
 
     // NEW: Access Control & Data Collection
@@ -594,6 +597,7 @@ export interface BracketPool {
         autoLock?: boolean; // Auto-lock at tournament start
         announceWinner?: boolean; // Auto-announce winner when complete
         recipientFilter?: 'all' | 'unpaid' | 'noentry'; // Who gets reminders
+        smsEnabled?: boolean; // SMS feature
     };
 
     // NEW: Access Control & Data Collection

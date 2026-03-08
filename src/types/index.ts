@@ -88,6 +88,7 @@ export interface PlayoffPool {
     autoLock?: boolean; // Auto-lock at Wild Card start
     announceWinner?: boolean; // Auto-announce winner when complete
     recipientFilter?: 'all' | 'unpaid' | 'noentry'; // Who gets reminders
+    smsEnabled?: boolean; // Enable SMS notifications via Courier
   };
 
   // NEW: Access Control & Data Collection
@@ -446,6 +447,7 @@ export interface ReminderSettings {
     includeDigits: boolean;
     includeCharityImpact: boolean;
   };
+  smsEnabled?: boolean; // Enable Courier SMS notifications
 }
 
 export interface User {
@@ -457,6 +459,7 @@ export interface User {
   picture?: string | null; // Allow null for Firebase compatibility
   registrationMethod?: 'google' | 'email' | 'unknown';
   phone?: string;
+  smsOptIn?: boolean; // User opted in to SMS notifications
   socialLinks?: {
     twitter?: string;
     instagram?: string;
@@ -636,6 +639,7 @@ export interface BracketPool {
     autoLock?: boolean; // Auto-lock at tournament start
     announceWinner?: boolean; // Auto-announce winner when complete
     recipientFilter?: 'all' | 'unpaid' | 'noentry'; // Who gets reminders
+    smsEnabled?: boolean; // Enable Courier SMS notifications
   };
 
   // NEW: Access Control & Data Collection

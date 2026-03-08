@@ -18,6 +18,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
     const [formData, setFormData] = useState<Partial<User>>({
         name: user.name,
         phone: user.phone || '',
+        smsOptIn: user.smsOptIn || false,
         socialLinks: {
             twitter: user.socialLinks?.twitter || '',
             instagram: user.socialLinks?.instagram || '',
@@ -40,7 +41,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
         setFormData({
             name: user.name,
             phone: user.phone || '',
-            socialLinks: {
+            smsOptIn: user.smsOptIn || false,
+        socialLinks: {
                 twitter: user.socialLinks?.twitter || '',
                 instagram: user.socialLinks?.instagram || '',
                 facebook: user.socialLinks?.facebook || '',
@@ -74,6 +76,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                 ...user,
                 name: formData.name || user.name,
                 phone: formData.phone || '',
+                smsOptIn: formData.smsOptIn || false,
                 socialLinks: formData.socialLinks,
                 paymentHandles: formData.paymentHandles
             };
@@ -215,7 +218,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                             </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-4">
+                            <div className="space-y-2">
                             <label className="text-sm font-bold text-slate-300">Phone Number <span className="text-slate-500 font-normal text-xs">(Optional)</span></label>
                             <div className="relative">
                                 <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -227,6 +231,23 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                     placeholder="+1 (555) 000-0000"
                                 />
                             </div>
+                        </div>
+                            
+                            <label className="flex items-center gap-3 cursor-pointer group bg-slate-800/50 p-3 rounded-lg border border-slate-700 hover:border-indigo-500/50 transition-colors w-fit">
+                                <div className="relative flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={formData.smsOptIn || false}
+                                        onChange={(e) => setFormData({ ...formData, smsOptIn: e.target.checked })}
+                                    />
+                                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-bold text-slate-300 group-hover:text-white transition-colors">Opt-in to SMS Notifications</span>
+                                    <span className="text-xs text-slate-500">Receive important pool updates and reminders via text message.</span>
+                                </div>
+                            </label>
                         </div>
 
                         {/* Payment Info */}

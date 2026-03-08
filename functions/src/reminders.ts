@@ -2,9 +2,10 @@
 import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 // Fixed imports
-import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry } from "./types";
+import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry, BracketPool, User, BracketEntry } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { sendCourierSMS } from "./notifications/smsService";
 
 
 
@@ -102,6 +103,11 @@ export const runReminders = functions.scheduler.onSchedule("every 5 minutes", as
                 await checkPlayoffReminders(db, pool, now);
             }
 
+            // --- TYPE: BRACKET ---
+            else if (pool.type === 'BRACKET') {
+                await checkBracketReminders(db, pool as BracketPool, now);
+            }
+
         } catch (poolError: unknown) {
             console.error(`[runReminders] Error processing pool ${doc.id}:`, poolError);
         }
@@ -126,7 +132,7 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
     // 2. Find Unpaid Entries that haven't been reminded
     const entries = pool.entries || {};
     const updates: Record<string, unknown> = {};
-    const emailsToSend: { email: string, name: string, entryName: string }[] = [];
+    const emailsToSend: { email: string, name: string, entryName: string, phone?: string, smsOptIn?: boolean }[] = [];
 
     for (const [entryId, entry] of Object.entries(entries) as [string, PlayoffEntry][]) {
         if (!entry.paid && !entry.paymentReminderSent) {
@@ -140,9 +146,16 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
             if (entry.userId) {
                 const userSnap = await db.collection('users').doc(entry.userId).get();
                 if (userSnap.exists) {
-                    const email = userSnap.data()?.email;
+                    const userData = userSnap.data();
+                    const email = userData?.email;
                     if (email) {
-                        emailsToSend.push({ email, name: entry.userName, entryName: entry.entryName || 'Entry' });
+                        emailsToSend.push({
+                            email,
+                            name: entry.userName,
+                            entryName: entry.entryName || 'Entry',
+                            phone: userData?.phone,
+                            smsOptIn: userData?.smsOptIn
+                        });
                         // Mark as sent immediately in memory updates
                         updates[`entries.${entryId}.paymentReminderSent`] = true;
                     }
@@ -154,7 +167,7 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
     if (emailsToSend.length > 0) {
         console.log(`[PlayoffReminders] Sending ${emailsToSend.length} payment reminders for pool ${pool.id}`);
 
-        // Send Emails
+        // Send Emails and SMS
         for (const recipient of emailsToSend) {
             const subject = `Action Required: Payment Due for ${pool.name}`;
             const body = `
@@ -176,6 +189,12 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
                 to: recipient.email,
                 message: { subject, html }
             });
+
+            // Send SMS if opted in and pool enables SMS
+            if (pool.reminders?.smsEnabled && recipient.smsOptIn && recipient.phone) {
+                const smsMessage = `Hi ${recipient.name}, your entry "${recipient.entryName}" in ${pool.name} is Unpaid. Pool locks in < 2 hours!`;
+                await sendCourierSMS(recipient.phone, smsMessage);
+            }
         }
 
         // Apply Updates (mark as sent)
@@ -547,5 +566,79 @@ async function executeAutoLock(db: admin.firestore.Firestore, pool: GameState) {
         console.log(`[AutoLock] SUCCESSFULLY LOCKED: ${pool.id}`);
     } catch (e) {
         console.error(`[AutoLock] Failed to lock pool ${pool.id}:`, e);
+    }
+}
+
+// --- BRACKET REMINDER LOGIC ---
+async function checkBracketReminders(db: admin.firestore.Firestore, pool: BracketPool, now: number) {
+    if (!pool.lockAt) return;
+
+    const msUntilLock = pool.lockAt - now;
+    const hoursUntilLock = msUntilLock / (1000 * 60 * 60);
+
+    const is24h = hoursUntilLock <= 24 && hoursUntilLock > 23.8;
+    const is1h = hoursUntilLock <= 1 && hoursUntilLock > 0.8;
+    const isLockMsg = hoursUntilLock <= 0 && hoursUntilLock > -0.2;
+
+    let trigger = '';
+    let emailSubject = '';
+    let emailBody = '';
+    let smsBody = '';
+
+    if (is24h && pool.reminders?.auto24h) {
+        trigger = '24h';
+        emailSubject = `24 Hours to Lock: ${pool.name}`;
+        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> locks in exactly 24 hours. Make sure your entries are filled out and paid.</p>`;
+        smsBody = `Pool ${pool.name} locks in 24 hours! Get your bracket in.`;
+    } else if (is1h && pool.reminders?.auto1h) {
+        trigger = '1h';
+        emailSubject = `1 Hour WARNING: ${pool.name}`;
+        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> is locking in 1 HOUR! Finalize your entries now.</p>`;
+        smsBody = `1 HOUR WARNING! Pool ${pool.name} locks soon.`;
+    } else if (isLockMsg) {
+        trigger = 'locked';
+        emailSubject = `Pool Locked: ${pool.name}`;
+        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> is now locked. Good luck!</p>`;
+        smsBody = `Pool ${pool.name} is now locked! Good luck.`;
+    } else {
+        return;
+    }
+
+    const key = `BRACKET_REMINDER:${pool.id}:${trigger}`;
+    const sent = await createNotificationOnce(db, key, {
+        poolId: pool.id,
+        type: 'LOCK_COUNTDOWN',
+        recipient: 'ALL_PARTICIPANTS',
+        sentAt: now,
+        status: 'SENT',
+        metadata: { trigger }
+    });
+
+    if (sent) {
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('entries').get();
+        const uids = entriesSnap.docs.map(doc => (doc.data() as BracketEntry).ownerUid).filter(Boolean); // using BracketEntry for typings
+        const uniqueUids = Array.from(new Set(uids)) as string[];
+
+        let smsSentCount = 0;
+        let emailsSentCount = 0;
+
+        for (const uid of uniqueUids) {
+            const userDoc = await db.collection('users').doc(uid).get();
+            if (!userDoc.exists) continue;
+            const userData = userDoc.data() as User;
+
+            if (userData.email) {
+                const html = renderEmailHtml(emailSubject, emailBody, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
+                await sendEmail(db, userData.email, emailSubject, html);
+                emailsSentCount++;
+            }
+
+            if (pool.reminders?.smsEnabled && userData.smsOptIn && userData.phone) {
+                await sendCourierSMS(userData.phone, smsBody);
+                smsSentCount++;
+            }
+        }
+
+        await logAudit(db, pool.id, `Sent ${trigger} bracket reminder (${emailsSentCount} emails, ${smsSentCount} SMS)`, 'NOTIFICATION_SENT', { dedupeKey: key });
     }
 }

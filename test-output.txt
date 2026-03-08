@@ -1,0 +1,49 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mD:/march-melee-pools[39m
+
+ [31mΓ¥»[39m functions/lib/__tests__/participant.test.js [2m([22m[2m0 test[22m[2m)[22m
+ [31mΓ¥»[39m functions/src/__tests__/participant.test.ts [2m([22m[2m0 test[22m[2m)[22m
+ [32mΓ£ô[39m tests/bigeast-conference.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32mΓ£ô[39m tests/replay-2025.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32mΓ£ô[39m tests/synthetic-scenarios.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+[90mstdout[2m | tests/admin-tournament.test.ts[2m > [22m[2mTournament Initialization[2m > [22m[2mshould initialize a skeleton tournament with 63+4 games
+[22m[39m{"severity":"INFO","message":"Initialized tournament mens-2026 with lockAt=2026-03-19T16:00:00.000Z and 0 teams."}
+
+[90mstdout[2m | tests/admin-tournament.test.ts[2m > [22m[2mTournament Initialization[2m > [22m[2mshould populate real team names if provided
+[22m[39m{"severity":"INFO","message":"Initialized tournament mens-2026 with lockAt=2026-03-19T16:00:00.000Z and 2 teams."}
+
+[90mstdout[2m | tests/admin-tournament.test.ts[2m > [22m[2mTournament Initialization[2m > [22m[2mshould pre-fill FF games with placeholder teams
+[22m[39m{"severity":"INFO","message":"Initialized tournament mens-2026 with lockAt=2026-03-19T16:00:00.000Z and 0 teams."}
+
+ [32mΓ£ô[39m tests/admin-tournament.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+[90mstdout[2m | tests/auto-release.test.ts[2m > [22m[2mAuto-Release Logic[2m > [22m[2mshould release unpaid squares older than autoReleaseHours
+[22m[39mEmail queued for admin@example.com: 1 Squares Auto-Released: Test Pool
+
+[90mstdout[2m | tests/auto-release.test.ts[2m > [22m[2mAuto-Release Logic[2m > [22m[2mshould release unpaid squares older than autoReleaseHours
+[22m[39m[AutoRelease] Released 1 squares from pool pool-123
+
+[90mstdout[2m | tests/auto-release.test.ts[2m > [22m[2mAuto-Release Logic[2m > [22m[2mshould notify waitlist when squares are released
+[22m[39mEmail queued for admin@example.com: 1 Squares Auto-Released: Test Pool
+
+[90mstdout[2m | tests/auto-release.test.ts[2m > [22m[2mAuto-Release Logic[2m > [22m[2mshould notify waitlist when squares are released
+[22m[39m[AutoRelease] Released 1 squares from pool pool-123
+
+[90mstdout[2m | tests/auto-release.test.ts[2m > [22m[2mAuto-Release Logic[2m > [22m[2mshould notify the host when squares are released
+[22m[39mEmail queued for admin@example.com: 1 Squares Auto-Released: Test Pool
+
+[90mstdout[2m | tests/auto-release.test.ts[2m > [22m[2mAuto-Release Logic[2m > [22m[2mshould notify the host when squares are released
+[22m[39m[AutoRelease] Released 1 squares from pool pool-123
+
+ [31mΓ¥»[39m tests/auto-release.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 9[2mms[22m[39m
+     [32mΓ£ô[39m should release unpaid squares older than autoReleaseHours[32m 3[2mms[22m[39m
+     [32mΓ£ô[39m should NOT release squares if auto-release is disabled[32m 0[2mms[22m[39m
+     [32mΓ£ô[39m should NOT release paid squares[32m 0[2mms[22m[39m
+     [32mΓ£ô[39m should NOT release squares within the time window[32m 0[2mms[22m[39m
+[31m     [31m├ù[31m should notify waitlist when squares are released[39m[32m 3[2mms[22m[39m
+     [32mΓ£ô[39m should notify the host when squares are released[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m4 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m45 passed[39m[22m[90m (46)[39m
+[2m   Start at [22m 18:55:53
+[2m   Duration [22m 851ms[2m (transform 595ms, setup 0ms, import 1.26s, tests 36ms, environment 1ms)[22m
+

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin'; // Use real admin for types/static values
-import { checkPaymentReminders } from '../functions/src/reminders';
+import { checkPaymentReminders, notifyWaitlist } from '../functions/src/reminders';
 import { GameState, Square, WaitlistEntry } from '../functions/src/types';
 
 // Mock dependencies
@@ -183,13 +183,12 @@ describe('Auto-Release Logic', () => {
             data: () => pool
         });
 
-        await checkPaymentReminders(mockDb, pool, now);
+        await notifyWaitlist(mockDb, pool, 1);
 
         // Expect add to be called for the email
         // Note: mockAdd is called on collection('mail')
         // We can inspect mockAdd calls.
         const addCalls = mockAdd.mock.calls;
-        // console.log('Add Calls (Waitlist):', JSON.stringify(addCalls, null, 2));
 
         const waitlistEmail = addCalls.find(call => call[0].to === 'wait@example.com');
         expect(waitlistEmail).toBeDefined();

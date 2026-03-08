@@ -8,6 +8,7 @@ const functions = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const audit_1 = require("./audit");
 const emailStyles_1 = require("./emailStyles");
+const smsService_1 = require("./notifications/smsService");
 // --- HELPERS ---
 /**
  * Sends an email by writing to the /mail collection (triggered by EmailJS or other service).
@@ -92,6 +93,10 @@ exports.runReminders = functions.scheduler.onSchedule("every 5 minutes", async (
             else if (pool.type === 'NFL_PLAYOFFS') {
                 await checkPlayoffReminders(db, pool, now);
             }
+            // --- TYPE: BRACKET ---
+            else if (pool.type === 'BRACKET') {
+                await checkBracketReminders(db, pool, now);
+            }
         }
         catch (poolError) {
             console.error(`[runReminders] Error processing pool ${doc.id}:`, poolError);
@@ -128,9 +133,16 @@ async function checkPlayoffReminders(db, pool, now) {
             if (entry.userId) {
                 const userSnap = await db.collection('users').doc(entry.userId).get();
                 if (userSnap.exists) {
-                    const email = (_a = userSnap.data()) === null || _a === void 0 ? void 0 : _a.email;
+                    const userData = userSnap.data();
+                    const email = userData === null || userData === void 0 ? void 0 : userData.email;
                     if (email) {
-                        emailsToSend.push({ email, name: entry.userName, entryName: entry.entryName || 'Entry' });
+                        emailsToSend.push({
+                            email,
+                            name: entry.userName,
+                            entryName: entry.entryName || 'Entry',
+                            phone: userData === null || userData === void 0 ? void 0 : userData.phone,
+                            smsOptIn: userData === null || userData === void 0 ? void 0 : userData.smsOptIn
+                        });
                         // Mark as sent immediately in memory updates
                         updates[`entries.${entryId}.paymentReminderSent`] = true;
                     }
@@ -140,7 +152,7 @@ async function checkPlayoffReminders(db, pool, now) {
     }
     if (emailsToSend.length > 0) {
         console.log(`[PlayoffReminders] Sending ${emailsToSend.length} payment reminders for pool ${pool.id}`);
-        // Send Emails
+        // Send Emails and SMS
         for (const recipient of emailsToSend) {
             const subject = `Action Required: Payment Due for ${pool.name}`;
             const body = `
@@ -153,7 +165,7 @@ async function checkPlayoffReminders(db, pool, now) {
                     <p style="margin: 5px 0 0 0;">Please pay the pool manager to secure your spot.</p>
                 </div>
 
-                ${((_b = pool.settings) === null || _b === void 0 ? void 0 : _b.paymentInstructions) ? `<p><strong>Instructions:</strong> ${pool.settings.paymentInstructions}</p>` : ''}
+                ${((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.paymentInstructions) ? `<p><strong>Instructions:</strong> ${pool.settings.paymentInstructions}</p>` : ''}
             `;
             const html = (0, emailStyles_1.renderEmailHtml)('Payment Reminder', body, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'View Pool');
             // Queue Email
@@ -161,6 +173,11 @@ async function checkPlayoffReminders(db, pool, now) {
                 to: recipient.email,
                 message: { subject, html }
             });
+            // Send SMS if opted in and pool enables SMS
+            if (((_b = pool.reminders) === null || _b === void 0 ? void 0 : _b.smsEnabled) && recipient.smsOptIn && recipient.phone) {
+                const smsMessage = `Hi ${recipient.name}, your entry "${recipient.entryName}" in ${pool.name} is Unpaid. Pool locks in < 2 hours!`;
+                await (0, smsService_1.sendCourierSMS)(recipient.phone, smsMessage);
+            }
         }
         // Apply Updates (mark as sent)
         await db.collection('pools').doc(pool.id).update(updates);
@@ -481,6 +498,74 @@ async function executeAutoLock(db, pool) {
     }
     catch (e) {
         console.error(`[AutoLock] Failed to lock pool ${pool.id}:`, e);
+    }
+}
+// --- BRACKET REMINDER LOGIC ---
+async function checkBracketReminders(db, pool, now) {
+    var _a, _b, _c;
+    if (!pool.lockAt)
+        return;
+    const msUntilLock = pool.lockAt - now;
+    const hoursUntilLock = msUntilLock / (1000 * 60 * 60);
+    const is24h = hoursUntilLock <= 24 && hoursUntilLock > 23.8;
+    const is1h = hoursUntilLock <= 1 && hoursUntilLock > 0.8;
+    const isLockMsg = hoursUntilLock <= 0 && hoursUntilLock > -0.2;
+    let trigger = '';
+    let emailSubject = '';
+    let emailBody = '';
+    let smsBody = '';
+    if (is24h && ((_a = pool.reminders) === null || _a === void 0 ? void 0 : _a.auto24h)) {
+        trigger = '24h';
+        emailSubject = `24 Hours to Lock: ${pool.name}`;
+        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> locks in exactly 24 hours. Make sure your entries are filled out and paid.</p>`;
+        smsBody = `Pool ${pool.name} locks in 24 hours! Get your bracket in.`;
+    }
+    else if (is1h && ((_b = pool.reminders) === null || _b === void 0 ? void 0 : _b.auto1h)) {
+        trigger = '1h';
+        emailSubject = `1 Hour WARNING: ${pool.name}`;
+        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> is locking in 1 HOUR! Finalize your entries now.</p>`;
+        smsBody = `1 HOUR WARNING! Pool ${pool.name} locks soon.`;
+    }
+    else if (isLockMsg) {
+        trigger = 'locked';
+        emailSubject = `Pool Locked: ${pool.name}`;
+        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> is now locked. Good luck!</p>`;
+        smsBody = `Pool ${pool.name} is now locked! Good luck.`;
+    }
+    else {
+        return;
+    }
+    const key = `BRACKET_REMINDER:${pool.id}:${trigger}`;
+    const sent = await createNotificationOnce(db, key, {
+        poolId: pool.id,
+        type: 'LOCK_COUNTDOWN',
+        recipient: 'ALL_PARTICIPANTS',
+        sentAt: now,
+        status: 'SENT',
+        metadata: { trigger }
+    });
+    if (sent) {
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('entries').get();
+        const uids = entriesSnap.docs.map(doc => doc.data().ownerUid).filter(Boolean); // using BracketEntry for typings
+        const uniqueUids = Array.from(new Set(uids));
+        let smsSentCount = 0;
+        let emailsSentCount = 0;
+        for (const uid of uniqueUids) {
+            const userDoc = await db.collection('users').doc(uid).get();
+            if (!userDoc.exists)
+                continue;
+            const userData = userDoc.data();
+            if (userData.email) {
+                const html = (0, emailStyles_1.renderEmailHtml)(emailSubject, emailBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'View Pool');
+                await sendEmail(db, userData.email, emailSubject, html);
+                emailsSentCount++;
+            }
+            if (((_c = pool.reminders) === null || _c === void 0 ? void 0 : _c.smsEnabled) && userData.smsOptIn && userData.phone) {
+                await (0, smsService_1.sendCourierSMS)(userData.phone, smsBody);
+                smsSentCount++;
+            }
+        }
+        await logAudit(db, pool.id, `Sent ${trigger} bracket reminder (${emailsSentCount} emails, ${smsSentCount} SMS)`, 'NOTIFICATION_SENT', { dedupeKey: key });
     }
 }
 //# sourceMappingURL=reminders.js.map

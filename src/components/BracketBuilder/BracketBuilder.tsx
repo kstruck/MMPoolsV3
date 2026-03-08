@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { Tournament, BracketRegion } from '../../types';
 import { MatchNode } from './MatchNode';
 import { RegionTabs } from './RegionTabs';
-import { ChevronRight, ChevronLeft, Trophy } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Trophy, Star, Dices, Wand2 } from 'lucide-react';
 
 interface BracketBuilderProps {
     tournament: Tournament;
@@ -70,6 +70,100 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
         );
     }
 
+    const handleQuickPick = (strategy: 'favorites' | 'random' | 'smart') => {
+        if (readOnly) return;
+
+        if (strategy !== 'smart' && Object.keys(picks).length > 0) {
+            if (!window.confirm(`This will overwrite your current picks with ${strategy} picks. Are you sure?`)) {
+                return;
+            }
+        }
+
+        const newPicks: Record<string, string> = strategy === 'smart' ? { ...picks } : {};
+
+        const pickWinner = (teamA: string | undefined, teamB: string | undefined): string | undefined => {
+            if (!teamA) return teamB;
+            if (!teamB) return teamA;
+            if (strategy === 'random') {
+                return Math.random() > 0.5 ? teamA : teamB;
+            }
+            // For favorites and smart
+            const matchA = teamA.match(/[A-Z]?(\d+)-/);
+            const matchB = teamB.match(/[A-Z]?(\d+)-/);
+            const seedA = matchA ? parseInt(matchA[1], 10) : 8;
+            const seedB = matchB ? parseInt(matchB[1], 10) : 8;
+
+            if (strategy === 'smart') {
+                // Weighted random based on seed inversion (seed 1 has weight 16, seed 16 has weight 1)
+                const weightA = 17 - seedA;
+                const weightB = 17 - seedB;
+                const total = weightA + weightB;
+                return Math.random() * total < weightA ? teamA : teamB;
+            }
+
+            return seedA <= seedB ? teamA : teamB;
+        };
+
+        const order = ['East', 'West', 'South', 'Midwest'];
+        const regChamps: Record<string, string | undefined> = {};
+
+        order.forEach(region => {
+            const getGames = (round: number) => Object.values(tournament.games).filter(g => g.region === region && g.round === round).sort((a, b) => a.id.localeCompare(b.id));
+            const r1 = getGames(1);
+            const r2 = getGames(2);
+            const r3 = getGames(3);
+            const r4 = getGames(4);
+
+            // Round 1
+            r1.forEach(g => {
+                if (!newPicks[g.id]) newPicks[g.id] = pickWinner(g.homeTeamId, g.awayTeamId)!;
+            });
+            // Round 2
+            r2.forEach((g, i) => {
+                if (!r1[i * 2] || !r1[i * 2 + 1]) return;
+                const home = newPicks[r1[i * 2].id];
+                const away = newPicks[r1[i * 2 + 1].id];
+                if (!newPicks[g.id]) newPicks[g.id] = pickWinner(home, away)!;
+            });
+            // Round 3
+            r3.forEach((g, i) => {
+                if (!r2[i * 2] || !r2[i * 2 + 1]) return;
+                const home = newPicks[r2[i * 2].id];
+                const away = newPicks[r2[i * 2 + 1].id];
+                if (!newPicks[g.id]) newPicks[g.id] = pickWinner(home, away)!;
+            });
+            // Round 4
+            r4.forEach((g, i) => {
+                if (!r3[i * 2] || !r3[i * 2 + 1]) return;
+                const home = newPicks[r3[i * 2].id];
+                const away = newPicks[r3[i * 2 + 1].id];
+                if (!newPicks[g.id]) newPicks[g.id] = pickWinner(home, away)!;
+                regChamps[region] = newPicks[g.id];
+            });
+        });
+
+        // Final Four (Round 5)
+        const ff = Object.values(tournament.games).filter(g => g.round === 5).sort((a, b) => a.id.localeCompare(b.id));
+        const f4Game1 = ff.find(g => g.id === 'R5-1') || ff[0];
+        const f4Game2 = ff.find(g => g.id === 'R5-2') || ff[1];
+
+        if (f4Game1 && !newPicks[f4Game1.id]) newPicks[f4Game1.id] = pickWinner(regChamps['East'], regChamps['West'])!;
+        if (f4Game2 && !newPicks[f4Game2.id]) newPicks[f4Game2.id] = pickWinner(regChamps['South'], regChamps['Midwest'])!;
+
+        // Championship (Round 6)
+        const champ = Object.values(tournament.games).find(g => g.round === 6);
+        if (champ && f4Game1 && f4Game2 && !newPicks[champ.id]) {
+            newPicks[champ.id] = pickWinner(newPicks[f4Game1.id], newPicks[f4Game2.id])!;
+        }
+
+        // Apply new picks 
+        Object.entries(newPicks).forEach(([slot, team]) => {
+            if (picks[slot] !== team && team !== undefined) {
+                onPick(slot, team);
+            }
+        });
+    };
+
     const handleNextRegion = () => {
         const order: (BracketRegion | 'FF')[] = ['East', 'West', 'South', 'Midwest', 'FF'];
         const currentIndex = order.indexOf(activeRegion);
@@ -95,8 +189,35 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                         {activeRegion === 'FF' ? <Trophy className="text-amber-500" /> : <span className="text-indigo-400">Region:</span>}
                         {activeRegion === 'FF' ? 'Final Four' : activeRegion}
                     </h2>
-                    <div className="text-sm text-slate-400 font-mono">
-                        Total Picks: {Object.values(picks).length} / {Object.keys(tournament.games).length}
+                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-4">
+                        {!readOnly && (
+                            <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
+                                <button
+                                    onClick={() => handleQuickPick('favorites')}
+                                    className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+                                    title="Fill bracket with top seeds"
+                                >
+                                    <Star size={12} className="text-amber-400" /> <span className="hidden sm:inline">Favorites</span>
+                                </button>
+                                <button
+                                    onClick={() => handleQuickPick('random')}
+                                    className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+                                    title="Fill bracket randomly"
+                                >
+                                    <Dices size={12} className="text-indigo-400" /> <span className="hidden sm:inline">Random</span>
+                                </button>
+                                <button
+                                    onClick={() => handleQuickPick('smart')}
+                                    className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+                                    title="Finish remaining games for me"
+                                >
+                                    <Wand2 size={12} className="text-emerald-400" /> <span className="hidden sm:inline">Finish Empty</span>
+                                </button>
+                            </div>
+                        )}
+                        <div className="text-xs sm:text-sm text-slate-400 font-mono whitespace-nowrap">
+                            Total: {Object.values(picks).length} / {Object.keys(tournament.games).length}
+                        </div>
                     </div>
                 </div>
 

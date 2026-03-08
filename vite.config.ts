@@ -16,5 +16,8 @@ export default defineConfig({
     },
     chunkSizeWarningLimit: 500,
     target: 'es2020',
+  },
+  test: {
+    exclude: ['node_modules/**', 'functions/**']
   }
-})
+} as any)

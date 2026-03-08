@@ -52,7 +52,7 @@ import { logger } from './utils/logger';
 
 // Loading spinner for lazy-loaded routes
 const RouteLoader = () => (
-  <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+  <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
     <Loader className="animate-spin text-indigo-500 w-8 h-8" />
   </div>
 );
@@ -176,7 +176,7 @@ const App: React.FC = () => {
   const isAdmin = isSuperAdmin(user);
 
   if (isAuthLoading) {
-    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader className="animate-spin text-indigo-500" /></div>;
+    return <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center text-slate-900 dark:text-slate-100"><Loader className="animate-spin text-indigo-500" /></div>;
   }
 
   return (
@@ -338,7 +338,7 @@ const App: React.FC = () => {
 
           <Route path="/super-admin" element={
             isAdmin ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+              <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
                 <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <SuperAdmin />
                 <Footer />
@@ -369,7 +369,7 @@ const App: React.FC = () => {
           } />
           <Route path="/bracket-wizard" element={
             isAdmin && user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+              <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />
@@ -378,7 +378,7 @@ const App: React.FC = () => {
           } />
           <Route path="/playoff-wizard" element={
             isAdmin && user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+              <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />
@@ -387,7 +387,7 @@ const App: React.FC = () => {
           } />
           <Route path="/props-wizard" element={
             isAdmin && user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+              <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />
@@ -397,7 +397,7 @@ const App: React.FC = () => {
 
           <Route path="/grid-wizard" element={
             isAdmin && user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+              <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
                 <Footer />
