@@ -23,8 +23,10 @@ import { LiveScoreTicker } from './LiveScoreTicker';
 import { EliminationTracker } from './EliminationTracker';
 import { BracketCountdown } from './BracketCountdown';
 import { AICommissioner } from '../AICommissioner';
+import { BanterBoard } from './BanterBoard';
+import { PaymentLedger } from './PaymentLedger';
 
-type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager';
+type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager' | 'ledger';
 type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'chalk' | 'analytics' | 'insights';
 
 interface BracketPoolDashboardProps {
@@ -438,6 +440,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         { id: 'entries' as DashboardTab, label: 'All Entries', icon: Users },
                         { id: 'brackets' as DashboardTab, label: 'Brackets', icon: GitBranch },
                         { id: 'reports' as DashboardTab, label: 'Reports', icon: FileText },
+                        { id: 'ledger' as DashboardTab, label: 'Payment Ledger', icon: CreditCard, hidden: !isManager },
                         { id: 'manager' as DashboardTab, label: '⚙️ Settings', icon: ShieldCheck, hidden: !isManager },
                     ].map(tab => !tab.hidden && (
                         <button
@@ -724,13 +727,20 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             <BracketAwards tournament={tournament} entries={entries} />
                         )}
                         {tournament ? (
-                            <StandingsTable
-                                entries={entries}
-                                pool={pool}
-                                tournament={tournament}
-                                currentUserId={user?.id}
-                                onEntryClick={handleViewEntry}
-                            />
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="lg:col-span-2">
+                                    <StandingsTable
+                                        entries={entries}
+                                        pool={pool}
+                                        tournament={tournament}
+                                        currentUserId={user?.id}
+                                        onEntryClick={handleViewEntry}
+                                    />
+                                </div>
+                                <div className="lg:col-span-1 h-[600px] flex flex-col">
+                                    <BanterBoard poolId={pool.id} user={user} />
+                                </div>
+                            </div>
                         ) : (
                             <div className="text-center py-12 text-slate-500">
                                 <Trophy size={48} className="mx-auto mb-4 opacity-20" />
@@ -1681,6 +1691,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             )}
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Payment Ledger Tab */}
+            {!loading && activeTab === 'ledger' && isManager && (
+                <div className="animate-in fade-in slide-in-from-bottom-4">
+                    <PaymentLedger pool={pool} entries={entries} />
                 </div>
             )}
 

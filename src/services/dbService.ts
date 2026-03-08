@@ -23,7 +23,7 @@ import { poolRepository } from "./poolRepository";
 import { userRepository } from "./userRepository";
 import { errorHandler, ErrorSeverity } from "./errorHandler";
 export { db };
-import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament } from "../types";
+import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage } from "../types";
 
 /** Global statistics tracked across all pools */
 export interface GlobalStats {
@@ -143,6 +143,29 @@ export const dbService = {
     },
 
     // ===== BRACKET POOL METHODS =====
+    subscribeToBanterMessages: (poolId: string, callback: (messages: BanterMessage[]) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'messages'), orderBy('timestamp', 'asc'), limit(150));
+        return onSnapshot(q, (snapshot) => {
+            const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BanterMessage));
+            callback(messages);
+        }, (error) => {
+            logger.error('[dbService] subscribeToBanterMessages error:', error);
+            callback([]);
+        });
+    },
+
+    sendBanterMessage: async (poolId: string, message: Omit<BanterMessage, 'id'>) => {
+        try {
+            await addDoc(collection(db, 'pools', poolId, 'messages'), message);
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.LOW,
+                context: { operation: 'sendBanterMessage', poolId, message }
+            });
+            throw error;
+        }
+    },
+
     subscribeToBracketEntries: (poolId: string, callback: (entries: BracketEntry[]) => void) => {
         const q = query(collection(db, 'pools', poolId, 'entries'), orderBy('score', 'desc'));
         return onSnapshot(q, (snapshot) => {

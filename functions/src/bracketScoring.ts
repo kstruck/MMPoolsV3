@@ -12,6 +12,71 @@ const SCORING_Multipliers = {
 };
 
 /**
+ * Returns a Set of Team IDs that have been eliminated from the tournament.
+ */
+export const getEliminatedTeams = (tournament: Tournament): Set<string> => {
+    const eliminated = new Set<string>();
+    Object.values(tournament.games).forEach(game => {
+        if (game.status === 'FINAL' && game.winnerTeamId) {
+            if (game.homeTeamId === game.winnerTeamId) {
+                eliminated.add(game.awayTeamId);
+            } else if (game.awayTeamId === game.winnerTeamId) {
+                eliminated.add(game.homeTeamId);
+            }
+        }
+    });
+    return eliminated;
+};
+
+/**
+ * Calculates current score + potential remaining points.
+ */
+export const calculateEntryMaxScore = (
+    entry: BracketEntry,
+    tournament: Tournament,
+    settings: BracketPool['settings'],
+    eliminatedTeams?: Set<string>
+): number => {
+    const system = settings.scoringSystem;
+    let multipliers = SCORING_Multipliers.CLASSIC;
+
+    if (system === 'FIBONACCI') multipliers = SCORING_Multipliers.FIBONACCI;
+    if (system === 'CUSTOM' && settings.customScoring && settings.customScoring.length > 0) {
+        multipliers = settings.customScoring;
+    }
+
+    if (!eliminatedTeams) {
+        eliminatedTeams = getEliminatedTeams(tournament);
+    }
+
+    let maxScore = 0;
+
+    Object.entries(entry.picks).forEach(([slotId, pickedTeamId]) => {
+        const slot = tournament.slots[slotId];
+        if (!slot) return;
+
+        const game = tournament.games[slot.gameId];
+        if (!game) return;
+
+        const roundIndex = game.round - 1;
+        if (roundIndex < 0 || roundIndex >= multipliers.length) return;
+
+        const points = multipliers[roundIndex];
+
+        if (game.status === 'FINAL') {
+            if (game.winnerTeamId === pickedTeamId) {
+                maxScore += points;
+            }
+        } else {
+            if (!eliminatedTeams.has(pickedTeamId)) {
+                maxScore += points;
+            }
+        }
+    });
+
+    return maxScore;
+};
+/**
  * Calculates score for a single entry
  */
 export const calculateEntryScore = (
@@ -59,17 +124,24 @@ export const scoreTournamentEntries = async (db: admin.firestore.Firestore, tour
     if (!tournamentSnap.exists) throw new Error('Tournament not found');
 
     const tournament = tournamentSnap.data() as Tournament;
+    const eliminatedTeams = getEliminatedTeams(tournament);
+
+    // Find championship to evaluate tiebreakers if finished
+    const games = Object.values(tournament.games);
+    const maxRound = games.reduce((max, g) => Math.max(max, g.round), 0);
+    const championshipGame = games.find(g => g.round === maxRound);
+
+    let actualTotal: number | null = null;
+    if (championshipGame?.status === 'FINAL') {
+        actualTotal = (championshipGame.homeScore || 0) + (championshipGame.awayScore || 0);
+    }
 
     const poolsSnap = await db.collection('pools')
         .where('type', '==', 'BRACKET')
-        // .where('tournamentId', '==', tournamentId) // Index might be missing in dev, so filter manually if needed? 
-        // Best to rely on index or 'tournamentId' field being present.
         .get();
 
-    // Clientside filter if index missing (safe for low volume V1)
     const pools = poolsSnap.docs
         .map(d => {
-            // Ensure 'id' is set on the pool object for later use
             const poolData = d.data() as BracketPool;
             poolData.id = d.id;
             return poolData;
@@ -78,37 +150,101 @@ export const scoreTournamentEntries = async (db: admin.firestore.Firestore, tour
 
     let totalEntriesScored = 0;
 
-    // We'll use a Promise.all approach for pools to be faster? 
-    // Or sequential to avoid memory spikes. Sequential is safer.
-
     for (const pool of pools) {
         const entriesSnap = await db.collection('pools').doc(pool.id).collection('bracket_entries').get();
-        const updates: { ref: admin.firestore.DocumentReference, score: number }[] = [];
+        if (entriesSnap.empty) continue;
 
-        entriesSnap.docs.forEach(entryDoc => {
-            const entry = entryDoc.data() as BracketEntry;
+        // 1. Calculate Score & Max for all
+        const scoredEntries = entriesSnap.docs.map(doc => {
+            const entry = doc.data() as BracketEntry;
             const newScore = calculateEntryScore(entry, tournament, pool.settings);
-
-            // Only update if changed (save writes)
-            if (entry.score !== newScore) {
-                updates.push({ ref: entryDoc.ref, score: newScore });
-            }
+            const newMax = calculateEntryMaxScore(entry, tournament, pool.settings, eliminatedTeams);
+            return {
+                docRef: doc.ref,
+                entry: { ...entry, score: newScore },
+                max: newMax,
+                originalEntry: entry
+            };
         });
 
+        // 2. Sort to compute Rank
+        scoredEntries.sort((a, b) => {
+            // Primary: Current score desc
+            if (b.entry.score !== a.entry.score) return b.entry.score - a.entry.score;
+
+            // Secondary: Max possible desc
+            if (b.max !== a.max) return b.max - a.max;
+
+            // Tiebreaker if Championship is finalized
+            if (actualTotal !== null && a.entry.tieBreakerPrediction !== undefined && b.entry.tieBreakerPrediction !== undefined) {
+                const diffA = a.entry.tieBreakerPrediction - actualTotal;
+                const diffB = b.entry.tieBreakerPrediction - actualTotal;
+
+                if (pool.settings.tieBreakers?.closestUnder) {
+                    const aUnder = diffA <= 0;
+                    const bUnder = diffB <= 0;
+                    if (aUnder && !bUnder) return -1;
+                    if (!aUnder && bUnder) return 1;
+                    if (aUnder && bUnder) return Math.abs(diffA) - Math.abs(diffB);
+                }
+
+                return Math.abs(diffA) - Math.abs(diffB);
+            }
+            return 0;
+        });
+
+        // 3. Assign Ranks
+        let currentRank = 1;
+        scoredEntries.forEach((se, idx) => {
+            if (idx > 0) {
+                const prev = scoredEntries[idx - 1];
+                let trulyTied = se.entry.score === prev.entry.score && se.max === prev.max;
+                if (trulyTied && actualTotal !== null) {
+                    if (se.entry.tieBreakerPrediction !== undefined && prev.entry.tieBreakerPrediction !== undefined) {
+                        const diffSe = se.entry.tieBreakerPrediction - actualTotal;
+                        const diffPrev = prev.entry.tieBreakerPrediction - actualTotal;
+
+                        if (pool.settings.tieBreakers?.closestUnder) {
+                            const seUnder = diffSe <= 0;
+                            const prevUnder = diffPrev <= 0;
+                            if (seUnder !== prevUnder || Math.abs(diffSe) !== Math.abs(diffPrev)) trulyTied = false;
+                        } else {
+                            if (Math.abs(diffSe) !== Math.abs(diffPrev)) trulyTied = false;
+                        }
+                    } else if (se.entry.tieBreakerPrediction !== prev.entry.tieBreakerPrediction) {
+                        trulyTied = false;
+                    }
+                }
+
+                if (!trulyTied) currentRank = idx + 1;
+            }
+            se.entry.rank = currentRank;
+        });
+
+        // 4. Batch Updates
+        const updates = scoredEntries.filter(se =>
+            se.entry.score !== se.originalEntry.score ||
+            se.entry.rank !== se.originalEntry.rank
+        );
+
         if (updates.length > 0) {
-            let batch = db.batch(); // Initialize batch
+            let batch = db.batch();
             let batchCount = 0;
 
             for (const upd of updates) {
-                batch.update(upd.ref, { score: upd.score, updatedAt: Date.now() });
+                batch.update(upd.docRef, {
+                    score: upd.entry.score,
+                    rank: upd.entry.rank,
+                    updatedAt: Date.now()
+                });
                 batchCount++;
-                if (batchCount >= 400) { // Commit in chunks of 400 to stay under 500 limit
+                if (batchCount >= 400) {
                     await batch.commit();
-                    batch = db.batch(); // Re-initialize for next chunk
+                    batch = db.batch();
                     batchCount = 0;
                 }
             }
-            if (batchCount > 0) { // Commit any remaining operations
+            if (batchCount > 0) {
                 await batch.commit();
             }
             totalEntriesScored += updates.length;
@@ -139,4 +275,107 @@ export const scoreBracketEntries = onCall(async (request) => {
         logger.error(`Error scoring tournament ${tournamentId}:`, e);
         throw new HttpsError('internal', msg || 'An unknown error occurred during scoring.');
     }
+});
+
+/**
+ * Cloud Function to finalize pot distribution and payouts for a completed tournament.
+ */
+export const finalizeTournamentPayouts = onCall(async (request) => {
+    // 1. Auth Check
+    if (!request.auth || request.auth.token.role !== 'ADMIN') throw new HttpsError('permission-denied', 'Admin only.');
+    const { tournamentId } = request.data;
+    if (!tournamentId) throw new HttpsError('invalid-argument', 'Missing tournamentId');
+
+    const db = admin.firestore();
+    const tournamentSnap = await db.collection('tournaments').doc(tournamentId).get();
+    if (!tournamentSnap.exists) throw new HttpsError('not-found', 'Tournament not found');
+    const tournament = tournamentSnap.data() as Tournament;
+
+    if (!tournament.isFinalized) {
+        logger.warn(`Admin finalizing payouts for unfinalized tournament: ${tournamentId}`);
+    }
+
+    const poolsSnap = await db.collection('pools').where('type', '==', 'BRACKET').get();
+    const pools = poolsSnap.docs.filter(p => (p.data() as BracketPool).tournamentId === tournamentId);
+
+    let payoutCount = 0;
+
+    for (const poolDoc of pools) {
+        const pool = Object.assign(poolDoc.data(), { id: poolDoc.id }) as BracketPool;
+        const entryFee = pool.settings?.entryFee || 0;
+        if (entryFee <= 0) continue; // Free pool
+
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('bracket_entries').get();
+        if (entriesSnap.empty) continue;
+
+        // Count entries that have paidStatus === 'PAID'
+        const paidEntries = entriesSnap.docs.map(d => d.data() as BracketEntry).filter(e => e.paidStatus === 'PAID');
+        const pot = paidEntries.length * entryFee;
+        if (pot <= 0) continue;
+
+        const eligibleEntries = entriesSnap.docs.map(doc => Object.assign(doc.data(), { _ref: doc.ref }) as BracketEntry & { _ref: admin.firestore.DocumentReference });
+
+        // Group explicitly by rank (so ties are naturally array length > 1)
+        const entriesByRank: Record<number, typeof eligibleEntries> = {};
+        eligibleEntries.forEach(entry => {
+            if (!entry.rank) return;
+            if (!entriesByRank[entry.rank]) entriesByRank[entry.rank] = [];
+            entriesByRank[entry.rank].push(entry);
+        });
+
+        const payouts = pool.settings.payouts?.places || [];
+        if (payouts.length === 0) continue;
+
+        let placeIndex = 0;
+        let nextRank = 1;
+
+        const winningsUpdates: { ref: admin.firestore.DocumentReference, amountWon: number }[] = [];
+
+        while (placeIndex < payouts.length) {
+            const tiedEntries = entriesByRank[nextRank] || [];
+            if (tiedEntries.length === 0) {
+                nextRank++;
+                if (nextRank > eligibleEntries.length) break;
+                continue;
+            }
+
+            const numTied = tiedEntries.length;
+            let availablePercentage = 0;
+            const consumedPlaces = Math.min(numTied, payouts.length - placeIndex);
+
+            for (let i = 0; i < consumedPlaces; i++) {
+                availablePercentage += payouts[placeIndex + i].percentage;
+            }
+
+            const splitPayout = (pot * (availablePercentage / 100)) / numTied;
+
+            if (splitPayout > 0) {
+                for (const entry of tiedEntries) {
+                    winningsUpdates.push({ ref: entry._ref, amountWon: splitPayout });
+                    payoutCount++;
+                }
+            }
+
+            placeIndex += consumedPlaces;
+            nextRank++;
+        }
+
+        // Apply batch updates
+        if (winningsUpdates.length > 0) {
+            let batch = db.batch();
+            let count = 0;
+            for (const upd of winningsUpdates) {
+                batch.update(upd.ref, { amountWon: upd.amountWon, isWinner: true, updatedAt: Date.now() });
+                count++;
+                if (count >= 400) {
+                    await batch.commit();
+                    batch = db.batch();
+                    count = 0;
+                }
+            }
+            if (count > 0) await batch.commit();
+        }
+    }
+
+    return { success: true, payoutCount };
 });

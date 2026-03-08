@@ -644,6 +644,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 <option value="50">50 Brackets</option>
                                 <option value="100">100 Brackets</option>
                             </select>
+                            <p className="text-xs text-slate-500 mt-2">The total number of brackets allowed for the entire pool.</p>
                         </div>
 
                         <div>

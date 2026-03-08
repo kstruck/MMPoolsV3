@@ -335,6 +335,8 @@ export interface BracketEntry {
     paidStatus: 'PAID' | 'UNPAID';
     score: number;
     rank?: number;
+    amountWon?: number;
+    isWinner?: boolean;
 
     createdAt: number;
     updatedAt: number;

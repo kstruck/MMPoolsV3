@@ -1,56 +1,347 @@
 import re
+import sys
 
-file_path = 'd:/march-melee-pools/src/components/UserProfile.tsx'
-with open(file_path, 'r', encoding='utf-8') as f:
+with open('functions/src/bracketScoring.ts', 'r', encoding='utf-8') as f:
     content = f.read()
 
-# 1. Add smsOptIn to initial formData state
-content = re.sub(
-    r'(name: user\.name,\s*phone: user\.phone \|\| \'\',\s*)(socialLinks: {)',
-    r'\g<1>smsOptIn: user.smsOptIn || False,\n        \g<2>',
-    content,
-    count=2
-)
+# I will replace scoreTournamentEntries and add new functions.
+# Below SCORING_Multipliers, I need to add getEliminatedTeams and calculateEntryMaxScore
+multipliers_code = """const SCORING_Multipliers = {
+    CLASSIC: [10, 20, 40, 80, 160, 320], // Standard X10 for readable int scores
+    ESPN: [10, 20, 40, 80, 160, 320],    // Same as Classic usually
+    FIBONACCI: [10, 20, 30, 50, 80, 130],
+};"""
 
-# 2. Add smsOptIn to updatedUser object in handleSubmit
-content = re.sub(
-    r'(name: formData\.name \|\| user\.name,\s*phone: formData\.phone \|\| \'\',\s*)(socialLinks: formData\.socialLinks,)',
-    r'\g<1>smsOptIn: formData.smsOptIn || False,\n                \g<2>',
-    content,
-    count=1
-)
+helpers_code = """
 
-# 3. Add UI toggle
-phone_block_pattern = re.compile(
-    r'(<div className=\"space-y-2\">\s*<label className=\"text-sm font-bold text-slate-300\">Phone Number.*?</div>\s*</div>)',
-    re.DOTALL
-)
+/**
+ * Returns a Set of Team IDs that have been eliminated from the tournament.
+ */
+export const getEliminatedTeams = (tournament: Tournament): Set<string> => {
+    const eliminated = new Set<string>();
+    Object.values(tournament.games).forEach(game => {
+        if (game.status === 'FINAL' && game.winnerTeamId) {
+            if (game.homeTeamId === game.winnerTeamId) {
+                eliminated.add(game.awayTeamId);
+            } else if (game.awayTeamId === game.winnerTeamId) {
+                eliminated.add(game.homeTeamId);
+            }
+        }
+    });
+    return eliminated;
+};
 
-replacement_ui = '''<div className=\"space-y-4\">
-                            \g<1>
-                            
-                            <label className=\"flex items-center gap-3 cursor-pointer group bg-slate-800/50 p-3 rounded-lg border border-slate-700 hover:border-indigo-500/50 transition-colors w-fit\">
-                                <div className=\"relative flex items-center\">
-                                    <input
-                                        type=\"checkbox\"
-                                        className=\"sr-only peer\"
-                                        checked={formData.smsOptIn || False}
-                                        onChange={(e) => setFormData({ ...formData, smsOptIn: e.target.checked })}
-                                    />
-                                    <div className=\"w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500\"></div>
-                                </div>
-                                <div className=\"flex flex-col\">
-                                    <span className=\"text-sm font-bold text-slate-300 group-hover:text-white transition-colors\">Opt-in to SMS Notifications</span>
-                                    <span className=\"text-xs text-slate-500\">Receive important pool updates and reminders via text message.</span>
-                                </div>
-                            </label>
-                        </div>'''
+/**
+ * Calculates current score + potential remaining points.
+ */
+export const calculateEntryMaxScore = (
+    entry: BracketEntry,
+    tournament: Tournament,
+    settings: BracketPool['settings'],
+    eliminatedTeams?: Set<string>
+): number => {
+    const system = settings.scoringSystem;
+    let multipliers = SCORING_Multipliers.CLASSIC;
 
-content = phone_block_pattern.sub(replacement_ui, content, count=1)
+    if (system === 'FIBONACCI') multipliers = SCORING_Multipliers.FIBONACCI;
+    if (system === 'CUSTOM' && settings.customScoring && settings.customScoring.length > 0) {
+        multipliers = settings.customScoring;
+    }
 
-# fix the False boolean to false in the created file (since JS uses false)
-content = content.replace('False', 'false')
+    if (!eliminatedTeams) {
+        eliminatedTeams = getEliminatedTeams(tournament);
+    }
 
-with open(file_path, 'w', encoding='utf-8') as f:
+    let maxScore = 0;
+
+    Object.entries(entry.picks).forEach(([slotId, pickedTeamId]) => {
+        const slot = tournament.slots[slotId];
+        if (!slot) return;
+
+        const game = tournament.games[slot.gameId];
+        if (!game) return;
+
+        const roundIndex = game.round - 1;
+        if (roundIndex < 0 || roundIndex >= multipliers.length) return;
+
+        const points = multipliers[roundIndex];
+
+        if (game.status === 'FINAL') {
+            if (game.winnerTeamId === pickedTeamId) {
+                maxScore += points;
+            }
+        } else {
+            if (!eliminatedTeams.has(pickedTeamId)) {
+                maxScore += points;
+            }
+        }
+    });
+
+    return maxScore;
+};"""
+
+if getEliminatedTeams not in content:
+    content = content.replace(multipliers_code, multipliers_code + helpers_code)
+
+old_score_func = re.search(r'\/\*\*\n \* Internal logic to score all entries.*?export const scoreTournamentEntries = async \(db: admin\.firestore\.Firestore, tournamentId: string\) => \{.*?\n\};\n', content, re.DOTALL)
+
+if not old_score_func:
+    print("Could not find old scoreTournamentEntries function")
+    sys.exit(1)
+
+new_score_func = """/**
+ * Internal logic to score all entries for a tournament.
+ */
+export const scoreTournamentEntries = async (db: admin.firestore.Firestore, tournamentId: string) => {
+    const tournamentSnap = await db.collection('tournaments').doc(tournamentId).get();
+    if (!tournamentSnap.exists) throw new Error('Tournament not found');
+
+    const tournament = tournamentSnap.data() as Tournament;
+    const eliminatedTeams = getEliminatedTeams(tournament);
+    
+    // Find championship to evaluate tiebreakers if finished
+    const games = Object.values(tournament.games);
+    const maxRound = games.reduce((max, g) => Math.max(max, g.round), 0);
+    const championshipGame = games.find(g => g.round === maxRound);
+    
+    let actualTotal: number | null = null;
+    if (championshipGame?.status === 'FINAL') {
+        actualTotal = (championshipGame.homeScore || 0) + (championshipGame.awayScore || 0);
+    }
+
+    const poolsSnap = await db.collection('pools')
+        .where('type', '==', 'BRACKET')
+        .get();
+
+    const pools = poolsSnap.docs
+        .map(d => {
+            const poolData = d.data() as BracketPool;
+            poolData.id = d.id;
+            return poolData;
+        })
+        .filter(p => p.tournamentId === tournamentId);
+
+    let totalEntriesScored = 0;
+
+    for (const pool of pools) {
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('bracket_entries').get();
+        if (entriesSnap.empty) continue;
+
+        // 1. Calculate Score & Max for all
+        const scoredEntries = entriesSnap.docs.map(doc => {
+            const entry = doc.data() as BracketEntry;
+            const newScore = calculateEntryScore(entry, tournament, pool.settings);
+            const newMax = calculateEntryMaxScore(entry, tournament, pool.settings, eliminatedTeams);
+            return {
+                docRef: doc.ref,
+                entry: { ...entry, score: newScore },
+                max: newMax,
+                originalEntry: entry
+            };
+        });
+
+        // 2. Sort to compute Rank
+        scoredEntries.sort((a, b) => {
+            // Primary: Current score desc
+            if (b.entry.score !== a.entry.score) return b.entry.score - a.entry.score;
+
+            // Secondary: Max possible desc
+            if (b.max !== a.max) return b.max - a.max;
+
+            // Tiebreaker if Championship is finalized
+            if (actualTotal !== null && a.entry.tieBreakerPrediction !== undefined && b.entry.tieBreakerPrediction !== undefined) {
+                const diffA = a.entry.tieBreakerPrediction - actualTotal;
+                const diffB = b.entry.tieBreakerPrediction - actualTotal;
+
+                if (pool.settings.tieBreakers?.closestUnder) {
+                    const aUnder = diffA <= 0;
+                    const bUnder = diffB <= 0;
+                    if (aUnder && !bUnder) return -1;
+                    if (!aUnder && bUnder) return 1;
+                    if (aUnder && bUnder) return Math.abs(diffA) - Math.abs(diffB);
+                }
+
+                return Math.abs(diffA) - Math.abs(diffB);
+            }
+            return 0;
+        });
+
+        // 3. Assign Ranks
+        let currentRank = 1;
+        scoredEntries.forEach((se, idx) => {
+            if (idx > 0) {
+                const prev = scoredEntries[idx - 1];
+                let trulyTied = se.entry.score === prev.entry.score && se.max === prev.max;
+                if (trulyTied && actualTotal !== null) {
+                    if (se.entry.tieBreakerPrediction !== undefined && prev.entry.tieBreakerPrediction !== undefined) {
+                        const diffSe = se.entry.tieBreakerPrediction - actualTotal;
+                        const diffPrev = prev.entry.tieBreakerPrediction - actualTotal;
+                        
+                        if (pool.settings.tieBreakers?.closestUnder) {
+                            const seUnder = diffSe <= 0;
+                            const prevUnder = diffPrev <= 0;
+                            if (seUnder !== prevUnder || Math.abs(diffSe) !== Math.abs(diffPrev)) trulyTied = false;
+                        } else {
+                            if (Math.abs(diffSe) !== Math.abs(diffPrev)) trulyTied = false;
+                        }
+                    } else if (se.entry.tieBreakerPrediction !== prev.entry.tieBreakerPrediction) {
+                        trulyTied = false;
+                    }
+                }
+                
+                if (!trulyTied) currentRank = idx + 1;
+            }
+            se.entry.rank = currentRank;
+        });
+
+        // 4. Batch Updates
+        const updates = scoredEntries.filter(se => 
+            se.entry.score !== se.originalEntry.score || 
+            se.entry.rank !== se.originalEntry.rank
+        );
+
+        if (updates.length > 0) {
+            let batch = db.batch(); 
+            let batchCount = 0;
+
+            for (const upd of updates) {
+                batch.update(upd.docRef, { 
+                    score: upd.entry.score, 
+                    rank: upd.entry.rank,
+                    updatedAt: Date.now() 
+                });
+                batchCount++;
+                if (batchCount >= 400) { 
+                    await batch.commit();
+                    batch = db.batch(); 
+                    batchCount = 0;
+                }
+            }
+            if (batchCount > 0) { 
+                await batch.commit();
+            }
+            totalEntriesScored += updates.length;
+        }
+    }
+    return totalEntriesScored;
+};
+"""
+
+content = content.replace(old_score_func.group(0), new_score_func)
+
+new_payout_func = """
+/**
+ * Cloud Function to finalize pot distribution and payouts for a completed tournament.
+ */
+export const finalizeTournamentPayouts = onCall(async (request) => {
+    // 1. Auth Check
+    if (!request.auth || request.auth.token.role !== 'ADMIN') throw new HttpsError('permission-denied', 'Admin only.');
+    const { tournamentId } = request.data;
+    if (!tournamentId) throw new HttpsError('invalid-argument', 'Missing tournamentId');
+    
+    const db = admin.firestore();
+    const tournamentSnap = await db.collection('tournaments').doc(tournamentId).get();
+    if (!tournamentSnap.exists) throw new HttpsError('not-found', 'Tournament not found');
+    const tournament = tournamentSnap.data() as Tournament;
+
+    // Technically a tournament should be isFinalized, but allow admin override
+    if (!tournament.isFinalized) {
+        logger.warn(`Admin finalizing payouts for unfinalized tournament: ${tournamentId}`);
+    }
+
+    const poolsSnap = await db.collection('pools').where('type', '==', 'BRACKET').get();
+    const pools = poolsSnap.docs.filter(p => (p.data() as BracketPool).tournamentId === tournamentId);
+
+    let payoutCount = 0;
+
+    for (const poolDoc of pools) {
+        const pool = Object.assign(poolDoc.data(), { id: poolDoc.id }) as BracketPool;
+        const entryFee = pool.settings?.entryFee || 0;
+        if (entryFee <= 0) continue; // Free pool
+
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('bracket_entries').get();
+        if (entriesSnap.empty) continue;
+        
+        // Count entries that have paidStatus === 'PAID'
+        const paidEntries = entriesSnap.docs.map(d => d.data() as BracketEntry).filter(e => e.paidStatus === 'PAID');
+        const pot = paidEntries.length * entryFee;
+        if (pot <= 0) continue;
+
+        // Group mostly paid/unpaid entries by rank? Wait, unpaid entries don't usually win, but in our system ranks are objective.
+        // We'll calculate winnings assuming all ranked entries are eligible, or maybe limit to PAID?
+        // Typically unpaid entries are disqualified from pot. Let's filter out unpaid for rank grouping?
+        // If an unpaid participant is #1, do they get paid? Usually no, but let's assume we pay out rank as if all valid entries are eligible,
+        // and if they're unpaid it's the manager's fault. Let's use all entries to be safe and match the visible standings.
+        const eligibleEntries = entriesSnap.docs.map(doc => Object.assign(doc.data(), { _ref: doc.ref }) as BracketEntry & { _ref: admin.firestore.DocumentReference });
+
+        const entriesByRank: Record<number, typeof eligibleEntries> = {};
+        eligibleEntries.forEach(entry => {
+            if (!entry.rank) return;
+            if (!entriesByRank[entry.rank]) entriesByRank[entry.rank] = [];
+            entriesByRank[entry.rank].push(entry);
+        });
+
+        const payouts = pool.settings.payouts?.places || [];
+        if (payouts.length === 0) continue;
+
+        let placeIndex = 0; 
+        let nextRank = 1;
+
+        const winningsUpdates: { ref: admin.firestore.DocumentReference, amountWon: number }[] = [];
+
+        while (placeIndex < payouts.length) {
+            const tiedEntries = entriesByRank[nextRank] || [];
+            if (tiedEntries.length === 0) {
+                nextRank++;
+                if (nextRank > eligibleEntries.length) break; 
+                continue;
+            }
+
+            const numTied = tiedEntries.length;
+            let availablePercentage = 0;
+            const consumedPlaces = Math.min(numTied, payouts.length - placeIndex);
+            
+            for (let i = 0; i < consumedPlaces; i++) {
+                availablePercentage += payouts[placeIndex + i].percentage;
+            }
+
+            const splitPayout = (pot * (availablePercentage / 100)) / numTied;
+
+            if (splitPayout > 0) {
+                for (const entry of tiedEntries) {
+                    winningsUpdates.push({ ref: entry._ref, amountWon: splitPayout });
+                    payoutCount++;
+                }
+            }
+
+            placeIndex += consumedPlaces;
+            nextRank++;
+        }
+
+        // Apply batch updates
+        if (winningsUpdates.length > 0) {
+            let batch = db.batch();
+            let count = 0;
+            for (const upd of winningsUpdates) {
+                batch.update(upd.ref, { amountWon: upd.amountWon, isWinner: true, updatedAt: Date.now() });
+                count++;
+                if (count >= 400) {
+                    await batch.commit();
+                    batch = db.batch();
+                    count = 0;
+                }
+            }
+            if (count > 0) await batch.commit();
+        }
+    }
+    
+    return { success: true, payoutCount };
+});
+"""
+
+if "finalizeTournamentPayouts" not in content:
+    content += new_payout_func
+
+with open('functions/src/bracketScoring.ts', 'w', encoding='utf-8') as f:
     f.write(content)
-print('Replaced successfully')
+print("done")

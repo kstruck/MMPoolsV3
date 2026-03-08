@@ -718,6 +718,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                                 <option value="50">50 Entries</option>
                                 <option value="100">100 Entries</option>
                             </select>
+                            <p className="text-xs text-slate-500 mt-2">The total number of entries allowed for the entire pool.</p>
                         </div>
 
                         <div>

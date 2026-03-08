@@ -6,6 +6,14 @@ export interface FirestoreTimestamp {
   toMillis: () => number;
 }
 
+export interface BanterMessage {
+  id?: string;
+  userId: string;
+  userName: string;
+  text: string;
+  timestamp: number;
+}
+
 // Core Pool Types
 // Core Pool Types
 export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
@@ -687,6 +695,8 @@ export interface BracketEntry {
   paidStatus: 'PAID' | 'UNPAID';
   score: number;
   rank?: number;
+  amountWon?: number;
+  isWinner?: boolean;
 
   createdAt: number;
   updatedAt: number;
