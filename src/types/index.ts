@@ -746,7 +746,7 @@ export interface Game {
   awayTeamId: string;
   homeScore: number;
   awayScore: number;
-  winnerTeamId?: string;
+  winnerTeamId?: string | null;
   round: number; // 0=FirstFour, 1=R64, 2=R32...
   region?: string | null;
   isFirstFour?: boolean;

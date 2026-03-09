@@ -326,7 +326,7 @@ async function fetchAndMapESPNGameData(seasonYear: number) {
             awayTeamId: awayTeamId,
             homeScore: parseInt(homeComp.score || '0'),
             awayScore: parseInt(awayComp.score || '0'),
-            winnerTeamId: status === 'FINAL' ? (parseInt(homeComp.score || '0') > parseInt(awayComp.score || '0') ? homeTeamId : awayTeamId) : undefined,
+            winnerTeamId: status === 'FINAL' ? (parseInt(homeComp.score || '0') > parseInt(awayComp.score || '0') ? homeTeamId : awayTeamId) : null,
             round: round,
             region: region,
 
@@ -1013,7 +1013,7 @@ function mapESPNConferenceGamesToSkeleton(
         const status = comp.status.type.state === 'pre' ? 'SCHEDULED' :
             comp.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
 
-        let winnerTeamId = undefined;
+        let winnerTeamId: string | null = null;
         if (status === 'FINAL') {
             winnerTeamId = homeScore > awayScore ? home.team.id : away.team.id;
         }
