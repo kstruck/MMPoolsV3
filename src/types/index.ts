@@ -608,6 +608,7 @@ export interface BracketPool {
       closestUnder: boolean;
     };
     payouts: PayoutSettings;
+    charity?: CharityConfig; // Optional charity configuration
     upsetBonus?: {
       enabled: boolean;
       multiplier: number; // Points per seed differential (default: 5)

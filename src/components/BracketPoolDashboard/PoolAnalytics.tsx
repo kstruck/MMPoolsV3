@@ -9,9 +9,10 @@ import type { BracketEntry, Tournament, BracketRegion } from '../../types';
 interface PoolAnalyticsProps {
     entries: BracketEntry[];
     tournament: Tournament;
+    isConference?: boolean;
 }
 
-export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournament }) => {
+export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournament, isConference }) => {
 
     const analyticsData = useMemo(() => {
         if (!tournament || entries.length === 0) return null;
@@ -20,14 +21,22 @@ export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournamen
         const regionWinnerCounts: Record<string, Record<string, number>> = {};
         const consensusPicks: Record<string, string> = {}; // gameId -> most popular teamId
 
-        const REGIONS: BracketRegion[] = ['East', 'West', 'South', 'Midwest'];
-        REGIONS.forEach(r => {
-            regionWinnerCounts[r] = {};
-        });
+        // Dynamically determine max round from tournament data
+        const maxRound = Object.values(tournament.games).reduce((max, g) => Math.max(max, g.round), 0) || 6;
+
+        // Only build region data for NCAA (non-conference) tournaments
+        if (!isConference) {
+            const REGIONS: BracketRegion[] = ['East', 'West', 'South', 'Midwest'];
+            REGIONS.forEach(r => {
+                regionWinnerCounts[r] = {};
+            });
+        }
 
         // 1. Calculate Champion and Region Winner distributions
-        const champGame = Object.values(tournament.games).find(g => g.round === 6);
-        const f4Games = Object.values(tournament.games).filter(g => g.round === 4);
+        // Championship game is the max round game
+        const champGame = Object.values(tournament.games).find(g => g.round === maxRound);
+        // For NCAA: region winners are semi-final round (maxRound - 2 = Elite 8)
+        const regionGames = isConference ? [] : Object.values(tournament.games).filter(g => g.round === maxRound - 2);
 
         entries.forEach(entry => {
             // Champion prep
@@ -36,8 +45,8 @@ export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournamen
                 if (pick) champCounts[pick] = (champCounts[pick] || 0) + 1;
             }
 
-            // Region prep
-            f4Games.forEach(g => {
+            // Region prep (NCAA only)
+            regionGames.forEach(g => {
                 const pick = entry.picks[g.id];
                 if (pick && g.region && regionWinnerCounts[g.region]) {
                     regionWinnerCounts[g.region][pick] = (regionWinnerCounts[g.region][pick] || 0) + 1;
@@ -96,8 +105,9 @@ export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournamen
             return { regionId, regionName, data };
         }).filter(rc => rc.data.length > 0);
 
-        // 4. Round-by-Round Accuracy (if games have started)
-        const roundAccuracy = [1, 2, 3, 4, 5, 6].map(round => {
+        // 4. Round-by-Round Accuracy (if games have started) — dynamic rounds
+        const allRounds = [...new Set(Object.values(tournament.games).map(g => g.round))].sort((a, b) => a - b);
+        const roundAccuracy = allRounds.map(round => {
             const gamesInRound = Object.values(tournament.games).filter(g => g.round === round && g.winnerTeamId);
             if (gamesInRound.length === 0) return null;
 
@@ -122,7 +132,7 @@ export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournamen
             contrarianData,
             roundAccuracy
         };
-    }, [tournament, entries]);
+    }, [tournament, entries, isConference]);
 
     if (!analyticsData) return null;
 

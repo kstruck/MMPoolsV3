@@ -216,10 +216,10 @@ export const dbService = {
         }
     },
 
-    updateBracketPicks: async (poolId: string, entryId: string, picks: Record<string, string>): Promise<{ success: boolean; message?: string }> => {
+    updateBracketPicks: async (poolId: string, entryId: string, picks: Record<string, string>, tieBreakerPrediction?: number): Promise<{ success: boolean; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'updateBracketPicks');
-            const result = await fn({ poolId, entryId, picks });
+            const result = await fn({ poolId, entryId, picks, tieBreakerPrediction });
             return result.data as { success: boolean; message?: string };
         } catch (error: unknown) {
             await errorHandler.handleError(error, {
@@ -231,10 +231,10 @@ export const dbService = {
         }
     },
 
-    submitBracketEntry: async (poolId: string, entryId: string, picks: Record<string, string>): Promise<{ success: boolean; message?: string }> => {
+    submitBracketEntry: async (poolId: string, entryId: string, picks: Record<string, string>, tieBreakerPrediction?: number): Promise<{ success: boolean; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'submitBracketEntry');
-            const result = await fn({ poolId, entryId, picks });
+            const result = await fn({ poolId, entryId, picks, tieBreakerPrediction });
             return result.data as { success: boolean; message?: string };
         } catch (error: unknown) {
             await errorHandler.handleError(error, {

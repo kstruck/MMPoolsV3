@@ -29,8 +29,26 @@ export interface RoundBreakdown {
     maxPoints: number;
 }
 
-const ROUND_LABELS = ['R64', 'R32', 'S16', 'E8', 'F4', 'Champ'];
+const ROUND_LABELS_NCAA = ['R64', 'R32', 'S16', 'E8', 'F4', 'Champ'];
+const ROUND_LABELS_CONF: Record<number, string[]> = {
+    4: ['QF', 'SF', 'Champ', ''],          // 4-round conference (e.g. smaller conf)
+    5: ['R1', 'QF', 'SF', 'Champ', ''],     // 5-round conference (e.g. Big 12)
+    10: ['R1', 'QF', 'SF', 'Champ'],         // Fallback
+};
 const ROUND_LABEL_FALLBACK = (r: number) => `R${r}`;
+
+export function getRoundLabel(roundIndex: number, maxRound: number, isConference?: boolean): string {
+    if (!isConference) {
+        return ROUND_LABELS_NCAA[roundIndex] || ROUND_LABEL_FALLBACK(roundIndex + 1);
+    }
+    const confLabels = ROUND_LABELS_CONF[maxRound];
+    if (confLabels && confLabels[roundIndex]) return confLabels[roundIndex];
+    // Generic fallback for any conference size
+    if (roundIndex === maxRound - 1) return 'Champ';
+    if (roundIndex === maxRound - 2) return 'SF';
+    if (roundIndex === maxRound - 3) return 'QF';
+    return `R${roundIndex + 1}`;
+}
 
 export function getPointsForRound(
     roundIndex: number,
@@ -170,7 +188,7 @@ export function calculateScore(
         const rd = roundMap.get(r)!;
         roundBreakdown.push({
             round: r,
-            label: ROUND_LABELS[r - 1] || ROUND_LABEL_FALLBACK(r),
+            label: getRoundLabel(r - 1, maxRound),
             ...rd,
         });
     }

@@ -129,6 +129,13 @@ service cloud.firestore {
         );
       }
 
+      // BANTER MESSAGES
+      match /messages/{messageId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update, delete: if false;
+      }
+
       // PROP CARDS
       match /propCards/{userId} {
         // Read: Owner (Admin), The User themselves, or SuperAdmin

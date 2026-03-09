@@ -7,22 +7,36 @@ const admin = require("firebase-admin");
 const reminders_1 = require("./reminders");
 const emailStyles_1 = require("./emailStyles");
 // Helper to calculate total pot and charity for a pool
-const calculatePoolPot = (pool) => {
-    let squaresSold = 0;
-    if (pool.squares && Array.isArray(pool.squares)) {
-        squaresSold = pool.squares.filter((s) => s.owner).length;
+const calculatePoolPot = async (db, poolId, pool) => {
+    var _a, _b;
+    let grossPot = 0;
+    if (pool.type === 'BRACKET' || pool.type === 'NFL_PLAYOFFS') {
+        const entryFee = ((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.entryFee) || 0;
+        if (entryFee > 0) {
+            const collectionName = pool.type === 'BRACKET' ? 'bracket_entries' : 'playoff_entries';
+            const entriesSnap = await db.collection('pools').doc(poolId).collection(collectionName).get();
+            const paidEntriesCount = entriesSnap.docs.filter(doc => {
+                const data = doc.data();
+                return data.paidStatus === 'PAID' || data.paid === true;
+            }).length;
+            grossPot = paidEntriesCount * entryFee;
+        }
     }
-    // Gross Pot is squares * cost
-    const grossPot = squaresSold * (pool.costPerSquare || 0);
+    else {
+        let squaresSold = 0;
+        if (pool.squares && Array.isArray(pool.squares)) {
+            squaresSold = pool.squares.filter((s) => s.owner).length;
+        }
+        grossPot = squaresSold * (pool.costPerSquare || 0);
+    }
     // Charity
     let charityAmount = 0;
-    if (pool.charity && pool.charity.enabled && pool.charity.percentage) {
-        charityAmount = grossPot * (pool.charity.percentage / 100);
+    const charityConfig = pool.charity || ((_b = pool.settings) === null || _b === void 0 ? void 0 : _b.charity);
+    if (charityConfig && charityConfig.enabled && charityConfig.percentage) {
+        charityAmount = grossPot * (charityConfig.percentage / 100);
     }
     // Prize Pot defaults to Gross - Charity
     const prizePot = grossPot - charityAmount;
-    // Check strict payouts if defined
-    // ... logic simplifies to just using the calculated net pot usually, but let's trust gross - charity.
     return { prizePot: Math.floor(prizePot), charityAmount: Math.floor(charityAmount) };
 };
 // Trigger: When a pool is LOCKED, add its pot to the global "Total Prizes"
@@ -35,7 +49,7 @@ exports.onPoolLocked = (0, firestore_1.onDocumentUpdated)("pools/{poolId}", asyn
         // Trigger only when transitioning from unlocked -> locked
         if (!before.isLocked && after.isLocked) {
             const db = admin.firestore();
-            const { prizePot, charityAmount } = calculatePoolPot(after);
+            const { prizePot, charityAmount } = await calculatePoolPot(db, event.params.poolId, after);
             if (prizePot > 0 || charityAmount > 0) {
                 await db.doc("stats/global").set({
                     totalPrizes: admin.firestore.FieldValue.increment(prizePot),
@@ -95,7 +109,7 @@ exports.recalculateGlobalStats = (0, https_1.onCall)({
                 const pool = doc.data();
                 if (!pool)
                     continue; // Safety check
-                const { prizePot, charityAmount } = calculatePoolPot(pool);
+                const { prizePot, charityAmount } = await calculatePoolPot(db, doc.id, pool);
                 if (!isNaN(prizePot)) {
                     totalAllTimePrizes += prizePot;
                     totalAllTimeCharity += charityAmount;

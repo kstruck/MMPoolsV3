@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { BracketEntry, Tournament } from '../../types';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
+import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { Users, Info } from 'lucide-react';
 
 interface BracketComparisonProps {
@@ -9,11 +10,12 @@ interface BracketComparisonProps {
     initialEntry1Id?: string;
     initialEntry2Id?: string;
     hideSelectors?: boolean;
+    isConference?: boolean;
 }
 
-export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament, allEntries, initialEntry1Id, initialEntry2Id, hideSelectors }) => {
-    // Determine initial selections
-    const validEntries = allEntries.filter(e => e.status === 'SUBMITTED' || e.picks['R5-1']); // Ensure they have picks (using R5-1 as a rough check, or just user filter)
+export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament, allEntries, initialEntry1Id, initialEntry2Id, hideSelectors, isConference }) => {
+    // Filter valid entries — check for status or that they have ANY picks at all
+    const validEntries = allEntries.filter(e => e.status === 'SUBMITTED' || Object.keys(e.picks || {}).length > 0);
 
     const [entry1Id, setEntry1Id] = useState<string>(
         initialEntry1Id && validEntries.find(e => e.id === initialEntry1Id)
@@ -29,6 +31,11 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
 
     const entry1 = validEntries.find(e => e.id === entry1Id);
     const entry2 = validEntries.find(e => e.id === entry2Id);
+
+    // Determine championship round dynamically
+    const maxRound = useMemo(() =>
+        Object.values(tournament.games).reduce((max, g) => Math.max(max, g.round), 0) || 6
+        , [tournament]);
 
     // Calculate differences
     const comparisonStats = useMemo(() => {
@@ -49,9 +56,9 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
                 }
             }
 
-            // Check if it's the championship game
+            // Check if it's the championship game (dynamic max round)
             const game = tournament.games[gameId];
-            if (game && game.round === 6 && p1 !== p2) {
+            if (game && game.round === maxRound && p1 !== p2) {
                 champDiff = true;
             }
         });
@@ -61,7 +68,7 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
             totalPicks,
             champDiff
         };
-    }, [entry1, entry2, tournament]);
+    }, [entry1, entry2, tournament, maxRound]);
 
     if (validEntries.length < 2) {
         return (
@@ -148,14 +155,23 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
                             {entry1.name}
                         </div>
                         <div className="relative">
-                            <BracketBuilder
-                                tournament={tournament}
-                                picks={entry1.picks}
-                                onPick={() => { }}
-                                readOnly
-                                viewMode="tabs"
-                                comparisonPicks={entry2.picks}
-                            />
+                            {isConference ? (
+                                <ConferenceBracketBuilder
+                                    tournament={tournament}
+                                    picks={entry1.picks}
+                                    onPick={() => { }}
+                                    readOnly
+                                />
+                            ) : (
+                                <BracketBuilder
+                                    tournament={tournament}
+                                    picks={entry1.picks}
+                                    onPick={() => { }}
+                                    readOnly
+                                    viewMode="tabs"
+                                    comparisonPicks={entry2.picks}
+                                />
+                            )}
                         </div>
                     </div>
 
@@ -164,14 +180,23 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
                             {entry2.name}
                         </div>
                         <div className="relative">
-                            <BracketBuilder
-                                tournament={tournament}
-                                picks={entry2.picks}
-                                onPick={() => { }}
-                                readOnly
-                                viewMode="tabs"
-                                comparisonPicks={entry1.picks}
-                            />
+                            {isConference ? (
+                                <ConferenceBracketBuilder
+                                    tournament={tournament}
+                                    picks={entry2.picks}
+                                    onPick={() => { }}
+                                    readOnly
+                                />
+                            ) : (
+                                <BracketBuilder
+                                    tournament={tournament}
+                                    picks={entry2.picks}
+                                    onPick={() => { }}
+                                    readOnly
+                                    viewMode="tabs"
+                                    comparisonPicks={entry1.picks}
+                                />
+                            )}
                         </div>
                     </div>
                 </div>

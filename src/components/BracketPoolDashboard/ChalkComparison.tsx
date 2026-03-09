@@ -5,9 +5,10 @@ import { BracketComparison } from './BracketComparison';
 interface ChalkComparisonProps {
     tournament: Tournament;
     userEntry: BracketEntry;
+    isConference?: boolean;
 }
 
-export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, userEntry }) => {
+export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, userEntry, isConference }) => {
 
     // Generate the "Chalk" entry based on the tournament data
     const chalkEntry = useMemo(() => {
@@ -15,9 +16,28 @@ export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, us
 
         const picks: Record<string, string> = {};
 
-        // We need to simulate the tournament from Round 1 to Round 6
-        // Always advance the team with the better (lower) seed number.
-        // For this, we need to know who is playing in each slot.
+        // Determine max round dynamically from tournament data
+        const maxRound = Object.values(tournament.games).reduce((max, g) => Math.max(max, g.round), 0) || 6;
+
+        // Build a mapping: slotId → gameId (each slot belongs to a game)
+        // and a mapping: gameId → [slotIds that feed INTO this game via nextSlotId]
+        const slotToGame: Record<string, string> = {};
+        const gameFeederSlots: Record<string, string[]> = {};
+
+        Object.values(tournament.slots).forEach(slot => {
+            slotToGame[slot.id] = slot.gameId;
+            if (slot.nextSlotId) {
+                // Find which game the next slot belongs to
+                const nextSlot = tournament.slots[slot.nextSlotId];
+                if (nextSlot) {
+                    const targetGameId = nextSlot.gameId;
+                    if (!gameFeederSlots[targetGameId]) gameFeederSlots[targetGameId] = [];
+                    gameFeederSlots[targetGameId].push(slot.gameId);
+                }
+            }
+        });
+
+        // Simulate all rounds from 1 to maxRound
         const simulateRound = (round: number) => {
             const gamesInRound = Object.values(tournament.games).filter(g => g.round === round);
 
@@ -25,31 +45,53 @@ export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, us
                 let teamA = game.homeTeamId;
                 let teamB = game.awayTeamId;
 
-                // If it's not round 1, the teams are the winners of the previous slots
+                // For rounds after 1, look up feeder games
                 if (round > 1) {
-                    // Find the games that feed into this one
+                    // Strategy 1: Use nextGameId feeders (NCAA pattern)
                     const feedGames = Object.values(tournament.games).filter(g => g.nextGameId === game.id);
                     if (feedGames.length === 2) {
-                        teamA = picks[feedGames[0].id] || 'TBD';
-                        teamB = picks[feedGames[1].id] || 'TBD';
+                        teamA = picks[feedGames[0].id] || teamA || 'TBD';
+                        teamB = picks[feedGames[1].id] || teamB || 'TBD';
+                    } else if (feedGames.length === 1) {
+                        // One feeder + one seeded team (bye scenario)
+                        const feederWinner = picks[feedGames[0].id] || 'TBD';
+                        if (!teamA || teamA === 'TBD') teamA = feederWinner;
+                        else if (!teamB || teamB === 'TBD') teamB = feederWinner;
+                    } else {
+                        // Strategy 2: Use slot-based feeders (Conference pattern)
+                        const feeders = gameFeederSlots[game.id];
+                        if (feeders && feeders.length >= 2) {
+                            teamA = picks[feeders[0]] || teamA || 'TBD';
+                            teamB = picks[feeders[1]] || teamB || 'TBD';
+                        } else if (feeders && feeders.length === 1) {
+                            const feederWinner = picks[feeders[0]] || 'TBD';
+                            if (!teamA || teamA === 'TBD') teamA = feederWinner;
+                            else if (!teamB || teamB === 'TBD') teamB = feederWinner;
+                        }
                     }
                 }
 
-                if (teamA === 'TBD' || teamB === 'TBD') {
-                    picks[game.id] = 'TBD';
+                // If either team is still unknown, handle byes
+                if (!teamA || teamA === 'TBD' || !teamB || teamB === 'TBD') {
+                    if (teamA && teamA !== 'TBD' && (!teamB || teamB === 'TBD')) {
+                        picks[game.id] = teamA;
+                    } else if (teamB && teamB !== 'TBD' && (!teamA || teamA === 'TBD')) {
+                        picks[game.id] = teamB;
+                    } else {
+                        picks[game.id] = 'TBD';
+                    }
                     return;
                 }
 
                 const seedA = tournament.importedTeams?.[teamA]?.seed || 99;
                 const seedB = tournament.importedTeams?.[teamB]?.seed || 99;
 
-                // Lower seed number wins. If seeds are equal, just pick teamA to be deterministic
+                // Lower seed number wins. If seeds are equal, pick teamA to be deterministic
                 picks[game.id] = seedA <= seedB ? teamA : teamB;
             });
         };
 
-        // Simulate all rounds
-        for (let i = 1; i <= 6; i++) {
+        for (let i = 1; i <= maxRound; i++) {
             simulateRound(i);
         }
 
@@ -119,6 +161,7 @@ export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, us
                 initialEntry1Id={userEntry.id}
                 initialEntry2Id={chalkEntry.id}
                 hideSelectors={true}
+                isConference={isConference}
             />
         </div>
     );
