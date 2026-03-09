@@ -1,7 +1,7 @@
 import { logger } from '../../utils/logger';
 import React, { useState } from 'react';
 import type { User } from '../../types';
-import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe, Share2, Copy, ExternalLink, AlertTriangle, Mail } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe, Share2, Copy, ExternalLink, AlertTriangle, Mail, Sparkles } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase';
 import { WizardStepBranding } from '../admin/WizardStepBranding';
@@ -108,6 +108,15 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         emailConfirmation: string;
         emailNumbersGenerated: boolean;
         notifyAdminFull: boolean;
+
+        // Charity
+        charity: {
+            enabled: boolean;
+            name: string;
+            percentage: number;
+            description: string;
+            url: string;
+        };
     }>({
         // Basics
         name: `${user.name}'s March Madness Pool`,
@@ -175,7 +184,16 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         collectNotes: false,
         emailConfirmation: 'Email Confirmation',
         emailNumbersGenerated: true,
-        notifyAdminFull: true
+        notifyAdminFull: true,
+
+        // Charity
+        charity: {
+            enabled: false,
+            name: '',
+            percentage: 10,
+            description: '',
+            url: ''
+        }
     });
 
     const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -306,7 +324,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     },
                     payouts: formData.payouts
                 },
-                lockAt: formData.lockAt
+                lockAt: formData.lockAt,
+                charity: formData.charity
             };
 
             const createBracketPool = httpsCallable(functions, 'createBracketPool');
@@ -811,7 +830,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     }
 
     function renderStep3() {
-        const total = [...formData.payouts.places, ...formData.payouts.bonuses].reduce((sum, p) => sum + p.percentage, 0);
+        const baseTotal = [...formData.payouts.places, ...formData.payouts.bonuses].reduce((sum, p) => sum + p.percentage, 0);
+        const total = baseTotal + (formData.charity.enabled ? formData.charity.percentage : 0);
         const isValid = Math.abs(total - 100) < 0.01;
 
         return (
@@ -937,6 +957,76 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                         </button>
                                     </div>
                                 ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Charity / Fundraising Section */}
+                    <div className="mt-8 pt-8 border-t border-slate-800">
+                        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                            <Sparkles size={20} className="text-indigo-400" /> Charity / Fundraising
+                        </h3>
+                        <p className="text-slate-400 text-sm mb-6">Allocate a percentage of the pot to a cause.</p>
+
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors mb-4">
+                            <div>
+                                <span className="font-bold text-slate-200 block">Enable Fundraising</span>
+                                <span className="text-xs text-slate-500">Deduct a percentage from determining the payouts.</span>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={formData.charity.enabled}
+                                onChange={(e) => update({ charity: { ...formData.charity, enabled: e.target.checked } })}
+                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                            />
+                        </label>
+
+                        {formData.charity.enabled && (
+                            <div className="space-y-4 animate-in fade-in bg-slate-950 p-4 rounded-lg border border-slate-800">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Organization Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.charity.name}
+                                        onChange={(e) => update({ charity: { ...formData.charity, name: e.target.value } })}
+                                        placeholder="e.g. Red Cross"
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Percentage %</label>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                value={formData.charity.percentage}
+                                                onChange={(e) => update({ charity: { ...formData.charity, percentage: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) } })}
+                                                className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500 pr-8"
+                                            />
+                                            <span className="absolute right-3 top-2 text-slate-500">%</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Link (Optional)</label>
+                                        <input
+                                            type="url"
+                                            value={formData.charity.url || ''}
+                                            onChange={(e) => update({ charity: { ...formData.charity, url: e.target.value } })}
+                                            placeholder="https://..."
+                                            className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Description</label>
+                                    <textarea
+                                        value={formData.charity.description || ''}
+                                        onChange={(e) => update({ charity: { ...formData.charity, description: e.target.value } })}
+                                        rows={2}
+                                        placeholder="Briefly describe the cause..."
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                    />
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1261,6 +1351,12 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                         <span className="text-amber-400 font-mono">{b.percentage}%</span>
                                     </div>
                                 ))}
+                                {formData.charity.enabled && (
+                                    <div className="flex justify-between border-t border-slate-800 pt-1 mt-1">
+                                        <span className="text-indigo-400">Charity ({formData.charity.name || 'Unnamed'})</span>
+                                        <span className="text-indigo-400 font-mono">{formData.charity.percentage}%</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

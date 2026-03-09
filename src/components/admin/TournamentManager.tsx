@@ -136,7 +136,8 @@ export const TournamentManager: React.FC = () => {
 
             if (selectedTournamentId.startsWith('bigeast') || selectedTournamentId.startsWith('big12')) {
                 importFnName = 'importConferenceTournamentFromESPN';
-                params.conferenceName = selectedTournamentId.split('-')[0];
+                if (selectedTournamentId.startsWith('bigeast')) params.conferenceName = 'Big East';
+                else if (selectedTournamentId.startsWith('big12')) params.conferenceName = 'Big 12';
             }
 
             const importFn = httpsCallable(functions, importFnName);

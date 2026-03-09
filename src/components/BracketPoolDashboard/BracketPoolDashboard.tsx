@@ -1745,7 +1745,6 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         picks={viewingEntry.picks}
                         onPick={() => { }} // Read-only
                         readOnly={true}
-                        viewMode="full"
                     />
                 </div>
             )}

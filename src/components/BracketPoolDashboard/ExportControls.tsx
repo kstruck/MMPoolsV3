@@ -47,27 +47,38 @@ export const ExportControls: React.FC<ExportControlsProps> = ({ pool, entries, t
 
             exportsData = entriesWithStats.map((e, idx) => ({
                 Rank: idx + 1,
-                Name: e.name.replace(/"/g, '""'),
-                OwnerId: e.ownerUid,
+                Name: e.name,
                 Score: e.score || 0,
                 MaxPossible: e.max || 0,
                 Tiebreaker: e.tieBreakerPrediction || 'N/A',
                 Status: e.status,
-                PaidStatus: e.paidStatus
+                PaidStatus: e.paidStatus || 'UNPAID'
             }));
         } else {
             exportsData = entries.map(e => ({
-                Name: e.name.replace(/"/g, '""'),
-                OwnerId: e.ownerUid,
+                Name: e.name,
                 Score: 0,
                 Status: e.status,
-                PaidStatus: e.paidStatus
+                PaidStatus: e.paidStatus || 'UNPAID'
             }));
         }
 
-        const headers = Object.keys(exportsData[0] || {}).join(',');
-        const rows = exportsData.map(obj => Object.values(obj).map(v => `"${v}"`).join(',')).join('\n');
-        const csvContent = `${headers}\n${rows}`;
+        if (exportsData.length === 0) {
+            setIsExporting(false);
+            setIsOpen(false);
+            return;
+        }
+
+        // CSV parsing: simple encoding
+        const headers = Object.keys(exportsData[0]).join(',');
+        const rows = exportsData.map(obj => {
+            return Object.values(obj).map(v => {
+                // Wrap strings with quotes and escape internal quotes if necessary
+                const valStr = String(v);
+                return `"${valStr.replace(/"/g, '""')}"`;
+            }).join(',');
+        });
+        const csvContent = [headers, ...rows].join('\n');
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
