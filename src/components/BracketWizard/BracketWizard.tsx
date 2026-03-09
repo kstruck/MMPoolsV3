@@ -220,7 +220,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
         if (step === 3) {
             // Validate payouts equal 100%
-            const total = [...formData.payouts.places, ...formData.payouts.bonuses].reduce((sum, p) => sum + p.percentage, 0);
+            const charityPct = formData.charity.enabled ? formData.charity.percentage : 0;
+            const total = [...formData.payouts.places, ...formData.payouts.bonuses].reduce((sum, p) => sum + p.percentage, 0) + charityPct;
             if (Math.abs(total - 100) > 0.01) {
                 setError(`Payout percentages must equal 100% (currently ${total.toFixed(1)}%)`);
                 return;

@@ -42,9 +42,13 @@ export const TournamentManager: React.FC = () => {
             const options: TournamentOption[] = [];
             snapshot.forEach(docSnap => {
                 const data = docSnap.data();
+                let prefix = data.gender === 'womens' ? "Women's" : "Men's";
+                if (docSnap.id.startsWith('bigeast')) prefix = 'Big East';
+                if (docSnap.id.startsWith('big12')) prefix = 'Big 12';
+
                 options.push({
                     id: docSnap.id,
-                    label: `${data.gender === 'womens' ? "Women's" : "Men's"} ${data.seasonYear}${data.isFinalized ? ' (Finalized)' : ''}`,
+                    label: `${prefix} ${data.seasonYear}${data.isFinalized ? ' (Finalized)' : ''}`,
                     seasonYear: data.seasonYear || 0,
                     gender: data.gender || 'mens',
                     isFinalized: data.isFinalized || false,

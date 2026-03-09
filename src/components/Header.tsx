@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { Logo } from './Logo';
 import type { User } from '../types';
-import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle, Sun, Moon } from 'lucide-react';
+import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { authService } from '../services/authService';
 import { isSuperAdmin, canCreatePool } from '../utils/auth';
 import { logger } from '../utils/logger';
 import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../contexts/ThemeContext';
 
 interface HeaderProps {
     user: User | null;
@@ -18,7 +17,6 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenAuth, onLogout, onCreatePool }) => {
     const navigate = useNavigate();
-    const { theme, toggleTheme } = useTheme();
     const [isResending, setIsResending] = useState(false);
     const [resendStatus, setResendStatus] = useState<'idle' | 'sent' | 'error'>('idle');
 
@@ -85,9 +83,6 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => navigate('/scoreboard')} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors mr-2">
                                     <Trophy size={14} /> Live Scores
                                 </button>
-                                <button onClick={toggleTheme} className="flex items-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2 p-1 rounded-full border border-transparent hover:border-slate-300 dark:hover:border-slate-600" title="Toggle Theme" aria-label="Toggle Theme">
-                                    {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                                </button>
                                 <div className="flex gap-2">
                                     <button onClick={onOpenAuth} className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 transition-colors">Sign In / Register</button>
                                 </div>
@@ -105,10 +100,6 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 </button>
                                 <button onClick={() => navigate('/scoreboard')} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors">
                                     <Trophy size={14} /> Live Scores
-                                </button>
-
-                                <button onClick={toggleTheme} className="flex items-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-4 p-1 rounded-full border border-transparent hover:border-slate-300 dark:hover:border-slate-600" title="Toggle Theme" aria-label="Toggle Theme">
-                                    {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
                                 </button>
 
                                 <button

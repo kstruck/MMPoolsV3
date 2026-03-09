@@ -55,11 +55,6 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
         return elim;
     }, [games]);
 
-    const r1 = gamesByRound[1] || []; // 3 play-in games
-    const r2 = gamesByRound[2] || []; // 4 QF games
-    const r3 = gamesByRound[3] || []; // 2 SF games
-    const r4 = gamesByRound[4] || []; // 1 final
-
     const totalPicks = Object.keys(picks).length;
     const requiredPicks = Object.keys(games).length;
 
@@ -68,6 +63,34 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
         if (!sourceGameId) return undefined;
         return picks[sourceGameId];
     };
+
+    const rounds = Object.keys(gamesByRound).map(Number).sort((a, b) => a - b);
+    const maxRound = rounds[rounds.length - 1] || 4;
+
+    const getRoundLabel = (r: number, max: number) => {
+        if (r === max) return "Championship";
+        if (r === max - 1) return "Semifinals";
+        if (r === max - 2) return "Quarterfinals";
+        if (r === max - 3) return max >= 5 ? "Second Round" : "First Round";
+        if (r <= max - 4) return "First Round";
+        return `Round ${r}`;
+    };
+
+    // Build feeder map for each game
+    const feedersByGame = useMemo(() => {
+        const feeders: Record<string, string[]> = {};
+        Object.values(tournament.slots || {}).forEach(slot => {
+            if (slot.nextSlotId) {
+                const targetSlot = tournament.slots[slot.nextSlotId];
+                const targetGameId = targetSlot ? targetSlot.gameId : slot.nextSlotId;
+                if (!feeders[targetGameId]) feeders[targetGameId] = [];
+                feeders[targetGameId].push(slot.gameId);
+            }
+        });
+        // Sort feeders so we have a consistent order
+        Object.values(feeders).forEach(arr => arr.sort());
+        return feeders;
+    }, [tournament.slots]);
 
     return (
         <div className="flex flex-col w-full">
@@ -88,86 +111,89 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
             <div className="p-4 overflow-x-auto">
                 <div className="flex gap-6 items-start min-w-fit mx-auto justify-center">
 
-                    {/* Round 1: Play-In (3 games) */}
-                    <RoundColumn
-                        label="First Round"
-                        sublabel="Play-In"
-                        games={r1}
-                        picks={picks}
-                        onPick={onPick}
-                        readOnly={readOnly}
-                        eliminatedTeamIds={eliminatedTeamIds}
-                        verticalSpacing="gap-8"
-                    />
+                    {rounds.map(r => {
+                        const roundGames = gamesByRound[r];
+                        if (!roundGames) return null;
 
-                    {/* Round 2: Quarterfinals (4 games) — R1 winners vs bye seeds */}
-                    <RoundColumn
-                        label="Quarterfinals"
-                        games={r2}
-                        picks={picks}
-                        onPick={onPick}
-                        readOnly={readOnly}
-                        eliminatedTeamIds={eliminatedTeamIds}
-                        verticalSpacing="gap-6"
-                        feeders={[
-                            // For each QF game, one team is a bye (already set on game) and one comes from R1
-                            ...(r2.map((g, i) => {
-                                // Work out which R1 game feeds this QF slot
-                                const r1Feeder = r1[i]; // heuristic: ordered by id
-                                return {
-                                    gameId: g.id,
-                                    homeOverride: r1Feeder ? resolveWinner(r1Feeder.id) : undefined,
-                                    // awayOverride stays undefined → falls back to game data (bye seed)
-                                };
-                            }))
-                        ]}
-                    />
+                        // Render final
+                        if (r === maxRound) {
+                            return (
+                                <div key={r} className="flex flex-col items-center justify-center gap-4 py-24">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-2">Championship</p>
+                                    <Trophy className="text-amber-400 animate-pulse mb-2" size={28} />
+                                    {roundGames[0] && (
+                                        <MatchNode
+                                            game={roundGames[0]}
+                                            picks={picks}
+                                            onPick={onPick}
+                                            readOnly={readOnly}
+                                            isChampionship
+                                            homeTeamIdOverride={resolveWinner(feedersByGame[roundGames[0].id]?.[0])}
+                                            awayTeamIdOverride={resolveWinner(feedersByGame[roundGames[0].id]?.[1])}
+                                            dynamicParticipants={true}
+                                            eliminatedTeamIds={eliminatedTeamIds}
+                                        />
+                                    )}
+                                    <p className="text-[10px] uppercase tracking-widest text-slate-500 mt-2">Champion</p>
+                                </div>
+                            );
+                        }
 
-                    {/* Round 3: Semifinals (2 games) */}
-                    <RoundColumn
-                        label="Semifinals"
-                        games={r3}
-                        picks={picks}
-                        onPick={onPick}
-                        readOnly={readOnly}
-                        eliminatedTeamIds={eliminatedTeamIds}
-                        verticalSpacing="gap-16"
-                        feeders={[
-                            // standard bracket: SF1 = Winner(1v8) vs Winner(4v5); SF2 = Winner(2v7) vs Winner(3v6)
-                            // r2[0]=1seed, r2[1]=2seed, r2[2]=3seed, r2[3]=4seed
-                            // So SF1 uses r2[0] & r2[3]. SF2 uses r2[1] & r2[2].
-                            {
-                                gameId: r3[0]?.id,
-                                homeOverride: resolveWinner(r2[0]?.id),
-                                awayOverride: resolveWinner(r2[3]?.id),
-                            },
-                            {
-                                gameId: r3[1]?.id,
-                                homeOverride: resolveWinner(r2[1]?.id),
-                                awayOverride: resolveWinner(r2[2]?.id),
+                        // Render RoundColumn
+                        const label = getRoundLabel(r, maxRound);
+                        const sublabel = r === 1 && maxRound === 4 ? "Play-In" : undefined;
+
+                        // Decide vertical spacing
+                        let spacing = 'gap-6';
+                        if (r === maxRound - 1) spacing = 'gap-16'; // SF
+                        if (maxRound === 4 && r === 1) spacing = 'gap-8'; // Big East R1
+
+                        // Build feeders for this round
+                        const columnFeeders = roundGames.map(g => {
+                            const f = feedersByGame[g.id] || [];
+                            let homeOverride: string | undefined;
+                            let awayOverride: string | undefined;
+
+                            if (f.length === 2) {
+                                homeOverride = resolveWinner(f[0]);
+                                awayOverride = resolveWinner(f[1]);
+                            } else if (f.length === 1) {
+                                // Find exactly which slot is empty/placeholder
+                                const isHomeEmpty = !g.homeTeamId || g.homeTeamId.startsWith('SEED_');
+                                const isAwayEmpty = !g.awayTeamId || g.awayTeamId.startsWith('SEED_');
+
+                                if (isAwayEmpty && !isHomeEmpty) {
+                                    awayOverride = resolveWinner(f[0]);
+                                } else if (isHomeEmpty && !isAwayEmpty) {
+                                    homeOverride = resolveWinner(f[0]);
+                                } else {
+                                    // If both or neither match the heuristic, default to away (common for bye structures)
+                                    awayOverride = resolveWinner(f[0]);
+                                }
                             }
-                        ]}
-                    />
 
-                    {/* Round 4: Championship Final */}
-                    <div className="flex flex-col items-center justify-center gap-4 py-24">
-                        <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-2">Championship</p>
-                        <Trophy className="text-amber-400 animate-pulse mb-2" size={28} />
-                        {r4[0] && (
-                            <MatchNode
-                                game={r4[0]}
+                            return {
+                                gameId: g.id,
+                                homeOverride,
+                                awayOverride
+                            };
+                        });
+
+                        return (
+                            <RoundColumn
+                                key={r}
+                                label={label}
+                                sublabel={sublabel}
+                                games={roundGames}
                                 picks={picks}
                                 onPick={onPick}
                                 readOnly={readOnly}
-                                isChampionship
-                                homeTeamIdOverride={resolveWinner(r3[0]?.id)}
-                                awayTeamIdOverride={resolveWinner(r3[1]?.id)}
-                                dynamicParticipants
                                 eliminatedTeamIds={eliminatedTeamIds}
+                                verticalSpacing={spacing}
+                                feeders={columnFeeders}
                             />
-                        )}
-                        <p className="text-[10px] uppercase tracking-widest text-slate-500 mt-2">Champion</p>
-                    </div>
+                        );
+                    })}
                 </div>
             </div>
         </div>

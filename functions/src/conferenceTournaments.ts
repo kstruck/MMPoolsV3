@@ -209,13 +209,13 @@ export const BIG_12_TEAMS_2026: ConferenceTeam[] = [
 // ---------------------------------------------------------------------------
 // Big 12 Tournament Structure
 //
-// Round 1 (Mar 10): 8 games (1v16, 8v9, 5v12, 4v13, 6v11, 3v14, 7v10, 2v15)
-// Quarterfinals (Mar 11): 4 games
-// Semifinals (Mar 12): 2 games
-// Championship (Mar 13): 1 game
+// Round 1 (Mar 10): 4 games (9v16, 12v13, 10v15, 11v14)
+// Round 2 (Mar 11): 4 games (seeds 5-8 vs R1 winners)
+// Quarterfinals (Mar 12): 4 games (seeds 1-4 vs R2 winners)
+// Semifinals (Mar 13): 2 games
+// Championship (Mar 14): 1 game
 //
 // Total: 15 games, 15 slots
-// No byes.
 // ---------------------------------------------------------------------------
 
 export const initializeBig12Tournament = async (
@@ -251,16 +251,12 @@ export const initializeBig12Tournament = async (
         region: 'Conference',
     });
 
-    // ---- ROUND 1 (8 games, seeds 1-16) ----
+    // ---- ROUND 1 (4 games, seeds 9-16) ----
     const r1Matchups: { id: string; home: number; away: number }[] = [
-        { id: 'R1-CONF-1', home: 1, away: 16 },
-        { id: 'R1-CONF-2', home: 8, away: 9 },
-        { id: 'R1-CONF-3', home: 5, away: 12 },
-        { id: 'R1-CONF-4', home: 4, away: 13 },
-        { id: 'R1-CONF-5', home: 6, away: 11 },
-        { id: 'R1-CONF-6', home: 3, away: 14 },
-        { id: 'R1-CONF-7', home: 7, away: 10 },
-        { id: 'R1-CONF-8', home: 2, away: 15 },
+        { id: 'R1-CONF-1', home: 9, away: 16 },
+        { id: 'R1-CONF-2', home: 12, away: 13 },
+        { id: 'R1-CONF-3', home: 10, away: 15 },
+        { id: 'R1-CONF-4', home: 11, away: 14 },
     ];
 
     for (const m of r1Matchups) {
@@ -269,45 +265,68 @@ export const initializeBig12Tournament = async (
         games[m.id] = makeGame(m.id, 1, homeTeam?.id || `SEED_${m.home}`, awayTeam?.id || `SEED_${m.away}`, startTime);
     }
 
-    // ---- ROUND 2 — QUARTERFINALS (4 games) ----
-    const qfStartTime = '2026-03-11T12:00:00.000Z';
-    games['R2-CONF-1'] = makeGame('R2-CONF-1', 2, '', '', qfStartTime); // Winner 1v16 vs Winner 8v9
-    games['R2-CONF-2'] = makeGame('R2-CONF-2', 2, '', '', qfStartTime); // Winner 5v12 vs Winner 4v13
-    games['R2-CONF-3'] = makeGame('R2-CONF-3', 2, '', '', qfStartTime); // Winner 6v11 vs Winner 3v14
-    games['R2-CONF-4'] = makeGame('R2-CONF-4', 2, '', '', qfStartTime); // Winner 7v10 vs Winner 2v15
+    // ---- ROUND 2 (4 games, seeds 5-8 vs R1 winners) ----
+    const r2StartTime = '2026-03-11T12:00:00.000Z';
+    const r2Matchups: { id: string; home: number }[] = [
+        { id: 'R2-CONF-1', home: 8 }, // vs Winner R1-CONF-1 (9v16)
+        { id: 'R2-CONF-2', home: 5 }, // vs Winner R1-CONF-2 (12v13)
+        { id: 'R2-CONF-3', home: 7 }, // vs Winner R1-CONF-3 (10v15)
+        { id: 'R2-CONF-4', home: 6 }, // vs Winner R1-CONF-4 (11v14)
+    ];
 
-    // ---- ROUND 3 — SEMIFINALS (2 games) ----
-    const sfStartTime = '2026-03-12T12:00:00.000Z';
-    games['R3-CONF-1'] = makeGame('R3-CONF-1', 3, '', '', sfStartTime);
-    games['R3-CONF-2'] = makeGame('R3-CONF-2', 3, '', '', sfStartTime);
+    for (const m of r2Matchups) {
+        const homeTeam = BIG_12_TEAMS_2026.find(t => t.seed === m.home);
+        games[m.id] = makeGame(m.id, 2, homeTeam?.id || `SEED_${m.home}`, '', r2StartTime);
+    }
 
-    // ---- ROUND 4 — CHAMPIONSHIP (1 game) ----
-    const champStartTime = '2026-03-13T14:00:00.000Z';
-    games['R4-CONF-1'] = makeGame('R4-CONF-1', 4, '', '', champStartTime);
+    // ---- ROUND 3 — QUARTERFINALS (4 games, seeds 1-4 vs R2 winners) ----
+    const qfStartTime = '2026-03-12T12:00:00.000Z';
+    const qfMatchups: { id: string; home: number }[] = [
+        { id: 'R3-CONF-1', home: 1 }, // vs Winner R2-CONF-1 (8 vs 9/16)
+        { id: 'R3-CONF-2', home: 4 }, // vs Winner R2-CONF-2 (5 vs 12/13)
+        { id: 'R3-CONF-3', home: 2 }, // vs Winner R2-CONF-3 (7 vs 10/15)
+        { id: 'R3-CONF-4', home: 3 }, // vs Winner R2-CONF-4 (6 vs 11/14)
+    ];
+
+    for (const m of qfMatchups) {
+        const homeTeam = BIG_12_TEAMS_2026.find(t => t.seed === m.home);
+        games[m.id] = makeGame(m.id, 3, homeTeam?.id || `SEED_${m.home}`, '', qfStartTime);
+    }
+
+    // ---- ROUND 4 — SEMIFINALS (2 games) ----
+    const sfStartTime = '2026-03-13T12:00:00.000Z';
+    games['R4-CONF-1'] = makeGame('R4-CONF-1', 4, '', '', sfStartTime); // Winner R3-CONF-1 vs Winner R3-CONF-2
+    games['R4-CONF-2'] = makeGame('R4-CONF-2', 4, '', '', sfStartTime); // Winner R3-CONF-3 vs Winner R3-CONF-4
+
+    // ---- ROUND 5 — CHAMPIONSHIP (1 game) ----
+    const champStartTime = '2026-03-14T14:00:00.000Z';
+    games['R5-CONF-1'] = makeGame('R5-CONF-1', 5, '', '', champStartTime);
 
     // ---- SLOTS ----
-    // R1 slots → their winners go to QF
+    // R1 slots → their winners go to R2 away spots
     slots['R1-CONF-1'] = { id: 'R1-CONF-1', gameId: 'R1-CONF-1', nextSlotId: 'R2-CONF-1' };
-    slots['R1-CONF-2'] = { id: 'R1-CONF-2', gameId: 'R1-CONF-2', nextSlotId: 'R2-CONF-1' };
-    slots['R1-CONF-3'] = { id: 'R1-CONF-3', gameId: 'R1-CONF-3', nextSlotId: 'R2-CONF-2' };
-    slots['R1-CONF-4'] = { id: 'R1-CONF-4', gameId: 'R1-CONF-4', nextSlotId: 'R2-CONF-2' };
-    slots['R1-CONF-5'] = { id: 'R1-CONF-5', gameId: 'R1-CONF-5', nextSlotId: 'R2-CONF-3' };
-    slots['R1-CONF-6'] = { id: 'R1-CONF-6', gameId: 'R1-CONF-6', nextSlotId: 'R2-CONF-3' };
-    slots['R1-CONF-7'] = { id: 'R1-CONF-7', gameId: 'R1-CONF-7', nextSlotId: 'R2-CONF-4' };
-    slots['R1-CONF-8'] = { id: 'R1-CONF-8', gameId: 'R1-CONF-8', nextSlotId: 'R2-CONF-4' };
+    slots['R1-CONF-2'] = { id: 'R1-CONF-2', gameId: 'R1-CONF-2', nextSlotId: 'R2-CONF-2' };
+    slots['R1-CONF-3'] = { id: 'R1-CONF-3', gameId: 'R1-CONF-3', nextSlotId: 'R2-CONF-3' };
+    slots['R1-CONF-4'] = { id: 'R1-CONF-4', gameId: 'R1-CONF-4', nextSlotId: 'R2-CONF-4' };
 
-    // QF slots → winners go to SF
+    // R2 slots → winners go to QF (R3) away spots
     slots['R2-CONF-1'] = { id: 'R2-CONF-1', gameId: 'R2-CONF-1', nextSlotId: 'R3-CONF-1' };
-    slots['R2-CONF-2'] = { id: 'R2-CONF-2', gameId: 'R2-CONF-2', nextSlotId: 'R3-CONF-1' };
-    slots['R2-CONF-3'] = { id: 'R2-CONF-3', gameId: 'R2-CONF-3', nextSlotId: 'R3-CONF-2' };
-    slots['R2-CONF-4'] = { id: 'R2-CONF-4', gameId: 'R2-CONF-4', nextSlotId: 'R3-CONF-2' };
+    slots['R2-CONF-2'] = { id: 'R2-CONF-2', gameId: 'R2-CONF-2', nextSlotId: 'R3-CONF-2' };
+    slots['R2-CONF-3'] = { id: 'R2-CONF-3', gameId: 'R2-CONF-3', nextSlotId: 'R3-CONF-3' };
+    slots['R2-CONF-4'] = { id: 'R2-CONF-4', gameId: 'R2-CONF-4', nextSlotId: 'R3-CONF-4' };
 
-    // SF slots → winners go to Championship
+    // QF (R3) slots → winners go to SF (R4)
     slots['R3-CONF-1'] = { id: 'R3-CONF-1', gameId: 'R3-CONF-1', nextSlotId: 'R4-CONF-1' };
     slots['R3-CONF-2'] = { id: 'R3-CONF-2', gameId: 'R3-CONF-2', nextSlotId: 'R4-CONF-1' };
+    slots['R3-CONF-3'] = { id: 'R3-CONF-3', gameId: 'R3-CONF-3', nextSlotId: 'R4-CONF-2' };
+    slots['R3-CONF-4'] = { id: 'R3-CONF-4', gameId: 'R3-CONF-4', nextSlotId: 'R4-CONF-2' };
+
+    // SF (R4) slots → winners go to Championship (R5)
+    slots['R4-CONF-1'] = { id: 'R4-CONF-1', gameId: 'R4-CONF-1', nextSlotId: 'R5-CONF-1' };
+    slots['R4-CONF-2'] = { id: 'R4-CONF-2', gameId: 'R4-CONF-2', nextSlotId: 'R5-CONF-1' };
 
     // Championship slot (no next)
-    slots['R4-CONF-1'] = { id: 'R4-CONF-1', gameId: 'R4-CONF-1', nextSlotId: null };
+    slots['R5-CONF-1'] = { id: 'R5-CONF-1', gameId: 'R5-CONF-1', nextSlotId: null };
 
     // ---- WRITE TO FIRESTORE ----
     await tournamentRef.set({
