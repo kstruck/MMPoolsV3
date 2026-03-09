@@ -177,6 +177,7 @@ export const TournamentManager: React.FC = () => {
                 seasonYear: selectedYear,
                 gender: selectedOption?.gender || 'mens',
                 teams: [],
+                overwrite: true,
             });
             setSuccessMsg('Tournament skeleton re-initialized.');
         } catch (err: unknown) {
