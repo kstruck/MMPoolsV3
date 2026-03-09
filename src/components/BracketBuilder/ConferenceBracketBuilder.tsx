@@ -169,11 +169,16 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
 
                                 if (isAwayEmpty && !isHomeEmpty) {
                                     awayOverride = resolveWinner(f[0]);
+                                    homeOverride = g.homeTeamId;
                                 } else if (isHomeEmpty && !isAwayEmpty) {
                                     homeOverride = resolveWinner(f[0]);
+                                    awayOverride = g.awayTeamId;
                                 } else {
                                     // If both or neither match the heuristic, default to away (common for bye structures)
                                     awayOverride = resolveWinner(f[0]);
+                                    if (!isHomeEmpty) {
+                                        homeOverride = g.homeTeamId;
+                                    }
                                 }
                             }
 
