@@ -124,7 +124,7 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "User must be logged in.");
     }
-    const { poolId, entryId } = request.data;
+    const { poolId, entryId, picks: newPicks } = request.data;
     const uid = request.auth.uid;
     const db = admin.firestore();
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
@@ -146,7 +146,8 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
         // Validate that bracket is complete:
         // NCAA = 63 picks (64-team bracket: 32+16+8+4+2+1)
         // Conference = total games in tournament (10 for Big East)
-        const pickCount = Object.keys(entryData.picks || {}).length;
+        const finalPicks = newPicks || entryData.picks || {};
+        const pickCount = Object.keys(finalPicks).length;
         const isConference = poolData.tournamentType === 'conference';
         let requiredPicks = 63; // Default for NCAA
         if (isConference) {
@@ -166,6 +167,7 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
         }
         transaction.update(entryRef, {
             status: "SUBMITTED",
+            picks: finalPicks,
             updatedAt: firestore_1.Timestamp.now().toMillis()
         });
         // Log audit
