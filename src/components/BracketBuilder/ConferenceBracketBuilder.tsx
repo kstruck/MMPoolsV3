@@ -147,9 +147,14 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
                         let spacing = 'gap-6';
                         if (r === maxRound - 1) spacing = 'gap-16'; // SF
                         if (maxRound === 4 && r === 1) spacing = 'gap-8'; // Big East R1
+                        if (maxRound >= 5) {
+                            if (r === 1) spacing = 'gap-24'; // First Round spacing for Big 12
+                            if (r === 2) spacing = 'gap-12'; // Second Round spacing
+                            if (r === maxRound - 2) spacing = 'gap-8'; // QF
+                        }
 
                         // Build feeders for this round
-                        const columnFeeders = roundGames.map(g => {
+                        const columnFeeders = roundGames.map((g) => {
                             const f = feedersByGame[g.id] || [];
                             let homeOverride: string | undefined;
                             let awayOverride: string | undefined;
@@ -175,7 +180,7 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
                             return {
                                 gameId: g.id,
                                 homeOverride,
-                                awayOverride
+                                awayOverride,
                             };
                         });
 
@@ -191,6 +196,8 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
                                 eliminatedTeamIds={eliminatedTeamIds}
                                 verticalSpacing={spacing}
                                 feeders={columnFeeders}
+                                roundNumber={r}
+                                maxRound={maxRound}
                             />
                         );
                     })}
@@ -219,6 +226,8 @@ interface RoundColumnProps {
     eliminatedTeamIds: Set<string>;
     verticalSpacing?: string;
     feeders?: FeederInfo[];
+    roundNumber?: number;
+    maxRound?: number;
 }
 
 const RoundColumn: React.FC<RoundColumnProps> = ({
@@ -231,16 +240,27 @@ const RoundColumn: React.FC<RoundColumnProps> = ({
     eliminatedTeamIds,
     verticalSpacing = 'gap-6',
     feeders,
+    roundNumber,
+    maxRound,
 }) => {
+    // Determine margin-top to stagger Big 12 early rounds so they line up better with subsequent rounds
+    let mtClass = "";
+    if (maxRound && maxRound >= 5) {
+        if (roundNumber === 1) mtClass = "mt-4";
+        if (roundNumber === 2) mtClass = "mt-12";
+        if (roundNumber === 3) mtClass = "mt-24";
+        if (roundNumber === 4) mtClass = "mt-40";
+    }
+
     return (
-        <div className="flex flex-col items-center">
+        <div className={`flex flex-col items-center ${mtClass}`}>
             {/* Round label */}
-            <div className="mb-4 text-center">
+            <div className="mb-4 text-center h-10">
                 <p className="text-xs font-bold uppercase tracking-widest text-indigo-400">{label}</p>
                 {sublabel && <p className="text-[10px] text-slate-500">{sublabel}</p>}
             </div>
 
-            <div className={`flex flex-col justify-around ${verticalSpacing} py-2`}>
+            <div className={`flex flex-col justify-around ${verticalSpacing} py-2 flex-grow`}>
                 {games.map((g: Game) => {
                     const feeder = feeders?.find(f => f.gameId === g.id);
                     const hasDynamicParticipants = Boolean(feeder?.homeOverride !== undefined || feeder?.awayOverride !== undefined);
