@@ -167,19 +167,30 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
                                 const isHomeEmpty = !g.homeTeamId || g.homeTeamId.startsWith('SEED_');
                                 const isAwayEmpty = !g.awayTeamId || g.awayTeamId.startsWith('SEED_');
 
+                                const feedWinner = resolveWinner(f[0]);
+
                                 if (isAwayEmpty && !isHomeEmpty) {
-                                    awayOverride = resolveWinner(f[0]);
+                                    // Home is seeded, Away is waiting for feeder
+                                    awayOverride = feedWinner;
                                     homeOverride = g.homeTeamId;
                                 } else if (isHomeEmpty && !isAwayEmpty) {
-                                    homeOverride = resolveWinner(f[0]);
+                                    // Away is seeded, Home is waiting for feeder
+                                    homeOverride = feedWinner;
                                     awayOverride = g.awayTeamId;
                                 } else {
-                                    // If both or neither match the heuristic, default to away (common for bye structures)
-                                    awayOverride = resolveWinner(f[0]);
-                                    if (!isHomeEmpty) {
-                                        homeOverride = g.homeTeamId;
-                                    }
+                                    // Default to away, but preserve home if it exists
+                                    awayOverride = feedWinner;
+                                    homeOverride = isHomeEmpty ? undefined : g.homeTeamId;
                                 }
+                            }
+
+                            // Bulletproof fallback: If we are dynamically passing participants,
+                            // NEVER drop a deeply-seeded team ID that was already present in the game (like CINC).
+                            if (homeOverride === undefined && g.homeTeamId && !g.homeTeamId.startsWith('SEED_')) {
+                                homeOverride = g.homeTeamId;
+                            }
+                            if (awayOverride === undefined && g.awayTeamId && !g.awayTeamId.startsWith('SEED_')) {
+                                awayOverride = g.awayTeamId;
                             }
 
                             return {
