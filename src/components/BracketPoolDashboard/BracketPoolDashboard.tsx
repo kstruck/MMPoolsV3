@@ -25,6 +25,7 @@ import { BracketCountdown } from './BracketCountdown';
 import { AICommissioner } from '../AICommissioner';
 import { BanterBoard } from './BanterBoard';
 import { PaymentLedger } from './PaymentLedger';
+import { ExportControls } from './ExportControls';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager' | 'ledger';
 type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'chalk' | 'analytics' | 'insights';
@@ -140,6 +141,26 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             setLoading(false);
         });
         return () => unsub();
+    }, [pool.id]);
+
+    // Listen for master bracket print event
+    useEffect(() => {
+        const handlePrintMaster = () => {
+            setViewingEntry({
+                id: 'master',
+                poolId: pool.id,
+                ownerUid: 'system',
+                name: 'Master Bracket',
+                picks: {},
+                score: 0,
+                status: 'SUBMITTED',
+                paidStatus: 'PAID',
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            });
+        };
+        window.addEventListener('print-master-bracket', handlePrintMaster);
+        return () => window.removeEventListener('print-master-bracket', handlePrintMaster);
     }, [pool.id]);
 
     // Fetch tournament data
@@ -408,6 +429,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     </div>
 
                     <div className="flex gap-2">
+                        <ExportControls pool={pool} entries={entries} tournament={tournament} />
                         <button onClick={onShare} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm">
                             <Share2 size={16} /> Share
                         </button>

@@ -28,6 +28,14 @@ export const getEliminatedTeams = (tournament: Tournament): Set<string> => {
     return eliminated;
 };
 
+export function extractSeedFromTeamId(teamId: string | undefined | null): number | null {
+    if (!teamId) return null;
+    // Expected format: "E1-Duke" or "S10-NorthCarolina"
+    const match = teamId.match(/^[A-Za-z]+(\d+)-/);
+    if (match) return parseInt(match[1], 10);
+    return null;
+}
+
 /**
  * Calculates current score + potential remaining points.
  */
@@ -49,6 +57,9 @@ export const calculateEntryMaxScore = (
         eliminatedTeams = getEliminatedTeams(tournament);
     }
 
+    const upsetBonusEnabled = settings.upsetBonus?.enabled ?? false;
+    const upsetMultiplier = settings.upsetBonus?.multiplier ?? 1;
+
     let maxScore = 0;
 
     Object.entries(entry.picks).forEach(([slotId, pickedTeamId]) => {
@@ -66,10 +77,35 @@ export const calculateEntryMaxScore = (
         if (game.status === 'FINAL') {
             if (game.winnerTeamId === pickedTeamId) {
                 maxScore += points;
+
+                if (upsetBonusEnabled) {
+                    const winnerSeed = extractSeedFromTeamId(game.winnerTeamId);
+                    const loserId = game.homeTeamId === game.winnerTeamId ? game.awayTeamId : game.homeTeamId;
+                    const loserSeed = extractSeedFromTeamId(loserId);
+
+                    if (winnerSeed && loserSeed && winnerSeed > loserSeed) {
+                        maxScore += (winnerSeed - loserSeed) * upsetMultiplier;
+                    }
+                }
             }
         } else {
             if (!eliminatedTeams.has(pickedTeamId)) {
                 maxScore += points;
+
+                if (upsetBonusEnabled) {
+                    const pickSeed = extractSeedFromTeamId(pickedTeamId);
+                    if (pickSeed) {
+                        const opponentId = game.homeTeamId === pickedTeamId ? game.awayTeamId : (game.awayTeamId === pickedTeamId ? game.homeTeamId : null);
+                        if (opponentId && !eliminatedTeams!.has(opponentId)) {
+                            const oppSeed = extractSeedFromTeamId(opponentId);
+                            if (oppSeed && pickSeed > oppSeed) {
+                                maxScore += (pickSeed - oppSeed) * upsetMultiplier;
+                            }
+                        } else if (!opponentId && pickSeed > 1) {
+                            maxScore += (pickSeed - 1) * upsetMultiplier;
+                        }
+                    }
+                }
             }
         }
     });
@@ -93,6 +129,9 @@ export const calculateEntryScore = (
         multipliers = settings.customScoring;
     }
 
+    const upsetBonusEnabled = settings.upsetBonus?.enabled ?? false;
+    const upsetMultiplier = settings.upsetBonus?.multiplier ?? 1;
+
     // Iterate all picks
     Object.entries(entry.picks).forEach(([slotId, pickedTeamId]) => {
         // Find Game for this slot
@@ -109,6 +148,16 @@ export const calculateEntryScore = (
             const roundIndex = game.round - 1;
             if (roundIndex >= 0 && roundIndex < multipliers.length) {
                 score += multipliers[roundIndex];
+            }
+
+            if (upsetBonusEnabled) {
+                const winnerSeed = extractSeedFromTeamId(game.winnerTeamId);
+                const loserId = game.homeTeamId === game.winnerTeamId ? game.awayTeamId : game.homeTeamId;
+                const loserSeed = extractSeedFromTeamId(loserId);
+
+                if (winnerSeed && loserSeed && winnerSeed > loserSeed) {
+                    score += (winnerSeed - loserSeed) * upsetMultiplier;
+                }
             }
         }
     });

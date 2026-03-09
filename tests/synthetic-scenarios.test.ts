@@ -166,6 +166,46 @@ describe('Upset Bonus Scoring', () => {
         expect(result.upsetCount).toBe(0);
         expect(result.score).toBe(1920); // Classic total with no upsets
     });
+
+    it('should calculate optimistic max possible points for an undecided upset', () => {
+        const tournament = createMockTournament();
+        const pendingGameId = 'R2_G1';
+
+        tournament.games[pendingGameId].status = 'SCHEDULED';
+        tournament.games[pendingGameId].homeTeamId = 'S1-Gonzaga';
+        tournament.games[pendingGameId].awayTeamId = 'S9-Memphis';
+
+        const picks: Record<string, string> = {
+            [pendingGameId]: 'S9-Memphis', // Predicting the upset
+        };
+
+        const entry = createMockEntry('optimistic-entry', picks);
+        const maxScore = calculateEntryMaxScore(entry, tournament, TEST_POOL_SETTINGS_UPSET_BONUS);
+
+        // R2 point value is 20. Upset is 9 over 1 = 8. Multiplier is 5.
+        // 8 * 5 = 40. Total expected max: 20 + 40 = 60.
+        expect(maxScore).toBe(60);
+    });
+
+    it('should safely fall back to optimistic points when opponent TBD', () => {
+        const tournament = createMockTournament();
+        const tbdGameId = 'R2_G2';
+
+        tournament.games[tbdGameId].status = 'SCHEDULED';
+        tournament.games[tbdGameId].homeTeamId = 'TBD';
+        tournament.games[tbdGameId].awayTeamId = 'TBD';
+
+        const picks: Record<string, string> = {
+            [tbdGameId]: 'E15-OralRoberts', // Predicting deep run for a 15 seed
+        };
+
+        const entry = createMockEntry('tbd-entry', picks);
+        const maxScore = calculateEntryMaxScore(entry, tournament, TEST_POOL_SETTINGS_UPSET_BONUS);
+
+        // Round 2 points is 20. Opponent is TBD. Optimistic upset is beating a 1 seed (15-1=14).  (15 - 1) * 5 = 70.
+        // Expected max score: 20 + 70 = 90.
+        expect(maxScore).toBe(90);
+    });
 });
 
 describe('Conference Tournament Scoring (4-round / 5-round)', () => {

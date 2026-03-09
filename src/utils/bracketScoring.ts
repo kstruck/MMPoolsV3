@@ -27,6 +27,14 @@ export const getEliminatedTeams = (tournament: Tournament): Set<string> => {
     return eliminated;
 };
 
+export function extractSeedFromTeamId(teamId: string | undefined | null): number | null {
+    if (!teamId) return null;
+    // Expected format: "E1-Duke" or "S10-NorthCarolina"
+    const match = teamId.match(/^[A-Za-z]+(\d+)-/);
+    if (match) return parseInt(match[1], 10);
+    return null;
+}
+
 /**
  * Calculates current score + potential remaining points.
  */
@@ -48,20 +56,10 @@ export const calculateEntryMaxScore = (
         eliminatedTeams = getEliminatedTeams(tournament);
     }
 
+    const upsetBonusEnabled = settings.upsetBonus?.enabled ?? false;
+    const upsetMultiplier = settings.upsetBonus?.multiplier ?? 1;
+
     let maxScore = 0;
-
-    // Iterate all picks
-    // Wait, we need to iterate all ROUNDS/GAMES possible for this entry.
-    // An entry picks a team for a specific SLOT.
-
-    // For each configured slot in the tournament:
-    // If the user picked a team for this slot:
-    //   1. Check if that game is already decided.
-    //      - If decided and user won: +Points
-    //      - If decided and user lost: +0
-    //   2. If game NOT decided:
-    //      - Check if user's pick is ELIMINATED.
-    //      - If NOT eliminated: +Points (Potential)
 
     Object.entries(entry.picks).forEach(([slotId, pickedTeamId]) => {
         const slot = tournament.slots[slotId];
@@ -79,6 +77,16 @@ export const calculateEntryMaxScore = (
         if (game.status === 'FINAL') {
             if (game.winnerTeamId === pickedTeamId) {
                 maxScore += points; // Won
+
+                if (upsetBonusEnabled) {
+                    const winnerSeed = extractSeedFromTeamId(game.winnerTeamId);
+                    const loserId = game.homeTeamId === game.winnerTeamId ? game.awayTeamId : game.homeTeamId;
+                    const loserSeed = extractSeedFromTeamId(loserId);
+
+                    if (winnerSeed && loserSeed && winnerSeed > loserSeed) {
+                        maxScore += (winnerSeed - loserSeed) * upsetMultiplier;
+                    }
+                }
             }
             // Else lost -> 0
         }
@@ -87,6 +95,21 @@ export const calculateEntryMaxScore = (
             // Check if team is still alive
             if (!eliminatedTeams.has(pickedTeamId)) {
                 maxScore += points; // Potential
+
+                if (upsetBonusEnabled) {
+                    const pickSeed = extractSeedFromTeamId(pickedTeamId);
+                    if (pickSeed) {
+                        const opponentId = game.homeTeamId === pickedTeamId ? game.awayTeamId : (game.awayTeamId === pickedTeamId ? game.homeTeamId : null);
+                        if (opponentId && !eliminatedTeams!.has(opponentId)) {
+                            const oppSeed = extractSeedFromTeamId(opponentId);
+                            if (oppSeed && pickSeed > oppSeed) {
+                                maxScore += (pickSeed - oppSeed) * upsetMultiplier;
+                            }
+                        } else if (!opponentId && pickSeed > 1) {
+                            maxScore += (pickSeed - 1) * upsetMultiplier;
+                        }
+                    }
+                }
             }
             // Else eliminated -> 0
         }

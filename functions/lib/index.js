@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.submitPlayoffPicks = exports.onAnnouncementCreated = exports.onGameComplete = exports.importConferenceTournamentFromESPN = exports.importTournamentFromESPN = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentData = exports.markEntryPaidStatus = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.fixParticipantIds = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.autoLockPools = exports.onWinnerComputed = exports.runReminders = exports.sendAdminPasswordReset = exports.deleteUserAccount = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = exports.confirmPayment = exports.markSquaresPaid = exports.reserveSquare = exports.lockPool = void 0;
-exports.initializeBig12TournamentHttp = exports.initializeBigEastTournamentHttp = exports.setSuperAdminClaim = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = void 0;
+exports.finalizeTournamentPayouts = exports.scoreBracketEntries = exports.initializeBig12TournamentHttp = exports.initializeBigEastTournamentHttp = exports.setSuperAdminClaim = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -93,4 +93,7 @@ Object.defineProperty(exports, "setSuperAdminClaim", { enumerable: true, get: fu
 var conferenceTournaments_1 = require("./conferenceTournaments");
 Object.defineProperty(exports, "initializeBigEastTournamentHttp", { enumerable: true, get: function () { return conferenceTournaments_1.initializeBigEastTournamentHttp; } });
 Object.defineProperty(exports, "initializeBig12TournamentHttp", { enumerable: true, get: function () { return conferenceTournaments_1.initializeBig12TournamentHttp; } });
+var bracketScoring_1 = require("./bracketScoring");
+Object.defineProperty(exports, "scoreBracketEntries", { enumerable: true, get: function () { return bracketScoring_1.scoreBracketEntries; } });
+Object.defineProperty(exports, "finalizeTournamentPayouts", { enumerable: true, get: function () { return bracketScoring_1.finalizeTournamentPayouts; } });
 //# sourceMappingURL=index.js.map

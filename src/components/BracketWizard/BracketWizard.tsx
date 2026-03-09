@@ -67,6 +67,10 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         scoringSystem: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
         customScoring: number[];
         tieBreaker: 'CLOSEST_ABSOLUTE' | 'CLOSEST_UNDER';
+        upsetBonus?: {
+            enabled: boolean;
+            multiplier: number;
+        };
         lockAt: number; // Tournament start timestamp
 
         // Step 3: Payouts
@@ -127,6 +131,10 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
         scoringSystem: 'CLASSIC',
         customScoring: [1, 2, 4, 8, 16, 32], // re-initialized when tournamentType changes
         tieBreaker: 'CLOSEST_ABSOLUTE',
+        upsetBonus: {
+            enabled: false,
+            multiplier: 5
+        },
         lockAt: new Date('2026-03-17T12:00:00').getTime(), // March Madness 2026
 
         // Payouts
@@ -694,6 +702,42 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 </div>
                             );
                         })()}
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Upset Bonuses</label>
+                            <div className="flex items-center justify-between bg-slate-950 border border-slate-700 rounded-lg p-3">
+                                <div>
+                                    <h4 className="font-bold text-white text-sm">Enable Upset Bonus</h4>
+                                    <p className="text-xs text-slate-500">Reward players for bolder predictions.</p>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.upsetBonus?.enabled}
+                                        onChange={(e) => update({ upsetBonus: { ...(formData.upsetBonus || { multiplier: 5 }), enabled: e.target.checked } })}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500" />
+                                </label>
+                            </div>
+
+                            {formData.upsetBonus?.enabled && (
+                                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mt-3 animate-in fade-in slide-in-from-top-2">
+                                    <label className="block text-[10px] font-bold text-amber-500/80 uppercase mb-1">Points Per Seed Difference</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={formData.upsetBonus.multiplier}
+                                        onChange={(e) => update({ upsetBonus: { ...formData.upsetBonus, multiplier: parseInt(e.target.value) || 0, enabled: true } })}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-sm outline-none focus:border-amber-500"
+                                    />
+                                    <p className="text-[10px] text-amber-500/60 mt-2 leading-snug">
+                                        E.g. A 12-seed beats a 5-seed = difference of 7. <br />
+                                        7 × {formData.upsetBonus.multiplier || 0} = <strong className="text-amber-400">+{7 * (formData.upsetBonus.multiplier || 0)} Bonus Points</strong>.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
 
                         <div>
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lock Date/Time</label>
