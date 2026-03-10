@@ -1,8 +1,9 @@
 import { logger } from '../../utils/logger';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2, ClipboardList, Mail } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
@@ -39,10 +40,35 @@ interface BracketPoolDashboardProps {
 }
 
 export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool, user, onBack, onShare }) => {
-    const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Replace local state with URL params to enable correct browser back-button behavior
+    const activeTab = (searchParams.get('tab') as DashboardTab) || 'dashboard';
+    const setActiveTab = useCallback((tab: DashboardTab) => {
+        setSearchParams(prev => {
+            if (tab === 'dashboard') {
+                prev.delete('tab');
+            } else {
+                prev.set('tab', tab);
+            }
+            return prev;
+        }); // no {replace: true} because we want history items
+    }, [setSearchParams]);
+
+    const isCreating = searchParams.get('action') === 'create';
+    const setIsCreating = useCallback((creating: boolean) => {
+        setSearchParams(prev => {
+            if (creating) {
+                prev.set('action', 'create');
+            } else {
+                prev.delete('action');
+            }
+            return prev;
+        }); // no {replace: true} because we want history items
+    }, [setSearchParams]);
+
     const [entries, setEntries] = useState<BracketEntry[]>([]);
     const [tournament, setTournament] = useState<Tournament | null>(null);
-    const [isCreating, setIsCreating] = useState(false);
     const [picks, setPicks] = useState<Record<string, string>>({});
     const [entryName, setEntryName] = useState('');
     const [activeEntryId, setActiveEntryId] = useState<string | null>(null);
@@ -57,6 +83,10 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     // Entry Viewing/Sharing Modal
     const [viewingEntry, setViewingEntry] = useState<BracketEntry | null>(null);
     const [sharingEntry, setSharingEntry] = useState<BracketEntry | null>(null);
+
+    // Create Entry Name Modal
+    const [showNameModal, setShowNameModal] = useState(false);
+    const [newNameInput, setNewNameInput] = useState('');
 
     // Manager tab interactive state
     const [commissionerDraft, setCommissionerDraft] = useState(pool.commissionerMessage || '');
@@ -113,6 +143,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     // Collapsible section toggles
     const [openSections, setOpenSections] = useState<Record<string, boolean>>({ details: true, rules: true });
+    const [sendingEmail, setSendingEmail] = useState(false);
     const toggleSection = (key: string) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
     const isManager = isPoolManager(user, pool);
@@ -336,6 +367,40 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         setTimeout(() => setLinkCopied(false), 2000);
     }, [pool.slug]);
 
+    // Handle emailing users with incomplete entries
+    const handleEmailIncomplete = async () => {
+        try {
+            setSendingEmail(true);
+            const draftEntries = entries.filter(e => e.status === 'DRAFT');
+            const draftUids = [...new Set(draftEntries.map(e => e.ownerUid))];
+
+            const allEntryUids = new Set(entries.map(e => e.ownerUid));
+            const participantsWithoutEntries = (pool.participantIds || []).filter(uid => !allEntryUids.has(uid));
+
+            const combinedUidsToEmail = [...new Set([...draftUids, ...participantsWithoutEntries])];
+
+            const allUsers = await dbService.getAllUsers();
+            const incompleteEmails = allUsers
+                .filter(u => combinedUidsToEmail.includes(u.id))
+                .map(u => u.email)
+                .filter(Boolean);
+
+            if (incompleteEmails.length > 0) {
+                const bcc = incompleteEmails.join(',');
+                const subject = encodeURIComponent(`Action Required: Complete your bracket for ${pool.name}`);
+                const body = encodeURIComponent(`Please complete and submit your bracket entry for ${pool.name} before the pool locks.\n\nLink: ${window.location.origin}/pool/${pool.slug}`);
+                window.location.href = `mailto:?bcc=${bcc}&subject=${subject}&body=${body}`;
+            } else {
+                alert("No users found with incomplete entries.");
+            }
+        } catch (e) {
+            console.error("Failed to fetch users", e);
+            alert("Failed to fetch user emails.");
+        } finally {
+            setSendingEmail(false);
+        }
+    };
+
     // Load user's existing entry picks when switching to edit mode
     const handleEditEntry = useCallback((entry: BracketEntry) => {
         setActiveEntryId(entry.id);
@@ -343,7 +408,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         setEntryName(entry.name);
         setTieBreakerPrediction(entry.tieBreakerPrediction);
         setIsCreating(true);
-    }, []);
+    }, [setIsCreating]);
 
     // Delete a user's entry
     const handleDeleteEntry = useCallback(async (entry: BracketEntry) => {
@@ -369,6 +434,12 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             setError('Please enter a name for your bracket.');
             return;
         }
+
+        if (entries.some(e => e.name.toLowerCase() === finalName.toLowerCase())) {
+            setError('That bracket name is already taken. Please choose another.');
+            return;
+        }
+
         setSubmitting(true);
         setError(null);
         try {
@@ -387,11 +458,17 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         } finally {
             setSubmitting(false);
         }
-    }, [pool.id, entryName]);
+    }, [pool.id, entryName, setIsCreating, entries]);
 
     // Save picks (draft)
     const handleSaveDraft = useCallback(async () => {
         if (!activeEntryId) return;
+
+        if (entries.some(e => e.name.toLowerCase() === entryName.trim().toLowerCase() && e.id !== activeEntryId)) {
+            setError('That bracket name is already taken. Please choose another.');
+            return;
+        }
+
         setSubmitting(true);
         setError(null);
         try {
@@ -404,11 +481,16 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         } finally {
             setSubmitting(false);
         }
-    }, [pool.id, activeEntryId, picks, tieBreakerPrediction, entryName]);
+    }, [pool.id, activeEntryId, picks, tieBreakerPrediction, entryName, entries]);
 
     // Submit final bracket
     const handleSubmitBracket = useCallback(async () => {
         if (!activeEntryId) return;
+
+        if (entries.some(e => e.name.toLowerCase() === entryName.trim().toLowerCase() && e.id !== activeEntryId)) {
+            setError('That bracket name is already taken. Please choose another.');
+            return;
+        }
 
         const reqPicks = tournament ? Object.keys(tournament.games).length : (pool.tournamentType === 'conference' ? 10 : 63);
         const currentPicksCount = Object.keys(picks).length;
@@ -443,7 +525,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         } finally {
             setSubmitting(false);
         }
-    }, [pool.id, pool.tournamentType, tournament, activeEntryId, picks, tieBreakerPrediction, entryName]);
+    }, [pool.id, pool.tournamentType, tournament, activeEntryId, picks, tieBreakerPrediction, entryName, setIsCreating, entries]);
 
     const pickCount = Object.keys(picks).length;
     const requiredPicks = tournament ? Object.keys(tournament.games).length : (pool.tournamentType === 'conference' ? 10 : 63);
@@ -559,7 +641,10 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 {canCreateMore && (
                                     <div className="flex justify-end">
                                         <button
-                                            onClick={() => handleCreateEntry(`Bracket ${userEntries.length + 1}`)}
+                                            onClick={() => {
+                                                setNewNameInput(`Bracket ${userEntries.length + 1}`);
+                                                setShowNameModal(true);
+                                            }}
                                             disabled={submitting || !tournament}
                                             title={!tournament ? "Tournament data not available yet" : ""}
                                             className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold px-4 py-2 rounded-lg flex items-center gap-2"
@@ -1624,6 +1709,31 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             </div>
                         </div>
 
+                        {/* Entry Status Card */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                                <ClipboardList size={18} className="text-blue-400" /> Entry Status
+                            </h3>
+                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
+                                    <p className="text-2xl font-bold text-emerald-400">{entries.filter(e => e.status === 'SUBMITTED').length}</p>
+                                    <p className="text-[10px] text-slate-500 uppercase">Completed</p>
+                                </div>
+                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
+                                    <p className="text-2xl font-bold text-amber-400">{entries.filter(e => e.status === 'DRAFT').length + ((pool.participantIds?.length || 0) - new Set(entries.map(e => e.ownerUid)).size)}</p>
+                                    <p className="text-[10px] text-slate-500 uppercase">Incomplete</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleEmailIncomplete}
+                                disabled={sendingEmail}
+                                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
+                            >
+                                {sendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+                                Email Incomplete Entries
+                            </button>
+                        </div>
+
                         {/* Accounting Card */}
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                             <div className="flex items-center justify-between mb-4">
@@ -1886,6 +1996,91 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     onClose={() => setSharingEntry(null)}
                 />
             )}
+
+            {/* Create Bracket Name Modal */}
+            {showNameModal && (() => {
+                const normalizedInput = newNameInput.trim().toLowerCase();
+                const isNameTaken = entries.some(e => e.name.toLowerCase() === normalizedInput);
+                const suggestedName = isNameTaken ? (function () {
+                    let suffix = 2;
+                    let suggestion = `${newNameInput.trim()} ${suffix}`;
+                    while (entries.some(e => e.name.toLowerCase() === suggestion.toLowerCase())) {
+                        suffix++;
+                        suggestion = `${newNameInput.trim()} ${suffix}`;
+                    }
+                    return suggestion;
+                })() : '';
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+                            <button
+                                onClick={() => setShowNameModal(false)}
+                                className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+
+                            <h3 className="text-xl font-bold text-white mb-2">Name Your Bracket</h3>
+                            <p className="text-slate-400 text-sm mb-6">
+                                Give your bracket a unique name to easily identify it in the standings.
+                            </p>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                                        Bracket Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={newNameInput}
+                                        onChange={(e) => setNewNameInput(e.target.value)}
+                                        placeholder="Enter a bracket name..."
+                                        className={`w-full bg-slate-950 border ${isNameTaken && newNameInput.trim() !== '' ? 'border-red-500/50 focus:ring-red-500' : 'border-slate-800 focus:ring-amber-500'} rounded-lg px-4 py-3 text-white focus:ring-2 focus:border-transparent outline-none transition-all placeholder:text-slate-600`}
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && newNameInput.trim() && !isNameTaken) {
+                                                setShowNameModal(false);
+                                                handleCreateEntry(newNameInput.trim());
+                                            }
+                                        }}
+                                    />
+                                    {isNameTaken && newNameInput.trim() !== '' && (
+                                        <p className="mt-2 text-sm text-red-400 flex items-center gap-1">
+                                            This name is taken. How about <button
+                                                onClick={() => setNewNameInput(suggestedName)}
+                                                className="underline font-bold hover:text-red-300"
+                                            >"{suggestedName}"</button>?
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-3 pt-2">
+                                    <button
+                                        onClick={() => setShowNameModal(false)}
+                                        className="flex-1 px-4 py-2 border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-800 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (newNameInput.trim() && !isNameTaken) {
+                                                setShowNameModal(false);
+                                                handleCreateEntry(newNameInput.trim());
+                                            }
+                                        }}
+                                        disabled={!newNameInput.trim() || isNameTaken || submitting}
+                                        className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2 rounded-lg transition-colors font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
+                                        Continue
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };
