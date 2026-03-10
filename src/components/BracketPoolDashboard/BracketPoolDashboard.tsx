@@ -2012,6 +2012,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                     tournament={tournament}
                     poolName={pool.name}
                     onClose={() => setSharingEntry(null)}
+                    isConference={isConference}
                 />
             )}
 

@@ -2,6 +2,7 @@ import { logger } from '../../utils/logger';
 import React, { useRef, useState, useEffect } from 'react';
 import type { BracketEntry, Tournament } from '../../types';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
+import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { toPng } from 'html-to-image';
 import { X, Download, Share2, Loader2, Image as ImageIcon } from 'lucide-react';
 import { getTeamLogo } from '../../constants';
@@ -11,16 +12,18 @@ interface BracketShareModalProps {
     tournament: Tournament;
     poolName: string;
     onClose: () => void;
+    isConference?: boolean;
 }
 
-export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tournament, poolName, onClose }) => {
+export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tournament, poolName, onClose, isConference }) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // Identify the champion pick to feature in the header
-    const champGameId = Object.values(tournament.games).find(g => g.round === 6)?.id;
+    const maxRound = Math.max(...Object.values(tournament.games).map(g => g.round));
+    const champGameId = Object.values(tournament.games).find(g => g.round === maxRound)?.id;
     const champPickTeamId = champGameId ? entry.picks[champGameId] : null;
 
     useEffect(() => {
@@ -119,13 +122,22 @@ export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tou
 
                     {/* Bracket Body */}
                     <div className="relative">
-                        <BracketBuilder
-                            tournament={tournament}
-                            picks={entry.picks}
-                            onPick={() => { }}
-                            readOnly
-                            viewMode="full"
-                        />
+                        {isConference ? (
+                            <ConferenceBracketBuilder
+                                tournament={tournament}
+                                picks={entry.picks}
+                                onPick={() => { }}
+                                readOnly
+                            />
+                        ) : (
+                            <BracketBuilder
+                                tournament={tournament}
+                                picks={entry.picks}
+                                onPick={() => { }}
+                                readOnly
+                                viewMode="full"
+                            />
+                        )}
                     </div>
 
                     {/* Watermark Footer */}
