@@ -158,7 +158,6 @@ export const submitBracketEntry = onCall(async (request) => {
         const entryData = entryDoc.data() as BracketEntry;
 
         if (entryData.ownerUid !== uid) throw new HttpsError("permission-denied", "Not your entry.");
-        if (entryData.status === 'SUBMITTED') throw new HttpsError("failed-precondition", "Already submitted.");
 
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data() as BracketPool;
