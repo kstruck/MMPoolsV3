@@ -758,24 +758,6 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         </button>
                                     </div>
                                 </div>
-                                {/* Tiebreaker Input */}
-                                <div className="px-4 pb-2">
-                                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                                        <div className="flex-1">
-                                            <label className="text-sm font-bold text-amber-400 block mb-1">🏆 Tiebreaker</label>
-                                            <p className="text-xs text-slate-400">Predict the total combined score of the championship game.</p>
-                                        </div>
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            max={500}
-                                            value={tieBreakerPrediction ?? ''}
-                                            onChange={(e) => setTieBreakerPrediction(e.target.value ? parseInt(e.target.value) : undefined)}
-                                            placeholder="e.g. 145"
-                                            className={`bg-slate-900 border ${error?.includes('tie-breaker') ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'border-slate-600'} rounded-lg px-4 py-2 text-white w-32 text-center font-mono text-lg focus:outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
-                                        />
-                                    </div>
-                                </div>
                                 <div className="p-4 overflow-x-auto">
                                     {tournament ? (
                                         isConference ? (
@@ -798,6 +780,49 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             Tournament data not yet available.
                                         </div>
                                     )}
+                                </div>
+
+                                {/* Tiebreaker and Action Buttons (Bottom) */}
+                                <div className="p-4 xl:px-6 border-t border-slate-800 bg-slate-900/50 flex flex-col xl:flex-row items-center justify-between gap-4">
+                                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full xl:w-auto">
+                                        <div className="flex-1">
+                                            <label className="text-sm font-bold text-amber-400 block mb-1">🏆 Tiebreaker</label>
+                                            <p className="text-xs text-slate-400">Predict the total combined score of the championship game.</p>
+                                        </div>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={500}
+                                            value={tieBreakerPrediction ?? ''}
+                                            onChange={(e) => setTieBreakerPrediction(e.target.value ? parseInt(e.target.value) : undefined)}
+                                            placeholder="e.g. 145"
+                                            className={`bg-slate-900 border ${error?.includes('tie-breaker') ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'border-slate-600'} rounded-lg px-4 py-2 text-white w-32 text-center font-mono text-lg focus:outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2 w-full xl:w-auto justify-end">
+                                        <button
+                                            onClick={() => { setIsCreating(false); setActiveEntryId(null); setPicks({}); setTieBreakerPrediction(undefined); }}
+                                            className="text-slate-400 hover:text-white px-3 py-2 rounded text-sm font-bold"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleSaveDraft}
+                                            disabled={submitting}
+                                            className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold flex items-center justify-center gap-2 text-sm"
+                                        >
+                                            <Save size={14} /> Save Draft
+                                        </button>
+                                        <button
+                                            onClick={handleSubmitBracket}
+                                            disabled={submitting}
+                                            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold flex items-center justify-center gap-2 text-sm shadow-lg shadow-emerald-500/20"
+                                        >
+                                            {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                                            Submit Bracket
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
