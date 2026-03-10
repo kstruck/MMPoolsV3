@@ -109,62 +109,74 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
     }
 
     return (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-            {/* Header */}
-            <div className="grid grid-cols-12 gap-4 p-4 bg-slate-950 border-b border-slate-800 font-bold text-slate-400 text-sm uppercase tracking-wider">
-                <div className="col-span-2 md:col-span-1 text-center">Rank</div>
-                <div className="col-span-6 md:col-span-7">Entry Name</div>
-                <div className="col-span-2 text-right">Points</div>
-                <div className="col-span-2 text-right hidden md:block">Max Possible</div>
-            </div>
+        <div className="space-y-3">
+            {/* Legend */}
+            {currentUserId && (
+                <div className="flex justify-end px-2">
+                    <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                        <div className="w-4 h-4 rounded bg-indigo-900/40 border-l-2 border-indigo-500 flex items-center justify-center"></div>
+                        <span>Your Entries</span>
+                    </div>
+                </div>
+            )}
 
-            {/* Rows */}
-            <div className="divide-y divide-slate-800">
-                {entriesWithStats.map((entry, idx) => {
-                    const rank = idx + 1;
-                    const isChampion = rank === 1;
-                    const isTop3 = rank <= 3;
-                    const change = rankChanges[entry.id];
+            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                {/* Header */}
+                <div className="grid grid-cols-12 gap-4 p-4 bg-slate-950 border-b border-slate-800 font-bold text-slate-400 text-sm uppercase tracking-wider">
+                    <div className="col-span-2 md:col-span-1 text-center">Rank</div>
+                    <div className="col-span-6 md:col-span-7">Entry Name</div>
+                    <div className="col-span-2 text-right">Points</div>
+                    <div className="col-span-2 text-right hidden md:block">Max Possible</div>
+                </div>
 
-                    return (
-                        <div
-                            key={entry.id}
-                            onClick={() => onEntryClick?.(entry)}
-                            className={`grid grid-cols-12 gap-4 p-4 items-center transition-colors ${onEntryClick ? 'cursor-pointer hover:bg-white/5' : ''} ${currentUserId && entry.ownerUid === currentUserId ? 'bg-indigo-900/20 border-l-2 border-indigo-500' : ''}`}
-                        >
-                            <div className="col-span-2 md:col-span-1 flex flex-col items-center justify-center">
-                                <div className="flex items-center gap-1">
-                                    {isChampion ? <Trophy size={20} className="text-amber-400" /> :
-                                        isTop3 ? <Medal size={20} className={rank === 2 ? 'text-slate-300' : 'text-amber-700'} /> :
-                                            <span className="font-mono text-slate-500 font-bold">#{rank}</span>}
-                                </div>
-                                {change !== undefined && change !== 0 && (
-                                    <div className={`text-[10px] font-bold flex items-center ${change > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                        {change > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-                                        {Math.abs(change)}
+                {/* Rows */}
+                <div className="divide-y divide-slate-800">
+                    {entriesWithStats.map((entry, idx) => {
+                        const rank = idx + 1;
+                        const isChampion = rank === 1;
+                        const isTop3 = rank <= 3;
+                        const change = rankChanges[entry.id];
+
+                        return (
+                            <div
+                                key={entry.id}
+                                onClick={() => onEntryClick?.(entry)}
+                                className={`grid grid-cols-12 gap-4 p-4 items-center transition-colors ${onEntryClick ? 'cursor-pointer hover:bg-white/5' : ''} ${currentUserId && entry.ownerUid === currentUserId ? 'bg-indigo-900/20 border-l-2 border-indigo-500' : ''}`}
+                            >
+                                <div className="col-span-2 md:col-span-1 flex flex-col items-center justify-center">
+                                    <div className="flex items-center gap-1">
+                                        {isChampion ? <Trophy size={20} className="text-amber-400" /> :
+                                            isTop3 ? <Medal size={20} className={rank === 2 ? 'text-slate-300' : 'text-amber-700'} /> :
+                                                <span className="font-mono text-slate-500 font-bold">#{rank}</span>}
                                     </div>
-                                )}
-                            </div>
-                            <div className="col-span-6 md:col-span-7">
-                                <div className="font-bold text-white truncate flex items-center gap-2">
-                                    {entry.name}
                                     {change !== undefined && change !== 0 && (
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${change > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
-                                            {change > 0 ? 'Rank Up' : 'Rank Down'}
-                                        </span>
+                                        <div className={`text-[10px] font-bold flex items-center ${change > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                            {change > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
+                                            {Math.abs(change)}
+                                        </div>
                                     )}
                                 </div>
-                                <div className="text-xs text-slate-500 truncate hidden sm:block">ID: {entry.id.substring(0, 8)}</div>
+                                <div className="col-span-6 md:col-span-7">
+                                    <div className="font-bold text-white truncate flex items-center gap-2">
+                                        {entry.name}
+                                        {change !== undefined && change !== 0 && (
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${change > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                                                {change > 0 ? 'Rank Up' : 'Rank Down'}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-slate-500 truncate hidden sm:block">ID: {entry.id.substring(0, 8)}</div>
+                                </div>
+                                <div className="col-span-2 text-right font-mono font-bold text-lg text-emerald-400">
+                                    {entry.score}
+                                </div>
+                                <div className="col-span-2 text-right font-mono text-slate-500 hidden md:block">
+                                    {entry.max}
+                                </div>
                             </div>
-                            <div className="col-span-2 text-right font-mono font-bold text-lg text-emerald-400">
-                                {entry.score}
-                            </div>
-                            <div className="col-span-2 text-right font-mono text-slate-500 hidden md:block">
-                                {entry.max}
-                            </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );

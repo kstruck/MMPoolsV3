@@ -1142,6 +1142,7 @@ export const SuperAdmin: React.FC = () => {
                                         <th className="p-4 tracking-wider">Role</th>
                                         <th className="p-4 tracking-wider">Method</th>
                                         <th className="p-4 tracking-wider">Referrals</th>
+                                        <th className="p-4 tracking-wider">Created</th>
                                         <th className="p-4 tracking-wider">ID</th>
                                         <th className="p-4 tracking-wider">Actions</th>
                                     </tr>
@@ -1165,6 +1166,12 @@ export const SuperAdmin: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-center">
                                                 <span className="text-indigo-400 font-bold">{u.referralCount || 0}</span>
+                                            </td>
+                                            <td className="p-4 text-slate-500 text-xs">
+                                                {u.createdAt ? (() => {
+                                                    const d = new Date(u.createdAt);
+                                                    return `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getFullYear()}`;
+                                                })() : '—'}
                                             </td>
                                             <td className="p-4 text-slate-500 font-mono text-xs max-w-[100px] truncate" title={u.id}>{u.id}</td>
                                             <td className="p-4 flex gap-2">

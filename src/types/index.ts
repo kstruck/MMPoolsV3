@@ -694,6 +694,7 @@ export interface BracketEntry {
   tieBreakerPrediction?: number; // Total score of championship
   status: 'DRAFT' | 'SUBMITTED';
   paidStatus: 'PAID' | 'UNPAID';
+  paymentMethod?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Other';
   score: number;
   rank?: number;
   amountWon?: number;

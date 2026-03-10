@@ -12,6 +12,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
     const [updatingId, setUpdatingId] = useState<string | null>(null);
+    const [selectedMethods, setSelectedMethods] = useState<Record<string, 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Other'>>({});
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
     const costPerEntry = pool.settings?.entryFee ?? 0;
@@ -28,11 +29,11 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
     const totalPaid = entries.filter(e => e.paidStatus === 'PAID').length * costPerEntry;
     const totalExpected = entries.length * costPerEntry;
 
-    const handleTogglePayment = async (entryId: string, currentStatus: 'PAID' | 'UNPAID') => {
+    const handleTogglePayment = async (entryId: string, currentStatus: 'PAID' | 'UNPAID', method?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Other') => {
         setUpdatingId(entryId);
         try {
             const newStatus = currentStatus === 'PAID' ? 'UNPAID' : 'PAID';
-            await dbService.updateBracketEntryPayment(pool.id, entryId, newStatus);
+            await dbService.updateBracketEntryPayment(pool.id, entryId, newStatus, method);
             setMessage({ text: `Entry marked as ${newStatus}`, type: 'success' });
             setTimeout(() => setMessage(null), 3000);
         } catch (error) {
@@ -162,6 +163,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                 <th className="p-4 font-medium text-center">Status</th>
                                 <th className="p-4 font-medium text-right">Fee</th>
                                 <th className="p-4 font-medium text-center">Payment</th>
+                                <th className="p-4 font-medium text-center">Method</th>
                                 <th className="p-4 font-medium text-right">Action</th>
                             </tr>
                         </thead>
@@ -185,19 +187,37 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                     </td>
                                     <td className="p-4 text-center">
                                         {entry.paidStatus === 'PAID' ? (
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">
-                                                <Check size={12} /> Paid
-                                            </span>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">
+                                                    <Check size={12} /> Paid
+                                                </span>
+                                                {entry.paymentMethod && <span className="text-[10px] text-slate-500">{entry.paymentMethod}</span>}
+                                            </div>
                                         ) : (
                                             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/20 text-red-400 text-xs font-bold">
                                                 <X size={12} /> Unpaid
                                             </span>
                                         )}
                                     </td>
+                                    <td className="p-4 text-center">
+                                        <select
+                                            value={selectedMethods[entry.id] || entry.paymentMethod || ''}
+                                            onChange={(e) => setSelectedMethods(prev => ({ ...prev, [entry.id]: e.target.value as 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Other' }))}
+                                            className="bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-2 py-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
+                                            disabled={updatingId === entry.id}
+                                        >
+                                            <option value="" disabled>Select Method</option>
+                                            <option value="Cash">Cash</option>
+                                            <option value="Check">Check</option>
+                                            <option value="Venmo">Venmo</option>
+                                            <option value="Google Pay">Google Pay</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </td>
                                     <td className="p-4 text-right">
                                         <button
-                                            onClick={() => handleTogglePayment(entry.id, entry.paidStatus)}
-                                            disabled={updatingId === entry.id}
+                                            onClick={() => handleTogglePayment(entry.id, entry.paidStatus, selectedMethods[entry.id] || entry.paymentMethod)}
+                                            disabled={updatingId === entry.id || (entry.paidStatus === 'UNPAID' && !selectedMethods[entry.id] && !entry.paymentMethod)}
                                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 ${entry.paidStatus === 'PAID'
                                                 ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
                                                 : 'bg-emerald-600 hover:bg-emerald-500 text-white'

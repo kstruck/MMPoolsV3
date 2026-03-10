@@ -15,7 +15,8 @@ import {
     orderBy,
     limit,
     arrayUnion,
-    addDoc
+    addDoc,
+    deleteField
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
@@ -266,9 +267,9 @@ export const dbService = {
         await updateDoc(poolRef, { ...updates, updatedAt: Date.now() });
     },
 
-    updateBracketEntryPayment: async (poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID'): Promise<void> => {
+    updateBracketEntryPayment: async (poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID', paymentMethod?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Other'): Promise<void> => {
         const entryRef = doc(db, 'pools', poolId, 'entries', entryId);
-        await updateDoc(entryRef, { paidStatus, updatedAt: Date.now() });
+        await updateDoc(entryRef, { paidStatus, paymentMethod: paymentMethod || deleteField(), updatedAt: Date.now() });
     },
 
     subscribeToPropCard: (poolId: string, userId: string, callback: (card: PropCard | null) => void) => {

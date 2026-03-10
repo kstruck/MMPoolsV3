@@ -363,19 +363,22 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     }, [pool.id]);
 
     // Create a new bracket entry
-    const handleCreateEntry = useCallback(async () => {
-        if (!entryName.trim()) {
+    const handleCreateEntry = useCallback(async (customName?: string) => {
+        const finalName = customName || entryName.trim();
+        if (!finalName) {
             setError('Please enter a name for your bracket.');
             return;
         }
         setSubmitting(true);
         setError(null);
         try {
-            const result = await dbService.createBracketEntry(pool.id, { name: entryName.trim() });
+            const result = await dbService.createBracketEntry(pool.id, { name: finalName });
             if (result.success && result.entryId) {
                 setActiveEntryId(result.entryId);
                 setPicks({});
+                setEntryName(finalName);
                 setTieBreakerPrediction(undefined);
+                setIsCreating(true);
             } else {
                 setError(result.message || 'Failed to create entry');
             }
@@ -552,6 +555,21 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                         {!isCreating ? (
                             <div className="space-y-6">
+                                {/* Create new entry button (Moved to top)*/}
+                                {canCreateMore && (
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => handleCreateEntry(`Bracket ${userEntries.length + 1}`)}
+                                            disabled={submitting || !tournament}
+                                            title={!tournament ? "Tournament data not available yet" : ""}
+                                            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold px-4 py-2 rounded-lg flex items-center gap-2"
+                                        >
+                                            {submitting ? <Loader2 size={18} className="animate-spin" /> : <PlusCircle size={18} />}
+                                            {userEntries.length === 0 ? 'Create Your Bracket' : 'Add Another Entry'}
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* Pool Overview Stats Cards */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     {/* Pot & Payouts */}
@@ -701,39 +719,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
                                 )}
 
-                                {/* Create new entry */}
-                                {canCreateMore && (
-                                    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 text-center">
-                                        <h2 className="text-2xl font-bold text-white mb-4">
-                                            {userEntries.length === 0 ? 'Create Your Bracket' : 'Add Another Entry'}
-                                        </h2>
-                                        <p className="text-slate-400 mb-6">
-                                            {!tournament
-                                                ? 'Tournament bracket data is not yet available. Check back soon!'
-                                                : `Fill out all ${requiredPicks} games to complete your bracket.`}
-                                        </p>
-                                        {tournament && (
-                                            <div className="max-w-sm mx-auto space-y-4">
-                                                <input
-                                                    type="text"
-                                                    value={entryName}
-                                                    onChange={e => setEntryName(e.target.value)}
-                                                    placeholder="Entry name (e.g. 'My Lucky Bracket')"
-                                                    className="w-full bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                                    maxLength={50}
-                                                />
-                                                <button
-                                                    onClick={handleCreateEntry}
-                                                    disabled={submitting || !entryName.trim()}
-                                                    className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold px-8 py-3 rounded-xl flex items-center justify-center gap-2 mx-auto transition-transform hover:scale-105"
-                                                >
-                                                    {submitting ? <Loader2 size={20} className="animate-spin" /> : <PlusCircle size={20} />}
-                                                    Create Entry
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+
                             </div>
                         ) : (
                             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
@@ -786,7 +772,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             value={tieBreakerPrediction ?? ''}
                                             onChange={(e) => setTieBreakerPrediction(e.target.value ? parseInt(e.target.value) : undefined)}
                                             placeholder="e.g. 145"
-                                            className={`bg-slate-900 border ${error?.includes('tie-breaker') ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'border-slate-600'} rounded-lg px-4 py-2 text-white w-32 text-center font-mono text-lg focus:outline-none focus:border-amber-500`}
+                                            className={`bg-slate-900 border ${error?.includes('tie-breaker') ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'border-slate-600'} rounded-lg px-4 py-2 text-white w-32 text-center font-mono text-lg focus:outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                                         />
                                     </div>
                                 </div>
