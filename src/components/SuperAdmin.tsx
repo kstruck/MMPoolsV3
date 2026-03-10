@@ -16,6 +16,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
 import { AdminStatsDashboard } from './AdminStatsDashboard';
 import { TournamentManager } from './admin/TournamentManager';
+import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
 
 type SystemLog = {
     timestamp?: { toDate?: () => Date } | number | string;
@@ -333,7 +334,7 @@ export const SuperAdmin: React.FC = () => {
         const confirmSim = confirm(`Run simulation for ${pool.name} ? This will advance the game state.`);
         if (!confirmSim) return;
         try {
-            const { simulatePoolGame } = await import('../utils/simulationUtils');
+            // Imported statically
             const scores = {
                 ...pool.scores,
                 current: pool.scores.current || { home: 0, away: 0 }
@@ -1975,7 +1976,7 @@ export const SuperAdmin: React.FC = () => {
                                         onClick={async () => {
                                             if (!confirm("Overwrite 'tournaments/2025' with test data? This will RESET all current brackets.")) return;
                                             try {
-                                                const { seedTestTournament } = await import('../utils/simulationUtils');
+                                                // Imported statically
                                                 await seedTestTournament(2025);
                                                 alert("Tournament seeded successfully.");
                                             } catch (e: unknown) {
@@ -1996,7 +1997,7 @@ export const SuperAdmin: React.FC = () => {
                                         onClick={async () => {
                                             if (!confirm("Simulate scores for current round?")) return;
                                             try {
-                                                const { simulateRound } = await import('../utils/simulationUtils');
+                                                // Imported statically
                                                 const res = await simulateRound(2025);
                                                 alert(res);
                                             } catch (e: unknown) {
@@ -2012,7 +2013,7 @@ export const SuperAdmin: React.FC = () => {
                                         onClick={async () => {
                                             if (!confirm("RESET tournament scores?")) return;
                                             try {
-                                                const { resetTournament } = await import('../utils/simulationUtils');
+                                                // Imported statically
                                                 await resetTournament(2025);
                                                 alert("Tournament reset.");
                                             } catch (e: unknown) {
