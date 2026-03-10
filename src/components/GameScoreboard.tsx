@@ -118,8 +118,8 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
 
     const hasOvertime = detectOvertime();
 
-    const homeLogo = gameState.homeTeamLogo || (gameState.homeTeam ? getTeamLogo(gameState.homeTeam) : undefined);
-    const awayLogo = gameState.awayTeamLogo || (gameState.awayTeam ? getTeamLogo(gameState.awayTeam) : undefined);
+    const homeLogo = gameState.homeTeamLogo || (gameState.homeTeam ? getTeamLogo(gameState.homeTeam, gameState.league === 'college' ? 'ncaa' : (gameState.league as 'nfl' | 'ncaa' | undefined)) : undefined);
+    const awayLogo = gameState.awayTeamLogo || (gameState.awayTeam ? getTeamLogo(gameState.awayTeam, gameState.league === 'college' ? 'ncaa' : (gameState.league as 'nfl' | 'ncaa' | undefined)) : undefined);
     const { gameStatus, startTime, clock, period, syncStatus } = gameState.scores || {};
 
     // Determine status text

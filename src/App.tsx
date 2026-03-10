@@ -28,6 +28,7 @@ const CustomSportsLanding = React.lazy(() => import('./components/CustomSportsLa
 const PricingPage = React.lazy(() => import('./components/PricingPage').then(m => ({ default: m.PricingPage })));
 const AboutPage = React.lazy(() => import('./components/AboutPage').then(m => ({ default: m.AboutPage })));
 const CharityPage = React.lazy(() => import('./components/CharityPage').then(m => ({ default: m.CharityPage })));
+const AuthActionHandler = React.lazy(() => import('./components/AuthActionHandler').then(m => ({ default: m.AuthActionHandler })));
 
 // Lazy-loaded routes
 const PoolRoute = React.lazy(() => import('./components/routes/PoolRoute').then(m => ({ default: m.PoolRoute })));
@@ -254,6 +255,7 @@ const App: React.FC = () => {
           <Route path="/pricing" element={<PricingPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/about" element={<AboutPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/charity" element={<CharityPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+          <Route path="/auth/action" element={<AuthActionHandler user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
 
           <Route path="/browse" element={
             <BrowsePools user={user} pools={pools} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />

@@ -173,6 +173,7 @@ export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, us
 
             {/* We reuse the BracketComparison, but force the two entries */}
             <BracketComparison
+                key={userEntry.id}
                 tournament={tournament}
                 allEntries={[userEntry, chalkEntry]}
                 initialEntry1Id={userEntry.id}

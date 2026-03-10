@@ -109,7 +109,7 @@ export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tou
                                     </div>
                                 </div>
                                 <img
-                                    src={getTeamLogo(champPickTeamId.split('-')[1] || '') || undefined}
+                                    src={getTeamLogo(champPickTeamId.split('-')[1] || '', 'ncaa') || undefined}
                                     className="w-24 h-24 object-contain drop-shadow-lg"
                                     alt="Champion Logo"
                                 />

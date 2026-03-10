@@ -161,6 +161,7 @@ export const NCAA_TEAMS: Record<string, { name: string, id: string, logo: string
   'asu': { name: "Arizona State Sun Devils", id: "9", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/9.png" },
   'arizona': { name: "Arizona Wildcats", id: "12", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/12.png" },
   'ariz': { name: "Arizona Wildcats", id: "12", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/12.png" },
+  'ari': { name: "Arizona Wildcats", id: "12", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/12.png" },
   'arkansas': { name: "Arkansas Razorbacks", id: "8", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/8.png" },
   'ark': { name: "Arkansas Razorbacks", id: "8", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/8.png" },
   'arkansasst': { name: "Arkansas State Red Wolves", id: "2032", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2032.png" },
@@ -249,6 +250,7 @@ export const NCAA_TEAMS: Record<string, { name: string, id: string, logo: string
   'colg': { name: "Colgate Raiders", id: "2142", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2142.png" },
   'colorado': { name: "Colorado Buffaloes", id: "38", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/38.png" },
   'colo': { name: "Colorado Buffaloes", id: "38", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/38.png" },
+  'col': { name: "Colorado Buffaloes", id: "38", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/38.png" },
   'coloradost': { name: "Colorado State Rams", id: "36", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/36.png" },
   'csu': { name: "Colorado State Rams", id: "36", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/36.png" },
   'columbia': { name: "Columbia Lions", id: "171", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/171.png" },
@@ -372,6 +374,7 @@ export const NCAA_TEAMS: Record<string, { name: string, id: string, logo: string
   'uiw': { name: "Incarnate Word Cardinals", id: "2916", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2916.png" },
   'indiana': { name: "Indiana Hoosiers", id: "84", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/84.png" },
   'iu': { name: "Indiana Hoosiers", id: "84", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/84.png" },
+  'ind': { name: "Indiana Hoosiers", id: "84", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/84.png" },
   'indianast': { name: "Indiana State Sycamores", id: "282", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/282.png" },
   'inst': { name: "Indiana State Sycamores", id: "282", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/282.png" },
   'iona': { name: "Iona Gaels", id: "314", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/314.png" },
@@ -471,6 +474,7 @@ export const NCAA_TEAMS: Record<string, { name: string, id: string, logo: string
   'milw': { name: "Milwaukee Panthers", id: "270", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/270.png" },
   'minnesota': { name: "Minnesota Golden Gophers", id: "135", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/135.png" },
   'minn': { name: "Minnesota Golden Gophers", id: "135", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/135.png" },
+  'min': { name: "Minnesota Golden Gophers", id: "135", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/135.png" },
   'mississippist': { name: "Mississippi State Bulldogs", id: "344", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/344.png" },
   'msst': { name: "Mississippi State Bulldogs", id: "344", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/344.png" },
   'missvalleyst': { name: "Mississippi Valley State Delta Devils", id: "2400", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2400.png" },
@@ -579,6 +583,7 @@ export const NCAA_TEAMS: Record<string, { name: string, id: string, logo: string
   'pepperdine': { name: "Pepperdine Waves", id: "2492", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2492.png" },
   'pepp': { name: "Pepperdine Waves", id: "2492", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2492.png" },
   'pitt': { name: "Pittsburgh Panthers", id: "221", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/221.png" },
+  'pit': { name: "Pittsburgh Panthers", id: "221", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/221.png" },
   'portland': { name: "Portland Pilots", id: "2501", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2501.png" },
   'port': { name: "Portland Pilots", id: "2501", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2501.png" },
   'portlandst': { name: "Portland State Vikings", id: "2502", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2502.png" },
@@ -701,6 +706,7 @@ export const NCAA_TEAMS: Record<string, { name: string, id: string, logo: string
   'tntc': { name: "Tennessee Tech Golden Eagles", id: "2635", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2635.png" },
   'tennessee': { name: "Tennessee Volunteers", id: "2633", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2633.png" },
   'tenn': { name: "Tennessee Volunteers", id: "2633", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2633.png" },
+  'ten': { name: "Tennessee Volunteers", id: "2633", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2633.png" },
   'texasam': { name: "Texas A&M Aggies", id: "245", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/245.png" },
   'ta&m': { name: "Texas A&M Aggies", id: "245", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/245.png" },
   'texasamcc': { name: "Texas A&M-Corpus Christi Islanders", id: "357", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/357.png" },
@@ -790,6 +796,7 @@ export const NCAA_TEAMS: Record<string, { name: string, id: string, logo: string
   'wake': { name: "Wake Forest Demon Deacons", id: "154", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/154.png" },
   'washington': { name: "Washington Huskies", id: "264", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/264.png" },
   'wash': { name: "Washington Huskies", id: "264", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/264.png" },
+  'wsh': { name: "Washington Huskies", id: "264", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/264.png" },
   'washingtonst': { name: "Washington State Cougars", id: "265", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/265.png" },
   'wsu': { name: "Washington State Cougars", id: "265", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/265.png" },
   'weberst': { name: "Weber State Wildcats", id: "2692", logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/2692.png" },
@@ -828,15 +835,38 @@ export const NCAA_TEAMS: Record<string, { name: string, id: string, logo: string
 };
 
 // Helper to find logo from input string (fuzzy match)
-export const getTeamLogo = (input: string): string | null => {
+export const getTeamLogo = (input: string, league?: 'nfl' | 'ncaa' | 'bracket'): string | null => {
   if (!input) return null;
   const lower = input.toLowerCase();
+  const cleanName = lower.replace(/^[ewsm][0-9]{1,2}-/, '').replace(/-/g, ' ');
+
+  if (league === 'ncaa' || league === 'bracket') {
+    if (NCAA_TEAMS[cleanName]) return NCAA_TEAMS[cleanName].logo;
+    const ncaaKey = Object.keys(NCAA_TEAMS).find(k =>
+      NCAA_TEAMS[k].name.toLowerCase().includes(cleanName) ||
+      cleanName.includes(NCAA_TEAMS[k].name.toLowerCase())
+    );
+    if (ncaaKey) return NCAA_TEAMS[ncaaKey].logo;
+    return null;
+  }
+
+  if (league === 'nfl') {
+    if (NFL_TEAMS[lower]) return NFL_TEAMS[lower].logo;
+    const nflKey = Object.keys(NFL_TEAMS).find(k =>
+      NFL_TEAMS[k].name.toLowerCase().includes(lower) ||
+      lower.includes(NFL_TEAMS[k].name.toLowerCase()) ||
+      NFL_TEAMS[k].abbr.toLowerCase() === lower
+    );
+    if (nflKey) return NFL_TEAMS[nflKey].logo;
+    return null;
+  }
 
   // 1. Try NFL Direct Key
   if (NFL_TEAMS[lower]) return NFL_TEAMS[lower].logo;
 
   // 2. Try NCAA Direct Key
   if (NCAA_TEAMS[lower]) return NCAA_TEAMS[lower].logo;
+  if (NCAA_TEAMS[cleanName]) return NCAA_TEAMS[cleanName].logo;
 
   // 3. Fuzzy Match NFL
   const nflKey = Object.keys(NFL_TEAMS).find(k =>
@@ -847,9 +877,6 @@ export const getTeamLogo = (input: string): string | null => {
   if (nflKey) return NFL_TEAMS[nflKey].logo;
 
   // 4. Fuzzy Match NCAA
-  // Remove seed prefixes like "E1-", "W2-" for better matching
-  const cleanName = lower.replace(/^[ewsm][0-9]{1,2}-/, '').replace(/-/g, ' ');
-
   const ncaaKey = Object.keys(NCAA_TEAMS).find(k =>
     NCAA_TEAMS[k].name.toLowerCase().includes(cleanName) ||
     cleanName.includes(NCAA_TEAMS[k].name.toLowerCase())

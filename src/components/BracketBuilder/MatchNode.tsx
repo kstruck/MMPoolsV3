@@ -60,7 +60,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
                 isPicked={isHomePicked}
                 pickStatus={getPickStatus(displayHomeId)}
                 isWinner={isHomeWinner}
-                logoUrl={displayHomeId ? getTeamLogo(displayHomeId) : null}
+                logoUrl={displayHomeId ? getTeamLogo(displayHomeId, 'ncaa') : null}
                 onClick={() => !readOnly && displayHomeId && onPick(game.id, displayHomeId)}
                 disabled={readOnly || !displayHomeId}
                 isEliminated={displayHomeId ? eliminatedTeamIds?.has(displayHomeId) : false}
@@ -73,7 +73,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
                 isPicked={isAwayPicked}
                 pickStatus={getPickStatus(displayAwayId)}
                 isWinner={isAwayWinner}
-                logoUrl={displayAwayId ? getTeamLogo(displayAwayId) : null}
+                logoUrl={displayAwayId ? getTeamLogo(displayAwayId, 'ncaa') : null}
                 onClick={() => !readOnly && displayAwayId && onPick(game.id, displayAwayId)}
                 disabled={readOnly || !displayAwayId}
                 isEliminated={displayAwayId ? eliminatedTeamIds?.has(displayAwayId) : false}

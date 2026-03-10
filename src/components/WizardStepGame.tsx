@@ -126,8 +126,8 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
         setShowSchedule(false);
     };
 
-    const homeLogo = gameState.homeTeamLogo || getTeamLogo(gameState.homeTeam);
-    const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam);
+    const homeLogo = gameState.homeTeamLogo || getTeamLogo(gameState.homeTeam, gameState.league === 'college' ? 'ncaa' : (gameState.league as 'nfl' | 'ncaa' | undefined));
+    const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam, gameState.league === 'college' ? 'ncaa' : (gameState.league as 'nfl' | 'ncaa' | undefined));
 
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
