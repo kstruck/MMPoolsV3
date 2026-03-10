@@ -2,7 +2,7 @@ import { logger } from '../../utils/logger';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2 } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
@@ -345,6 +345,23 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         setIsCreating(true);
     }, []);
 
+    // Delete a user's entry
+    const handleDeleteEntry = useCallback(async (entry: BracketEntry) => {
+        if (!confirm(`Are you sure you want to delete "${entry.name}"? This action cannot be undone.`)) {
+            return;
+        }
+
+        setError(null);
+        try {
+            const result = await dbService.deleteBracketEntry(pool.id, entry.id);
+            if (!result.success) {
+                setError(result.message || 'Failed to delete entry');
+            }
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'An error occurred while deleting');
+        }
+    }, [pool.id]);
+
     // Create a new bracket entry
     const handleCreateEntry = useCallback(async () => {
         if (!entryName.trim()) {
@@ -375,7 +392,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         setSubmitting(true);
         setError(null);
         try {
-            const result = await dbService.updateBracketPicks(pool.id, activeEntryId, picks, tieBreakerPrediction);
+            const result = await dbService.updateBracketPicks(pool.id, activeEntryId, picks, tieBreakerPrediction, entryName.trim());
             if (!result.success) {
                 setError(result.message || 'Failed to save draft');
             }
@@ -384,15 +401,29 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         } finally {
             setSubmitting(false);
         }
-    }, [pool.id, activeEntryId, picks, tieBreakerPrediction]);
+    }, [pool.id, activeEntryId, picks, tieBreakerPrediction, entryName]);
 
     // Submit final bracket
     const handleSubmitBracket = useCallback(async () => {
         if (!activeEntryId) return;
+
+        const reqPicks = tournament ? Object.keys(tournament.games).length : (pool.tournamentType === 'conference' ? 10 : 63);
+        const currentPicksCount = Object.keys(picks).length;
+
+        if (currentPicksCount < reqPicks) {
+            setError(`Please complete all picks before submitting. You have made ${currentPicksCount} of ${reqPicks} picks.`);
+            return;
+        }
+
+        if (tieBreakerPrediction === undefined || tieBreakerPrediction === null || String(tieBreakerPrediction).trim() === '') {
+            setError('Please enter a tie-breaker prediction before submitting.');
+            return;
+        }
+
         setSubmitting(true);
         setError(null);
         try {
-            const result = await dbService.submitBracketEntry(pool.id, activeEntryId, picks, tieBreakerPrediction);
+            const result = await dbService.submitBracketEntry(pool.id, activeEntryId, picks, tieBreakerPrediction, entryName.trim());
             if (result.success) {
                 setIsCreating(false);
                 setActiveEntryId(null);
@@ -409,7 +440,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         } finally {
             setSubmitting(false);
         }
-    }, [pool.id, activeEntryId, picks, tieBreakerPrediction]);
+    }, [pool.id, pool.tournamentType, tournament, activeEntryId, picks, tieBreakerPrediction, entryName]);
 
     const pickCount = Object.keys(picks).length;
     const requiredPicks = tournament ? Object.keys(tournament.games).length : (pool.tournamentType === 'conference' ? 10 : 63);
@@ -656,6 +687,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                     >
                                                         {entry.status === 'SUBMITTED' ? 'Edit' : 'Enter Picks/Edit Picks'}
                                                     </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteEntry(entry); }}
+                                                        className="bg-red-500/20 hover:bg-red-500/40 text-red-400 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Delete Entry"
+                                                        disabled={pool.status === 'LOCKED' || pool.status === 'COMPLETED'}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
@@ -700,8 +739,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
                                 <div className="flex flex-wrap justify-between items-center gap-3 p-4 border-b border-slate-800 bg-slate-950">
                                     <div>
-                                        <h3 className="font-bold text-white">{entryName}</h3>
-                                        <span className="text-xs text-slate-500">{pickCount}/{requiredPicks} picks</span>
+                                        <input
+                                            type="text"
+                                            value={entryName}
+                                            onChange={(e) => setEntryName(e.target.value)}
+                                            className="font-bold text-white bg-transparent border-b border-transparent hover:border-slate-700 focus:border-indigo-500 focus:outline-none px-1 py-0.5 transition-colors w-full sm:w-64"
+                                            placeholder="Bracket Name"
+                                        />
+                                        <div className="text-xs text-slate-500 px-1 mt-1">{pickCount}/{requiredPicks} picks</div>
                                     </div>
                                     <div className="flex gap-2">
                                         <button
@@ -719,7 +764,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         </button>
                                         <button
                                             onClick={handleSubmitBracket}
-                                            disabled={submitting || pickCount < requiredPicks}
+                                            disabled={submitting}
                                             className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded font-bold flex items-center gap-2 text-sm"
                                         >
                                             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -741,7 +786,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             value={tieBreakerPrediction ?? ''}
                                             onChange={(e) => setTieBreakerPrediction(e.target.value ? parseInt(e.target.value) : undefined)}
                                             placeholder="e.g. 145"
-                                            className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white w-32 text-center font-mono text-lg focus:outline-none focus:border-amber-500"
+                                            className={`bg-slate-900 border ${error?.includes('tie-breaker') ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'border-slate-600'} rounded-lg px-4 py-2 text-white w-32 text-center font-mono text-lg focus:outline-none focus:border-amber-500`}
                                         />
                                     </div>
                                 </div>
@@ -854,13 +899,19 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 {!loading && activeTab === 'brackets' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
                         {/* Elimination Tracker - Bracket Health */}
-                        {tournament && userEntries.length > 0 && userEntries[0].status === 'SUBMITTED' && (
-                            <EliminationTracker
-                                entry={userEntries[0]}
-                                allEntries={entries}
-                                tournament={tournament}
-                                pool={pool}
-                            />
+                        {tournament && userEntries.some(e => e.status === 'SUBMITTED') && (
+                            <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
+                                {userEntries.filter(e => e.status === 'SUBMITTED').map(entry => (
+                                    <div key={entry.id} className="w-[85vw] sm:w-[360px] shrink-0 snap-center first:pl-0">
+                                        <EliminationTracker
+                                            entry={entry}
+                                            allEntries={entries}
+                                            tournament={tournament}
+                                            pool={pool}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         )}
 
                         {/* Brackets Sub-Navigation */}
@@ -953,7 +1004,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         {/* Who to Root For */}
                         {bracketSubTab === 'rootfor' && (
                             tournament && userEntries.length > 0 ? (
-                                <WhoToRootFor userEntry={userEntries[0]} allEntries={entries} tournament={tournament} pool={pool} />
+                                <WhoToRootFor userEntries={userEntries} allEntries={entries} tournament={tournament} pool={pool} />
                             ) : (
                                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
                                     <p>{!tournament ? 'Tournament data not yet available.' : 'Submit a bracket to see rooting advice.'}</p>
@@ -976,7 +1027,12 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         {bracketSubTab === 'compare' && (
                             tournament && entries.length > 0 ? (
                                 <div className="animate-in fade-in slide-in-from-bottom-4">
-                                    <BracketComparison tournament={tournament} allEntries={entries} initialEntry1Id={userEntries[0]?.id} isConference={isConference} />
+                                    <BracketComparison
+                                        tournament={tournament}
+                                        allEntries={pool.status === 'LOCKED' || pool.status === 'COMPLETED' ? entries : userEntries}
+                                        initialEntry1Id={userEntries[0]?.id}
+                                        isConference={isConference}
+                                    />
                                 </div>
                             ) : (
                                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
@@ -1002,7 +1058,11 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         {bracketSubTab === 'analytics' && (
                             tournament && entries.length > 0 ? (
                                 <div className="animate-in fade-in slide-in-from-bottom-4">
-                                    <PoolAnalytics tournament={tournament} entries={entries} isConference={isConference} />
+                                    <PoolAnalytics
+                                        tournament={tournament}
+                                        entries={pool.status === 'LOCKED' || pool.status === 'COMPLETED' ? entries : userEntries}
+                                        isConference={isConference}
+                                    />
                                 </div>
                             ) : (
                                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">

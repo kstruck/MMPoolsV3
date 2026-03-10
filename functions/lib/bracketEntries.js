@@ -95,14 +95,6 @@ exports.updateBracketEntry = (0, https_1.onCall)(async (request) => {
         if (entryData.ownerUid !== uid) {
             throw new https_1.HttpsError("permission-denied", "Not your entry.");
         }
-        if (entryData.status === 'SUBMITTED') {
-            // Allow updates if not locked yet? Usually SUBMITTED means ready, but can edit until lock.
-            // Requirement: "Submit before lock; after submit and after lock, picks immutable."
-            // This implies if I submit, I can't edit? Or allows "Unsubmit"?
-            // Usually bracket pools allow editing until lock.
-            // But let's follow strict instruction: "after submit... picks immutable". 
-            throw new https_1.HttpsError("failed-precondition", "Entry already submitted.");
-        }
         // Check pool lock
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data();
@@ -124,7 +116,7 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "User must be logged in.");
     }
-    const { poolId, entryId, picks: newPicks } = request.data;
+    const { poolId, entryId, picks: newPicks, tieBreakerPrediction } = request.data;
     const uid = request.auth.uid;
     const db = admin.firestore();
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
@@ -136,8 +128,6 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
         const entryData = entryDoc.data();
         if (entryData.ownerUid !== uid)
             throw new https_1.HttpsError("permission-denied", "Not your entry.");
-        if (entryData.status === 'SUBMITTED')
-            throw new https_1.HttpsError("failed-precondition", "Already submitted.");
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data();
         if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
@@ -168,6 +158,7 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
         transaction.update(entryRef, {
             status: "SUBMITTED",
             picks: finalPicks,
+            tieBreakerPrediction: tieBreakerPrediction || 0,
             updatedAt: firestore_1.Timestamp.now().toMillis()
         });
         // Log audit

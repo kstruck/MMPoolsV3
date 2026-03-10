@@ -4,27 +4,30 @@ import { calculateRootForResults, type RootForResult } from './bracketScoring';
 import { Heart, ArrowUp, ArrowDown, Minus, Loader2 } from 'lucide-react';
 
 interface WhoToRootForProps {
-    userEntry: BracketEntry;
+    userEntries: BracketEntry[];
     allEntries: BracketEntry[];
     tournament: Tournament;
     pool: BracketPool;
 }
 
-export const WhoToRootFor: React.FC<WhoToRootForProps> = ({ userEntry, allEntries, tournament, pool }) => {
+export const WhoToRootFor: React.FC<WhoToRootForProps> = ({ userEntries, allEntries, tournament, pool }) => {
     const [computing, setComputing] = useState(true);
-
+    const [selectedEntryId, setSelectedEntryId] = useState<string>(userEntries[0]?.id || '');
     const [results, setResults] = useState<RootForResult[]>([]);
 
+    const selectedEntry = userEntries.find(e => e.id === selectedEntryId) || userEntries[0];
+
     React.useEffect(() => {
+        if (!selectedEntry) return;
         setComputing(true);
         // Small timeout to allow UI to show loading state if calculation is heavy
         const timer = setTimeout(() => {
-            const r = calculateRootForResults(userEntry, allEntries, tournament, pool.settings);
+            const r = calculateRootForResults(selectedEntry, allEntries, tournament, pool.settings);
             setResults(r);
             setComputing(false);
         }, 10);
         return () => clearTimeout(timer);
-    }, [userEntry, allEntries, tournament, pool.settings]);
+    }, [selectedEntry, allEntries, tournament, pool.settings]);
 
     const formatRankChange = (change: number) => {
         if (change > 0) return <span className="text-emerald-400 flex items-center gap-0.5"><ArrowUp size={12} /> {change}</span>;
@@ -48,7 +51,19 @@ export const WhoToRootFor: React.FC<WhoToRootForProps> = ({ userEntry, allEntrie
             <div className="flex items-center gap-2 mb-4">
                 <Heart size={20} className="text-pink-400" />
                 <h3 className="text-xl font-bold text-white">Who to Root For</h3>
-                <span className="text-xs text-slate-500 ml-auto">Based on: {userEntry.name}</span>
+                {userEntries.length > 1 ? (
+                    <select
+                        value={selectedEntryId}
+                        onChange={(e) => setSelectedEntryId(e.target.value)}
+                        className="ml-auto bg-slate-800 border border-slate-700 rounded-md text-sm text-slate-300 px-3 py-1 focus:ring-1 focus:ring-pink-500"
+                    >
+                        {userEntries.map(e => (
+                            <option key={e.id} value={e.id}>{e.name}</option>
+                        ))}
+                    </select>
+                ) : (
+                    <span className="text-xs text-slate-500 ml-auto">Based on: {selectedEntry?.name}</span>
+                )}
             </div>
             <p className="text-slate-400 text-sm mb-4">See how each upcoming game's outcome affects your standings.</p>
 

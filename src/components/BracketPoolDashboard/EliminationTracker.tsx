@@ -106,14 +106,18 @@ export const EliminationTracker: React.FC<EliminationTrackerProps> = ({ entry, a
 
     return (
         <div className={`border rounded-xl p-5 ${statusBg}`}>
-            <div className="flex items-center gap-2 mb-4">
-                <Activity size={18} className="text-indigo-400" />
-                <h3 className="text-lg font-bold text-white">Bracket Health</h3>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ml-auto
-                    ${alivePercent > 75 ? 'bg-emerald-500/20 text-emerald-400' : alivePercent > 50 ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}
-                `}>
-                    {statusLabel}
-                </span>
+            <div className="flex flex-col gap-1 mb-4">
+                <div className="flex items-center gap-2">
+                    <Activity size={18} className="text-indigo-400" />
+                    <h3 className="text-lg font-bold text-white max-w-[150px] truncate" title={entry.name || 'My Bracket'}>
+                        {entry.name || 'My Bracket'}
+                    </h3>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ml-auto whitespace-nowrap
+                        ${alivePercent > 75 ? 'bg-emerald-500/20 text-emerald-400' : alivePercent > 50 ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}
+                    `}>
+                        {statusLabel}
+                    </span>
+                </div>
             </div>
 
             <div className="flex items-center gap-6">

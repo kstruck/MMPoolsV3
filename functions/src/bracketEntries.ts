@@ -98,7 +98,7 @@ export const updateBracketEntry = onCall(async (request) => {
         throw new HttpsError("unauthenticated", "User must be logged in.");
     }
 
-    const { poolId, entryId, picks, tieBreakerPrediction } = request.data;
+    const { poolId, entryId, picks, tieBreakerPrediction, name } = request.data;
     const uid = request.auth.uid;
 
     if (!poolId || !entryId || !picks) {
@@ -127,11 +127,17 @@ export const updateBracketEntry = onCall(async (request) => {
             throw new HttpsError("failed-precondition", "Pool is locked.");
         }
 
-        transaction.update(entryRef, {
+        const updateData: Partial<BracketEntry> = {
             picks,
             tieBreakerPrediction: tieBreakerPrediction || 0,
             updatedAt: Timestamp.now().toMillis()
-        });
+        };
+
+        if (name && typeof name === 'string' && name.trim().length > 0) {
+            updateData.name = name.trim();
+        }
+
+        transaction.update(entryRef, updateData as admin.firestore.UpdateData<BracketEntry>);
     });
 
     return { success: true };
@@ -189,12 +195,19 @@ export const submitBracketEntry = onCall(async (request) => {
             throw new HttpsError("failed-precondition", `Bracket incomplete. Only ${pickCount}/${requiredPicks} picks made.`);
         }
 
-        transaction.update(entryRef, {
+        const updateData: Partial<BracketEntry> = {
             status: "SUBMITTED",
             picks: finalPicks,
             tieBreakerPrediction: tieBreakerPrediction || 0,
             updatedAt: Timestamp.now().toMillis()
-        });
+        };
+
+        const { name } = request.data;
+        if (name && typeof name === 'string' && name.trim().length > 0) {
+            updateData.name = name.trim();
+        }
+
+        transaction.update(entryRef, updateData as admin.firestore.UpdateData<BracketEntry>);
 
         // Log audit
         const auditRef = db.collection("audit").doc();
@@ -211,4 +224,67 @@ export const submitBracketEntry = onCall(async (request) => {
     return { success: true };
 });
 
+// ----------------------------------------------------------------------------
+// Delete Bracket Entry
+// ----------------------------------------------------------------------------
+export const deleteBracketEntry = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in.");
+    }
+
+    const { poolId, entryId } = request.data;
+    const uid = request.auth.uid;
+
+    if (!poolId || !entryId) {
+        throw new HttpsError("invalid-argument", "Missing data.");
+    }
+
+    const db = admin.firestore();
+    const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
+    const poolRef = db.collection("pools").doc(poolId);
+
+    await db.runTransaction(async (transaction) => {
+        const entryDoc = await transaction.get(entryRef);
+        if (!entryDoc.exists) throw new HttpsError("not-found", "Entry not found.");
+        const entryData = entryDoc.data() as BracketEntry;
+
+        const poolDoc = await transaction.get(poolRef);
+        const poolData = poolDoc.data() as BracketPool;
+
+        if (entryData.ownerUid !== uid) {
+            // Give managers the ability to delete entries as well
+            if (uid !== poolData.managerUid && uid !== poolData.ownerId) {
+                throw new HttpsError("permission-denied", "Not your entry. Only the owner or pool manager can delete it.");
+            }
+        }
+
+        // Check pool lock
+        if (poolData.status === 'LOCKED' || poolData.status === 'COMPLETED' || (poolData.lockAt > 0 && Date.now() > poolData.lockAt)) {
+            // Managers could potentially bypass this, but for now we follow playoff structure:
+            if (uid !== poolData.managerUid && uid !== poolData.ownerId) {
+                throw new HttpsError("failed-precondition", "Cannot delete entry after pool is locked.");
+            }
+        }
+
+        transaction.delete(entryRef);
+
+        // Decrement pool entry count
+        transaction.update(poolRef, {
+            entryCount: admin.firestore.FieldValue.increment(-1)
+        });
+
+        // Log audit
+        const auditRef = db.collection("audit").doc();
+        transaction.set(auditRef, {
+            poolId,
+            type: "ENTRY_DELETED",
+            message: `Entry ${entryData.name} deleted by ${uid}`,
+            severity: "INFO",
+            actor: { uid, role: "USER" },
+            timestamp: Timestamp.now().toMillis()
+        });
+    });
+
+    return { success: true, message: "Entry deleted successfully" };
+});
 

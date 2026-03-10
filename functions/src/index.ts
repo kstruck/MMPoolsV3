@@ -20,7 +20,7 @@ export { onUserCreated as createParticipantProfile, createClaimCode, claimMySqua
 export { createPool, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds } from "./poolOps";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
-export { createBracketEntry, updateBracketEntry, submitBracketEntry } from "./bracketEntries";
+export { createBracketEntry, updateBracketEntry, submitBracketEntry, deleteBracketEntry } from "./bracketEntries";
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { adminInitTournament, syncBracketTournament, scheduledBracketSync, importTournamentFromESPN, importConferenceTournamentFromESPN } from "./espnBracket";
 export { onGameComplete } from "./postGameEmail";

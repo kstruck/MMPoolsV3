@@ -216,10 +216,10 @@ export const dbService = {
         }
     },
 
-    updateBracketPicks: async (poolId: string, entryId: string, picks: Record<string, string>, tieBreakerPrediction?: number): Promise<{ success: boolean; message?: string }> => {
+    updateBracketPicks: async (poolId: string, entryId: string, picks: Record<string, string>, tieBreakerPrediction?: number, name?: string): Promise<{ success: boolean; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'updateBracketEntry');
-            const result = await fn({ poolId, entryId, picks, tieBreakerPrediction });
+            const result = await fn({ poolId, entryId, picks, tieBreakerPrediction, name });
             return result.data as { success: boolean; message?: string };
         } catch (error: unknown) {
             await errorHandler.handleError(error, {
@@ -231,10 +231,10 @@ export const dbService = {
         }
     },
 
-    submitBracketEntry: async (poolId: string, entryId: string, picks: Record<string, string>, tieBreakerPrediction?: number): Promise<{ success: boolean; message?: string }> => {
+    submitBracketEntry: async (poolId: string, entryId: string, picks: Record<string, string>, tieBreakerPrediction?: number, name?: string): Promise<{ success: boolean; message?: string }> => {
         try {
             const fn = httpsCallable(functions, 'submitBracketEntry');
-            const result = await fn({ poolId, entryId, picks, tieBreakerPrediction });
+            const result = await fn({ poolId, entryId, picks, tieBreakerPrediction, name });
             return result.data as { success: boolean; message?: string };
         } catch (error: unknown) {
             await errorHandler.handleError(error, {
@@ -242,6 +242,21 @@ export const dbService = {
                 context: { operation: 'submitBracketEntry', poolId, entryId }
             });
             const msg = error instanceof Error ? error.message : 'Failed to submit bracket';
+            return { success: false, message: msg };
+        }
+    },
+
+    deleteBracketEntry: async (poolId: string, entryId: string): Promise<{ success: boolean; message?: string }> => {
+        try {
+            const fn = httpsCallable(functions, 'deleteBracketEntry');
+            const result = await fn({ poolId, entryId });
+            return result.data as { success: boolean; message?: string };
+        } catch (error: unknown) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'deleteBracketEntry', poolId, entryId }
+            });
+            const msg = error instanceof Error ? error.message : 'Failed to delete bracket entry';
             return { success: false, message: msg };
         }
     },

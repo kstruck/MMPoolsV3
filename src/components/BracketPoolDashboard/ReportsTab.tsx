@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { Download, Trophy, BarChart3, FileText, Table } from 'lucide-react';
 import type { BracketEntry, Tournament, BracketPool } from '../../types';
 import { calculateScore } from './bracketScoring';
@@ -237,6 +237,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                                         {popularityData.champion.map((_, index) => (
                                             <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#6366f1'} />
                                         ))}
+                                        <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={12} fontWeight="bold" />
                                     </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
@@ -268,6 +269,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                                         {popularityData.finalFour.map((_, index) => (
                                             <Cell key={`cell-${index}`} fill="#8b5cf6" />
                                         ))}
+                                        <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={12} fontWeight="bold" />
                                     </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
