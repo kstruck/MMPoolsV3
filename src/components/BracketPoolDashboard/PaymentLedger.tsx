@@ -92,6 +92,28 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
         }
     };
 
+    const handleMarkAllPaid = async (uid: string) => {
+        setUpdatingId(uid);
+        try {
+            const userEntries = entries.filter(e => e.ownerUid === uid && e.paidStatus === 'UNPAID');
+            if (userEntries.length === 0) {
+                setMessage({ text: 'All entries are already paid.', type: 'success' });
+                setTimeout(() => setMessage(null), 3000);
+                setUpdatingId(null);
+                return;
+            }
+            await Promise.all(userEntries.map(e => dbService.updateBracketEntryPayment(pool.id, e.id, 'PAID')));
+            setMessage({ text: `Successfully marked ${userEntries.length} entries as PAID.`, type: 'success' });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (error) {
+            setMessage({ text: 'Failed to update payment status for user entries', type: 'error' });
+            setTimeout(() => setMessage(null), 3000);
+            console.error(error);
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
     const handleUpdateMethod = async (entryId: string, method: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other') => {
         setUpdatingId(entryId);
         try {
@@ -369,6 +391,15 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                                     <div className="text-slate-400">
                                                         Total Due: <span className="text-white font-bold">${group.entries.length * costPerEntry}</span>
                                                     </div>
+                                                    {group.entries.some(e => e.paidStatus === 'UNPAID') && (
+                                                        <button
+                                                            onClick={() => handleMarkAllPaid(group.entries[0].ownerUid)}
+                                                            disabled={updatingId === group.entries[0].ownerUid}
+                                                            className="text-xs px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors disabled:opacity-50"
+                                                        >
+                                                            {updatingId === group.entries[0].ownerUid ? 'Updating...' : 'Mark All Paid'}
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => handleDeleteUser(group.entries[0].ownerUid)}
                                                         disabled={updatingId === group.entries[0].ownerUid}

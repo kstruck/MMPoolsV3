@@ -60,7 +60,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
                 isPicked={isHomePicked}
                 pickStatus={getPickStatus(displayHomeId)}
                 isWinner={isHomeWinner}
-                logoUrl={displayHomeId ? getTeamLogo(displayHomeId.split('-')[1] || '') : null}
+                logoUrl={displayHomeId ? getTeamLogo(displayHomeId) : null}
                 onClick={() => !readOnly && displayHomeId && onPick(game.id, displayHomeId)}
                 disabled={readOnly || !displayHomeId}
                 isEliminated={displayHomeId ? eliminatedTeamIds?.has(displayHomeId) : false}
@@ -73,7 +73,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
                 isPicked={isAwayPicked}
                 pickStatus={getPickStatus(displayAwayId)}
                 isWinner={isAwayWinner}
-                logoUrl={displayAwayId ? getTeamLogo(displayAwayId.split('-')[1] || '') : null}
+                logoUrl={displayAwayId ? getTeamLogo(displayAwayId) : null}
                 onClick={() => !readOnly && displayAwayId && onPick(game.id, displayAwayId)}
                 disabled={readOnly || !displayAwayId}
                 isEliminated={displayAwayId ? eliminatedTeamIds?.has(displayAwayId) : false}
@@ -101,12 +101,12 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
     // Assuming format RegionSeed-Name or just Name
     let teamName = 'TBD';
     if (teamId) {
+        // Try splitting by hyphen if there is one (e.g., S1-Houston -> Houston)
+        // If no hyphen, use the whole ID (e.g. KC -> KC)
         const parts = teamId.split('-');
-        teamName = parts.length > 1 ? parts[1] : parts[0];
-        // Clean up camelCase if needed, but the data seems to be "Duke", "NorthCarolina" etc.
-        // Actually data is "North Carolina" in name field, but ID is "S10-NorthCarolina".
-        // Use regex to separate CamelCase? Or just use as is.
-        teamName = teamName.replace(/([A-Z])/g, ' $1').trim();
+        teamName = parts.length > 1 ? parts.slice(1).join('-') : parts[0];
+        // Clean up camelCase if needed
+        teamName = teamName.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
     }
 
     return (

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import type { BracketEntry, Tournament, BracketPool } from '../../types';
-import { calculateWhatIfScore } from './bracketScoring';
+import { calculateWhatIfScore, getRoundLabel } from './bracketScoring';
 import { FlaskConical, RotateCcw, Trophy } from 'lucide-react';
 
 interface WhatIfSimulatorProps {
@@ -27,7 +27,9 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ entries, tourn
         return grouped;
     }, [tournament]);
 
-    const ROUND_LABELS: Record<number, string> = { 1: 'Round of 64', 2: 'Round of 32', 3: 'Sweet 16', 4: 'Elite 8', 5: 'Final Four', 6: 'Championship' };
+    const maxRound = useMemo(() => {
+        return Object.values(tournament.games).reduce((max, g) => Math.max(max, g.round), 0) || 6;
+    }, [tournament]);
 
     // Calculate simulated standings
     const standings = useMemo(() => {
@@ -84,7 +86,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ entries, tourn
             {/* Game Toggles by Round */}
             {Array.from(undecidedByRound.entries()).map(([round, games]) => (
                 <div key={round} className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h4 className="text-sm font-bold text-slate-300 mb-3">{ROUND_LABELS[round] || `Round ${round}`}</h4>
+                    <h4 className="text-sm font-bold text-slate-300 mb-3">{getRoundLabel(round - 1, maxRound, tournament.tournamentType === 'conference')}</h4>
                     <div className="space-y-2">
                         {games.map(game => {
                             const homeSelected = hypotheticals[game.id] === game.homeTeamId;
@@ -95,8 +97,8 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ entries, tourn
                                     <button
                                         onClick={() => toggleWinner(game.id, game.homeTeamId)}
                                         className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold border transition-all ${homeSelected
-                                                ? 'bg-emerald-900/40 border-emerald-600 text-emerald-300'
-                                                : 'bg-slate-950 border-slate-800 text-white hover:border-slate-600'
+                                            ? 'bg-emerald-900/40 border-emerald-600 text-emerald-300'
+                                            : 'bg-slate-950 border-slate-800 text-white hover:border-slate-600'
                                             }`}
                                     >
                                         {homeSelected && <Trophy size={12} className="inline mr-1.5 -mt-0.5" />}
@@ -106,8 +108,8 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ entries, tourn
                                     <button
                                         onClick={() => toggleWinner(game.id, game.awayTeamId)}
                                         className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold border transition-all ${awaySelected
-                                                ? 'bg-emerald-900/40 border-emerald-600 text-emerald-300'
-                                                : 'bg-slate-950 border-slate-800 text-white hover:border-slate-600'
+                                            ? 'bg-emerald-900/40 border-emerald-600 text-emerald-300'
+                                            : 'bg-slate-950 border-slate-800 text-white hover:border-slate-600'
                                             }`}
                                     >
                                         {awaySelected && <Trophy size={12} className="inline mr-1.5 -mt-0.5" />}
@@ -138,8 +140,8 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ entries, tourn
                         <div
                             key={s.entry.id}
                             className={`flex items-center justify-between p-2.5 rounded-lg text-sm ${s.isCurrentUser
-                                    ? 'bg-indigo-900/30 border border-indigo-700'
-                                    : i % 2 === 0 ? 'bg-slate-950' : ''
+                                ? 'bg-indigo-900/30 border border-indigo-700'
+                                : i % 2 === 0 ? 'bg-slate-950' : ''
                                 }`}
                         >
                             <div className="flex items-center gap-3">

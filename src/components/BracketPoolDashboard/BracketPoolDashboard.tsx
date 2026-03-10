@@ -159,6 +159,19 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         return isLocked && tournamentStarted;
     }, [pool.status, tournament, isManager]);
 
+    const championshipGameId = useMemo(() => {
+        if (!tournament) return null;
+        let maxRound = 0;
+        let finalGameId = null;
+        Object.values(tournament.games).forEach(g => {
+            if (g.round > maxRound) {
+                maxRound = g.round;
+                finalGameId = g.id;
+            }
+        });
+        return finalGameId;
+    }, [tournament]);
+
     const handleViewEntry = useCallback((entry: BracketEntry) => {
         if (entry.ownerUid !== user?.id && !isManager && !shouldShowBrackets) {
             alert("This bracket is hidden until the pool locks and the tournament begins.");
@@ -764,6 +777,11 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         ) : (
                                                             <span className="text-amber-400">Draft — {Object.keys(entry.picks || {}).length}/{requiredPicks} picks</span>
                                                         )}
+                                                        {championshipGameId && entry.picks && entry.picks[championshipGameId] && entry.picks[championshipGameId] !== 'TBD' && (
+                                                            <span className="text-slate-400 border-l border-slate-700 pl-2">
+                                                                Champ: <span className="text-white font-bold">{entry.picks[championshipGameId]}</span>
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-2">
@@ -1141,7 +1159,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         {bracketSubTab === 'chalk' && (
                             tournament && userEntries.length > 0 ? (
                                 <div className="animate-in fade-in slide-in-from-bottom-4">
-                                    <ChalkComparison tournament={tournament} userEntry={userEntries[0]} isConference={isConference} />
+                                    <ChalkComparison tournament={tournament} userEntries={userEntries} isConference={isConference} />
                                 </div>
                             ) : (
                                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">

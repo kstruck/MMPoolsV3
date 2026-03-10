@@ -1,14 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { BracketEntry, Tournament } from '../../types';
 import { BracketComparison } from './BracketComparison';
 
 interface ChalkComparisonProps {
     tournament: Tournament;
-    userEntry: BracketEntry;
+    userEntries: BracketEntry[];
     isConference?: boolean;
 }
 
-export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, userEntry, isConference }) => {
+export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, userEntries, isConference }) => {
+    const [selectedEntryId, setSelectedEntryId] = useState<string>(userEntries[0]?.id || '');
+    const userEntry = userEntries.find(e => e.id === selectedEntryId) || userEntries[0];
 
     // Generate the "Chalk" entry based on the tournament data
     const chalkEntry = useMemo(() => {
@@ -134,10 +136,25 @@ export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, us
                         <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                             My Bracket vs. The Chalk
                         </h3>
-                        <p className="text-slate-400 max-w-2xl">
+                        <p className="text-slate-400 max-w-2xl mb-4">
                             "Chalk" means always picking the favorite (the higher seed) to win every matchup.
                             Compare your picks against the mathematically safest bracket.
                         </p>
+
+                        {userEntries.length > 1 && (
+                            <div className="flex flex-col gap-2 max-w-xs">
+                                <label className="text-sm font-bold text-slate-400">Select Bracket to Compare</label>
+                                <select
+                                    value={selectedEntryId}
+                                    onChange={(e) => setSelectedEntryId(e.target.value)}
+                                    className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 font-medium"
+                                >
+                                    {userEntries.map(entry => (
+                                        <option key={entry.id} value={entry.id}>{entry.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 flex items-center gap-4 min-w-[200px] justify-center text-center">

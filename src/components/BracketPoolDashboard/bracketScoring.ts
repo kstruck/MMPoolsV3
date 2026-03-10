@@ -31,9 +31,9 @@ export interface RoundBreakdown {
 
 const ROUND_LABELS_NCAA = ['R64', 'R32', 'S16', 'E8', 'F4', 'Champ'];
 const ROUND_LABELS_CONF: Record<number, string[]> = {
-    4: ['QF', 'SF', 'Champ', ''],          // 4-round conference (e.g. smaller conf)
-    5: ['R1', 'QF', 'SF', 'Champ', ''],     // 5-round conference (e.g. Big 12)
-    10: ['R1', 'QF', 'SF', 'Champ'],         // Fallback
+    4: ['Quarterfinals', 'Semi-finals', 'Final', ''],          // 4-round conference (e.g. smaller conf)
+    5: ['Round 1', 'Round 2', 'Quarterfinals', 'Semi-finals', 'Final'],     // 5-round conference (e.g. Big 12)
+    10: ['Round 1', 'Quarterfinals', 'Semi-finals', 'Final'],         // Fallback
 };
 const ROUND_LABEL_FALLBACK = (r: number) => `R${r}`;
 

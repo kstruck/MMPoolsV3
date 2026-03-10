@@ -19,6 +19,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
     // Data Preparation
     // --------------------------------------------------------------------------------
 
+    const maxRound = useMemo(() => {
+        if (!tournament) return 0;
+        return Object.values(tournament.games).reduce((max, g) => Math.max(max, g.round), 0);
+    }, [tournament]);
+
     const scoringData = useMemo(() => {
         if (!tournament) return [];
         return entries.map(entry => {
@@ -37,9 +42,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
 
         const champCounts: Record<string, number> = {};
         const f4Counts: Record<string, number> = {};
-
-        const gamesList = Object.values(tournament.games);
-        const maxRound = gamesList.reduce((max, g) => Math.max(max, g.round), 0);
 
         // Identify slots
         const champSlots = Object.values(tournament.slots).filter(s => {
@@ -83,7 +85,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
             champion: toChartData(champCounts),
             finalFour: toChartData(f4Counts)
         };
-    }, [entries, tournament]);
+    }, [entries, tournament, maxRound]);
 
     // --------------------------------------------------------------------------------
     // Actions
@@ -92,11 +94,20 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
     const handleDownloadCSV = () => {
         if (!tournament) return;
 
-        const gamesList = Object.values(tournament.games);
-        const maxRound = gamesList.reduce((max, g) => Math.max(max, g.round), 0);
-
         // Header
-        const rounds = Array.from({ length: maxRound }, (_, i) => `Round ${i + 1}`);
+        const rounds = Array.from({ length: maxRound }, (_, i) => {
+            if (maxRound === 5) {
+                if (i === 2) return 'Quarterfinals';
+                if (i === 3) return 'Semi-finals';
+                if (i === 4) return 'Final';
+            } else if (maxRound === 6) {
+                if (i === 2) return 'Sweet 16';
+                if (i === 3) return 'Elite 8';
+                if (i === 4) return 'Final Four';
+                if (i === 5) return 'Championship';
+            }
+            return `Round ${i + 1}`;
+        });
         const header = ['Entry Name', 'Owner', 'Total Score', 'Max Possible', ...rounds, 'Champion Pick'];
 
         // Rows
@@ -179,12 +190,24 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                                     <th className="p-4">Entry</th>
                                     <th className="p-4 text-center">Total</th>
                                     <th className="p-4 text-center text-slate-600">Max</th>
-                                    <th className="p-4 text-center border-l border-slate-800">Round 1</th>
-                                    <th className="p-4 text-center">Round 2</th>
-                                    <th className="p-4 text-center">Round 3</th>
-                                    <th className="p-4 text-center">Round 4</th>
-                                    <th className="p-4 text-center">Round 5</th>
-                                    <th className="p-4 text-center">Round 6</th>
+                                    {Array.from({ length: maxRound }).map((_, idx) => {
+                                        let label = `Round ${idx + 1}`;
+                                        if (maxRound === 5) {
+                                            if (idx === 2) label = 'Quarterfinals';
+                                            if (idx === 3) label = 'Semi-finals';
+                                            if (idx === 4) label = 'Final';
+                                        } else if (maxRound === 6) {
+                                            if (idx === 2) label = 'Sweet 16';
+                                            if (idx === 3) label = 'Elite 8';
+                                            if (idx === 4) label = 'Final Four';
+                                            if (idx === 5) label = 'Championship';
+                                        }
+                                        return (
+                                            <th key={idx} className={`p-4 text-center ${idx === 0 ? 'border-l border-slate-800' : ''}`}>
+                                                {label}
+                                            </th>
+                                        );
+                                    })}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800">

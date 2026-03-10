@@ -159,6 +159,17 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
                                 <div className="col-span-6 md:col-span-7">
                                     <div className="font-bold text-white truncate flex items-center gap-2">
                                         {entry.name}
+                                        {pool.settings.entryFee > 0 && (
+                                            entry.paidStatus === 'PAID' ? (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                                                    PAID
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-slate-800 text-slate-400 border border-slate-700 whitespace-nowrap">
+                                                    UNPAID
+                                                </span>
+                                            )
+                                        )}
                                         {change !== undefined && change !== 0 && (
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${change > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
                                                 {change > 0 ? 'Rank Up' : 'Rank Down'}
