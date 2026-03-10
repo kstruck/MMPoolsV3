@@ -8,6 +8,7 @@ import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
 import { dbService } from '../../services/dbService';
+import { userRepository } from '../../services/userRepository';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { calculateCorrectPicks } from '../../utils/bracketScoring';
 import { isPoolManager, isSuperAdmin } from '../../utils/auth';
@@ -68,6 +69,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     }, [setSearchParams]);
 
     const [entries, setEntries] = useState<BracketEntry[]>([]);
+    const [userNames, setUserNames] = useState<Record<string, string>>({});
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [picks, setPicks] = useState<Record<string, string>>({});
     const [entryName, setEntryName] = useState('');
@@ -188,6 +190,21 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         });
         return () => unsub();
     }, [pool.id]);
+
+    // Build uid -> display name map whenever entries change
+    useEffect(() => {
+        if (entries.length === 0) return;
+        const uniqueUids = [...new Set(entries.map(e => e.ownerUid))];
+        Promise.all(
+            uniqueUids.map((uid: string) => userRepository.getById(uid))
+        ).then(users => {
+            const map: Record<string, string> = {};
+            users.forEach((u: { name?: string; email?: string } | null, i: number) => {
+                if (u) map[uniqueUids[i]] = u.name || u.email || uniqueUids[i];
+            });
+            setUserNames(map);
+        }).catch(() => { /* silent fallback */ });
+    }, [entries]);
 
     // Listen for master bracket print event
     useEffect(() => {
@@ -937,6 +954,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         pool={pool}
                                         tournament={tournament}
                                         currentUserId={user?.id}
+                                        userNames={userNames}
                                         onEntryClick={handleViewEntry}
                                     />
                                 </div>

@@ -9,10 +9,11 @@ interface StandingsTableProps {
     pool: BracketPool;
     tournament: Tournament;
     currentUserId?: string; // For highlighting user's own entries
+    userNames?: Record<string, string>; // uid -> display name map
     onEntryClick?: (entry: BracketEntry) => void;
 }
 
-export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, tournament, currentUserId, onEntryClick }) => {
+export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, tournament, currentUserId, userNames, onEntryClick }) => {
     // Pre-calculate eliminated teams once
     const eliminatedTeams = React.useMemo(() => getEliminatedTeams(tournament), [tournament]);
 
@@ -176,7 +177,9 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-xs text-slate-500 truncate hidden sm:block">ID: {entry.id.substring(0, 8)}</div>
+                                    <div className="text-xs text-slate-500 truncate hidden sm:block">
+                                        {userNames?.[entry.ownerUid] ?? 'Unknown'}
+                                    </div>
                                 </div>
                                 <div className="col-span-2 text-right font-mono font-bold text-lg text-emerald-400">
                                     {entry.score}
