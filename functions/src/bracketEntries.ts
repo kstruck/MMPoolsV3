@@ -120,15 +120,6 @@ export const updateBracketEntry = onCall(async (request) => {
             throw new HttpsError("permission-denied", "Not your entry.");
         }
 
-        if (entryData.status === 'SUBMITTED') {
-            // Allow updates if not locked yet? Usually SUBMITTED means ready, but can edit until lock.
-            // Requirement: "Submit before lock; after submit and after lock, picks immutable."
-            // This implies if I submit, I can't edit? Or allows "Unsubmit"?
-            // Usually bracket pools allow editing until lock.
-            // But let's follow strict instruction: "after submit... picks immutable". 
-            throw new HttpsError("failed-precondition", "Entry already submitted.");
-        }
-
         // Check pool lock
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data() as BracketPool;
@@ -154,7 +145,7 @@ export const submitBracketEntry = onCall(async (request) => {
         throw new HttpsError("unauthenticated", "User must be logged in.");
     }
 
-    const { poolId, entryId, picks: newPicks } = request.data;
+    const { poolId, entryId, picks: newPicks, tieBreakerPrediction } = request.data;
     const uid = request.auth.uid;
 
     const db = admin.firestore();
@@ -202,6 +193,7 @@ export const submitBracketEntry = onCall(async (request) => {
         transaction.update(entryRef, {
             status: "SUBMITTED",
             picks: finalPicks,
+            tieBreakerPrediction: tieBreakerPrediction || 0,
             updatedAt: Timestamp.now().toMillis()
         });
 

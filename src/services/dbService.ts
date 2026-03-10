@@ -218,7 +218,7 @@ export const dbService = {
 
     updateBracketPicks: async (poolId: string, entryId: string, picks: Record<string, string>, tieBreakerPrediction?: number): Promise<{ success: boolean; message?: string }> => {
         try {
-            const fn = httpsCallable(functions, 'updateBracketPicks');
+            const fn = httpsCallable(functions, 'updateBracketEntry');
             const result = await fn({ poolId, entryId, picks, tieBreakerPrediction });
             return result.data as { success: boolean; message?: string };
         } catch (error: unknown) {

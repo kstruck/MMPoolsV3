@@ -22,7 +22,12 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
     }, [poolId]);
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (messagesEndRef.current) {
+            const container = messagesEndRef.current.parentElement;
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
     }, [messages]);
 
     const handleSendMessage = async (e: React.FormEvent) => {

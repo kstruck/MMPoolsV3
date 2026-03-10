@@ -121,10 +121,10 @@ body {
 
   /* Position the bracket print view */
   #bracket-print-view {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100vw;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100vw !important;
     margin: 0 !important;
     padding: 8px !important;
     overflow: visible !important;

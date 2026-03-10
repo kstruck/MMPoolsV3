@@ -188,7 +188,7 @@ export function calculateScore(
         const rd = roundMap.get(r)!;
         roundBreakdown.push({
             round: r,
-            label: getRoundLabel(r - 1, maxRound),
+            label: getRoundLabel(r - 1, maxRound, tournament.tournamentType === 'conference'),
             ...rd,
         });
     }
