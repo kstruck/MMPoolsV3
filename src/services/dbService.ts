@@ -267,7 +267,7 @@ export const dbService = {
         await updateDoc(poolRef, { ...updates, updatedAt: Date.now() });
     },
 
-    updateBracketEntryPayment: async (poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID', paymentMethod?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Other'): Promise<void> => {
+    updateBracketEntryPayment: async (poolId: string, entryId: string, paidStatus: 'PAID' | 'UNPAID', paymentMethod?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other'): Promise<void> => {
         const entryRef = doc(db, 'pools', poolId, 'entries', entryId);
         await updateDoc(entryRef, { paidStatus, paymentMethod: paymentMethod || deleteField(), updatedAt: Date.now() });
     },

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import type { BracketPool, BracketEntry } from '../../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import type { BracketPool, BracketEntry, User } from '../../types';
 import { dbService } from '../../services/dbService';
-import { Search, Check, X, AlertCircle, DollarSign, Download, CreditCard, Mail } from 'lucide-react';
+import { Search, Check, X, AlertCircle, DollarSign, Download, CreditCard, Mail, Trash2, Save } from 'lucide-react';
 
 interface PaymentLedgerProps {
     pool: BracketPool;
@@ -12,8 +12,27 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
     const [updatingId, setUpdatingId] = useState<string | null>(null);
-    const [selectedMethods, setSelectedMethods] = useState<Record<string, 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Other'>>({});
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [deletingType, setDeletingType] = useState<'ENTRY' | 'USER' | null>(null);
+    const [users, setUsers] = useState<Record<string, User>>({});
+    const [selectedMethods, setSelectedMethods] = useState<Record<string, 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other'>>({});
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const allUsers = await dbService.getAllUsers();
+                const userMap = allUsers.reduce((acc, user) => {
+                    acc[user.id] = user;
+                    return acc;
+                }, {} as Record<string, User>);
+                setUsers(userMap);
+            } catch (error) {
+                console.error("Failed to fetch users:", error);
+            }
+        };
+        fetchUsers();
+    }, []);
 
     const costPerEntry = pool.settings?.entryFee ?? 0;
 
@@ -26,10 +45,38 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
         return matchesSearch && matchesFilter;
     });
 
+    const groupedEntries = useMemo(() => {
+        const grouped = filteredEntries.reduce((acc, entry) => {
+            const uid = entry.ownerUid;
+            if (!acc[uid]) {
+                acc[uid] = {
+                    user: users[uid],
+                    entries: []
+                };
+            }
+            acc[uid].entries.push(entry);
+            return acc;
+        }, {} as Record<string, { user?: User; entries: BracketEntry[] }>);
+        return Object.values(grouped).sort((a, b) => {
+            const nameA = a.user?.name || a.entries[0].ownerUid;
+            const nameB = b.user?.name || b.entries[0].ownerUid;
+            return nameA.localeCompare(nameB);
+        });
+    }, [filteredEntries, users]);
+
     const totalPaid = entries.filter(e => e.paidStatus === 'PAID').length * costPerEntry;
     const totalExpected = entries.length * costPerEntry;
 
-    const handleTogglePayment = async (entryId: string, currentStatus: 'PAID' | 'UNPAID', method?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Other') => {
+    // Calculate totals per payment method
+    const totalsByMethod = useMemo(() => {
+        return entries.filter(e => e.paidStatus === 'PAID').reduce((acc, entry) => {
+            const method = (entry.paymentMethod as string) || 'Unspecified';
+            acc[method] = (acc[method] || 0) + costPerEntry;
+            return acc;
+        }, {} as Record<string, number>);
+    }, [entries, costPerEntry]);
+
+    const handleTogglePayment = async (entryId: string, currentStatus: 'PAID' | 'UNPAID', method?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other') => {
         setUpdatingId(entryId);
         try {
             const newStatus = currentStatus === 'PAID' ? 'UNPAID' : 'PAID';
@@ -45,14 +92,82 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
         }
     };
 
+    const handleUpdateMethod = async (entryId: string, method: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other') => {
+        setUpdatingId(entryId);
+        try {
+            await dbService.updateBracketEntryPayment(pool.id, entryId, 'PAID', method);
+            setMessage({ text: 'Payment method updated', type: 'success' });
+            setSelectedMethods(prev => {
+                const next = { ...prev };
+                delete next[entryId];
+                return next;
+            });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (error) {
+            setMessage({ text: 'Failed to update payment method', type: 'error' });
+            setTimeout(() => setMessage(null), 3000);
+            console.error(error);
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
+    const handleDeleteUser = (uid: string) => {
+        setDeletingId(uid);
+        setDeletingType('USER');
+    };
+
+    const confirmDeleteUser = async (uid: string) => {
+        setUpdatingId(uid);
+        try {
+            const userEntries = entries.filter(e => e.ownerUid === uid);
+            await Promise.all(userEntries.map(e => dbService.deleteBracketEntry(pool.id, e.id)));
+            setMessage({ text: `Successfully deleted user and ${userEntries.length} entries.`, type: 'success' });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (error) {
+            setMessage({ text: 'Failed to delete user entries', type: 'error' });
+            setTimeout(() => setMessage(null), 3000);
+            console.error(error);
+        } finally {
+            setUpdatingId(null);
+            setDeletingId(null);
+            setDeletingType(null);
+        }
+    };
+
+    const handleDeleteEntry = (entryId: string) => {
+        setDeletingId(entryId);
+        setDeletingType('ENTRY');
+    };
+
+    const confirmDeleteEntry = async (entryId: string) => {
+        setUpdatingId(entryId);
+        try {
+            await dbService.deleteBracketEntry(pool.id, entryId);
+            setMessage({ text: 'Entry properly deleted', type: 'success' });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (error) {
+            setMessage({ text: 'Failed to delete entry', type: 'error' });
+            setTimeout(() => setMessage(null), 3000);
+            console.error(error);
+        } finally {
+            setUpdatingId(null);
+            setDeletingId(null);
+            setDeletingType(null);
+        }
+    };
+
     const handleExportCSV = () => {
-        const headers = ['Entry Name', 'Status', 'Paid Status', 'Amount Due', 'Date Created'];
+        const headers = ['Entry Name', 'Owner Email', 'Owner Name', 'Status', 'Paid Status', 'Payment Method', 'Amount Due', 'Date Created'];
         const csvContent = [
             headers.join(','),
             ...filteredEntries.map(e => [
                 `"${e.name.replace(/"/g, '""')}"`,
+                users[e.ownerUid]?.email || 'N/A',
+                `"${(users[e.ownerUid]?.name || 'N/A').replace(/"/g, '""')}"`,
                 e.status,
                 e.paidStatus,
+                e.paymentMethod || 'N/A',
                 `$${costPerEntry}`,
                 new Date(e.createdAt).toLocaleDateString()
             ].join(','))
@@ -71,6 +186,45 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
 
     return (
         <div className="space-y-6">
+            {deletingId && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-4 text-red-400 mb-4">
+                            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                                <AlertCircle size={24} />
+                            </div>
+                            <h3 className="text-xl font-bold">Confirm Deletion</h3>
+                        </div>
+                        <p className="text-slate-300 mb-6">
+                            {deletingType === 'USER'
+                                ? 'Are you sure you want to delete this user and ALL of their entries from the pool? This cannot be undone.'
+                                : 'Are you sure you want to delete this entry? This cannot be undone.'}
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => { setDeletingId(null); setDeletingType(null); }}
+                                className="px-5 py-2.5 rounded-xl font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (deletingType === 'USER') {
+                                        confirmDeleteUser(deletingId);
+                                    } else {
+                                        confirmDeleteEntry(deletingId);
+                                    }
+                                }}
+                                disabled={updatingId !== null}
+                                className="px-5 py-2.5 rounded-xl font-bold bg-red-600 hover:bg-red-500 text-white transition-colors flex items-center gap-2"
+                            >
+                                <Trash2 size={18} />
+                                {updatingId ? 'Deleting...' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {message && (
                 <div className={`px-4 py-3 rounded-xl mb-4 text-sm flex items-center justify-between border animate-in fade-in slide-in-from-bottom-4 ${message.type === 'success' ? 'bg-emerald-900/40 border-emerald-800 text-emerald-300' : 'bg-red-900/40 border-red-800 text-red-300'}`}>
                     <span>{message.text}</span>
@@ -97,7 +251,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
                         <DollarSign size={24} />
@@ -114,6 +268,21 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                     <div>
                         <p className="text-sm text-slate-400">Outstanding</p>
                         <p className="text-2xl font-bold text-white">${totalExpected - totalPaid}</p>
+                    </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-center">
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Collected By Method</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {Object.entries(totalsByMethod).length > 0 ? (
+                            Object.entries(totalsByMethod).map(([method, amount]) => (
+                                <div key={method} className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-300">{method}</span>
+                                    <span className="text-white font-mono">${amount}</span>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-sm text-slate-500 col-span-2">No payments received yet.</div>
+                        )}
                     </div>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
@@ -168,65 +337,132 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
-                            {filteredEntries.map((entry) => (
-                                <tr key={entry.id} className="hover:bg-slate-800/50 transition-colors">
-                                    <td className="p-4">
-                                        <div className="font-bold text-white">{entry.name}</div>
-                                        <div className="text-xs text-slate-500 flex items-center gap-1 mt-1">
-                                            <Mail size={12} /> User ID: {entry.ownerUid.slice(0, 8)}...
-                                        </div>
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${entry.status === 'SUBMITTED' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-400'
-                                            }`}>
-                                            {entry.status}
-                                        </span>
-                                    </td>
-                                    <td className="p-4 text-right">
-                                        <span className="text-white font-mono">${costPerEntry}</span>
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        {entry.paidStatus === 'PAID' ? (
-                                            <div className="flex flex-col items-center gap-1">
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">
-                                                    <Check size={12} /> Paid
-                                                </span>
-                                                {entry.paymentMethod && <span className="text-[10px] text-slate-500">{entry.paymentMethod}</span>}
+                            {groupedEntries.map((group) => (
+                                <React.Fragment key={group.entries[0].ownerUid}>
+                                    <tr className="bg-slate-800/80">
+                                        <td colSpan={6} className="p-3">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 font-bold">
+                                                        {group.user?.name?.charAt(0)?.toUpperCase() || '?'}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-white text-sm">
+                                                            {group.user?.name || 'Unknown User'}
+                                                        </p>
+                                                        <div className="flex items-center gap-3 text-xs text-slate-400">
+                                                            <span className="flex items-center gap-1">
+                                                                <Mail size={12} /> {group.user?.email || 'No email'}
+                                                            </span>
+                                                            {group.user?.email && (
+                                                                <a href={`mailto:${group.user.email}`} className="text-indigo-400 hover:text-indigo-300 transition-colors">
+                                                                    Contact
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 text-sm">
+                                                    <div className="text-slate-400">
+                                                        Entries: <span className="text-white font-bold">{group.entries.length}</span>
+                                                    </div>
+                                                    <div className="text-slate-400">
+                                                        Total Due: <span className="text-white font-bold">${group.entries.length * costPerEntry}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleDeleteUser(group.entries[0].ownerUid)}
+                                                        disabled={updatingId === group.entries[0].ownerUid}
+                                                        className="text-red-400 hover:text-red-300 hover:bg-red-900/40 p-1 rounded transition-colors"
+                                                        title="Delete user and all their entries"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
                                             </div>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/20 text-red-400 text-xs font-bold">
-                                                <X size={12} /> Unpaid
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        <select
-                                            value={selectedMethods[entry.id] || entry.paymentMethod || ''}
-                                            onChange={(e) => setSelectedMethods(prev => ({ ...prev, [entry.id]: e.target.value as 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Other' }))}
-                                            className="bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-2 py-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
-                                            disabled={updatingId === entry.id}
-                                        >
-                                            <option value="" disabled>Select Method</option>
-                                            <option value="Cash">Cash</option>
-                                            <option value="Check">Check</option>
-                                            <option value="Venmo">Venmo</option>
-                                            <option value="Google Pay">Google Pay</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                    </td>
-                                    <td className="p-4 text-right">
-                                        <button
-                                            onClick={() => handleTogglePayment(entry.id, entry.paidStatus, selectedMethods[entry.id] || entry.paymentMethod)}
-                                            disabled={updatingId === entry.id || (entry.paidStatus === 'UNPAID' && !selectedMethods[entry.id] && !entry.paymentMethod)}
-                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 ${entry.paidStatus === 'PAID'
-                                                ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                                                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                                                }`}
-                                        >
-                                            {updatingId === entry.id ? 'Updating...' : (entry.paidStatus === 'PAID' ? 'Mark Unpaid' : 'Mark Paid')}
-                                        </button>
-                                    </td>
-                                </tr>
+                                        </td>
+                                    </tr>
+                                    {group.entries.map((entry) => {
+                                        const hasMethodChanged = selectedMethods[entry.id] && selectedMethods[entry.id] !== entry.paymentMethod;
+                                        return (
+                                            <tr key={entry.id} className="hover:bg-slate-800/50 transition-colors">
+                                                <td className="p-4 pl-10">
+                                                    <div className="font-bold text-white">{entry.name}</div>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${entry.status === 'SUBMITTED' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-400'
+                                                        }`}>
+                                                        {entry.status}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <span className="text-white font-mono">${costPerEntry}</span>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {entry.paidStatus === 'PAID' ? (
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">
+                                                                <Check size={12} /> Paid
+                                                            </span>
+                                                            {entry.paymentMethod && <span className="text-[10px] text-slate-500">{entry.paymentMethod}</span>}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/20 text-red-400 text-xs font-bold">
+                                                            <X size={12} /> Unpaid
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <select
+                                                        value={selectedMethods[entry.id] || entry.paymentMethod || ''}
+                                                        onChange={(e) => setSelectedMethods(prev => ({ ...prev, [entry.id]: e.target.value as 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other' }))}
+                                                        className="bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-2 py-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
+                                                        disabled={updatingId === entry.id}
+                                                    >
+                                                        <option value="" disabled>Select Method</option>
+                                                        <option value="Cash">Cash</option>
+                                                        <option value="Check">Check</option>
+                                                        <option value="Venmo">Venmo</option>
+                                                        <option value="Google Pay">Google Pay</option>
+                                                        <option value="Cash.me">Cash.me</option>
+                                                        <option value="Other">Other</option>
+                                                    </select>
+                                                </td>
+                                                <td className="p-4 text-right flex justify-end gap-2 items-center">
+                                                    {entry.paidStatus === 'PAID' && hasMethodChanged ? (
+                                                        <button
+                                                            onClick={() => handleUpdateMethod(entry.id, selectedMethods[entry.id])}
+                                                            disabled={updatingId === entry.id}
+                                                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 bg-blue-600 hover:bg-blue-500 text-white"
+                                                            title="Save edited payment method"
+                                                        >
+                                                            {updatingId === entry.id ? 'Saving...' : <><Save size={14} /> Save</>}
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleTogglePayment(entry.id, entry.paidStatus, (selectedMethods[entry.id] || entry.paymentMethod) as 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other' | undefined)}
+                                                            disabled={updatingId === entry.id}
+                                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 ${entry.paidStatus === 'PAID'
+                                                                ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                                                                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                                                }`}
+                                                        >
+                                                            {updatingId === entry.id ? 'Updating...' : (entry.paidStatus === 'PAID' ? 'Mark Unpaid' : 'Mark Paid')}
+                                                        </button>
+                                                    )}
+
+                                                    <button
+                                                        onClick={() => handleDeleteEntry(entry.id)}
+                                                        disabled={updatingId === entry.id}
+                                                        className="text-red-400 hover:text-red-300 hover:bg-red-900/40 p-1.5 rounded transition-colors"
+                                                        title="Delete entry"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </React.Fragment>
                             ))}
 
                             {filteredEntries.length === 0 && (
