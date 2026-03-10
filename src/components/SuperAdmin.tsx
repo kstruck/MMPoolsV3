@@ -6,7 +6,7 @@ import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
 import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -274,6 +274,17 @@ export const SuperAdmin: React.FC = () => {
     const handleDeletePool = async (id: string) => {
         if (confirm('Create: Super Delete Pool?')) {
             await dbService.deletePool(id);
+        }
+    };
+
+    const handleClosePool = async (pool: Pool) => {
+        if (!confirm(`Close "${pool.name}"?\n\nThis will mark the pool as COMPLETED, removing it from the "Live" section on participants' My Entries page. This cannot be easily undone.`)) return;
+        try {
+            await dbService.updateBracketPool(pool.id, { status: 'COMPLETED' });
+            alert(`"${pool.name}" has been closed and marked as Completed.`);
+        } catch (e: unknown) {
+            logger.error('Close pool error:', e);
+            alert('Error closing pool: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
@@ -1043,7 +1054,7 @@ export const SuperAdmin: React.FC = () => {
                                                                     <span className="text-xs text-slate-500">{filledDisplay}</span>
                                                                 </div>
                                                             </td>
-                                                            <td className="p-4 flex gap-2">
+                                                            <td className="p-4 flex gap-2 flex-wrap">
                                                                 <button onClick={() => navigate(`/admin/${pool.id}`)} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</button>
                                                                 {!isBracket && (
                                                                     <button onClick={() => handleRunSim(pool as GameState)} className="text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 px-2 py-1 rounded">Sim</button>
@@ -1069,6 +1080,16 @@ export const SuperAdmin: React.FC = () => {
                                                                         title="Lock Pool"
                                                                     >
                                                                         <Lock size={12} /> Lock
+                                                                    </button>
+                                                                )}
+                                                                {/* Close Pool Button — bracket pools that are LOCKED/live */}
+                                                                {isBracket && (pool as unknown as PoolLike).status === 'LOCKED' && (
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); handleClosePool(pool); }}
+                                                                        className="text-orange-400 hover:text-orange-300 text-xs font-bold border border-orange-500/30 px-2 py-1 rounded flex items-center gap-1"
+                                                                        title="Close Pool (mark as Completed)"
+                                                                    >
+                                                                        <CheckCircle size={12} /> Close Pool
                                                                     </button>
                                                                 )}
                                                                 <button onClick={() => handleDeletePool(pool.id)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
