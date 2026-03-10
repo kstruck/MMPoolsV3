@@ -114,7 +114,7 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
             {currentUserId && (
                 <div className="flex justify-end px-2">
                     <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
-                        <div className="w-4 h-4 rounded bg-indigo-900/40 border-l-2 border-indigo-500 flex items-center justify-center"></div>
+                        <div className="w-4 h-4 rounded bg-orange-900/40 border-l-2 border-orange-500 flex items-center justify-center"></div>
                         <span>Your Entries</span>
                     </div>
                 </div>
@@ -141,7 +141,7 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
                             <div
                                 key={entry.id}
                                 onClick={() => onEntryClick?.(entry)}
-                                className={`grid grid-cols-12 gap-4 p-4 items-center transition-colors ${onEntryClick ? 'cursor-pointer hover:bg-white/5' : ''} ${currentUserId && entry.ownerUid === currentUserId ? 'bg-indigo-900/20 border-l-2 border-indigo-500' : ''}`}
+                                className={`grid grid-cols-12 gap-4 p-4 items-center transition-colors ${onEntryClick ? 'cursor-pointer hover:bg-white/5' : ''} ${currentUserId && entry.ownerUid === currentUserId ? 'bg-orange-900/20 border-l-2 border-orange-500' : ''}`}
                             >
                                 <div className="col-span-2 md:col-span-1 flex flex-col items-center justify-center">
                                     <div className="flex items-center gap-1">
