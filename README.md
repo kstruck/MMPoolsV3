@@ -20,12 +20,16 @@ A modern, real-time sports pool application supporting both **NCAA March Madness
 * **How it Works Guide:** **NEW!** Comprehensive, step-by-step interactive guide for new users, accessible directly from the main menu.
 * **User Accounts:** Secure Google Authentication and email registration via Firebase.
 
-### College Basketball (March Madness)
+### College Basketball (March Madness & Conference Tournaments)
 
-* **64-Team Bracket Challenge:** Full support for the Men's NCAA Tournament.
+* **Multi-Tournament Support:** **NEW!** Full support for the Men's NCAA Tournament (6-rounds), Big 12 Tournament (5-rounds, incorporating bye-teams), and Big East Tournament (4-rounds) with dynamic scoring configurations.
+* **Charity Integration:** **NEW!** Built-in charity fundraising options tailored for bracket pools.
+* **BanterBoard & Payment Ledger:** **NEW!** Integrated trash-talk board and detailed payment tracking for pool members.
+* **Upset Bonus Logic:** **NEW!** Configurable extra points for correctly picking lower-seeded upsets.
+* **Export Options:** **NEW!** Export standings to CSV and generated brackets to PDF for easy sharing.
 * **Interactive Builder:** Mobile-friendly bracket picker with drag-and-drop-like ease. 'Smart Fill' features for rapid selection.
 * **Live Scoring:** Round-by-round scoring updates with active leaderboard table.
-* **Live Score Ticker:** **NEW!** Real-time scrolling ticker displaying live game scores, broadcast channels, and game status (powered by ESPN).
+* **Live Score Ticker:** Real-time scrolling ticker displaying live game scores, broadcast channels, and game status (powered by ESPN).
 * **Advanced Analytics:** "Who to Root For" engine calculates win probabilities and rank changes in real-time.
 * **What-If Simulator:** Forecast potential outcomes and standings based on hypothetical results.
 
@@ -110,6 +114,7 @@ A fully integrated mini-game allowing pool managers to create custom prop bets (
 
 ### 🔔 Smart Reminder System & Notifications
 
+* **SMS Notifications:** **NEW!** Users can opt-in to receive critical alerts (like payment reminders or lock warnings) via text message.
 * **Automated Payment Reminders:** Scheduled system that identifies users with unpaid squares and sends focused email reminders.
 * **Game Time Alerts:** Notifies users shortly before the pool locks.
 * **Winner Announcements:** Instant email notifications sent to users when they win a quarter.
@@ -173,7 +178,7 @@ Built-in viral growth mechanism to help pool managers expand their reach.
 
 ### Verification & Compliance
 
-* **Security Audited:** **NEW!** Regular automated dependency scanning and manual code audits to ensure military-grade security.
+* **Security Audited:** **NEW!** Regular automated dependency scanning and manual code audits to ensure military-grade security. Includes patched dependencies and strict Content Security Policies (CSP) for Cloud Functions and client apps.
 * **Google OAuth Verified:** Fully compliant with Google API Services User Data Policy, including "Limited Use" disclosure.
 * **Legal Center:** Integrated Privacy Policy and Terms of Service pages with consistent site navigation and "Back to Home" functionality.
 * **Brand Compliance:** Uses official Google Sign-In branding and color palettes.

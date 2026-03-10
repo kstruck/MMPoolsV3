@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
@@ -1768,7 +1769,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             )}
 
             {/* Printable Bracket View - Hidden on screen, visible when printing */}
-            {viewingEntry && tournament && (shouldShowBrackets || isManager) && (
+            {viewingEntry && tournament && (shouldShowBrackets || isManager) && createPortal(
                 <div
                     id="bracket-print-view"
                     style={{ position: 'absolute', left: '-9999px', top: 0 }}
@@ -1799,7 +1800,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             readOnly={true}
                         />
                     )}
-                </div>
+                </div>,
+                document.body
             )}
 
             {sharingEntry && tournament && (

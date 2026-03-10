@@ -102,15 +102,9 @@ body {
    =========================================== */
 @media print {
 
-  /* When the bracket print view is active, hide everything else */
-  body:has(#bracket-print-view) * {
-    visibility: hidden;
-  }
-
-  /* Show only the bracket print view and ALL its children */
-  body:has(#bracket-print-view) #bracket-print-view,
-  body:has(#bracket-print-view) #bracket-print-view * {
-    visibility: visible !important;
+  /* When the bracket print view is active, hide the main app root */
+  body:has(#bracket-print-view)>#root {
+    display: none !important;
   }
 
   /* Reset backgrounds for printing */
