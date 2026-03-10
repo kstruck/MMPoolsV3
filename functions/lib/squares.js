@@ -76,6 +76,7 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
         });
         transaction.update(poolRef, {
             squares: updatedSquares,
+            participantIds: userId !== "anonymous" ? admin.firestore.FieldValue.arrayUnion(userId) : admin.firestore.FieldValue.arrayUnion("guest"),
             updatedAt: admin.firestore.Timestamp.now()
         });
         // --- AUDIT LOGGING ---

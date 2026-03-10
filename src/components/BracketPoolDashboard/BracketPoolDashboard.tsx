@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
-import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2, ClipboardList, Mail } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2, ClipboardList, Mail } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
@@ -16,7 +16,7 @@ import { PickHistory } from './PickHistory';
 import { WhoToRootFor } from './WhoToRootFor';
 import { WhatIfSimulator } from './WhatIfSimulator';
 import { BracketComparison } from './BracketComparison';
-import { BracketShareModal } from './BracketShareCard';
+// import { BracketShareModal } from './BracketShareCard'; // temporarily disabled - image generation failing
 import { PoolAnalytics } from './PoolAnalytics';
 import { BracketAwards } from './BracketAwards';
 import { ChalkComparison } from './ChalkComparison';
@@ -36,10 +36,10 @@ interface BracketPoolDashboardProps {
     pool: BracketPool;
     user: User | null;
     onBack: () => void;
-    onShare: () => void;
+    onShare?: () => void; // temporarily unused - share feature disabled
 }
 
-export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool, user, onBack, onShare }) => {
+export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool, user, onBack }) => {
     const [searchParams, setSearchParams] = useSearchParams();
 
     // Replace local state with URL params to enable correct browser back-button behavior
@@ -80,9 +80,9 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const [showSuccess, setShowSuccess] = useState(false);
     const [tieBreakerPrediction, setTieBreakerPrediction] = useState<number | undefined>(undefined);
 
-    // Entry Viewing/Sharing Modal
+    // Entry Viewing Modal
     const [viewingEntry, setViewingEntry] = useState<BracketEntry | null>(null);
-    const [sharingEntry, setSharingEntry] = useState<BracketEntry | null>(null);
+    // sharingEntry/setSharingEntry removed - share feature temporarily disabled (image generation failing)
 
     // Create Entry Name Modal
     const [showNameModal, setShowNameModal] = useState(false);
@@ -564,9 +564,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                     <div className="flex gap-2">
                         <ExportControls pool={pool} entries={entries} tournament={tournament} />
-                        <button onClick={onShare} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm">
-                            <Share2 size={16} /> Share
-                        </button>
+                        {/* Share button temporarily hidden - image generation failing */}
                     </div>
                 </div>
             </div>
@@ -793,14 +791,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         <Printer size={16} />
                                                         <span className="hidden sm:inline">View</span>
                                                     </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setSharingEntry(entry); }}
-                                                        className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
-                                                        title="Share"
-                                                    >
-                                                        <Share2 size={16} />
-                                                        <span className="hidden sm:inline">Share</span>
-                                                    </button>
+                                                    {/* Share button temporarily hidden - image generation failing */}
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleEditEntry(entry); }}
                                                         className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold"
@@ -2006,15 +1997,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 document.body
             )}
 
-            {sharingEntry && tournament && (
-                <BracketShareModal
-                    entry={sharingEntry}
-                    tournament={tournament}
-                    poolName={pool.name}
-                    onClose={() => setSharingEntry(null)}
-                    isConference={isConference}
-                />
-            )}
+            {/* BracketShareModal temporarily hidden - image generation failing */}
 
             {/* Create Bracket Name Modal */}
             {showNameModal && (() => {

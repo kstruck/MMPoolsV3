@@ -216,7 +216,7 @@ export const toggleWinnerPaid = onCall(async (request) => {
     // For MVP, just try/catch the helper
     try {
         assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
-    } catch (e) {
+    } catch {
         // Fallback: fetch user doc to check real role if claim missing
         const userDoc = await db.collection('users').doc(uid).get();
         if (userDoc.exists && userDoc.data()?.role === 'SUPER_ADMIN') {
@@ -282,10 +282,19 @@ export const fixParticipantIds = onCall(async (request) => {
             });
         }
 
-        // 2. Playoff Pools / Bracket Pools
+        // 2. Playoff Pools (Legacy entries map)
         if (pool.entries && typeof pool.entries === 'object') {
             Object.values(pool.entries).forEach((entry: any) => {
-                if (entry.userId) participantIds.add(entry.userId);
+                if (entry.userId || entry.ownerUid) participantIds.add(entry.userId || entry.ownerUid);
+            });
+        }
+
+        // 3. Bracket Pools (Subcollection)
+        if (pool.type === 'BRACKET') {
+            const entriesSnap = await doc.ref.collection('entries').get();
+            entriesSnap.docs.forEach(entryDoc => {
+                const entryData = entryDoc.data();
+                if (entryData.ownerUid) participantIds.add(entryData.ownerUid);
             });
         }
 

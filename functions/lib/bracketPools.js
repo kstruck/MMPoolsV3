@@ -201,7 +201,8 @@ exports.joinBracketPool = (0, https_1.onCall)(async (request) => {
     // For now, let's just track in user profile for "My Pools" list logic.
     // Ideally we increment a counter on the pool safely.
     await poolRef.update({
-        participantCount: admin.firestore.FieldValue.increment(1)
+        participantCount: admin.firestore.FieldValue.increment(1),
+        participantIds: admin.firestore.FieldValue.arrayUnion(uid)
     });
     return { success: true };
 });

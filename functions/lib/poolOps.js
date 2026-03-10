@@ -185,7 +185,7 @@ exports.toggleWinnerPaid = (0, https_1.onCall)(async (request) => {
     try {
         (0, exports.assertPoolOwnerOrSuperAdmin)(pool, uid, userRole);
     }
-    catch (e) {
+    catch (_b) {
         // Fallback: fetch user doc to check real role if claim missing
         const userDoc = await db.collection('users').doc(uid).get();
         if (userDoc.exists && ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) === 'SUPER_ADMIN') {
@@ -243,11 +243,20 @@ exports.fixParticipantIds = (0, https_1.onCall)(async (request) => {
                     participantIds.add(sq.reservedByUid);
             });
         }
-        // 2. Playoff Pools / Bracket Pools
+        // 2. Playoff Pools (Legacy entries map)
         if (pool.entries && typeof pool.entries === 'object') {
             Object.values(pool.entries).forEach((entry) => {
-                if (entry.userId)
-                    participantIds.add(entry.userId);
+                if (entry.userId || entry.ownerUid)
+                    participantIds.add(entry.userId || entry.ownerUid);
+            });
+        }
+        // 3. Bracket Pools (Subcollection)
+        if (pool.type === 'BRACKET') {
+            const entriesSnap = await doc.ref.collection('entries').get();
+            entriesSnap.docs.forEach(entryDoc => {
+                const entryData = entryDoc.data();
+                if (entryData.ownerUid)
+                    participantIds.add(entryData.ownerUid);
             });
         }
         // 3. Compare with existing
