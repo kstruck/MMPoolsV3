@@ -1082,8 +1082,8 @@ export const SuperAdmin: React.FC = () => {
                                                                         <Lock size={12} /> Lock
                                                                     </button>
                                                                 )}
-                                                                {/* Close Pool Button — bracket pools that are LOCKED/live */}
-                                                                {isBracket && (pool as unknown as PoolLike).status === 'LOCKED' && (
+                                                                {/* Close Pool Button — any bracket pool not already COMPLETED */}
+                                                                {isBracket && (pool as unknown as PoolLike).status !== 'COMPLETED' && (
                                                                     <button
                                                                         onClick={(e) => { e.stopPropagation(); handleClosePool(pool); }}
                                                                         className="text-orange-400 hover:text-orange-300 text-xs font-bold border border-orange-500/30 px-2 py-1 rounded flex items-center gap-1"
