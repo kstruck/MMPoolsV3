@@ -153,7 +153,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const isManager = isPoolManager(user, pool);
     const userEntries = entries.filter(e => e.ownerUid === user?.id);
     const maxEntriesPerUser = pool.settings?.maxEntriesPerUser || 1;
-    const canCreateMore = userEntries.length < maxEntriesPerUser;
+    const canCreateMore = userEntries.length < maxEntriesPerUser && (pool.status === 'OPEN' || pool.status === 'DRAFT');
 
     // Bracket Visibility Rules: Show brackets only when pool is locked and tournament has started
     const shouldShowBrackets = useMemo(() => {
@@ -1672,16 +1672,38 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             <p className="text-xs text-slate-400 uppercase mb-1">Current Status</p>
                                             <p className="text-lg font-bold text-white">{pool.status}</p>
                                         </div>
-                                        {pool.status !== 'LOCKED' && pool.status !== 'LIVE' && pool.status !== 'COMPLETED' && (
-                                            <button
-                                                onClick={handleLockNow}
-                                                disabled={savingSettings}
-                                                className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
-                                            >
-                                                {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                                                Lock Pool Now
-                                            </button>
-                                        )}
+                                        <div className="flex flex-col gap-2 items-end">
+                                            {pool.status === 'DRAFT' && (
+                                                <button
+                                                    onClick={async () => {
+                                                        setSavingSettings(true);
+                                                        try {
+                                                            await dbService.updateBracketPool(pool.id, { status: 'OPEN' });
+                                                        } catch (err) {
+                                                            logger.error('[BracketPoolDashboard] Error publishing pool:', err);
+                                                            setError('Failed to publish pool.');
+                                                        } finally {
+                                                            setSavingSettings(false);
+                                                        }
+                                                    }}
+                                                    disabled={savingSettings}
+                                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                                >
+                                                    {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />}
+                                                    Publish Pool (Set OPEN)
+                                                </button>
+                                            )}
+                                            {pool.status !== 'LOCKED' && pool.status !== 'LIVE' && pool.status !== 'COMPLETED' && (
+                                                <button
+                                                    onClick={handleLockNow}
+                                                    disabled={savingSettings}
+                                                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                                >
+                                                    {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                                                    Lock Pool Now
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
