@@ -19,7 +19,7 @@ export const PrivacyPage: React.FC<Props> = (props) => {
             {/* Content */}
             <div className="max-w-4xl mx-auto px-6 py-16">
                 <h1 className="text-4xl font-black text-white mb-4">Privacy Policy</h1>
-                <p className="text-slate-400 mb-12">Last Updated: December 13, 2025</p>
+                <p className="text-slate-400 mb-12">Last Updated: March 10, 2026</p>
 
                 <div className="prose prose-invert max-w-none space-y-8">
                     <section>
@@ -34,6 +34,7 @@ export const PrivacyPage: React.FC<Props> = (props) => {
                         <h3 className="text-xl font-bold text-white mb-2 mt-6">2.1 Information You Provide</h3>
                         <ul className="list-disc pl-6 space-y-2 text-slate-300">
                             <li><strong>Account Information:</strong> Name, email address, profile picture</li>
+                            <li><strong>Phone Number:</strong> Mobile phone number (if you opt in to SMS notifications)</li>
                             <li><strong>Pool Information:</strong> Pool settings, participant data, payment records</li>
                             <li><strong>Communications:</strong> Support requests, feedback, and correspondence</li>
                         </ul>
@@ -52,7 +53,8 @@ export const PrivacyPage: React.FC<Props> = (props) => {
                         <ul className="list-disc pl-6 space-y-2 text-slate-300">
                             <li>Provide and maintain our services</li>
                             <li>Process transactions and manage pools</li>
-                            <li>Send service-related notifications</li>
+                            <li>Send service-related notifications (including SMS/text messages, if opted in)</li>
+                            <li>Send account security alerts via SMS when critical changes are made to your account</li>
                             <li>Improve our platform and user experience</li>
                             <li>Prevent fraud and ensure security</li>
                             <li>Comply with legal obligations</li>
@@ -72,6 +74,7 @@ export const PrivacyPage: React.FC<Props> = (props) => {
                         <ul className="list-disc pl-6 space-y-2 text-slate-300">
                             <li><strong>With Your Consent:</strong> When you explicitly authorize us to share information</li>
                             <li><strong>Service Providers:</strong> Third-party services that help us operate (Firebase, Google Analytics) under strict confidentiality agreements</li>
+                            <li><strong>SMS Delivery Partners:</strong> We use Courier and Twilio to deliver text messages. When you opt in to SMS, your phone number is shared with these providers solely for the purpose of delivering messages to you. These providers are contractually bound to use your data only for message delivery</li>
                             <li><strong>Legal Requirements:</strong> When required by law or to protect our legal rights</li>
                             <li><strong>Business Transfers:</strong> In connection with a merger, sale, or acquisition (you will be notified)</li>
                         </ul>
@@ -93,6 +96,7 @@ export const PrivacyPage: React.FC<Props> = (props) => {
                             <li><strong>Deletion:</strong> Request deletion of your account and data</li>
                             <li><strong>Data Portability:</strong> Receive your data in a portable format</li>
                             <li><strong>Opt-Out:</strong> Unsubscribe from marketing communications</li>
+                            <li><strong>SMS Opt-Out:</strong> Stop receiving text messages at any time by replying STOP to any message, or by disabling SMS in your profile settings</li>
                         </ul>
                         <p className="text-slate-300 leading-relaxed mt-4">
                             To exercise these rights, contact us at <a href="mailto:support@marchmeleepools.com" className="text-indigo-400 hover:underline">support@marchmeleepools.com</a>.

@@ -19,7 +19,7 @@ export const TermsPage: React.FC<Props> = (props) => {
             {/* Content */}
             <div className="max-w-4xl mx-auto px-6 py-16">
                 <h1 className="text-4xl font-black text-white mb-4">Terms of Service</h1>
-                <p className="text-slate-400 mb-12">Last Updated: December 13, 2025</p>
+                <p className="text-slate-400 mb-12">Last Updated: March 10, 2026</p>
 
                 <div className="prose prose-invert max-w-none space-y-8">
                     <section>
@@ -79,8 +79,54 @@ export const TermsPage: React.FC<Props> = (props) => {
                         </ul>
                     </section>
 
+                    <section className="bg-sky-900/20 border border-sky-500/30 rounded-xl p-6">
+                        <h2 className="text-2xl font-bold text-white mb-4">5. SMS/Text Messaging Terms</h2>
+                        <p className="text-slate-300 leading-relaxed mb-4">
+                            March Melee Pools offers optional SMS/text message notifications to enhance your experience. By opting in to receive text messages, you agree to the following:
+                        </p>
+
+                        <h3 className="text-xl font-bold text-white mb-2 mt-6">5.1 Consent</h3>
+                        <p className="text-slate-300 leading-relaxed">
+                            By providing your phone number and opting in to SMS notifications in your profile settings, you expressly consent to receive text messages from March Melee Pools at the phone number you provided. Consent is not a condition of purchasing any goods or services.
+                        </p>
+
+                        <h3 className="text-xl font-bold text-white mb-2 mt-6">5.2 Types of Messages</h3>
+                        <p className="text-slate-300 leading-relaxed mb-2">You may receive the following types of text messages:</p>
+                        <ul className="list-disc pl-6 space-y-2 text-slate-300">
+                            <li><strong>Account Security Alerts:</strong> Notifications about changes to your account, such as email address updates or suspicious activity</li>
+                            <li><strong>Pool Reminders:</strong> Deadline reminders for bracket submissions, payment due dates, and pool events</li>
+                            <li><strong>Score Updates:</strong> Real-time updates on pool standings and game results (if enabled by your pool manager)</li>
+                            <li><strong>Administrative Notices:</strong> Important service announcements and updates</li>
+                        </ul>
+
+                        <h3 className="text-xl font-bold text-white mb-2 mt-6">5.3 Message Frequency</h3>
+                        <p className="text-slate-300 leading-relaxed">
+                            Message frequency varies based on your notification preferences and pool activity. During active tournament periods, you may receive multiple messages per day. Outside of tournament periods, message frequency will be minimal.
+                        </p>
+
+                        <h3 className="text-xl font-bold text-white mb-2 mt-6">5.4 Opt-Out</h3>
+                        <p className="text-slate-300 leading-relaxed">
+                            You can opt out of SMS notifications at any time by replying <strong>STOP</strong> to any message, or by disabling SMS notifications in your profile settings. After opting out, you will receive a one-time confirmation message. Reply <strong>START</strong> to re-subscribe.
+                        </p>
+
+                        <h3 className="text-xl font-bold text-white mb-2 mt-6">5.5 Costs</h3>
+                        <p className="text-slate-300 leading-relaxed">
+                            Message and data rates may apply. March Melee Pools does not charge for SMS messages, but your mobile carrier's standard messaging rates will apply. Check with your carrier for details about your plan.
+                        </p>
+
+                        <h3 className="text-xl font-bold text-white mb-2 mt-6">5.6 Help</h3>
+                        <p className="text-slate-300 leading-relaxed">
+                            For help or questions about SMS notifications, reply <strong>HELP</strong> to any message or contact us at <a href="mailto:support@marchmeleepools.com" className="text-indigo-400 hover:underline">support@marchmeleepools.com</a>.
+                        </p>
+
+                        <h3 className="text-xl font-bold text-white mb-2 mt-6">5.7 Carrier Disclaimer</h3>
+                        <p className="text-slate-300 leading-relaxed">
+                            Carriers are not liable for delayed or undelivered messages. March Melee Pools is not responsible for messages that are not delivered due to carrier network issues or device incompatibility.
+                        </p>
+                    </section>
+
                     <section>
-                        <h2 className="text-2xl font-bold text-white mb-4">5. Pool Management</h2>
+                        <h2 className="text-2xl font-bold text-white mb-4">6. Pool Management</h2>
                         <p className="text-slate-300 leading-relaxed mb-4">
                             Pool managers ("Managers") have the following responsibilities:
                         </p>
@@ -96,14 +142,14 @@ export const TermsPage: React.FC<Props> = (props) => {
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-bold text-white mb-4">6. Intellectual Property</h2>
+                        <h2 className="text-2xl font-bold text-white mb-4">7. Intellectual Property</h2>
                         <p className="text-slate-300 leading-relaxed">
                             The Service and its original content, features, and functionality are owned by March Melee Pools and are protected by international copyright, trademark, and other intellectual property laws.
                         </p>
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-bold text-white mb-4">7. Limitation of Liability</h2>
+                        <h2 className="text-2xl font-bold text-white mb-4">8. Limitation of Liability</h2>
                         <p className="text-slate-300 leading-relaxed mb-4">
                             To the maximum extent permitted by law, March Melee Pools shall not be liable for:
                         </p>
@@ -120,35 +166,35 @@ export const TermsPage: React.FC<Props> = (props) => {
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-bold text-white mb-4">8. Disclaimer of Warranties</h2>
+                        <h2 className="text-2xl font-bold text-white mb-4">9. Disclaimer of Warranties</h2>
                         <p className="text-slate-300 leading-relaxed">
                             The Service is provided "as is" and "as available" without warranties of any kind, either express or implied. We do not guarantee that the Service will be uninterrupted, secure, or error-free.
                         </p>
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-bold text-white mb-4">9. Dispute Resolution</h2>
+                        <h2 className="text-2xl font-bold text-white mb-4">10. Dispute Resolution</h2>
                         <p className="text-slate-300 leading-relaxed">
                             Any disputes arising from these Terms or the Service shall be resolved through binding arbitration in accordance with the laws of the jurisdiction where March Melee Pools is registered, except where prohibited by law.
                         </p>
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-bold text-white mb-4">10. Termination</h2>
+                        <h2 className="text-2xl font-bold text-white mb-4">11. Termination</h2>
                         <p className="text-slate-300 leading-relaxed">
                             We reserve the right to terminate or suspend your account and access to the Service at our sole discretion, without notice, for conduct that we believe violates these Terms or is harmful to other users or the Service.
                         </p>
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-bold text-white mb-4">11. Changes to Terms</h2>
+                        <h2 className="text-2xl font-bold text-white mb-4">12. Changes to Terms</h2>
                         <p className="text-slate-300 leading-relaxed">
                             We reserve the right to modify these Terms at any time. Material changes will be notified via email or a prominent notice on the Service. Continued use after changes constitutes acceptance of the modified Terms.
                         </p>
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-bold text-white mb-4">12. Contact Information</h2>
+                        <h2 className="text-2xl font-bold text-white mb-4">13. Contact Information</h2>
                         <p className="text-slate-300 leading-relaxed">
                             For questions about these Terms, please contact:
                         </p>
