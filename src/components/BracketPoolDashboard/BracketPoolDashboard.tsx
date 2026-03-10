@@ -341,6 +341,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         setActiveEntryId(entry.id);
         setPicks(entry.picks || {});
         setEntryName(entry.name);
+        setTieBreakerPrediction(entry.tieBreakerPrediction);
         setIsCreating(true);
     }, []);
 
@@ -357,6 +358,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             if (result.success && result.entryId) {
                 setActiveEntryId(result.entryId);
                 setPicks({});
+                setTieBreakerPrediction(undefined);
             } else {
                 setError(result.message || 'Failed to create entry');
             }
@@ -396,6 +398,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 setActiveEntryId(null);
                 setPicks({});
                 setEntryName('');
+                setTieBreakerPrediction(undefined);
                 setShowSuccess(true);
                 setTimeout(() => setShowSuccess(false), 3000);
             } else {
@@ -702,7 +705,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
                                     <div className="flex gap-2">
                                         <button
-                                            onClick={() => { setIsCreating(false); setActiveEntryId(null); setPicks({}); }}
+                                            onClick={() => { setIsCreating(false); setActiveEntryId(null); setPicks({}); setTieBreakerPrediction(undefined); }}
                                             className="text-slate-400 hover:text-white px-3 py-2 rounded text-sm"
                                         >
                                             Cancel
