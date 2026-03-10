@@ -3,6 +3,8 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { BracketPool, BracketEntry } from "./types";
 import { Timestamp } from "firebase-admin/firestore";
+import { sendEmail } from "./reminders";
+import { renderEmailHtml, BASE_URL } from "./emailStyles";
 
 
 
@@ -220,6 +222,42 @@ export const submitBracketEntry = onCall(async (request) => {
             timestamp: Timestamp.now().toMillis()
         });
     });
+
+    try {
+        const userRec = await admin.auth().getUser(uid);
+        if (userRec.email) {
+            const poolDoc = await admin.firestore().collection("pools").doc(poolId).get();
+            const poolData = poolDoc.data();
+
+            if (poolData) {
+                const finalEntryName = (request.data.name && typeof request.data.name === 'string' && request.data.name.trim().length > 0) ? request.data.name.trim() : "Your Bracket";
+
+                const emailHtml = renderEmailHtml(`
+                    <p>Hi ${userRec.displayName || 'there'},</p>
+                    <p>Your bracket entry <strong>${finalEntryName}</strong> for the pool <strong>${poolData.name}</strong> has been successfully submitted!</p>
+                    <p>You can view your picks and track your performance here:</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${BASE_URL}/pool/${poolId}" style="display: inline-block; padding: 12px 24px; background-color: #fca311; color: #14213d; text-decoration: none; border-radius: 4px; font-weight: bold;">View My Bracket</a>
+                    </div>
+                    <p>Good luck!</p>
+                `, "Bracket Submitted");
+
+                await sendEmail(
+                    db,
+                    userRec.email,
+                    `Bracket Submitted: ${finalEntryName}`,
+                    emailHtml,
+                    {
+                        type: "bracket_submitted",
+                        poolId,
+                        uid
+                    }
+                );
+            }
+        }
+    } catch (e) {
+        console.error("Failed to send bracket submission email:", e);
+    }
 
     return { success: true };
 });
