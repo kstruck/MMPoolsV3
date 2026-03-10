@@ -155,13 +155,12 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const maxEntriesPerUser = pool.settings?.maxEntriesPerUser || 1;
     const canCreateMore = userEntries.length < maxEntriesPerUser && (pool.status === 'OPEN' || pool.status === 'DRAFT');
 
-    // Bracket Visibility Rules: Show brackets only when pool is locked and tournament has started
+    // Bracket Visibility Rules: Show brackets to all once pool is locked
     const shouldShowBrackets = useMemo(() => {
         if (isManager) return true;
-        const isLocked = pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED';
-        const tournamentStarted = tournament?.games ? Object.values(tournament.games).some(g => g.winnerTeamId) : false;
-        return isLocked && tournamentStarted;
-    }, [pool.status, tournament, isManager]);
+        // Once locked, live, or completed — entries are visible to everyone
+        return pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED';
+    }, [pool.status, isManager]);
 
     const championshipGameId = useMemo(() => {
         if (!tournament) return null;
@@ -178,7 +177,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     const handleViewEntry = useCallback((entry: BracketEntry) => {
         if (entry.ownerUid !== user?.id && !isManager && !shouldShowBrackets) {
-            alert("This bracket is hidden until the pool locks and the tournament begins.");
+            alert("This bracket is hidden until the pool is locked.");
             return;
         }
         setViewingEntry(entry);
