@@ -12,23 +12,29 @@ function generateDigits(): number[] {
 }
 
 // --- DEDICATED AUTO-LOCK SCHEDULER (Runs Every 1 Minute) ---
-export const autoLockPools = functions.scheduler.onSchedule("every 1 minutes", async (event) => {
+export const autoLockPools = functions.scheduler.onSchedule("every 1 minutes", async (_event) => {
     const now = Date.now();
     console.log(`[AutoLock] Starting auto-lock check at ${new Date(now).toISOString()}`);
 
     try {
-        // Query only pools that:
-        // 1. Have auto-lock enabled
-        // 2. Are not yet locked
-        // 3. Have a lockAt time
-        const poolsSnapshot = await db.collection("pools")
+        // Query SQUARES pools (legacy path — reminders.lock.enabled)
+        const squaresSnapshot = await db.collection("pools")
             .where("reminders.lock.enabled", "==", true)
             .where("isLocked", "==", false)
             .get();
 
-        console.log(`[AutoLock] Found ${poolsSnapshot.size} unlocked pools with auto-lock enabled`);
+        // Query BRACKET pools — these use a root-level lockAt field and status
+        // They don't require reminders.lock.enabled; any pool with a lockAt should auto-lock.
+        const bracketSnapshot = await db.collection("pools")
+            .where("type", "==", "BRACKET")
+            .where("status", "in", ["DRAFT", "OPEN"])
+            .where("lockAt", "<=", now + 30000)
+            .get();
 
-        for (const doc of poolsSnapshot.docs) {
+        console.log(`[AutoLock] Found ${squaresSnapshot.size} SQUARES pools, ${bracketSnapshot.size} BRACKET pools ready to lock`);
+
+        // Process SQUARES pools
+        for (const doc of squaresSnapshot.docs) {
             try {
                 const pool = { id: doc.id, ...doc.data() } as GameState;
 
@@ -44,14 +50,41 @@ export const autoLockPools = functions.scheduler.onSchedule("every 1 minutes", a
                     continue;
                 }
 
-                // Check if it's time to lock (with 30 second buffer to handle any delays)
                 const msUntilLock = lockAtNum - now;
-                if (msUntilLock <= 30000) { // Lock if within 30 seconds or past
-                    console.log(`[AutoLock] Locking pool ${pool.id} (lockAt: ${new Date(lockAtNum).toISOString()}, now: ${new Date(now).toISOString()})`);
+                if (msUntilLock <= 30000) {
+                    console.log(`[AutoLock] Locking SQUARES pool ${pool.id} (lockAt: ${new Date(lockAtNum).toISOString()})`);
                     await executeAutoLock(pool);
                 }
             } catch (poolError: any) {
-                console.error(`[AutoLock] Error processing pool ${doc.id}:`, poolError);
+                console.error(`[AutoLock] Error processing SQUARES pool ${doc.id}:`, poolError);
+            }
+        }
+
+        // Process BRACKET pools
+        for (const doc of bracketSnapshot.docs) {
+            try {
+                const pool = { id: doc.id, ...doc.data() } as GameState;
+
+                // Read root-level lockAt (stored as ms timestamp)
+                const rawLockAt = (pool as any).lockAt;
+                if (!rawLockAt) continue;
+
+                const lockAtNum = typeof rawLockAt === 'number'
+                    ? rawLockAt
+                    : (rawLockAt as any)?.toMillis?.() || new Date(rawLockAt as any).getTime();
+
+                if (isNaN(lockAtNum)) {
+                    console.warn(`[AutoLock] Invalid lockAt for BRACKET pool ${pool.id}:`, rawLockAt);
+                    continue;
+                }
+
+                const msUntilLock = lockAtNum - now;
+                if (msUntilLock <= 30000) {
+                    console.log(`[AutoLock] Locking BRACKET pool ${pool.id} (lockAt: ${new Date(lockAtNum).toISOString()})`);
+                    await executeAutoLock(pool);
+                }
+            } catch (poolError: any) {
+                console.error(`[AutoLock] Error processing BRACKET pool ${doc.id}:`, poolError);
             }
         }
 
@@ -60,6 +93,7 @@ export const autoLockPools = functions.scheduler.onSchedule("every 1 minutes", a
         console.error(`[AutoLock] Critical error:`, error);
     }
 });
+
 
 // --- EXECUTE AUTO LOCK ---
 async function executeAutoLock(pool: GameState) {

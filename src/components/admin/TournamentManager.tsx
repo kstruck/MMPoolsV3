@@ -1,7 +1,7 @@
 import { logger } from '../../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { getFirestore, doc, onSnapshot, updateDoc, collection, getDocs } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, updateDoc, collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import {
     Trophy, Download, RefreshCw, AlertTriangle, Check,
     Calendar, Users, Activity, Clock
@@ -194,10 +194,39 @@ export const TournamentManager: React.FC = () => {
         try {
             const db = getFirestore();
             const lockAtMs = new Date(editLockAt).getTime();
+
+            // 1. Save lock date to the tournament doc
             await updateDoc(doc(db, 'tournaments', selectedTournamentId), {
                 lockAt: lockAtMs,
             });
-            setSuccessMsg(`Lock date updated to ${new Date(lockAtMs).toLocaleString()}`);
+
+            // 2. Propagate lockAt to all bracket pools linked to this tournament
+            //    so the autoLock cloud function will pick them up automatically.
+            const linkedPoolsSnap = await getDocs(
+                query(
+                    collection(db, 'pools'),
+                    where('tournamentId', '==', selectedTournamentId),
+                    where('type', '==', 'BRACKET')
+                )
+            );
+
+            if (!linkedPoolsSnap.empty) {
+                const batch = writeBatch(db);
+                linkedPoolsSnap.forEach((poolDoc) => {
+                    const poolData = poolDoc.data();
+                    // Only update pools that aren't already locked
+                    if (poolData.status !== 'LOCKED' && poolData.status !== 'COMPLETED') {
+                        batch.update(poolDoc.ref, { lockAt: lockAtMs });
+                    }
+                });
+                await batch.commit();
+                setSuccessMsg(
+                    `Lock date updated to ${new Date(lockAtMs).toLocaleString()}. ` +
+                    `Synced to ${linkedPoolsSnap.size} linked bracket pool(s).`
+                );
+            } else {
+                setSuccessMsg(`Lock date updated to ${new Date(lockAtMs).toLocaleString()}. No linked bracket pools found.`);
+            }
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to update lock date');
         } finally {

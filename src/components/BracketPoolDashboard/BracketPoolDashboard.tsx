@@ -1638,8 +1638,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
 
                                     {/* Section 8: Dates & Deadlines */}
-                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
-                                        <button onClick={() => toggleSection('dates')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
+                                    <div className="border border-slate-800 rounded-lg">
+                                        <button onClick={() => toggleSection('dates')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors rounded-lg">
                                             <span className="flex items-center gap-2 text-sm font-bold text-white"><Lock size={14} className="text-cyan-400" /> Dates & Deadlines</span>
                                             {openSections.dates ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                         </button>
