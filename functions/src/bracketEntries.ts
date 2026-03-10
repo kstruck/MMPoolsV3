@@ -81,9 +81,10 @@ export const createBracketEntry = onCall(async (request) => {
 
         transaction.set(newEntryRef, newEntry);
 
-        // Increment pool entry count
+        // Increment pool entry count and add user to participantIds
         transaction.update(poolRef, {
-            entryCount: admin.firestore.FieldValue.increment(1)
+            entryCount: admin.firestore.FieldValue.increment(1),
+            participantIds: admin.firestore.FieldValue.arrayUnion(uid)
         });
 
         return newEntryRef.id;

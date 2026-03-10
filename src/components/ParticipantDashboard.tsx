@@ -22,6 +22,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const [activeTab, setActiveTab] = useState<'all' | 'open' | 'live' | 'completed'>('live');
     const [searchQuery, setSearchQuery] = useState('');
     const [poolWinners, setPoolWinners] = useState<Record<string, Winner[]>>({});
+    const [bracketEntryCounts, setBracketEntryCounts] = useState<Record<string, number>>({});
 
     useEffect(() => {
         setIsLoading(true);
@@ -114,6 +115,47 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         };
     }, [user.id, user.role]);
 
+    useEffect(() => {
+        let isMounted = true;
+        const fetchCounts = async () => {
+            const newCounts: Record<string, number> = {};
+            for (const pool of myPools) {
+                if (pool.type === 'BRACKET') {
+                    try {
+                        const entries = await dbService.getBracketEntries(pool.id);
+                        newCounts[pool.id] = entries.filter((e: any) => e.ownerUid === user.id).length;
+                    } catch (e) {
+                        logger.error('Failed to fetch bracket entries for pool', pool.id);
+                    }
+                }
+            }
+            if (isMounted) {
+                setBracketEntryCounts(newCounts);
+            }
+        };
+        if (myPools.some(p => p.type === 'BRACKET')) {
+            fetchCounts();
+        }
+        return () => { isMounted = false; };
+    }, [myPools, user.id]);
+
+    const getPoolTabStatus = (pool: Pool): 'open' | 'live' | 'completed' => {
+        if (pool.type === 'BRACKET') {
+            const bPool = pool as BracketPool;
+            const isCompleted = bPool.status === 'COMPLETED';
+            const isLive = bPool.status === 'LOCKED' || (bPool.lockAt > 0 && Date.now() >= bPool.lockAt && !isCompleted);
+            if (isCompleted) return 'completed';
+            if (isLive) return 'live';
+            return 'open';
+        } else {
+            const isCompleted = (pool as GameState).scores?.gameStatus === 'post';
+            const isLocked = (pool as GameState).isLocked;
+            if (isCompleted) return 'completed';
+            if (isLocked) return 'live';
+            return 'open';
+        }
+    };
+
     const lifetimeStats = useMemo(() => {
         let totalSquares = 0;
         let totalWinnings = 0;
@@ -142,6 +184,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 totalSquares += myEntries.length; // Count entries as "squares" for now
 
                 // Playoff winners logic (TODO: Implement if needed, currently N/A or different)
+            } else if (pool.type === 'BRACKET') {
+                const counts = bracketEntryCounts[pool.id] || 0;
+                totalSquares += counts; // Count entries as "squares"
             }
         });
 
@@ -167,16 +212,11 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             if (!matchesSearch) return false;
 
             // 2. Tab Status Filter
-            const scores = (pool as GameState).scores;
-            const isLocked = (pool as GameState).isLocked;
+            const status = getPoolTabStatus(pool);
 
-            const isCompleted = scores?.gameStatus === 'post';
-            const isLive = isLocked && !isCompleted;
-            const isOpen = !isLocked;
-
-            if (activeTab === 'open') return isOpen;
-            if (activeTab === 'live') return isLive;
-            if (activeTab === 'completed') return isCompleted;
+            if (activeTab === 'open') return status === 'open';
+            if (activeTab === 'live') return status === 'live';
+            if (activeTab === 'completed') return status === 'completed';
 
             return true; // 'all'
         });
@@ -184,18 +224,17 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     // Counts for Tabs
     const counts = useMemo(() => {
-        const open = myPools.filter(p => !(p as GameState).isLocked).length;
-        const completed = myPools.filter(p => (p as GameState).scores?.gameStatus === 'post').length;
-        const live = myPools.filter(p => (p as GameState).isLocked && (p as GameState).scores?.gameStatus !== 'post').length;
+        const open = myPools.filter(p => getPoolTabStatus(p) === 'open').length;
+        const completed = myPools.filter(p => getPoolTabStatus(p) === 'completed').length;
+        const live = myPools.filter(p => getPoolTabStatus(p) === 'live').length;
         return { all: myPools.length, open, live, completed };
     }, [myPools]);
 
     const getStatusBadge = (pool: Pool) => {
-        const status = (pool as GameState).scores?.gameStatus;
-        const isLocked = (pool as GameState).isLocked;
+        const tabStatus = getPoolTabStatus(pool);
 
-        if (status === 'post') return <span className="bg-slate-700 text-slate-300 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Completed</span>;
-        if (isLocked) return <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider animate-pulse">Live Now</span>;
+        if (tabStatus === 'completed') return <span className="bg-slate-700 text-slate-300 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Completed</span>;
+        if (tabStatus === 'live') return <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider animate-pulse">Live Now</span>;
         return <span className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Open</span>;
     };
 
@@ -340,7 +379,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 const entries = pPool.entries ? Object.values(pPool.entries) : [];
                                 userEntryCount = entries.filter(e => e.userId === user.id).length;
                                 percentFull = 0; // No "full" concept yet for bracket
-                                costDisplay = pPool.settings?.entryFee ? `$${pPool.settings.entryFee} Entry` : 'Free';
+                                costDisplay = pPool.settings?.entryFee ? `${pPool.settings.entryFee} Entry` : 'Free';
+                            } else if (pool.type === 'BRACKET') {
+                                const bPool = pool as BracketPool;
+                                userEntryCount = bracketEntryCounts[pool.id] || 0;
+                                percentFull = 0;
+                                costDisplay = bPool.settings?.entryFee ? `${bPool.settings.entryFee} Entry` : 'Free';
                             }
 
                             return (
