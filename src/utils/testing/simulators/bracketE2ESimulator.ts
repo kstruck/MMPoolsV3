@@ -106,7 +106,7 @@ export async function runE2EBracketSimulation(config: {
             slugLower: `e2e-bracket-test-${now}`,
             isListedPublic: false,
             lockAt: now - 3600000, // Already locked
-            status: 'PUBLISHED', // CF overrides to DRAFT — we'll update after
+            status: 'OPEN', // CF overrides to DRAFT — we'll update after
             seasonYear: 2025,
             gender: 'mens',
             tournamentId: 'mens-2025',

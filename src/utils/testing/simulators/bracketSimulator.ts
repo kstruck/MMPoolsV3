@@ -77,7 +77,7 @@ export async function runScenario(
             slugLower: `test-bracket-${now}`,
             seasonYear: settings?.seasonYear || 2025,
             gender: settings?.gender || 'mens',
-            status: 'PUBLISHED',
+            status: 'OPEN',
             isListedPublic: false,
             lockAt: now - 3600000, // Already locked (1hr ago)
             settings: {
