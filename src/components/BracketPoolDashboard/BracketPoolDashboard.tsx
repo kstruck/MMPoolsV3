@@ -724,25 +724,23 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
                                 </div>
                                 {/* Tiebreaker Input */}
-                                {pool.settings.tieBreakers && (
-                                    <div className="px-4 pb-2">
-                                        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                                            <div className="flex-1">
-                                                <label className="text-sm font-bold text-amber-400 block mb-1">🏆 Tiebreaker</label>
-                                                <p className="text-xs text-slate-400">Predict the total combined score of the championship game.</p>
-                                            </div>
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                max={500}
-                                                value={tieBreakerPrediction ?? ''}
-                                                onChange={(e) => setTieBreakerPrediction(e.target.value ? parseInt(e.target.value) : undefined)}
-                                                placeholder="e.g. 145"
-                                                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white w-32 text-center font-mono text-lg focus:outline-none focus:border-amber-500"
-                                            />
+                                <div className="px-4 pb-2">
+                                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                        <div className="flex-1">
+                                            <label className="text-sm font-bold text-amber-400 block mb-1">🏆 Tiebreaker</label>
+                                            <p className="text-xs text-slate-400">Predict the total combined score of the championship game.</p>
                                         </div>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={500}
+                                            value={tieBreakerPrediction ?? ''}
+                                            onChange={(e) => setTieBreakerPrediction(e.target.value ? parseInt(e.target.value) : undefined)}
+                                            placeholder="e.g. 145"
+                                            className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white w-32 text-center font-mono text-lg focus:outline-none focus:border-amber-500"
+                                        />
                                     </div>
-                                )}
+                                </div>
                                 <div className="p-4 overflow-x-auto">
                                     {tournament ? (
                                         isConference ? (

@@ -38,20 +38,21 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
         const champCounts: Record<string, number> = {};
         const f4Counts: Record<string, number> = {};
 
+        const gamesList = Object.values(tournament.games);
+        const maxRound = gamesList.reduce((max, g) => Math.max(max, g.round), 0);
+
         // Identify slots
         const champSlots = Object.values(tournament.slots).filter(s => {
             const game = tournament.games[s.gameId];
-            // Round 6 = Championship Game
-            return game && game.round === 6;
+            // Championship Game
+            return game && game.round === maxRound;
         });
 
         const f4Slots = Object.values(tournament.slots).filter(s => {
             const game = tournament.games[s.gameId];
-            // Round 4 winners -> Final Four participants
-            // Wait, the "Final Four" are the 4 teams that play in Round 5.
-            // So they are the winners of Round 4 games.
-            // So we look at picks for Round 4 slots.
-            return game && game.round === 4;
+            // For NCAA (6 rounds): winners of Round 4 (Elite 8) advance to Final Four
+            // For Conference (e.g. 5 rounds): winners of Round 3 (QF) advance to Semis
+            return game && game.round === Math.max(1, maxRound - 2);
         });
 
         entries.forEach(entry => {
@@ -91,8 +92,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
     const handleDownloadCSV = () => {
         if (!tournament) return;
 
+        const gamesList = Object.values(tournament.games);
+        const maxRound = gamesList.reduce((max, g) => Math.max(max, g.round), 0);
+
         // Header
-        const rounds = ['R64', 'R32', 'S16', 'E8', 'F4', 'Champ'];
+        const rounds = Array.from({ length: maxRound }, (_, i) => `Round ${i + 1}`);
         const header = ['Entry Name', 'Owner', 'Total Score', 'Max Possible', ...rounds, 'Champion Pick'];
 
         // Rows
@@ -100,7 +104,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
             const roundScores = d.result.roundBreakdown.map(r => r.points);
 
             // Find Champ Pick
-            const champSlot = Object.values(tournament.slots).find(s => tournament.games[s.gameId]?.round === 6);
+            const champSlot = Object.values(tournament.slots).find(s => tournament.games[s.gameId]?.round === maxRound);
             const champPick = champSlot ? d.entry.picks[champSlot.id] : '-';
 
             return [
@@ -175,12 +179,12 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                                     <th className="p-4">Entry</th>
                                     <th className="p-4 text-center">Total</th>
                                     <th className="p-4 text-center text-slate-600">Max</th>
-                                    <th className="p-4 text-center border-l border-slate-800">R64</th>
-                                    <th className="p-4 text-center">R32</th>
-                                    <th className="p-4 text-center">S16</th>
-                                    <th className="p-4 text-center">E8</th>
-                                    <th className="p-4 text-center">F4</th>
-                                    <th className="p-4 text-center">Champ</th>
+                                    <th className="p-4 text-center border-l border-slate-800">Round 1</th>
+                                    <th className="p-4 text-center">Round 2</th>
+                                    <th className="p-4 text-center">Round 3</th>
+                                    <th className="p-4 text-center">Round 4</th>
+                                    <th className="p-4 text-center">Round 5</th>
+                                    <th className="p-4 text-center">Round 6</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800">
