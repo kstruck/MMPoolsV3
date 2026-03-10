@@ -94,9 +94,12 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             const data: { events: Game[] } = await response.json();
             let fetchedGames = data.events || [];
 
-            // For basketball, filter out games that do not feature an AP Top 25 team
+            // For basketball, always include LIVE games + any game featuring an AP Top 25 team
             if (activeTab === 'basketball') {
                 fetchedGames = fetchedGames.filter(game => {
+                    // Always show live (in-progress) games regardless of ranking
+                    if (game.status.type.state === 'in') return true;
+                    // For completed/upcoming, only show if a Top 25 team is involved
                     const competitors = game.competitions?.[0]?.competitors || [];
                     return competitors.some(c =>
                         c.curatedRank?.current && c.curatedRank.current >= 1 && c.curatedRank.current <= 25
