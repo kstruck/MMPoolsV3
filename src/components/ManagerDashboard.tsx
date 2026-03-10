@@ -83,22 +83,27 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                 let isClosed = false;
                 let isLive = false;
                 let isLocked = false;
+                let isOpen = false;
 
                 if (p.type === 'BRACKET') {
+                    isOpen = p.status === 'OPEN' || p.status === 'DRAFT';
+                    isLocked = p.status === 'LOCKED';
+                    isLive = p.status === 'LIVE';
                     isClosed = p.status === 'COMPLETED';
-                    isLocked = p.status === 'LOCKED' || p.status === 'COMPLETED';
                 } else if (p.type === 'SQUARES') {
                     isClosed = p.scores?.gameStatus === 'post';
                     isLive = p.scores?.gameStatus === 'in';
                     isLocked = p.isLocked;
+                    isOpen = !p.isLocked;
                 } else {
                     isClosed = false;
                     isLive = false;
                     isLocked = p.isLocked || false;
+                    isOpen = !isLocked;
                 }
 
-                if (filterStatus === 'open' && isLocked) return false;
-                if (filterStatus === 'locked' && (!isLocked || isLive || isClosed)) return false;
+                if (filterStatus === 'open' && !isOpen) return false;
+                if (filterStatus === 'locked' && !isLocked) return false;
                 if (filterStatus === 'live' && !isLive) return false;
                 if (filterStatus === 'final' && !isClosed) return false;
             }
@@ -327,7 +332,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                 <div className="space-y-2">
                                     {[
                                         { id: 'all', label: 'All Pools', count: pools.length },
-                                        { id: 'open', label: 'Open for Entry', count: pools.filter(p => p.type === 'BRACKET' ? p.status === 'PUBLISHED' : !(p as GameState).isLocked).length },
+                                        { id: 'open', label: 'Open for Entry', count: pools.filter(p => p.type === 'BRACKET' ? (p.status === 'OPEN' || p.status === 'DRAFT') : !(p as GameState).isLocked).length },
                                         { id: 'live', label: 'Live Now', count: pools.filter(p => p.type === 'SQUARES' && (p as GameState).scores?.gameStatus === 'in').length },
                                         { id: 'final', label: 'Completed', count: pools.filter(p => p.type === 'BRACKET' ? p.status === 'COMPLETED' : p.type === 'SQUARES' && (p as GameState).scores?.gameStatus === 'post').length },
                                     ].map((stat) => (
@@ -448,7 +453,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                             homeTeam = 'Tournament';
                                             awayTeam = 'Bracket';
                                             cost = pool.settings.entryFee;
-                                            isLocked = pool.status !== 'DRAFT' && pool.status !== 'PUBLISHED';
+                                            isLocked = pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED';
                                         } else if (pool.type === 'SQUARES') {
                                             filled = pool.squares?.filter(s => s.owner).length || 0;
                                             pct = Math.round((filled / 100) * 100);

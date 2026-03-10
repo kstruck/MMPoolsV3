@@ -594,7 +594,7 @@ export interface BracketPool {
   isListedPublic: boolean;
   passwordHash?: string; // If protected
   lockAt: number; // Timestamp
-  status: 'DRAFT' | 'PUBLISHED' | 'LOCKED' | 'COMPLETED';
+  status: 'DRAFT' | 'OPEN' | 'LOCKED' | 'LIVE' | 'COMPLETED';
 
   settings: {
     maxEntriesTotal: number; // -1 for unlimited

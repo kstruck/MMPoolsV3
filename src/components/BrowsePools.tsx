@@ -74,20 +74,20 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
             // Status Filter
             if (filterStatus !== 'all') {
                 if (filterStatus === 'open') {
-                    // Open = Not Locked (Squares) or Published (Bracket)
-                    if (isBracket && (p as BracketPool).status !== 'PUBLISHED') return false;
+                    // Open = OPEN status (Bracket) or Not Locked (Squares)
+                    if (isBracket && (p as BracketPool).status !== 'OPEN') return false;
                     if (isSquares && (p as GameState).isLocked) return false;
                 } else if (filterStatus === 'live') {
-                    // Live = Locked + In Progress
+                    // Live = LIVE status (Bracket) or In-Progress (Squares)
                     if (isBracket) {
-                        if ((p as BracketPool).status !== 'LOCKED') return false;
+                        if ((p as BracketPool).status !== 'LIVE' && (p as BracketPool).status !== 'LOCKED') return false;
                     } else {
                         const s = p as GameState;
                         const isLive = s.isLocked && s.scores?.gameStatus === 'in';
                         if (!isLive) return false;
                     }
                 } else if (filterStatus === 'closed') {
-                    // Closed = Complete
+                    // Closed = COMPLETED status (Bracket) or Post-game (Squares)
                     if (isBracket) {
                         if ((p as BracketPool).status !== 'COMPLETED') return false;
                     } else {
@@ -298,7 +298,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     homeTeam = 'Tournament';
                                     awayTeam = 'Bracket';
                                     cost = bp.settings.entryFee;
-                                    isLocked = bp.status !== 'DRAFT' && bp.status !== 'PUBLISHED';
+                                    isLocked = bp.status === 'LOCKED' || bp.status === 'LIVE' || bp.status === 'COMPLETED';
                                 } else if (pool.type === 'NFL_PLAYOFFS') {
                                     const pp = pool as PlayoffPool;
                                     filled = Object.keys(pp.entries || {}).length;

@@ -35,8 +35,11 @@ export const createBracketEntry = onCall(async (request) => {
 
         const poolData = poolDoc.data() as BracketPool;
 
-        // Check lock status
-        if (poolData.status === 'LOCKED' || poolData.status === 'COMPLETED' || (poolData.lockAt > 0 && Date.now() > poolData.lockAt)) {
+        // Check lock status — only OPEN pools accept new entries
+        if (poolData.status !== 'OPEN' && poolData.status !== 'DRAFT') {
+            throw new HttpsError("failed-precondition", "Pool is not accepting new entries.");
+        }
+        if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new HttpsError("failed-precondition", "Pool is locked.");
         }
 
@@ -123,9 +126,12 @@ export const updateBracketEntry = onCall(async (request) => {
             throw new HttpsError("permission-denied", "Not your entry.");
         }
 
-        // Check pool lock
+        // Check pool lock — only OPEN pools allow edits
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data() as BracketPool;
+        if (poolData.status === 'LOCKED' || poolData.status === 'LIVE' || poolData.status === 'COMPLETED') {
+            throw new HttpsError("failed-precondition", "Pool is locked. No edits allowed.");
+        }
         if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new HttpsError("failed-precondition", "Pool is locked.");
         }
@@ -170,6 +176,9 @@ export const submitBracketEntry = onCall(async (request) => {
 
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data() as BracketPool;
+        if (poolData.status === 'LOCKED' || poolData.status === 'LIVE' || poolData.status === 'COMPLETED') {
+            throw new HttpsError("failed-precondition", "Pool is locked. Submissions are closed.");
+        }
         if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new HttpsError("failed-precondition", "Pool is locked.");
         }
@@ -300,9 +309,8 @@ export const deleteBracketEntry = onCall(async (request) => {
             }
         }
 
-        // Check pool lock
-        if (poolData.status === 'LOCKED' || poolData.status === 'COMPLETED' || (poolData.lockAt > 0 && Date.now() > poolData.lockAt)) {
-            // Managers could potentially bypass this, but for now we follow playoff structure:
+        // Check pool lock — block non-managers from deleting after lock
+        if (poolData.status === 'LOCKED' || poolData.status === 'LIVE' || poolData.status === 'COMPLETED' || (poolData.lockAt > 0 && Date.now() > poolData.lockAt)) {
             if (uid !== poolData.managerUid && uid !== poolData.ownerId) {
                 throw new HttpsError("failed-precondition", "Cannot delete entry after pool is locked.");
             }

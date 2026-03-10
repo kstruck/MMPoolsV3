@@ -158,7 +158,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     // Bracket Visibility Rules: Show brackets only when pool is locked and tournament has started
     const shouldShowBrackets = useMemo(() => {
         if (isManager) return true;
-        const isLocked = pool.status === 'LOCKED' || pool.status === 'COMPLETED';
+        const isLocked = pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED';
         const tournamentStarted = tournament?.games ? Object.values(tournament.games).some(g => g.winnerTeamId) : false;
         return isLocked && tournamentStarted;
     }, [pool.status, tournament, isManager]);
@@ -816,7 +816,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleEditEntry(entry); }}
                                                         className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold"
-                                                        disabled={(entry.status === 'SUBMITTED' && pool.status !== 'DRAFT') || pool.status === 'LOCKED' || pool.status === 'COMPLETED'}
+                                                        disabled={(entry.status === 'SUBMITTED' && pool.status !== 'OPEN') || pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED'}
                                                     >
                                                         {entry.status === 'SUBMITTED' ? 'Edit' : 'Enter Picks/Edit Picks'}
                                                     </button>
@@ -824,7 +824,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         onClick={(e) => { e.stopPropagation(); handleDeleteEntry(entry); }}
                                                         className="bg-red-500/20 hover:bg-red-500/40 text-red-400 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                                         title="Delete Entry"
-                                                        disabled={pool.status === 'LOCKED' || pool.status === 'COMPLETED'}
+                                                        disabled={pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED'}
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
@@ -1156,7 +1156,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 <div className="animate-in fade-in slide-in-from-bottom-4">
                                     <BracketComparison
                                         tournament={tournament}
-                                        allEntries={pool.status === 'LOCKED' || pool.status === 'COMPLETED' ? entries : userEntries}
+                                        allEntries={pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED' ? entries : userEntries}
                                         initialEntry1Id={userEntries[0]?.id}
                                         isConference={isConference}
                                     />
@@ -1187,7 +1187,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 <div className="animate-in fade-in slide-in-from-bottom-4">
                                     <PoolAnalytics
                                         tournament={tournament}
-                                        entries={pool.status === 'LOCKED' || pool.status === 'COMPLETED' ? entries : userEntries}
+                                        entries={pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED' ? entries : userEntries}
                                         isConference={isConference}
                                     />
                                 </div>
@@ -1222,7 +1222,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-xl font-bold text-white">Pool Settings</h3>
                                 {!editingSettings ? (
-                                    ((pool.status !== 'LOCKED' && pool.status !== 'COMPLETED') || isSuperAdmin(user)) ? (
+                                    ((pool.status !== 'LOCKED' && pool.status !== 'LIVE' && pool.status !== 'COMPLETED') || isSuperAdmin(user)) ? (
                                         <button onClick={() => setEditingSettings(true)} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 px-3 py-1.5 border border-indigo-800 rounded-lg">
                                             <Edit3 size={12} /> Edit
                                         </button>
@@ -1672,7 +1672,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             <p className="text-xs text-slate-400 uppercase mb-1">Current Status</p>
                                             <p className="text-lg font-bold text-white">{pool.status}</p>
                                         </div>
-                                        {pool.status !== 'LOCKED' && pool.status !== 'COMPLETED' && (
+                                        {pool.status !== 'LOCKED' && pool.status !== 'LIVE' && pool.status !== 'COMPLETED' && (
                                             <button
                                                 onClick={handleLockNow}
                                                 disabled={savingSettings}

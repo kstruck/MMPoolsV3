@@ -551,7 +551,7 @@ export interface BracketPool {
     isListedPublic: boolean;
     passwordHash?: string;
     lockAt: number;
-    status: 'DRAFT' | 'PUBLISHED' | 'LOCKED' | 'COMPLETED';
+    status: 'DRAFT' | 'OPEN' | 'LOCKED' | 'LIVE' | 'COMPLETED';
 
     settings: {
         maxEntriesTotal: number;
