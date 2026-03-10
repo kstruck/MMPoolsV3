@@ -233,6 +233,9 @@ exports.deleteBracketEntry = (0, https_1.onCall)(async (request) => {
             throw new https_1.HttpsError("not-found", "Entry not found.");
         const entryData = entryDoc.data();
         const poolDoc = await transaction.get(poolRef);
+        if (!poolDoc.exists) {
+            throw new https_1.HttpsError("not-found", "Pool not found.");
+        }
         const poolData = poolDoc.data();
         if (entryData.ownerUid !== uid) {
             // Give managers the ability to delete entries as well
@@ -257,10 +260,10 @@ exports.deleteBracketEntry = (0, https_1.onCall)(async (request) => {
         transaction.set(auditRef, {
             poolId,
             type: "ENTRY_DELETED",
-            message: `Entry ${entryData.name} deleted by ${uid}`,
+            message: `Entry ${entryData.name || 'Unknown'} deleted by ${uid}`,
             severity: "INFO",
             actor: { uid, role: "USER" },
-            timestamp: firestore_1.Timestamp.now().toMillis()
+            timestamp: Date.now()
         });
     });
     return { success: true, message: "Entry deleted successfully" };

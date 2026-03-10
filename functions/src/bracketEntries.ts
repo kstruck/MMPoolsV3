@@ -287,6 +287,9 @@ export const deleteBracketEntry = onCall(async (request) => {
         const entryData = entryDoc.data() as BracketEntry;
 
         const poolDoc = await transaction.get(poolRef);
+        if (!poolDoc.exists) {
+            throw new HttpsError("not-found", "Pool not found.");
+        }
         const poolData = poolDoc.data() as BracketPool;
 
         if (entryData.ownerUid !== uid) {
@@ -316,10 +319,10 @@ export const deleteBracketEntry = onCall(async (request) => {
         transaction.set(auditRef, {
             poolId,
             type: "ENTRY_DELETED",
-            message: `Entry ${entryData.name} deleted by ${uid}`,
+            message: `Entry ${entryData.name || 'Unknown'} deleted by ${uid}`,
             severity: "INFO",
             actor: { uid, role: "USER" },
-            timestamp: Timestamp.now().toMillis()
+            timestamp: Date.now()
         });
     });
 
