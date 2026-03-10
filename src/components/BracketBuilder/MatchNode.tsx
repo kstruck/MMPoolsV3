@@ -127,7 +127,12 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
         >
             <div className="flex items-center gap-1 sm:gap-2 w-full overflow-hidden z-10">
                 {logoUrl ? (
-                    <img src={logoUrl} alt={teamName} className="w-4 h-4 sm:w-5 sm:h-5 object-contain" />
+                    <img
+                        src={logoUrl}
+                        alt={teamName}
+                        className="w-4 h-4 sm:w-5 sm:h-5 object-contain"
+                        crossOrigin="anonymous"
+                    />
                 ) : (
                     seed && <span className="text-[10px] font-mono opacity-60 w-3">{seed}</span>
                 )}

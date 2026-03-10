@@ -41,7 +41,8 @@ export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tou
                         transform: 'scale(1)',
                         transformOrigin: 'top left',
                         width: '2400px', // Force a large fixed width so the full bracket fits
-                    }
+                    },
+                    includeQueryParams: true,
                 });
                 setImageUrl(dataUrl);
                 setIsGenerating(false);
@@ -115,6 +116,7 @@ export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tou
                                     src={getTeamLogo(champPickTeamId.split('-')[1] || '', 'ncaa') || undefined}
                                     className="w-24 h-24 object-contain drop-shadow-lg"
                                     alt="Champion Logo"
+                                    crossOrigin="anonymous"
                                 />
                             </div>
                         )}
