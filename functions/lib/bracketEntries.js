@@ -27,8 +27,11 @@ exports.createBracketEntry = (0, https_1.onCall)(async (request) => {
             throw new https_1.HttpsError("not-found", "Pool not found.");
         }
         const poolData = poolDoc.data();
-        // Check lock status
-        if (poolData.status === 'LOCKED' || poolData.status === 'COMPLETED' || (poolData.lockAt > 0 && Date.now() > poolData.lockAt)) {
+        // Check lock status — only OPEN pools accept new entries
+        if (poolData.status !== 'OPEN' && poolData.status !== 'DRAFT') {
+            throw new https_1.HttpsError("failed-precondition", "Pool is not accepting new entries.");
+        }
+        if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new https_1.HttpsError("failed-precondition", "Pool is locked.");
         }
         // Check max entries per user
@@ -98,9 +101,12 @@ exports.updateBracketEntry = (0, https_1.onCall)(async (request) => {
         if (entryData.ownerUid !== uid) {
             throw new https_1.HttpsError("permission-denied", "Not your entry.");
         }
-        // Check pool lock
+        // Check pool lock — only OPEN pools allow edits
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data();
+        if (poolData.status === 'LOCKED' || poolData.status === 'LIVE' || poolData.status === 'COMPLETED') {
+            throw new https_1.HttpsError("failed-precondition", "Pool is locked. No edits allowed.");
+        }
         if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new https_1.HttpsError("failed-precondition", "Pool is locked.");
         }
@@ -137,6 +143,9 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
             throw new https_1.HttpsError("permission-denied", "Not your entry.");
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data();
+        if (poolData.status === 'LOCKED' || poolData.status === 'LIVE' || poolData.status === 'COMPLETED') {
+            throw new https_1.HttpsError("failed-precondition", "Pool is locked. Submissions are closed.");
+        }
         if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new https_1.HttpsError("failed-precondition", "Pool is locked.");
         }
@@ -244,9 +253,8 @@ exports.deleteBracketEntry = (0, https_1.onCall)(async (request) => {
                 throw new https_1.HttpsError("permission-denied", "Not your entry. Only the owner or pool manager can delete it.");
             }
         }
-        // Check pool lock
-        if (poolData.status === 'LOCKED' || poolData.status === 'COMPLETED' || (poolData.lockAt > 0 && Date.now() > poolData.lockAt)) {
-            // Managers could potentially bypass this, but for now we follow playoff structure:
+        // Check pool lock — block non-managers from deleting after lock
+        if (poolData.status === 'LOCKED' || poolData.status === 'LIVE' || poolData.status === 'COMPLETED' || (poolData.lockAt > 0 && Date.now() > poolData.lockAt)) {
             if (uid !== poolData.managerUid && uid !== poolData.ownerId) {
                 throw new https_1.HttpsError("failed-precondition", "Cannot delete entry after pool is locked.");
             }

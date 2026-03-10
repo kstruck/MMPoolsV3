@@ -200,7 +200,7 @@ export const scoreTournamentEntries = async (db: admin.firestore.Firestore, tour
     let totalEntriesScored = 0;
 
     for (const pool of pools) {
-        const entriesSnap = await db.collection('pools').doc(pool.id).collection('bracket_entries').get();
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('entries').get();
         if (entriesSnap.empty) continue;
 
         // 1. Calculate Score & Max for all
@@ -354,7 +354,7 @@ export const finalizeTournamentPayouts = onCall(async (request) => {
         const entryFee = pool.settings?.entryFee || 0;
         if (entryFee <= 0) continue; // Free pool
 
-        const entriesSnap = await db.collection('pools').doc(pool.id).collection('bracket_entries').get();
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('entries').get();
         if (entriesSnap.empty) continue;
 
         // Count entries that have paidStatus === 'PAID'

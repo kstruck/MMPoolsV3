@@ -178,7 +178,7 @@ const scoreTournamentEntries = async (db, tournamentId) => {
         .filter(p => p.tournamentId === tournamentId);
     let totalEntriesScored = 0;
     for (const pool of pools) {
-        const entriesSnap = await db.collection('pools').doc(pool.id).collection('bracket_entries').get();
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('entries').get();
         if (entriesSnap.empty)
             continue;
         // 1. Calculate Score & Max for all
@@ -329,7 +329,7 @@ exports.finalizeTournamentPayouts = (0, https_1.onCall)(async (request) => {
         const entryFee = ((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.entryFee) || 0;
         if (entryFee <= 0)
             continue; // Free pool
-        const entriesSnap = await db.collection('pools').doc(pool.id).collection('bracket_entries').get();
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('entries').get();
         if (entriesSnap.empty)
             continue;
         // Count entries that have paidStatus === 'PAID'

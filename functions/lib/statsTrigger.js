@@ -13,7 +13,7 @@ const calculatePoolPot = async (db, poolId, pool) => {
     if (pool.type === 'BRACKET' || pool.type === 'NFL_PLAYOFFS') {
         const entryFee = ((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.entryFee) || 0;
         if (entryFee > 0) {
-            const collectionName = pool.type === 'BRACKET' ? 'bracket_entries' : 'playoff_entries';
+            const collectionName = pool.type === 'BRACKET' ? 'entries' : 'playoff_entries';
             const entriesSnap = await db.collection('pools').doc(poolId).collection(collectionName).get();
             const paidEntriesCount = entriesSnap.docs.filter(doc => {
                 const data = doc.data();

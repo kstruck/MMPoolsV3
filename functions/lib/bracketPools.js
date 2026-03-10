@@ -143,7 +143,7 @@ exports.publishBracketPool = (0, https_1.onCall)(async (request) => {
             slugLower,
             isListedPublic: !!isListedPublic,
             passwordHash: passwordHash || admin.firestore.FieldValue.delete(),
-            status: "PUBLISHED",
+            status: "OPEN",
             lockAt: lockAt,
             updatedAt: firestore_1.Timestamp.now().toMillis(),
         });
