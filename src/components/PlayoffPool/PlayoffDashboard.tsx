@@ -20,6 +20,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
     const [zelleCopied, setZelleCopied] = useState(false);
+    const [shareCopied, setShareCopied] = useState(false);
     // const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
     // const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Deprecated
 
@@ -93,17 +94,12 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                 <button
                                     onClick={() => {
                                         navigator.clipboard.writeText(window.location.href);
-                                        // Simple feedback - could be improved with toast
-                                        const btn = document.activeElement as HTMLElement;
-                                        if (btn) {
-                                            const originalText = btn.innerHTML;
-                                            btn.innerHTML = '<span class="text-emerald-400">Copied!</span>';
-                                            setTimeout(() => btn.innerHTML = originalText, 2000);
-                                        }
+                                        setShareCopied(true);
+                                        setTimeout(() => setShareCopied(false), 2000);
                                     }}
                                     className="flex items-center gap-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-all ml-2 px-3 py-1.5 rounded-lg shadow-lg shadow-indigo-900/20 hover:scale-105 active:scale-95"
                                 >
-                                    <Share2 size={14} /> Share
+                                    {shareCopied ? <><Check size={14} className="text-emerald-400" /> Copied!</> : <><Share2 size={14} /> Share</>}
                                 </button>
                             </div>
                         </div>

@@ -25,7 +25,7 @@ const squaresSteps = [
     { title: "4. Assign Numbers", desc: "The system randomly assigns numbers (0–9) to every row and column." },
     { title: "5. Check Your Numbers", desc: "Your square now corresponds to two numbers: one for the Home Team and one for the Away Team." },
     { title: "6. Watch the Game", desc: "Relax and enjoy. You don't need to track stats or players." },
-    { title: "7. Check the Score", desc: "At the end of each quarter, look at the <strong>last digit</strong> of each team's score." },
+    { title: "7. Check the Score", desc: "At the end of each quarter, look at the last digit of each team's score." },
     { title: "8. Find the Winner", desc: "Match those last digits to the grid. If they intersect at your square, you win!" },
     { title: "9. Celebrate", desc: "Winners are typically determined after Q1, Halftime, Q3, and the Final score." }
 ];
@@ -158,7 +158,7 @@ export const HowItWorksPage: React.FC<Props> = (props) => {
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-lg text-white mb-1">{step.title}</h3>
-                                    <p className="text-slate-400" dangerouslySetInnerHTML={{ __html: step.desc }}></p>
+                                    <p className="text-slate-400">{step.desc}</p>
                                 </div>
                             </div>
                         ))}

@@ -105,11 +105,11 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
 export const recalculateGlobalStats = onCall({
     timeoutSeconds: 300,
     memory: "512MiB",
-    cors: true // Explicitly enable CORS
+    cors: ["https://www.marchmeleepools.com", "https://gridiron-gamble-uzuqo.firebaseapp.com", "https://gridiron-gamble-uzuqo.web.app"]
 }, async (request) => {
     try {
         // Only allow super admin
-        if (!request.auth || request.auth.token.email !== 'kstruck@gmail.com') {
+        if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
             return { success: false, message: 'Permission Denied: Only super admin can run this' };
         }
 

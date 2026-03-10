@@ -5,8 +5,9 @@ import { dbService } from '../services/dbService';
 import { auth } from '../firebase';
 import { authService } from '../services/authService';
 
-import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon } from 'lucide-react';
+import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon, Edit2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 interface UserProfileProps {
     user: User;
@@ -36,13 +37,20 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
     const [isVerifying, setIsVerifying] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+    // Email Change State
+    const [showEmailModal, setShowEmailModal] = useState(false);
+    const [newEmail, setNewEmail] = useState('');
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [emailUpdateLoading, setEmailUpdateLoading] = useState(false);
+    const [passwordError, setPasswordError] = useState('');
+
     useEffect(() => {
         // Reset form when user prop changes
         setFormData({
             name: user.name,
             phone: user.phone || '',
             smsOptIn: user.smsOptIn || false,
-        socialLinks: {
+            socialLinks: {
                 twitter: user.socialLinks?.twitter || '',
                 instagram: user.socialLinks?.instagram || '',
                 facebook: user.socialLinks?.facebook || '',
@@ -89,6 +97,55 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
             setMessage({ type: 'error', text: 'Failed to save changes. Please try again.' });
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleEmailUpdate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setPasswordError('');
+        if (!newEmail || !currentPassword) {
+            setPasswordError('Both new email and current password are required.');
+            return;
+        }
+
+        setEmailUpdateLoading(true);
+        setMessage(null);
+
+        try {
+            // Re-authenticate and set pending email
+            await authService.requestEmailUpdate(newEmail, currentPassword);
+
+            // Trigger SMS security alert
+            if (user.phone && user.smsOptIn) {
+                const functions = getFunctions();
+                const sendSecuritySMSAlert = httpsCallable(functions, 'sendSecuritySMSAlert');
+                try {
+                    await sendSecuritySMSAlert();
+                    logger.log('Security SMS alert sent');
+                } catch (smsError) {
+                    logger.warn('Failed to send security SMS:', smsError);
+                }
+            }
+
+            setMessage({ type: 'success', text: `Verification link sent to ${newEmail}! Check your inbox and verify the link before the change takes effect.` });
+            setShowEmailModal(false);
+            setNewEmail('');
+            setCurrentPassword('');
+
+            // Note: Since email updates require clicking the link, we don't update local state or db right now.
+        } catch (error: any) {
+            logger.error('Error updating email:', error);
+            if (error.code === 'auth/wrong-password') {
+                setPasswordError('Incorrect current password.');
+            } else if (error.code === 'auth/email-already-in-use') {
+                setPasswordError('This email is already in use by another account.');
+            } else if (error.code === 'auth/requires-recent-login') {
+                setPasswordError('This operation requires recent authentication. Please log out and log back in, then try again.');
+            } else {
+                setPasswordError(error.message || 'Failed to update email. Ensure your current password is correct and the new email is valid.');
+            }
+        } finally {
+            setEmailUpdateLoading(false);
         }
     };
 
@@ -195,9 +252,20 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-slate-300">Email <span className="text-slate-600 font-normal text-xs">(Read Only)</span></label>
-                                <div className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-400 cursor-not-allowed">
-                                    {user.email || 'No Email'}
+                                <label className="text-sm font-bold text-slate-300">Email <span className="text-slate-600 font-normal text-xs">(Requires Verification to Change)</span></label>
+                                <div className="flex gap-2">
+                                    <div className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-400 cursor-not-allowed">
+                                        {user.email || 'No Email'}
+                                    </div>
+                                    {user.provider === 'password' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowEmailModal(true)}
+                                            className="bg-slate-700/50 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors border border-slate-600 truncate flex items-center gap-2"
+                                        >
+                                            <Edit2 size={16} /> Change
+                                        </button>
+                                    )}
                                 </div>
                                 {!user.emailVerified && (
                                     <div className="flex items-center gap-2 mt-2">
@@ -220,19 +288,19 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
 
                         <div className="space-y-4">
                             <div className="space-y-2">
-                            <label className="text-sm font-bold text-slate-300">Phone Number <span className="text-slate-500 font-normal text-xs">(Optional)</span></label>
-                            <div className="relative">
-                                <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                                <input
-                                    type="tel"
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                                    placeholder="+1 (555) 000-0000"
-                                />
+                                <label className="text-sm font-bold text-slate-300">Phone Number <span className="text-slate-500 font-normal text-xs">(Optional)</span></label>
+                                <div className="relative">
+                                    <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                    <input
+                                        type="tel"
+                                        value={formData.phone}
+                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                                        placeholder="+1 (555) 000-0000"
+                                    />
+                                </div>
                             </div>
-                        </div>
-                            
+
                             <label className="flex items-center gap-3 cursor-pointer group bg-slate-800/50 p-3 rounded-lg border border-slate-700 hover:border-indigo-500/50 transition-colors w-fit">
                                 <div className="relative flex items-center">
                                     <input
@@ -361,6 +429,73 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                     </form>
                 </div>
             </div>
+
+            {/* Email Change Modal */}
+            {showEmailModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-md w-full shadow-2xl relative overflow-hidden">
+                        {/* Decorative glow */}
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+
+                        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                            <Edit2 size={20} className="text-indigo-400" />
+                            Update Email Address
+                        </h3>
+                        <p className="text-sm text-slate-400 mb-6">
+                            For security purposes, please provide your current password and your new email address.
+                            A verification link will be sent to the new email.
+                        </p>
+                        <form onSubmit={handleEmailUpdate} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-300 mb-1">New Email</label>
+                                <input
+                                    type="email"
+                                    value={newEmail}
+                                    onChange={(e) => setNewEmail(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                                    placeholder="new.email@example.com"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-300 mb-1">Current Password</label>
+                                <input
+                                    type="password"
+                                    value={currentPassword}
+                                    onChange={(e) => setCurrentPassword(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                                    placeholder="••••••••"
+                                    required
+                                />
+                            </div>
+
+                            {passwordError && (
+                                <div className="text-red-400 text-sm p-3 bg-red-500/10 rounded-lg border border-red-500/20 font-medium">
+                                    {passwordError}
+                                </div>
+                            )}
+
+                            <div className="pt-4 flex justify-end gap-3 border-t border-slate-700 mt-6 md:mt-8">
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowEmailModal(false); setPasswordError(''); }}
+                                    className="px-4 py-2 rounded-lg text-slate-400 font-bold hover:text-white transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={emailUpdateLoading}
+                                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-indigo-500/25 flex items-center gap-2 transition-all"
+                                >
+                                    {emailUpdateLoading && <Loader size={16} className="animate-spin" />}
+                                    Send Verification
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

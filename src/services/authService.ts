@@ -6,10 +6,13 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updateProfile,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  verifyBeforeUpdateEmail,
   type User as FirebaseUser
 } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, increment, onSnapshot } from "firebase/firestore";
 import type { User } from "../types";
 import { emailService } from "./emailService";
 import { logger } from '../utils/logger';
@@ -224,6 +227,37 @@ export const authService = {
     }
   },
 
+  // Request Email Update
+  requestEmailUpdate: async (newEmail: string, currentPassword?: string): Promise<void> => {
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error("No authenticated user found.");
+    }
+
+    try {
+      // Re-authenticate if password is provided and user is using email/password
+      if (currentPassword && user.providerData.some(p => p.providerId === 'password')) {
+        if (!user.email) throw new Error("Current email not found on user object.");
+        const credential = EmailAuthProvider.credential(user.email, currentPassword);
+        await reauthenticateWithCredential(user, credential);
+      }
+
+      // Start the email update verification flow
+      await verifyBeforeUpdateEmail(user, newEmail);
+
+      // (We don't update our Firestore user doc's email right away, 
+      // because verifyBeforeUpdateEmail requires the user to click 
+      // the link in the new email before the change takes effect. 
+      // The auth state listener will catch the updated email automatically 
+      // once they log back in or when their token refreshes post-verification.)
+
+      logger.log(`Email update verification sent to ${newEmail}`);
+    } catch (error) {
+      logger.error("[AuthService] Request Email Update Error", error);
+      throw error;
+    }
+  },
+
   // Logout
   logout: async () => {
     try {
@@ -234,9 +268,15 @@ export const authService = {
     }
   },
 
-  // Listener for Auth State
   onAuthStateChanged: (callback: (user: User | null) => void) => {
-    return onAuthStateChanged(auth, async (firebaseUser) => {
+    let firestoreUnsubscribe: (() => void) | null = null;
+
+    const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firestoreUnsubscribe) {
+        firestoreUnsubscribe();
+        firestoreUnsubscribe = null;
+      }
+
       if (firebaseUser) {
         const user = mapUser(firebaseUser);
         if (user) {
@@ -244,6 +284,13 @@ export const authService = {
           try {
             const syncedUser = await syncUserToFirestore(user);
             callback(syncedUser);
+
+            // Set up real-time listener for user document changes (e.g. email verified in another tab)
+            firestoreUnsubscribe = onSnapshot(doc(db, 'users', user.id), (docSnap) => {
+              if (docSnap.exists()) {
+                callback({ ...syncedUser, ...(docSnap.data() as User) });
+              }
+            });
           } catch (err) {
             logger.error("Auth Sync Failed", err);
             // Fallback: Proceed with basic user data so they aren't stuck "logged out"
@@ -256,6 +303,13 @@ export const authService = {
         callback(null);
       }
     });
+
+    return () => {
+      authUnsubscribe();
+      if (firestoreUnsubscribe) {
+        firestoreUnsubscribe();
+      }
+    };
   },
 
   // Update Profile (Name/Photo)

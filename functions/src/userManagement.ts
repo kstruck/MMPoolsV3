@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { renderEmailHtml } from "./emailStyles";
+import { courierAuthToken, sendCourierSMS } from "./notifications/smsService";
 
 
 
@@ -119,4 +120,70 @@ export const sendAdminPasswordReset = functions.https.onCall(async (request) => 
         console.error(`[PasswordReset] Failed:`, error);
         throw new functions.https.HttpsError("internal", error.message);
     }
+});
+
+/**
+ * Send a security SMS alert to the authenticated user.
+ */
+export const sendSecuritySMSAlert = functions.https.onCall({ secrets: [courierAuthToken] }, async (request) => {
+    if (!request.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+    }
+
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    const userSnap = await db.collection("users").doc(uid).get();
+    const userData = userSnap.data();
+
+    if (!userData || !userData.phone || !userData.smsOptIn) {
+        return { success: true, message: "No SMS sent, user not opted in or no phone number." };
+    }
+
+    try {
+        const message = "Security Alert: A request to change your account email has been initiated.";
+        const success = await sendCourierSMS(userData.phone, message);
+        return { success, message: success ? "Alert sent" : "Failed to send SMS" };
+    } catch (error: any) {
+        console.error(`[SecuritySMS] Failed:`, error);
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
+
+/**
+ * Test Endpoint for SMS
+ */
+export const testSmsHttp = functions.https.onRequest({ secrets: [courierAuthToken] }, async (req, res) => {
+    // Security: Require Firebase Auth Bearer token with SUPER_ADMIN role
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        res.status(401).send("Unauthorized: Missing Bearer token");
+        return;
+    }
+    try {
+        const token = authHeader.split('Bearer ')[1];
+        const decoded = await admin.auth().verifyIdToken(token);
+        if (decoded.role !== 'SUPER_ADMIN') {
+            res.status(403).send("Forbidden: Super Admin access required");
+            return;
+        }
+    } catch {
+        res.status(401).send("Unauthorized: Invalid token");
+        return;
+    }
+
+    const phone = req.query.phone as string;
+    if (!phone) {
+        res.status(400).send("Provide ?phone=1234567890");
+        return;
+    }
+
+    // Normalize to E.164 for debug output
+    const digits = phone.replace(/\D/g, "");
+    const e164 = digits.length === 10 ? `+1${digits}` : (digits.startsWith("1") && digits.length === 11 ? `+${digits}` : `+${digits}`);
+
+    console.log(`[TestSMS] Raw phone: ${phone}, E.164: ${e164}`);
+    console.log(`[TestSMS] Token present: ${!!courierAuthToken.value()}, Token length: ${courierAuthToken.value()?.length}`);
+
+    const success = await sendCourierSMS(phone, "This is a test message from March Melee Pools 🏀");
+    res.send({ success, phone_raw: phone, phone_e164: e164, token_present: !!courierAuthToken.value() });
 });

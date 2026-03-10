@@ -27,6 +27,8 @@ if (recaptchaSiteKey) {
         provider: new ReCaptchaEnterpriseProvider(recaptchaSiteKey),
         isTokenAutoRefreshEnabled: true,
     });
+} else if (!import.meta.env.DEV) {
+    console.warn('⚠️ SECURITY: App Check is NOT active — VITE_RECAPTCHA_SITE_KEY is missing from environment');
 }
 
 export const auth = getAuth(app);

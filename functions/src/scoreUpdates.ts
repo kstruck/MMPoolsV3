@@ -1250,15 +1250,10 @@ export const fixPoolScores = onCall({
     timeoutSeconds: 300,
     memory: "512MiB"
 }, async (request) => {
-    // TEMPORARY: Auth disabled for testing
-    /*
     // Check Authentication (Admin Only)
-    if (request.auth?.token.role !== 'SUPER_ADMIN' && request.auth?.token.email !== 'kstruck@gmail.com') {
-        if (request.auth?.token.role !== 'SUPER_ADMIN') {
-            throw new HttpsError('permission-denied', 'Must be Super Admin');
-        }
+    if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
+        throw new HttpsError('permission-denied', 'Must be Super Admin');
     }
-    */
 
     const db = admin.firestore();
     const targetPoolId = request.data?.poolId;
