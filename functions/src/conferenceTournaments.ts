@@ -186,24 +186,24 @@ export const initializeBigEastTournamentHttp = onCall(async (request) => {
 // Seeding is determined after the regular season, so we use placeholder seeds.
 // ---------------------------------------------------------------------------
 
-// 16 Big 12 teams for 2026 (seeds TBD; we store them seeded 1-16 as placeholder)
+// 16 Big 12 teams for 2026 — ACTUAL seedings from ESPN 2026 Big 12 Tournament bracket
 export const BIG_12_TEAMS_2026: ConferenceTeam[] = [
-    { id: 'HOU', name: 'Houston Cougars', shortName: 'Houston', espnId: '248', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/248.png', seed: 1 },
-    { id: 'KU', name: 'Kansas Jayhawks', shortName: 'Kansas', espnId: '2305', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png', seed: 2 },
-    { id: 'ISU', name: 'Iowa State Cyclones', shortName: 'Iowa State', espnId: '66', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/66.png', seed: 3 },
-    { id: 'BYU', name: 'BYU Cougars', shortName: 'BYU', espnId: '252', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/252.png', seed: 4 },
-    { id: 'ARIZ', name: 'Arizona Wildcats', shortName: 'Arizona', espnId: '12', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/12.png', seed: 5 },
-    { id: 'TCU', name: 'TCU Horned Frogs', shortName: 'TCU', espnId: '2628', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2628.png', seed: 6 },
-    { id: 'BAYLOR', name: 'Baylor Bears', shortName: 'Baylor', espnId: '239', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/239.png', seed: 7 },
-    { id: 'CINC', name: 'Cincinnati Bearcats', shortName: 'Cincinnati', espnId: '2132', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2132.png', seed: 8 },
-    { id: 'KSU', name: 'Kansas State Wildcats', shortName: 'Kansas State', espnId: '2306', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2306.png', seed: 9 },
-    { id: 'OKST', name: 'Oklahoma State Cowboys', shortName: 'Oklahoma State', espnId: '197', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/197.png', seed: 10 },
+    { id: 'ARIZ', name: 'Arizona Wildcats', shortName: 'Arizona', espnId: '12', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/12.png', seed: 1 },
+    { id: 'HOU', name: 'Houston Cougars', shortName: 'Houston', espnId: '248', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/248.png', seed: 2 },
+    { id: 'KU', name: 'Kansas Jayhawks', shortName: 'Kansas', espnId: '2305', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png', seed: 3 },
+    { id: 'TTU', name: 'Texas Tech Red Raiders', shortName: 'Texas Tech', espnId: '2641', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2641.png', seed: 4 },
+    { id: 'ISU', name: 'Iowa State Cyclones', shortName: 'Iowa State', espnId: '66', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/66.png', seed: 5 },
+    { id: 'UCF', name: 'UCF Knights', shortName: 'UCF', espnId: '2116', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2116.png', seed: 6 },
+    { id: 'WVU', name: 'West Virginia Mountaineers', shortName: 'West Virginia', espnId: '277', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/277.png', seed: 7 },
+    { id: 'TCU', name: 'TCU Horned Frogs', shortName: 'TCU', espnId: '2628', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2628.png', seed: 8 },
+    { id: 'CINC', name: 'Cincinnati Bearcats', shortName: 'Cincinnati', espnId: '2132', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2132.png', seed: 9 },
+    { id: 'BYU', name: 'BYU Cougars', shortName: 'BYU', espnId: '252', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/252.png', seed: 10 },
     { id: 'COL', name: 'Colorado Buffaloes', shortName: 'Colorado', espnId: '38', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/38.png', seed: 11 },
-    { id: 'UCF', name: 'UCF Knights', shortName: 'UCF', espnId: '2116', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2116.png', seed: 12 },
-    { id: 'TTU', name: 'Texas Tech Red Raiders', shortName: 'Texas Tech', espnId: '2641', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2641.png', seed: 13 },
-    { id: 'UTAH', name: 'Utah Utes', shortName: 'Utah', espnId: '254', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/254.png', seed: 14 },
-    { id: 'ASU', name: 'Arizona State Sun Devils', shortName: 'Arizona State', espnId: '9', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/9.png', seed: 15 },
-    { id: 'WVU', name: 'West Virginia Mountaineers', shortName: 'West Virginia', espnId: '277', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/277.png', seed: 16 },
+    { id: 'ASU', name: 'Arizona State Sun Devils', shortName: 'Arizona State', espnId: '9', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/9.png', seed: 12 },
+    { id: 'BAYLOR', name: 'Baylor Bears', shortName: 'Baylor', espnId: '239', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/239.png', seed: 13 },
+    { id: 'OKST', name: 'Oklahoma State Cowboys', shortName: 'Oklahoma State', espnId: '197', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/197.png', seed: 14 },
+    { id: 'KSU', name: 'Kansas State Wildcats', shortName: 'Kansas State', espnId: '2306', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/2306.png', seed: 15 },
+    { id: 'UTAH', name: 'Utah Utes', shortName: 'Utah', espnId: '254', logo: 'https://a.espncdn.com/i/teamlogos/ncaa/500/254.png', seed: 16 },
 ];
 
 // ---------------------------------------------------------------------------

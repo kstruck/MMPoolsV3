@@ -6,6 +6,24 @@ const logger = require("firebase-functions/logger");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const bracketScoring_1 = require("./bracketScoring");
+const conferenceTournaments_1 = require("./conferenceTournaments");
+/**
+ * Recursively sanitizes an object for Firestore by replacing all `undefined`
+ * values with `null`. Firestore rejects `undefined` but accepts `null`.
+ */
+function sanitizeForFirestore(obj) {
+    if (obj === undefined)
+        return null;
+    if (obj === null || typeof obj !== 'object')
+        return obj;
+    if (Array.isArray(obj))
+        return obj.map(sanitizeForFirestore);
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+        result[key] = sanitizeForFirestore(value);
+    }
+    return result;
+}
 // Standard mapping of Seed match-ups for Round 1
 // Slot 1: 1 vs 16. Slot 2: 8 vs 9. Slot 3: 5 vs 12. Slot 4: 4 vs 13.
 // Slot 5: 6 vs 11. Slot 6: 3 vs 14. Slot 7: 7 vs 10. Slot 8: 2 vs 15.
@@ -230,7 +248,7 @@ function getFFSlot(region) {
  * Shared logic to fetch and map ESPN data.
  */
 async function fetchAndMapESPNGameData(seasonYear) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     // Validate fetch availability
     if (typeof fetch === 'undefined') {
         throw new Error("Server configuration error: fetch not found");
@@ -302,9 +320,9 @@ async function fetchAndMapESPNGameData(seasonYear) {
             round: round,
             region: region,
             // Live Score Details
-            period: (_c = competition.status) === null || _c === void 0 ? void 0 : _c.period,
-            clock: (_d = competition.status) === null || _d === void 0 ? void 0 : _d.displayClock, // e.g. "12:35"
-            broadcast: (_g = (_f = (_e = competition.broadcasts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.names) === null || _g === void 0 ? void 0 : _g[0], // e.g. "CBS"
+            period: (_d = (_c = competition.status) === null || _c === void 0 ? void 0 : _c.period) !== null && _d !== void 0 ? _d : null,
+            clock: (_f = (_e = competition.status) === null || _e === void 0 ? void 0 : _e.displayClock) !== null && _f !== void 0 ? _f : null, // e.g. "12:35"
+            broadcast: (_k = (_j = (_h = (_g = competition.broadcasts) === null || _g === void 0 ? void 0 : _g[0]) === null || _h === void 0 ? void 0 : _h.names) === null || _j === void 0 ? void 0 : _j[0]) !== null && _k !== void 0 ? _k : null, // e.g. "CBS"
             externalId: event.id
         };
         games[gameId] = game;
@@ -572,14 +590,15 @@ exports.importTournamentFromESPN = (0, https_1.onCall)(async (request) => {
         // Map ESPN data to skeleton structure
         const { updatedGames, mappedCount } = mapESPNGamesToSkeleton(existingGames, games, teams);
         // SAVE: both raw ESPN data and mapped skeleton games
-        await tournamentRef.set({
+        // sanitize first: Firestore rejects `undefined`, needs `null`
+        await tournamentRef.set(sanitizeForFirestore({
             id: tournamentId,
             seasonYear: parseInt(seasonYear),
             lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
             importedGames: games,
             importedTeams: teams,
             games: updatedGames,
-        }, { merge: true });
+        }), { merge: true });
         return { success: true, count, teams: Object.keys(teams).length, mapped: mappedCount };
     }
     catch (error) {
@@ -619,7 +638,15 @@ const updateTournamentScores = async (db, tournamentId, dryRun = false) => {
             if (!dryRun && events.length > 0) {
                 const existingGames = existingData.games || {};
                 const slots = existingData.slots || {};
-                const { updatedGames, mappedCount } = mapESPNConferenceGamesToSkeleton(existingGames, slots, events);
+                // Build ESPN numeric ID → skeleton short ID lookup for this conference
+                const confTeams = confName === 'Big 12' ? conferenceTournaments_1.BIG_12_TEAMS_2026
+                    : confName === 'Big East' ? conferenceTournaments_1.BIG_EAST_TEAMS_2026
+                        : [];
+                const teamLookup = {};
+                for (const t of confTeams) {
+                    teamLookup[t.espnId] = { espnId: t.espnId, id: t.id };
+                }
+                const { updatedGames, mappedCount } = mapESPNConferenceGamesToSkeleton(existingGames, slots, events, teamLookup);
                 logger.info(`[Conf Sync] Mapped ${mappedCount} games to skeleton for scoring.`);
                 await tournamentRef.set({
                     importedEvents: events,
@@ -769,12 +796,22 @@ async function fetchESPNConferenceTournamentData(seasonYear, groupId) {
         throw error;
     }
 }
-function mapESPNConferenceGamesToSkeleton(existingGames, slots, espnEvents) {
+function mapESPNConferenceGamesToSkeleton(existingGames, slots, espnEvents, teams // espnId → { shortId }
+) {
     const updated = Object.assign({}, existingGames);
     let mappedCount = 0;
-    // Convert espnEvents to matches
+    // Build ESPN numeric ID → skeleton short ID lookup
+    // e.g. '239' → 'BAYLOR', '9' → 'ASU'
+    const espnToShort = {};
+    if (teams) {
+        for (const t of Object.values(teams)) {
+            if (t.espnId && t.id)
+                espnToShort[t.espnId] = t.id;
+        }
+    }
+    // Convert espnEvents to matches — translate ESPN numeric IDs to skeleton short IDs
     const matches = espnEvents.map(e => {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         const comp = e.competitions[0];
         const home = comp.competitors.find(c => c.homeAway === 'home');
         const away = comp.competitors.find(c => c.homeAway === 'away');
@@ -784,21 +821,25 @@ function mapESPNConferenceGamesToSkeleton(existingGames, slots, espnEvents) {
         const awayScore = parseInt(away.score || '0');
         const status = comp.status.type.state === 'pre' ? 'SCHEDULED' :
             comp.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
+        // Translate ESPN numeric IDs to skeleton short IDs (fallback: raw ESPN id)
+        const homeShortId = espnToShort[home.team.id] || home.team.id;
+        const awayShortId = espnToShort[away.team.id] || away.team.id;
         let winnerTeamId = null;
         if (status === 'FINAL') {
-            winnerTeamId = homeScore > awayScore ? home.team.id : away.team.id;
+            // Winner stored as skeleton short ID
+            winnerTeamId = homeScore > awayScore ? homeShortId : awayShortId;
         }
         return {
-            homeTeamId: home.team.id,
-            awayTeamId: away.team.id,
+            homeTeamId: homeShortId,
+            awayTeamId: awayShortId,
             homeScore,
             awayScore,
             status,
             winnerTeamId,
             startTime: comp.date,
-            period: (_a = comp.status) === null || _a === void 0 ? void 0 : _a.period,
-            clock: (_b = comp.status) === null || _b === void 0 ? void 0 : _b.displayClock,
-            broadcast: (_e = (_d = (_c = comp.broadcasts) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.names) === null || _e === void 0 ? void 0 : _e[0],
+            period: (_b = (_a = comp.status) === null || _a === void 0 ? void 0 : _a.period) !== null && _b !== void 0 ? _b : null,
+            clock: (_d = (_c = comp.status) === null || _c === void 0 ? void 0 : _c.displayClock) !== null && _d !== void 0 ? _d : null,
+            broadcast: (_h = (_g = (_f = (_e = comp.broadcasts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.names) === null || _g === void 0 ? void 0 : _g[0]) !== null && _h !== void 0 ? _h : null,
             externalId: e.id
         };
     }).filter(m => m !== null);

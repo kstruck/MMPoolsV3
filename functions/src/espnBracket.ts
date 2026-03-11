@@ -4,6 +4,22 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Tournament, Game, TournamentSlot, BracketRegion, Team } from "./types";
 import { scoreTournamentEntries } from "./bracketScoring";
+import { BIG_12_TEAMS_2026, BIG_EAST_TEAMS_2026 } from "./conferenceTournaments";
+
+/**
+ * Recursively sanitizes an object for Firestore by replacing all `undefined`
+ * values with `null`. Firestore rejects `undefined` but accepts `null`.
+ */
+function sanitizeForFirestore<T>(obj: T): T {
+    if (obj === undefined) return null as unknown as T;
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(sanitizeForFirestore) as unknown as T;
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+        result[key] = sanitizeForFirestore(value);
+    }
+    return result as T;
+}
 
 // Standard mapping of Seed match-ups for Round 1
 // Slot 1: 1 vs 16. Slot 2: 8 vs 9. Slot 3: 5 vs 12. Slot 4: 4 vs 13.
@@ -331,9 +347,9 @@ async function fetchAndMapESPNGameData(seasonYear: number) {
             region: region,
 
             // Live Score Details
-            period: competition.status?.period,
-            clock: competition.status?.displayClock, // e.g. "12:35"
-            broadcast: competition.broadcasts?.[0]?.names?.[0], // e.g. "CBS"
+            period: competition.status?.period ?? null,
+            clock: competition.status?.displayClock ?? null, // e.g. "12:35"
+            broadcast: competition.broadcasts?.[0]?.names?.[0] ?? null, // e.g. "CBS"
             externalId: event.id
         };
 
@@ -691,14 +707,15 @@ export const importTournamentFromESPN = onCall(async (request) => {
         const { updatedGames, mappedCount } = mapESPNGamesToSkeleton(existingGames, games, teams);
 
         // SAVE: both raw ESPN data and mapped skeleton games
-        await tournamentRef.set({
+        // sanitize first: Firestore rejects `undefined`, needs `null`
+        await tournamentRef.set(sanitizeForFirestore({
             id: tournamentId,
             seasonYear: parseInt(seasonYear),
             lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
             importedGames: games,
             importedTeams: teams,
             games: updatedGames,
-        }, { merge: true });
+        }), { merge: true });
 
         return { success: true, count, teams: Object.keys(teams).length, mapped: mappedCount };
 
@@ -748,7 +765,14 @@ export const updateTournamentScores = async (
                 const existingGames = existingData.games || {};
                 const slots = existingData.slots || {};
 
-                const { updatedGames, mappedCount } = mapESPNConferenceGamesToSkeleton(existingGames, slots, events);
+                // Build ESPN numeric ID → skeleton short ID lookup for this conference
+                const confTeams = confName === 'Big 12' ? BIG_12_TEAMS_2026
+                    : confName === 'Big East' ? BIG_EAST_TEAMS_2026
+                        : [];
+                const teamLookup: Record<string, { espnId: string; id: string }> = {};
+                for (const t of confTeams) { teamLookup[t.espnId] = { espnId: t.espnId, id: t.id }; }
+
+                const { updatedGames, mappedCount } = mapESPNConferenceGamesToSkeleton(existingGames, slots, events, teamLookup);
                 logger.info(`[Conf Sync] Mapped ${mappedCount} games to skeleton for scoring.`);
 
                 await tournamentRef.set({
@@ -996,12 +1020,22 @@ async function fetchESPNConferenceTournamentData(seasonYear: number, groupId: nu
 function mapESPNConferenceGamesToSkeleton(
     existingGames: Record<string, Game>,
     slots: Record<string, TournamentSlot>,
-    espnEvents: ESPNEvent[]
+    espnEvents: ESPNEvent[],
+    teams?: Record<string, { espnId: string; id: string }>  // espnId → { shortId }
 ): { updatedGames: Record<string, Game>, mappedCount: number } {
     const updated = { ...existingGames };
     let mappedCount = 0;
 
-    // Convert espnEvents to matches
+    // Build ESPN numeric ID → skeleton short ID lookup
+    // e.g. '239' → 'BAYLOR', '9' → 'ASU'
+    const espnToShort: Record<string, string> = {};
+    if (teams) {
+        for (const t of Object.values(teams)) {
+            if (t.espnId && t.id) espnToShort[t.espnId] = t.id;
+        }
+    }
+
+    // Convert espnEvents to matches — translate ESPN numeric IDs to skeleton short IDs
     const matches = espnEvents.map(e => {
         const comp = e.competitions[0];
         const home = comp.competitors.find(c => c.homeAway === 'home');
@@ -1013,22 +1047,27 @@ function mapESPNConferenceGamesToSkeleton(
         const status = comp.status.type.state === 'pre' ? 'SCHEDULED' :
             comp.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
 
+        // Translate ESPN numeric IDs to skeleton short IDs (fallback: raw ESPN id)
+        const homeShortId = espnToShort[home.team.id] || home.team.id;
+        const awayShortId = espnToShort[away.team.id] || away.team.id;
+
         let winnerTeamId: string | null = null;
         if (status === 'FINAL') {
-            winnerTeamId = homeScore > awayScore ? home.team.id : away.team.id;
+            // Winner stored as skeleton short ID
+            winnerTeamId = homeScore > awayScore ? homeShortId : awayShortId;
         }
 
         return {
-            homeTeamId: home.team.id,
-            awayTeamId: away.team.id,
+            homeTeamId: homeShortId,
+            awayTeamId: awayShortId,
             homeScore,
             awayScore,
             status,
             winnerTeamId,
             startTime: comp.date,
-            period: comp.status?.period,
-            clock: comp.status?.displayClock,
-            broadcast: comp.broadcasts?.[0]?.names?.[0],
+            period: comp.status?.period ?? null,
+            clock: comp.status?.displayClock ?? null,
+            broadcast: comp.broadcasts?.[0]?.names?.[0] ?? null,
             externalId: e.id
         };
     }).filter(m => m !== null) as any[];
@@ -1080,9 +1119,11 @@ function mapESPNConferenceGamesToSkeleton(
     return { updatedGames: updated, mappedCount };
 }
 
+
 /**
  * Imports tournament data from ESPN, mapping existing games and teams for Conference Tournaments.
  */
+
 export const importConferenceTournamentFromESPN = onCall(async (request) => {
     let role = request.auth?.token.role;
     if (!role && request.auth?.uid) {

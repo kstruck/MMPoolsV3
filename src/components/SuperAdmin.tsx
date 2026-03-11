@@ -288,6 +288,38 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
+    const handleReinitBig12Tournament = async () => {
+        if (!confirm('Re-initialize big12-2026 tournament with CORRECT 2026 seeds?\n\nThis will overwrite the current tournament skeleton in Firestore with the real ESPN seedings. Do this now to fix the bracket structure.')) return;
+        try {
+            const functions = getFunctions();
+            const initFn = httpsCallable(functions, 'initializeBig12TournamentHttp');
+            const result = await initFn({ tournamentId: 'big12-2026', overwrite: true });
+            alert('✅ Big 12 tournament re-initialized successfully! The next sync (within 10 min) will pull live game results from ESPN.');
+            logger.info('Big12 reinit result:', result);
+        } catch (e: unknown) {
+            logger.error('Reinit failed:', e);
+            alert('Error re-initializing tournament: ' + (e instanceof Error ? e.message : String(e)));
+        }
+    };
+
+
+    const handleForceReopenPool = async (pool: Pool) => {
+        if (pool.type !== 'BRACKET') {
+            alert('Force Re-Open only applies to bracket pools.');
+            return;
+        }
+        if (!confirm(`Re-open "${pool.name}"?\n\nThis will set the status back to OPEN, allowing participants to edit and re-submit their brackets. You will need to manually close/lock it again when ready.`)) return;
+        try {
+            await dbService.updateBracketPool(pool.id, { status: 'OPEN', lockedAt: null });
+            alert(`✅ "${pool.name}" is now OPEN. Participants can edit and re-submit their brackets.`);
+            setViewingPool(null);
+        } catch (e: unknown) {
+            logger.error('Force reopen error:', e);
+            alert('Error re-opening pool: ' + (e instanceof Error ? e.message : String(e)));
+        }
+    };
+
+
     const handleDeleteUser = async (user: User) => {
         if (confirm(`Are you sure you want to COMPLETELY DELETE user ${user.name}?\n\nThis will remove their Login Account AND Database Profile.\nThis action cannot be undone.`)) {
             try {
@@ -845,9 +877,28 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ TOURNAMENT TAB ============ */}
             {activeTab === 'tournament' && (
                 <div className="space-y-6">
+                    {/* ⚠️ BIG 12 RE-INIT BANNER */}
+                    <div className="bg-amber-900/40 border border-amber-500/60 rounded-xl p-5 flex items-center justify-between gap-4">
+                        <div>
+                            <h3 className="text-amber-400 font-bold text-lg flex items-center gap-2">
+                                <Trophy size={20} className="text-amber-400" />
+                                Big 12 2026 — Bracket Re-Initialization Required
+                            </h3>
+                            <p className="text-amber-200/70 text-sm mt-1">
+                                The seeds were incorrect. Click to overwrite the Firestore tournament skeleton with the correct 2026 ESPN seedings (Arizona #1, Houston #2, ASU #12 vs Baylor #13, etc).
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleReinitBig12Tournament}
+                            className="shrink-0 bg-amber-500 hover:bg-amber-400 text-black font-extrabold px-5 py-3 rounded-xl text-sm transition-all shadow-lg shadow-amber-500/30 whitespace-nowrap"
+                        >
+                            🔧 Re-Init Big 12 Now
+                        </button>
+                    </div>
                     <TournamentManager />
                 </div>
             )}
+
 
             {/* ============ STATS TAB ============ */}
             {activeTab === 'stats' && (
@@ -2290,13 +2341,29 @@ export const SuperAdmin: React.FC = () => {
                                 }
 
                                 {/* Actions */}
-                                <div className="flex gap-3 pt-4 border-t border-slate-700">
+                                <div className="flex gap-3 pt-4 border-t border-slate-700 flex-wrap">
                                     <button onClick={() => window.location.href = `/admin/${viewingPool.id}`} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20">
                                         Manage Settings
                                     </button>
                                     <a href={`#pool/${viewingPool.id}`} target="_blank" className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-2">
                                         View Live Grid
                                     </a>
+                                    {viewingPool.type === 'BRACKET' && (
+                                        <button
+                                            onClick={() => handleForceReopenPool(viewingPool)}
+                                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20"
+                                        >
+                                            🔓 Force Re-Open Pool
+                                        </button>
+                                    )}
+                                    {viewingPool.type === 'BRACKET' && (
+                                        <button
+                                            onClick={() => { handleClosePool(viewingPool as unknown as Pool); setViewingPool(null); }}
+                                            className="w-full bg-rose-700 hover:bg-rose-600 text-white py-3 rounded-xl font-bold transition-all"
+                                        >
+                                            🔒 Close Pool
+                                        </button>
+                                    )}
                                 </div>
                             </div >
                         </div >

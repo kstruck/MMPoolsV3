@@ -372,9 +372,9 @@ export interface Game {
     region?: string | null;
     isFirstFour?: boolean;
     nextGameId?: string;
-    period?: number;
-    clock?: string;
-    broadcast?: string;
+    period?: number | null;
+    clock?: string | null;
+    broadcast?: string | null;
     externalId?: string;
 }
 
