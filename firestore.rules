@@ -2,16 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // POOLS: 
-    // - READ: Everyone (Public)
-    // - CREATE: Logged in users
-    // - UPDATE: 
-    //   - Allow Owner to update (for settings, managing players)
-    //   - DENY others (Public users claiming squares must use Cloud Function 'reserveSquare')
-    //   - DENY 'isLocked', 'axisNumbers' updates from Client (must use Cloud Function 'lockPool') - enforce via field check if owner?
-    //     - Actually, even Owner should use lockPool for RNG.
-    //     - But Owner might need to toggle lock manually? 
-    //     - Let's restrict 'axisNumbers' to only be writable if unchanged or via Admin SDK (which bypasses rules).
     // PROP QUESTIONS (Global Seeds)
     match /prop_questions/{questionId} {
       allow read: if true;
@@ -27,10 +17,10 @@ service cloud.firestore {
       // Allow GET by anyone (Guest Access via Link)
       allow get: if true;
       
-      // Allow LIST if:
-      // 1. Pool is Public (Squares root flag OR Playoff settings flag)
-      // 2. Pool has a URL Slug (urlSlug OR slug - enables resolving slugs for guests, even if private)
-      // 3. User is Owner/Manager/SuperAdmin
+      // Allow LIST if pool is public, has a slug (link-accessible), or user is authenticated owner/admin.
+      // IMPORTANT: We do NOT do resource.data.entries[uid] here — that's an O(doc) map read on every
+      // document in the collection scan, which kills performance at scale (500+ entries pools).
+      // Fine-grained participant access is enforced at the application layer via participations subcollection.
       allow list: if (resource.data.get('isPublic', false) == true) || 
                      (resource.data.get('settings', {}).get('isListedPublic', false) == true) ||
                      (resource.data.get('urlSlug', null) != null) ||
@@ -38,14 +28,16 @@ service cloud.firestore {
                      (request.auth != null && (
                         resource.data.ownerId == request.auth.uid || 
                         resource.data.managerUid == request.auth.uid || 
-                        resource.data.entries[request.auth.uid] != null ||
                         (resource.data.participantIds != null && resource.data.participantIds.hasAny([request.auth.uid])) ||
                         isSuperAdmin()
                      ));
 
-      
       // Delete: Owner only OR SuperAdmin
-      allow delete: if request.auth != null && (request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid || isSuperAdmin());
+      allow delete: if request.auth != null && (
+        request.auth.uid == resource.data.ownerId || 
+        request.auth.uid == resource.data.managerUid || 
+        isSuperAdmin()
+      );
       
       // Helper: is user the pool owner or manager?
       function isPoolManager() {
@@ -53,7 +45,6 @@ service cloud.firestore {
       }
 
       // Protected fields that ONLY the Admin SDK (cloud functions) can write.
-      // Client-side manager edits must never overwrite these.
       function protectedFieldsUnchanged() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
         return !changed.hasAny([
@@ -62,17 +53,13 @@ service cloud.firestore {
         ]);
       }
 
-      // Pool is in an editable state (not locked or completed).
-      // Super Admins bypass this check.
+      // Pool is in an editable state.
+      // NOTE: 'PUBLISHED' is removed — status was renamed to 'OPEN'.
       function poolIsEditable() {
-        return resource.data.get('status', 'DRAFT') in ['DRAFT', 'PUBLISHED', 'OPEN'];
+        return resource.data.get('status', 'DRAFT') in ['DRAFT', 'OPEN'];
       }
 
       // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted)
-      // Managers cannot:
-      //   1. Overwrite identity/ownership fields
-      //   2. Edit pools that are LOCKED or COMPLETED
-      // SuperAdmins bypass ALL restrictions (for emergency fixes)
       allow update: if request.auth != null && (
         (isPoolManager() && protectedFieldsUnchanged() && poolIsEditable())
         || isSuperAdmin()
@@ -81,16 +68,13 @@ service cloud.firestore {
       // NO CREATE via Client (Must use createPool function), unless it's a simulation
       allow create: if (request.resource.data.slug.matches('^sim-.*') && request.auth != null);
 
-
       // WINNERS (Subcollection)
-      // Read: Everyone (Publicly visible results)
       match /winners/{winnerId} {
         allow read: if true;
         allow write: if false; // Only via Cloud Functions
       }
 
       // PARTICIPANTS INDEX (Subcollection)
-      // Read: Pool Owner OR The Participant themselves OR SuperAdmin
       match /participants/{participantId} {
         allow read: if request.auth != null && (
           request.auth.uid == participantId || 
@@ -100,7 +84,7 @@ service cloud.firestore {
         allow write: if false; // Only via Cloud Functions
       }
 
-      // AUDIT LOGS: Encapsulated logic (No Client Writes)
+      // AUDIT LOGS
       match /audit/{auditId} {
         allow read: if true;
         allow write, delete: if false; 
@@ -138,9 +122,7 @@ service cloud.firestore {
 
       // PROP CARDS
       match /propCards/{userId} {
-        // Read: Owner (Admin), The User themselves, or SuperAdmin
         allow read: if request.auth != null;
-        // Write: Only via Cloud Function 'purchasePropCard' normally, but allow SuperAdmin for tests/edits
         allow write: if isSuperAdmin();
       }
 
@@ -159,14 +141,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null;
 
-      // Allow write if:
-      // 1. User editing themselves (BUT denying role change)
-      // 2. SuperAdmin editing anyone (Allowed to change roles too)
       allow write: if request.auth != null && (
         (request.auth.uid == userId && (
-          // CREATE: Allow if creating self, provided role is PARTICIPANT (prevent self-promotion)
           (resource == null && request.resource.data.role == 'PARTICIPANT') ||
-          // UPDATE: Allow if updating self, provided role is NOT changed
           (resource != null && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
         )) ||
         isSuperAdmin()
@@ -179,8 +156,7 @@ service cloud.firestore {
       }
     }
 
-    // POOL CLAIMS (Cross-Device Merge)
-    // Completely secure, only accessed via Cloud Functions
+    // POOL CLAIMS (Cross-Device Merge) — Cloud Functions only
     match /poolClaims/{claimId} {
       allow read, write: if false;
     }
@@ -190,19 +166,19 @@ service cloud.firestore {
       allow get: if true;
     }
 
-    // GLOBAL CONFIG (Playoffs, etc.)
+    // GLOBAL CONFIG
     match /config/{configId} {
       allow read: if true;
       allow write: if isSuperAdmin();
     }
 
-    // SYSTEM DOCUMENTS (Config, Playoff Results, etc.)
+    // SYSTEM DOCUMENTS
     match /system/{docId} {
       allow read: if true;
       allow write: if isSuperAdmin();
     }
 
-    // SYSTEM LOGS (ErrorBoundary + errorHandler write here)
+    // SYSTEM LOGS
     match /system_logs/{document=**} {
       allow read: if isSuperAdmin();
       allow create: if request.auth != null;
@@ -215,7 +191,7 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // STATS:
+    // STATS
     match /stats/{document=**} {
       allow read: if true;
       allow write: if false;
@@ -227,10 +203,9 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // EMAIL TRIGGERS:
-    // - Public write allowed (for now, to support legacy client-side trigger)
+    // EMAIL TRIGGERS — must go through Cloud Functions
     match /mail/{document=**} {
-      allow create: if false; // Trigger via Cloud Functions only
+      allow create: if false;
     }
   }
 }

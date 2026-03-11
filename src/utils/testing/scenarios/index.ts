@@ -44,7 +44,7 @@ export interface TestScenario {
         cost?: number; // For props
         maxPlayers?: number;
         maxCards?: number; // For props
-        ruleVariations?: Record<string, any>;
+        ruleVariations?: Record<string, unknown>;
         scoringSystem?: 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM';
         entryFee?: number;
     };
@@ -85,8 +85,8 @@ export interface TestScenario {
     }>;
     grading?: Record<string, number>;
     assertions: TestAssertion[];
-    tournamentResults?: any; // Bracket results
-    roundResults?: any; // Playoff round results
+    tournamentResults?: unknown; // Bracket results
+    roundResults?: unknown; // Playoff round results
 }
 
 export const SCENARIOS: Record<string, TestScenario> = {

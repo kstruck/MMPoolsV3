@@ -1044,8 +1044,8 @@ function mapESPNConferenceGamesToSkeleton(
 
         const homeScore = parseInt(home.score || '0');
         const awayScore = parseInt(away.score || '0');
-        const status = comp.status.type.state === 'pre' ? 'SCHEDULED' :
-            comp.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
+        const status = (comp.status.type.state === 'pre' ? 'SCHEDULED' :
+            comp.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL') as 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL';
 
         // Translate ESPN numeric IDs to skeleton short IDs (fallback: raw ESPN id)
         const homeShortId = espnToShort[home.team.id] || home.team.id;
@@ -1070,7 +1070,7 @@ function mapESPNConferenceGamesToSkeleton(
             broadcast: comp.broadcasts?.[0]?.names?.[0] ?? null,
             externalId: e.id
         };
-    }).filter(m => m !== null) as any[];
+    }).filter((m): m is NonNullable<typeof m> => m !== null);
 
     // Match by passing teams from feeders down
     const maxRound = Math.max(...Object.values(updated).map(g => g.round));
@@ -1171,8 +1171,9 @@ export const importConferenceTournamentFromESPN = onCall(async (request) => {
         await scoreTournamentEntries(db, tournamentId);
 
         return { success: true, count: events.length, mapped: mappedCount };
-    } catch (error: any) {
-        return { success: false, message: `Import failed: ${error.message}` };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        return { success: false, message: `Import failed: ${msg}` };
     }
 });
 
