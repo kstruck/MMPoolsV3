@@ -129,8 +129,8 @@ export const recalculatePoolWinners = onCall(async (request) => {
     }
 
     const uid = request.auth.uid;
-    const userDoc = await db.collection('users').doc(uid).get();
-    if (!userDoc.exists || userDoc.data()?.role !== 'SUPER_ADMIN') {
+    // Use JWT custom claim (tamper-proof) instead of Firestore document lookup
+    if (request.auth.token.role !== 'SUPER_ADMIN') {
         throw new HttpsError('permission-denied', 'SuperAdmin access required.');
     }
 
@@ -258,10 +258,8 @@ export const fixParticipantIds = onCall(async (request) => {
     const db = admin.firestore();
     if (!request.auth) throw new HttpsError('unauthenticated', 'Must be logged in.');
 
-    // Super Admin Check
-    const uid = request.auth.uid;
-    const userDoc = await db.collection('users').doc(uid).get();
-    if (userDoc.data()?.role !== 'SUPER_ADMIN') {
+    // Super Admin Check — use JWT custom claim (tamper-proof)
+    if (request.auth.token.role !== 'SUPER_ADMIN') {
         throw new HttpsError('permission-denied', 'SuperAdmin only.');
     }
 

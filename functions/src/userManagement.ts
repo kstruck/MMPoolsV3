@@ -18,11 +18,9 @@ export const deleteUserAccount = functions.https.onCall(async (request) => {
     }
 
     const callerUid = request.auth.uid;
-    const callerSnap = await db.collection("users").doc(callerUid).get();
-    const callerData = callerSnap.data();
-
-    if (!callerData || callerData.role !== "SUPER_ADMIN") {
-        throw new functions.https.HttpsError("permission-denied", "Only Super Ads can delete accounts.");
+    // Use JWT custom claim (tamper-proof) instead of reading mutable Firestore doc
+    if (request.auth.token.role !== 'SUPER_ADMIN') {
+        throw new functions.https.HttpsError("permission-denied", "Only Super Admins can delete accounts.");
     }
 
     const { targetUid } = request.data;
@@ -65,11 +63,8 @@ export const sendAdminPasswordReset = functions.https.onCall(async (request) => 
         throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
     }
 
-    const callerUid = request.auth.uid;
-    const callerSnap = await db.collection("users").doc(callerUid).get();
-    const callerData = callerSnap.data();
-
-    if (!callerData || callerData.role !== "SUPER_ADMIN") {
+    // Use JWT custom claim (tamper-proof) instead of reading mutable Firestore doc
+    if (request.auth.token.role !== 'SUPER_ADMIN') {
         throw new functions.https.HttpsError("permission-denied", "Only Super Admins can reset passwords.");
     }
 

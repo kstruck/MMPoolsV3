@@ -17,20 +17,17 @@ service cloud.firestore {
       // Allow GET by anyone (Guest Access via Link)
       allow get: if true;
       
-      // Allow LIST if pool is public, has a slug (link-accessible), or user is authenticated owner/admin.
-      // IMPORTANT: We do NOT do resource.data.entries[uid] here — that's an O(doc) map read on every
-      // document in the collection scan, which kills performance at scale (500+ entries pools).
-      // Fine-grained participant access is enforced at the application layer via participations subcollection.
-      allow list: if (resource.data.get('isPublic', false) == true) || 
-                     (resource.data.get('settings', {}).get('isListedPublic', false) == true) ||
-                     (resource.data.get('urlSlug', null) != null) ||
-                     (resource.data.get('slug', null) != null) ||
-                     (request.auth != null && (
-                        resource.data.ownerId == request.auth.uid || 
-                        resource.data.managerUid == request.auth.uid || 
-                        (resource.data.participantIds != null && resource.data.participantIds.hasAny([request.auth.uid])) ||
-                        isSuperAdmin()
-                     ));
+      // Allow LIST only if user is authenticated and is owner/admin/participant.
+      // NOTE: We keep allow get: if true for link-based sharing (unauthenticated access via slug is fine for single doc).
+      // Broad unauthenticated listing is removed to prevent data scraping.
+      allow list: if request.auth != null && (
+                     resource.data.get('isPublic', false) == true ||
+                     resource.data.get('settings', {}).get('isListedPublic', false) == true ||
+                     resource.data.ownerId == request.auth.uid || 
+                     resource.data.managerUid == request.auth.uid || 
+                     (resource.data.participantIds != null && resource.data.participantIds.hasAny([request.auth.uid])) ||
+                     isSuperAdmin()
+                  );
 
       // Delete: Owner only OR SuperAdmin
       allow delete: if request.auth != null && (
@@ -86,7 +83,12 @@ service cloud.firestore {
 
       // AUDIT LOGS
       match /audit/{auditId} {
-        allow read: if true;
+        // Restrict reads to pool owner or super admin (audit logs contain UIDs and operation metadata)
+        allow read: if request.auth != null && (
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
         allow write, delete: if false; 
       }
 
@@ -134,6 +136,20 @@ service cloud.firestore {
           request.resource.data.ownerUid == request.auth.uid &&
           get(/databases/$(database)/documents/pools/$(poolId)).data.slug.matches('^sim-.*')
         );
+      }
+
+      // SHARE CLICK TRACKING
+      // Records share link clicks for pool manager analytics.
+      // Writes require auth to prevent anonymous flooding.
+      // Reads restricted to pool owner/super admin.
+      match /shareClicks/{clickId} {
+        allow read: if request.auth != null && (
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow create: if request.auth != null;
+        allow update, delete: if false;
       }
     }
     

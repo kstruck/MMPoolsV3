@@ -289,6 +289,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Security: Validate file type to prevent SVG/JS injection via logo upload
+    const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      alert('Invalid file type. Please upload a JPEG, PNG, WebP, or GIF image.');
+      e.target.value = ''; // Reset the input so the same file can't be resubmitted
+      return;
+    }
+
     if (file.size > 2 * 1024 * 1024) { // 2MB Limit
       alert("Logo file is too large! Max size is 2MB.");
       return;
