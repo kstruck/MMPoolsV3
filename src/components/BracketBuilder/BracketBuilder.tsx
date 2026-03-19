@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import type { Tournament, BracketRegion } from '../../types';
 import { MatchNode } from './MatchNode';
 import { RegionTabs } from './RegionTabs';
-import { ChevronRight, ChevronLeft, Trophy, Star, Dices, Wand2 } from 'lucide-react';
+import { ESPNBracket } from './ESPNBracket';
+import { ChevronRight, ChevronLeft, Trophy, Star, Dices, Wand2, LayoutGrid, List } from 'lucide-react';
 
 interface BracketBuilderProps {
     tournament: Tournament;
@@ -13,12 +14,14 @@ interface BracketBuilderProps {
     comparisonPicks?: Record<string, string>;
 }
 
+type ViewType = 'espn' | 'tabs';
+
 export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly, viewMode = 'tabs', comparisonPicks }) => {
     const [activeRegion, setActiveRegion] = useState<BracketRegion | 'FF'>('East');
+    const [view, setView] = useState<ViewType>('espn'); // Default to ESPN full bracket
 
-    // Calculate completion status for tabs - moved up to avoid conditional hook call
+    // Calculate completion status for tabs
     const completionStatus = useMemo(() => {
-        // ... (status calc same as before) ...
         const status: Record<BracketRegion | 'FF', { count: number; total: number; complete: boolean }> = {
             East: { count: 0, total: 15, complete: false },
             West: { count: 0, total: 15, complete: false },
@@ -57,6 +60,10 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
         return eliminated;
     }, [tournament]);
 
+    const totalGames = Object.keys(tournament.games).length;
+    const totalPicks = Object.keys(picks).length;
+
+    // If caller explicitly requests the legacy full view
     if (viewMode === 'full') {
         return (
             <FullBracketView
@@ -87,14 +94,12 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
             if (strategy === 'random') {
                 return Math.random() > 0.5 ? teamA : teamB;
             }
-            // For favorites and smart
             const matchA = teamA.match(/[A-Z]?(\d+)-/);
             const matchB = teamB.match(/[A-Z]?(\d+)-/);
             const seedA = matchA ? parseInt(matchA[1], 10) : 8;
             const seedB = matchB ? parseInt(matchB[1], 10) : 8;
 
             if (strategy === 'smart') {
-                // Weighted random based on seed inversion (seed 1 has weight 16, seed 16 has weight 1)
                 const weightA = 17 - seedA;
                 const weightB = 17 - seedB;
                 const total = weightA + weightB;
@@ -114,25 +119,21 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
             const r3 = getGames(3);
             const r4 = getGames(4);
 
-            // Round 1
             r1.forEach(g => {
                 if (!newPicks[g.id]) newPicks[g.id] = pickWinner(g.homeTeamId, g.awayTeamId)!;
             });
-            // Round 2
             r2.forEach((g, i) => {
                 if (!r1[i * 2] || !r1[i * 2 + 1]) return;
                 const home = newPicks[r1[i * 2].id];
                 const away = newPicks[r1[i * 2 + 1].id];
                 if (!newPicks[g.id]) newPicks[g.id] = pickWinner(home, away)!;
             });
-            // Round 3
             r3.forEach((g, i) => {
                 if (!r2[i * 2] || !r2[i * 2 + 1]) return;
                 const home = newPicks[r2[i * 2].id];
                 const away = newPicks[r2[i * 2 + 1].id];
                 if (!newPicks[g.id]) newPicks[g.id] = pickWinner(home, away)!;
             });
-            // Round 4
             r4.forEach((g, i) => {
                 if (!r3[i * 2] || !r3[i * 2 + 1]) return;
                 const home = newPicks[r3[i * 2].id];
@@ -142,7 +143,6 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
             });
         });
 
-        // Final Four (Round 5)
         const ff = Object.values(tournament.games).filter(g => g.round === 5).sort((a, b) => a.id.localeCompare(b.id));
         const f4Game1 = ff.find(g => g.id === 'R5-1') || ff[0];
         const f4Game2 = ff.find(g => g.id === 'R5-2') || ff[1];
@@ -150,13 +150,11 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
         if (f4Game1 && !newPicks[f4Game1.id]) newPicks[f4Game1.id] = pickWinner(regChamps['East'], regChamps['West'])!;
         if (f4Game2 && !newPicks[f4Game2.id]) newPicks[f4Game2.id] = pickWinner(regChamps['South'], regChamps['Midwest'])!;
 
-        // Championship (Round 6)
         const champ = Object.values(tournament.games).find(g => g.round === 6);
         if (champ && f4Game1 && f4Game2 && !newPicks[champ.id]) {
             newPicks[champ.id] = pickWinner(newPicks[f4Game1.id], newPicks[f4Game2.id])!;
         }
 
-        // Apply new picks 
         Object.entries(newPicks).forEach(([slot, team]) => {
             if (picks[slot] !== team && team !== undefined) {
                 onPick(slot, team);
@@ -181,57 +179,77 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
     };
 
     return (
-        <div className="flex flex-col h-full w-full max-w-6xl mx-auto">
-            {/* Header / Tabs */}
-            <div className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-800 pt-4 px-4">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        {activeRegion === 'FF' ? <Trophy className="text-amber-500" /> : <span className="text-indigo-400">Region:</span>}
-                        {activeRegion === 'FF' ? 'Final Four' : activeRegion}
-                    </h2>
-                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-4">
-                        {!readOnly && (
-                            <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
-                                <button
-                                    onClick={() => handleQuickPick('favorites')}
-                                    className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
-                                    title="Fill bracket with top seeds"
-                                >
-                                    <Star size={12} className="text-amber-400" /> <span className="hidden sm:inline">Favorites</span>
-                                </button>
-                                <button
-                                    onClick={() => handleQuickPick('random')}
-                                    className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
-                                    title="Fill bracket randomly"
-                                >
-                                    <Dices size={12} className="text-indigo-400" /> <span className="hidden sm:inline">Random</span>
-                                </button>
-                                <button
-                                    onClick={() => handleQuickPick('smart')}
-                                    className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
-                                    title="Finish remaining games for me"
-                                >
-                                    <Wand2 size={12} className="text-emerald-400" /> <span className="hidden sm:inline">Finish Empty</span>
-                                </button>
-                            </div>
-                        )}
-                        <div className="text-xs sm:text-sm text-slate-400 font-mono whitespace-nowrap">
-                            Total: {Object.values(picks).length} / {Object.keys(tournament.games).length}
+        <div className="flex flex-col h-full w-full">
+            {/* Header */}
+            <div className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 pt-3 pb-2">
+                <div className="flex justify-between items-center gap-3">
+                    {/* Left: Quick pick tools */}
+                    {!readOnly && (
+                        <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
+                            <button
+                                onClick={() => handleQuickPick('favorites')}
+                                className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+                                title="Fill bracket with top seeds"
+                            >
+                                <Star size={12} className="text-amber-400" /> <span className="hidden sm:inline">Favorites</span>
+                            </button>
+                            <button
+                                onClick={() => handleQuickPick('random')}
+                                className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+                                title="Fill bracket randomly"
+                            >
+                                <Dices size={12} className="text-indigo-400" /> <span className="hidden sm:inline">Random</span>
+                            </button>
+                            <button
+                                onClick={() => handleQuickPick('smart')}
+                                className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+                                title="Finish remaining games"
+                            >
+                                <Wand2 size={12} className="text-emerald-400" /> <span className="hidden sm:inline">Finish</span>
+                            </button>
                         </div>
+                    )}
+
+                    {/* Center: Progress */}
+                    <div className="text-xs text-slate-400 font-mono whitespace-nowrap hidden sm:block">
+                        {totalPicks} / {totalGames} picks
+                    </div>
+
+                    {/* Right: View toggle */}
+                    <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
+                        <button
+                            onClick={() => setView('espn')}
+                            title="Full Bracket (ESPN-style)"
+                            className={`px-2 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'espn' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                        >
+                            <LayoutGrid size={11} /> <span className="hidden sm:inline">Full</span>
+                        </button>
+                        <button
+                            onClick={() => setView('tabs')}
+                            title="Region-by-Region"
+                            className={`px-2 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'tabs' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                        >
+                            <List size={11} /> <span className="hidden sm:inline">Regions</span>
+                        </button>
                     </div>
                 </div>
 
-                <RegionTabs
-                    activeRegion={activeRegion}
-                    onRegionChange={setActiveRegion}
-                    completionStatus={completionStatus}
-                />
+                {/* Region tabs — only shown in tabs view */}
+                {view === 'tabs' && (
+                    <div className="mt-2">
+                        <RegionTabs
+                            activeRegion={activeRegion}
+                            onRegionChange={setActiveRegion}
+                            completionStatus={completionStatus}
+                        />
+                    </div>
+                )}
             </div>
 
-            {/* Main Content Area - Scrollable if needed, but designed to fit */}
-            <div className="flex-1 p-4 overflow-x-auto overflow-y-auto min-h-[600px]">
-                {activeRegion === 'FF' ? (
-                    <FinalFourBracket
+            {/* Main Content */}
+            <div className="flex-1 overflow-auto">
+                {view === 'espn' ? (
+                    <ESPNBracket
                         tournament={tournament}
                         picks={picks}
                         onPick={onPick}
@@ -240,20 +258,33 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                         comparisonPicks={comparisonPicks}
                     />
                 ) : (
-                    <RegionBracket
-                        regionName={activeRegion}
-                        tournament={tournament}
-                        picks={picks}
-                        onPick={onPick}
-                        readOnly={readOnly}
-                        eliminatedTeamIds={eliminatedTeamIds}
-                        comparisonPicks={comparisonPicks}
-                    />
+                    <div className="p-4">
+                        {activeRegion === 'FF' ? (
+                            <FinalFourBracket
+                                tournament={tournament}
+                                picks={picks}
+                                onPick={onPick}
+                                readOnly={readOnly}
+                                eliminatedTeamIds={eliminatedTeamIds}
+                                comparisonPicks={comparisonPicks}
+                            />
+                        ) : (
+                            <RegionBracket
+                                regionName={activeRegion}
+                                tournament={tournament}
+                                picks={picks}
+                                onPick={onPick}
+                                readOnly={readOnly}
+                                eliminatedTeamIds={eliminatedTeamIds}
+                                comparisonPicks={comparisonPicks}
+                            />
+                        )}
+                    </div>
                 )}
             </div>
 
-            {/* Footer Navigation */}
-            {!readOnly && (
+            {/* Footer Navigation — only in tabs view */}
+            {!readOnly && view === 'tabs' && (
                 <div className="p-4 border-t border-slate-800 flex justify-between bg-slate-900/50 backdrop-blur">
                     <button
                         onClick={handlePrevRegion}
@@ -276,80 +307,49 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
     );
 };
 
-// --- Sub-components ---
+// --- Sub-components (kept for Regions tab view) ---
 
 const FullBracketView: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<string> }> = ({ tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks }) => {
-    // Zoom/Pan could be added here later. For now, we'll do a CSS transform scale to fit.
     return (
-        <div id="bracket-printable-area" className="w-full h-full overflow-auto bg-slate-950 p-4">
-            <div className="bracket-container w-fit mx-auto flex justify-center gap-4 lg:gap-8 xl:gap-16">
-
-                {/* LEFT SIDE: East & West */}
-                <div className="flex flex-col gap-12 lg:gap-16">
-                    <div>
-                        <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">East Region</h3>
-                        <RegionBracket regionName="East" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="left" eliminatedTeamIds={eliminatedTeamIds} comparisonPicks={comparisonPicks} />
-                    </div>
-                    <div>
-                        <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">West Region</h3>
-                        <RegionBracket regionName="West" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="left" eliminatedTeamIds={eliminatedTeamIds} comparisonPicks={comparisonPicks} />
-                    </div>
-                </div>
-
-                {/* CENTER: Final Four */}
-                <div className="flex flex-col justify-center sticky top-0 self-center z-10">
-                    <FinalFourBracket tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} eliminatedTeamIds={eliminatedTeamIds} comparisonPicks={comparisonPicks} />
-                </div>
-
-                {/* RIGHT SIDE: South & Midwest - ALIGN RIGHT */}
-                <div className="flex flex-col gap-12 lg:gap-16">
-                    <div>
-                        <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">South Region</h3>
-                        <RegionBracket regionName="South" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="right" eliminatedTeamIds={eliminatedTeamIds} comparisonPicks={comparisonPicks} />
-                    </div>
-                    <div>
-                        <h3 className="text-indigo-400 font-bold uppercase tracking-widest mb-4 text-center">Midwest Region</h3>
-                        <RegionBracket regionName="Midwest" tournament={tournament} picks={picks} onPick={onPick} readOnly={readOnly} align="right" eliminatedTeamIds={eliminatedTeamIds} comparisonPicks={comparisonPicks} />
-                    </div>
-                </div>
-            </div>
-        </div>
+        <ESPNBracket
+            tournament={tournament}
+            picks={picks}
+            onPick={onPick}
+            readOnly={readOnly}
+            eliminatedTeamIds={eliminatedTeamIds}
+            comparisonPicks={comparisonPicks}
+        />
     );
 };
 
 const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right'; eliminatedTeamIds: Set<string> } & BracketBuilderProps> = ({ regionName, align = 'left', tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks }) => {
-    // Helper to get games for this region and round
     const getGames = (round: number) => {
         return Object.values(tournament.games)
             .filter(g => g.region === regionName && g.round === round)
-            .sort((a, b) => a.id.localeCompare(b.id)); // Ensure stable order (by slot ID usually)
+            .sort((a, b) => a.id.localeCompare(b.id));
     };
 
-    const r1Games = getGames(1); // 8 games
-    const r2Games = getGames(2); // 4 games
-    const r3Games = getGames(3); // 2 games
-    const r4Games = getGames(4); // 1 game
+    const r1Games = getGames(1);
+    const r2Games = getGames(2);
+    const r3Games = getGames(3);
+    const r4Games = getGames(4);
 
-    // Dynamic classes based on alignment
-    // Use scale-75 or scale-x to shrink nicely without horizontal scrolling out of bounds on standard sizes
     const containerClasses = `flex gap-2 sm:gap-4 justify-center scale-[0.65] sm:scale-75 md:scale-90 xl:scale-75 2xl:scale-100 origin-top ${align === 'right' ? 'flex-row-reverse' : ''}`;
 
     return (
         <div className={containerClasses}>
-            {/* Round 1 Column */}
             <div className="flex flex-col justify-around gap-1 py-4">
                 {Array.from({ length: 8 }).map((_, i) => (
                     <MatchNode key={`r1-${i}`} game={r1Games[i]} picks={picks} onPick={onPick} readOnly={readOnly} eliminatedTeamIds={eliminatedTeamIds} comparisonPicks={comparisonPicks} />
                 ))}
             </div>
 
-            {/* Round 2 Column */}
             <div className="flex flex-col justify-around gap-2 py-8">
                 {Array.from({ length: 4 }).map((_, i) => {
                     const homeFeeder = r1Games[i * 2];
                     const awayFeeder = r1Games[i * 2 + 1];
-                    const homeId = picks[homeFeeder.id];
-                    const awayId = picks[awayFeeder.id];
+                    const homeId = picks[homeFeeder?.id];
+                    const awayId = picks[awayFeeder?.id];
                     return (
                         <MatchNode
                             key={`r2-${i}`}
@@ -366,13 +366,12 @@ const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right'; el
                 })}
             </div>
 
-            {/* Round 3 (Sweet 16) Column */}
             <div className="flex flex-col justify-around gap-2 py-16">
                 {Array.from({ length: 2 }).map((_, i) => {
                     const homeFeeder = r2Games[i * 2];
                     const awayFeeder = r2Games[i * 2 + 1];
-                    const homeId = picks[homeFeeder.id];
-                    const awayId = picks[awayFeeder.id];
+                    const homeId = picks[homeFeeder?.id];
+                    const awayId = picks[awayFeeder?.id];
                     return (
                         <MatchNode
                             key={`r3-${i}`}
@@ -389,13 +388,12 @@ const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right'; el
                 })}
             </div>
 
-            {/* Round 4 (Elite 8) Column */}
             <div className="flex flex-col justify-center py-20">
                 {(() => {
                     const homeFeeder = r3Games[0];
                     const awayFeeder = r3Games[1];
-                    const homeId = picks[homeFeeder.id];
-                    const awayId = picks[awayFeeder.id];
+                    const homeId = picks[homeFeeder?.id];
+                    const awayId = picks[awayFeeder?.id];
                     return (
                         <MatchNode
                             key="r4"
@@ -417,11 +415,9 @@ const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right'; el
 };
 
 const FinalFourBracket: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<string> }> = ({ tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks }) => {
-    const ffGames = Object.values(tournament.games).filter(g => g.round === 5); // 2 games
-    const champGame = Object.values(tournament.games).find(g => g.round === 6); // 1 game
+    const ffGames = Object.values(tournament.games).filter(g => g.round === 5);
+    const champGame = Object.values(tournament.games).find(g => g.round === 6);
 
-    // Helper to find regional champions
-    // East -> R4-E1, West -> R4-W1, South -> R4-S1, Midwest -> R4-M1
     const getRegChamp = (region: string) => {
         const game = Object.values(tournament.games).find(g => g.region === region && g.round === 4);
         return game ? picks[game.id] : undefined;
@@ -435,7 +431,6 @@ const FinalFourBracket: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<
     const f4Game1 = ffGames.find(g => g.id === 'R5-1') || ffGames[0];
     const f4Game2 = ffGames.find(g => g.id === 'R5-2') || ffGames[1];
 
-    // Championship feeders
     const champHome = picks[f4Game1?.id];
     const champAway = picks[f4Game2?.id];
 
@@ -444,7 +439,6 @@ const FinalFourBracket: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<
             <h3 className="text-2xl font-bold text-amber-500 tracking-widest uppercase mb-4">Final Four</h3>
 
             <div className="flex gap-8 items-center">
-                {/* Semifinal 1 (East vs West) */}
                 <div className="flex flex-col items-center gap-2">
                     <div className="text-xs text-slate-400">East vs West</div>
                     <MatchNode
@@ -460,7 +454,6 @@ const FinalFourBracket: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<
                     />
                 </div>
 
-                {/* Championship */}
                 <div className="flex flex-col items-center transform scale-125 z-10">
                     <div className="text-amber-400 font-bold mb-2 text-lg">NATIONAL CHAMPIONSHIP</div>
                     <Trophy className="w-8 h-8 text-amber-500 mb-4 animate-pulse" />
@@ -478,7 +471,6 @@ const FinalFourBracket: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<
                     />
                 </div>
 
-                {/* Semifinal 2 (South vs Midwest) */}
                 <div className="flex flex-col items-center gap-2">
                     <div className="text-xs text-slate-400">South vs Midwest</div>
                     <MatchNode
