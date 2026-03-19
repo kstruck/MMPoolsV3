@@ -33,8 +33,12 @@ export const LiveScoreTicker: React.FC<LiveScoreTickerProps> = ({ tournament }) 
             const scoreMap: Record<string, LiveESPNGame> = {};
             events.forEach((event) => {
                 const e = event as Record<string, unknown>;
-                const id = String(e.id ?? '');
-                if (!id) return;
+                const rawId = String(e.id ?? '');
+                if (!rawId) return;
+
+                // importedGames keys games as "espn-{espnEventId}" (see espnBracket.ts line 381)
+                // We must key liveScores the same way so lookups hit correctly.
+                const id = `espn-${rawId}`;
 
                 const competitions = e.competitions as unknown[];
                 const competition = (competitions?.[0] ?? {}) as Record<string, unknown>;
