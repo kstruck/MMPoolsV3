@@ -46,6 +46,97 @@ const FIRST_FOUR_GAMES = [
     { id: 'FF-4', region: 'South', seed: 11, nextGameId: 'R1-South-5' }
 ];
 /**
+ * 2026 NCAA Tournament: direct team-name → bracket slot mapping.
+ * Built from the official ESPN bracket image + ESPN scoreboard API.
+ *
+ * NOTE: ESPN's scoreboard API mislabels ALL Midwest games as "West".
+ * This table bypasses ESPN's region labels entirely — each team is
+ * keyed by display name and maps directly to region + slot + seed.
+ *
+ * Slots follow standard R1 structure:
+ *   1=(1v16), 2=(8v9), 3=(5v12), 4=(4v13),
+ *   5=(6v11), 6=(3v14), 7=(7v10), 8=(2v15)
+ *   isTop=true means the team is the higher seed (lower number)
+ */
+const NCAA_2026_BRACKET = {
+    // ===== EAST =====
+    'Ohio State Buckeyes': { region: 'East', slot: 1, seed: 1, isTop: true },
+    'TCU Horned Frogs': { region: 'East', slot: 1, seed: 16, isTop: false },
+    'Louisville Cardinals': { region: 'East', slot: 2, seed: 8, isTop: true },
+    'South Florida Bulls': { region: 'East', slot: 2, seed: 9, isTop: false },
+    'Duke Blue Devils': { region: 'East', slot: 3, seed: 5, isTop: true },
+    'Siena Saints': { region: 'East', slot: 3, seed: 12, isTop: false },
+    'Michigan State Spartans': { region: 'East', slot: 4, seed: 4, isTop: true },
+    'North Dakota State Bison': { region: 'East', slot: 4, seed: 13, isTop: false },
+    "St. John's Red Storm": { region: 'East', slot: 5, seed: 6, isTop: true },
+    'Northern Iowa Panthers': { region: 'East', slot: 5, seed: 11, isTop: false },
+    'UCLA Bruins': { region: 'East', slot: 6, seed: 3, isTop: true },
+    'UCF Knights': { region: 'East', slot: 6, seed: 14, isTop: false },
+    'Kansas Jayhawks': { region: 'East', slot: 7, seed: 7, isTop: true },
+    'California Baptist Lancers': { region: 'East', slot: 7, seed: 10, isTop: false },
+    'UConn Huskies': { region: 'East', slot: 8, seed: 2, isTop: true },
+    'Furman Paladins': { region: 'East', slot: 8, seed: 15, isTop: false },
+    // ===== WEST =====
+    'Arizona Wildcats': { region: 'West', slot: 1, seed: 1, isTop: true },
+    'Long Island University Sharks': { region: 'West', slot: 1, seed: 16, isTop: false },
+    'Villanova Wildcats': { region: 'West', slot: 2, seed: 8, isTop: true },
+    'Utah State Aggies': { region: 'West', slot: 2, seed: 9, isTop: false },
+    'Wisconsin Badgers': { region: 'West', slot: 3, seed: 5, isTop: true },
+    'High Point Panthers': { region: 'West', slot: 3, seed: 12, isTop: false },
+    'Arkansas Razorbacks': { region: 'West', slot: 4, seed: 4, isTop: true },
+    "Hawai'i Rainbow Warriors": { region: 'West', slot: 4, seed: 13, isTop: false },
+    'Georgia Bulldogs': { region: 'West', slot: 5, seed: 6, isTop: true },
+    'Saint Louis Billikens': { region: 'West', slot: 5, seed: 11, isTop: false },
+    'Gonzaga Bulldogs': { region: 'West', slot: 6, seed: 3, isTop: true },
+    'Kennesaw State Owls': { region: 'West', slot: 6, seed: 14, isTop: false },
+    'Kentucky Wildcats': { region: 'West', slot: 7, seed: 7, isTop: true },
+    'Santa Clara Broncos': { region: 'West', slot: 7, seed: 10, isTop: false },
+    'Texas Tech Red Raiders': { region: 'West', slot: 8, seed: 2, isTop: true },
+    'Akron Zips': { region: 'West', slot: 8, seed: 15, isTop: false },
+    // West First Four slot 5 (6v11): SMU vs Miami(OH), winner plays Georgia's slot
+    'SMU Mustangs': { region: 'West', slot: 5, seed: 11, isTop: false },
+    'Miami (OH) RedHawks': { region: 'West', slot: 5, seed: 11, isTop: false },
+    // ===== SOUTH =====
+    'Nebraska Cornhuskers': { region: 'South', slot: 1, seed: 1, isTop: true },
+    'Troy Trojans': { region: 'South', slot: 1, seed: 16, isTop: false },
+    'Vanderbilt Commodores': { region: 'South', slot: 2, seed: 8, isTop: true },
+    'McNeese Cowboys': { region: 'South', slot: 2, seed: 9, isTop: false },
+    'North Carolina Tar Heels': { region: 'South', slot: 3, seed: 5, isTop: true },
+    'VCU Rams': { region: 'South', slot: 3, seed: 12, isTop: false },
+    "Saint Mary's Gaels": { region: 'South', slot: 4, seed: 4, isTop: true },
+    'Texas A&M Aggies': { region: 'South', slot: 4, seed: 13, isTop: false },
+    'Illinois Fighting Illini': { region: 'South', slot: 5, seed: 6, isTop: true },
+    'Pennsylvania Quakers': { region: 'South', slot: 5, seed: 11, isTop: false },
+    'Houston Cougars': { region: 'South', slot: 6, seed: 3, isTop: true },
+    'Idaho Vandals': { region: 'South', slot: 6, seed: 14, isTop: false },
+    'Clemson Tigers': { region: 'South', slot: 7, seed: 7, isTop: true },
+    'Iowa Hawkeyes': { region: 'South', slot: 7, seed: 10, isTop: false },
+    'Florida Gators': { region: 'South', slot: 8, seed: 2, isTop: true },
+    'Prairie View A&M Panthers': { region: 'South', slot: 8, seed: 15, isTop: false },
+    // South First Four slot 5 (6v11): Lehigh vs Prairie View, winner plays Illinois's slot
+    'Lehigh Mountain Hawks': { region: 'South', slot: 5, seed: 11, isTop: false },
+    // ===== MIDWEST =====
+    // NOTE: ESPN API incorrectly labels these as "West" — we use this table to override
+    'Michigan Wolverines': { region: 'Midwest', slot: 1, seed: 1, isTop: true },
+    'Howard Bison': { region: 'Midwest', slot: 1, seed: 16, isTop: false },
+    'Miami Hurricanes': { region: 'Midwest', slot: 2, seed: 8, isTop: true },
+    'Missouri Tigers': { region: 'Midwest', slot: 2, seed: 9, isTop: false },
+    'Iowa State Cyclones': { region: 'Midwest', slot: 3, seed: 5, isTop: true },
+    'Tennessee State Tigers': { region: 'Midwest', slot: 3, seed: 12, isTop: false },
+    'Alabama Crimson Tide': { region: 'Midwest', slot: 4, seed: 4, isTop: true },
+    'Hofstra Pride': { region: 'Midwest', slot: 4, seed: 13, isTop: false },
+    'Tennessee Volunteers': { region: 'Midwest', slot: 5, seed: 6, isTop: true },
+    'Wright State Raiders': { region: 'Midwest', slot: 5, seed: 11, isTop: false },
+    'Virginia Cavaliers': { region: 'Midwest', slot: 6, seed: 3, isTop: true },
+    'Purdue Boilermakers': { region: 'Midwest', slot: 7, seed: 7, isTop: true },
+    'Queens University Royals': { region: 'Midwest', slot: 7, seed: 10, isTop: false },
+    'BYU Cougars': { region: 'Midwest', slot: 8, seed: 2, isTop: true },
+    'Texas Longhorns': { region: 'Midwest', slot: 8, seed: 15, isTop: false },
+    // Midwest slot 6 seed 14 placeholder — verify after ESPN updates
+    'NC State Wolfpack': { region: 'Midwest', slot: 6, seed: 14, isTop: false },
+    'UMBC Retrievers': { region: 'Midwest', slot: 6, seed: 14, isTop: false },
+};
+/**
  * Initializes a structured Tournament document in Firestore.
  * Supports 64-team skeleton or 68-team full load.
  */
@@ -248,7 +339,7 @@ function getFFSlot(region) {
  * Shared logic to fetch and map ESPN data.
  */
 async function fetchAndMapESPNGameData(seasonYear) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
     // Validate fetch availability
     if (typeof fetch === 'undefined') {
         throw new Error("Server configuration error: fetch not found");
@@ -276,43 +367,44 @@ async function fetchAndMapESPNGameData(seasonYear) {
             continue;
         const homeEspnId = homeComp.team.id;
         const awayEspnId = awayComp.team.id;
-        // --- WS4: Extract actual tournament seed from team name, e.g. "(1) Duke Blue Devils" ---
-        const homeSeed = parseSeedFromName(homeComp.team.displayName) || ((_a = homeComp.curatedRank) === null || _a === void 0 ? void 0 : _a.current) || 99;
-        const awaySeed = parseSeedFromName(awayComp.team.displayName) || ((_b = awayComp.curatedRank) === null || _b === void 0 ? void 0 : _b.current) || 99;
+        // --- WS4: Resolve tournament seed AND region from direct bracket lookup.
+        // ESPN's API does NOT include tournament seeds (curatedRank is AP poll rank, not bracket seed).
+        // ESPN also MISLABELS Midwest games as West — use NCAA_2026_BRACKET to override.
+        const homeDisplayNameRaw = homeComp.team.displayName.replace(/^\(\d+\)\s*/, '');
+        const awayDisplayNameRaw = awayComp.team.displayName.replace(/^\(\d+\)\s*/, '');
+        const homeBracketInfo = seasonYear === 2026 ? NCAA_2026_BRACKET[homeDisplayNameRaw] : null;
+        const awayBracketInfo = seasonYear === 2026 ? NCAA_2026_BRACKET[awayDisplayNameRaw] : null;
+        // Use bracket table for seed; fall back to parsing from name or 99
+        const homeSeed = (_b = (_a = homeBracketInfo === null || homeBracketInfo === void 0 ? void 0 : homeBracketInfo.seed) !== null && _a !== void 0 ? _a : parseSeedFromName(homeComp.team.displayName)) !== null && _b !== void 0 ? _b : 99;
+        const awaySeed = (_d = (_c = awayBracketInfo === null || awayBracketInfo === void 0 ? void 0 : awayBracketInfo.seed) !== null && _c !== void 0 ? _c : parseSeedFromName(awayComp.team.displayName)) !== null && _d !== void 0 ? _d : 99;
+        // Use bracket table for region — this corrects ESPN's Midwest→West mislabeling
+        const resolvedRegion = (_f = (_e = homeBracketInfo === null || homeBracketInfo === void 0 ? void 0 : homeBracketInfo.region) !== null && _e !== void 0 ? _e : awayBracketInfo === null || awayBracketInfo === void 0 ? void 0 : awayBracketInfo.region) !== null && _f !== void 0 ? _f : region;
         // Strip seed prefix from name for cleaner display, e.g. "(1) Duke Blue Devils" -> "Duke Blue Devils"
-        const homeDisplayName = homeComp.team.displayName.replace(/^\(\d+\)\s*/, '');
-        const awayDisplayName = awayComp.team.displayName.replace(/^\(\d+\)\s*/, '');
-        // KEY CHANGE: Key teams by display name, not ESPN numeric ID.
-        // This means games' homeTeamId/awayTeamId are the display names (e.g. "Duke Blue Devils"),
-        // which the bracket UI can render directly without a lookup table.
+        const homeDisplayName = homeDisplayNameRaw;
+        const awayDisplayName = awayDisplayNameRaw;
+        // Key teams by display name for bracket UI rendering
         const homeTeamKey = homeDisplayName;
         const awayTeamKey = awayDisplayName;
-        // Store Teams if not exists (update region if we now know it)
+        // Store Teams if not exists
         if (!teams[homeTeamKey]) {
             teams[homeTeamKey] = {
                 id: homeTeamKey,
                 name: homeDisplayName,
                 seed: homeSeed,
-                region: region,
+                region: resolvedRegion,
                 logoUrl: homeComp.team.logo,
-                externalId: homeEspnId, // Keep ESPN numeric ID for score sync
+                externalId: homeEspnId,
             };
-        }
-        else if (teams[homeTeamKey].region === 'TBD' && region !== 'TBD') {
-            teams[homeTeamKey].region = region;
         }
         if (!teams[awayTeamKey]) {
             teams[awayTeamKey] = {
                 id: awayTeamKey,
                 name: awayDisplayName,
                 seed: awaySeed,
-                region: region,
+                region: resolvedRegion,
                 logoUrl: awayComp.team.logo,
-                externalId: awayEspnId, // Keep ESPN numeric ID for score sync
+                externalId: awayEspnId,
             };
-        }
-        else if (teams[awayTeamKey].region === 'TBD' && region !== 'TBD') {
-            teams[awayTeamKey].region = region;
         }
         // Determine winner name (by display name key)
         const homeScore = parseInt(homeComp.score || '0');
@@ -331,9 +423,9 @@ async function fetchAndMapESPNGameData(seasonYear) {
             round: round,
             region: region,
             // Live Score Details
-            period: (_d = (_c = competition.status) === null || _c === void 0 ? void 0 : _c.period) !== null && _d !== void 0 ? _d : null,
-            clock: (_f = (_e = competition.status) === null || _e === void 0 ? void 0 : _e.displayClock) !== null && _f !== void 0 ? _f : null, // e.g. "12:35"
-            broadcast: (_k = (_j = (_h = (_g = competition.broadcasts) === null || _g === void 0 ? void 0 : _g[0]) === null || _h === void 0 ? void 0 : _h.names) === null || _j === void 0 ? void 0 : _j[0]) !== null && _k !== void 0 ? _k : null, // e.g. "CBS"
+            period: (_h = (_g = competition.status) === null || _g === void 0 ? void 0 : _g.period) !== null && _h !== void 0 ? _h : null,
+            clock: (_k = (_j = competition.status) === null || _j === void 0 ? void 0 : _j.displayClock) !== null && _k !== void 0 ? _k : null, // e.g. "12:35"
+            broadcast: (_p = (_o = (_m = (_l = competition.broadcasts) === null || _l === void 0 ? void 0 : _l[0]) === null || _m === void 0 ? void 0 : _m.names) === null || _o === void 0 ? void 0 : _o[0]) !== null && _p !== void 0 ? _p : null, // e.g. "CBS"
             externalId: event.id
         };
         games[gameId] = game;
@@ -373,13 +465,13 @@ function parseRegionAndRound(notes) {
     const headlineLower = headline.toLowerCase();
     if (headlineLower.includes('first four'))
         round = 0;
-    else if (headlineLower.includes('first round'))
+    else if (headlineLower.includes('first round') || headlineLower.includes('1st round'))
         round = 1;
-    else if (headlineLower.includes('second round'))
+    else if (headlineLower.includes('second round') || headlineLower.includes('2nd round'))
         round = 2;
-    else if (headlineLower.includes('sweet 16') || headlineLower.includes('sweet sixteen'))
+    else if (headlineLower.includes('sweet 16') || headlineLower.includes('sweet sixteen') || headlineLower.includes('3rd round'))
         round = 3;
-    else if (headlineLower.includes('elite eight') || headlineLower.includes('elite 8'))
+    else if (headlineLower.includes('elite eight') || headlineLower.includes('elite 8') || headlineLower.includes('4th round'))
         round = 4;
     else if (headlineLower.includes('final four') || headlineLower.includes('national semifinal'))
         round = 5;
@@ -411,88 +503,89 @@ function parseRegionAndRound(notes) {
  * Returns updated skeleton games map ready to write to Firestore.
  */
 function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const updated = Object.assign({}, skeletonGames);
     let mappedCount = 0;
-    // Index ESPN games by region+round for fast lookup
+    // Build espnBySlot: key = "{region}-R{round}" for quick lookup
+    // For R1, key = "{region}-1-{slot}" using NCAA_2026_BRACKET to correctly assign region+slot
+    const espnBySlot = {};
+    // For R0 (First Four), R2+: use region from the game itself
     const espnByRegionRound = {};
     for (const g of Object.values(espnGames)) {
-        const key = `${g.region}-${g.round}`;
-        if (!espnByRegionRound[key])
-            espnByRegionRound[key] = [];
-        espnByRegionRound[key].push(g);
+        if (g.round !== 1) {
+            const key = `${g.region}-${g.round}`;
+            if (!espnByRegionRound[key])
+                espnByRegionRound[key] = [];
+            espnByRegionRound[key].push(g);
+        }
+    }
+    // Build espnBySlot for R1 using NCAA_2026_BRACKET direct lookup.
+    // Index every R1 ESPN game by looking up BOTH teams in the bracket table.
+    // If both map to the same region+slot, use that as the key.
+    for (const g of Object.values(espnGames)) {
+        if (g.round !== 1)
+            continue;
+        const homeInfo = NCAA_2026_BRACKET[g.homeTeamId];
+        const awayInfo = NCAA_2026_BRACKET[g.awayTeamId];
+        const info = homeInfo !== null && homeInfo !== void 0 ? homeInfo : awayInfo;
+        if (!info) {
+            logger.warn(`R1: No bracket info for game ${g.homeTeamId} vs ${g.awayTeamId}`);
+            continue;
+        }
+        const key = `${info.region}-1-${info.slot}`;
+        espnBySlot[key] = g;
+        logger.info(`R1 mapped: ${key} = ${g.homeTeamId} vs ${g.awayTeamId}`);
     }
     // Helper: get team seed from espnTeams map
     const getTeamSeed = (teamId) => { var _a; return ((_a = espnTeams[teamId]) === null || _a === void 0 ? void 0 : _a.seed) || 99; };
     // Build a map of skeleton game ID → ESPN game ID for cascading
     const skeletonToEspn = {};
-    // --- ROUND 1: Match by region + seed matchup ---
+    // --- ROUND 1: Match directly by region + slot from NCAA_2026_BRACKET ---
     for (const region of REGIONS) {
-        for (const { slot, top, bot } of R1_SEED_MATCHUPS) {
+        for (const { slot, top } of R1_SEED_MATCHUPS) {
             const skeletonId = `R1-${region}-${slot}`;
             if (!updated[skeletonId])
                 continue;
-            // Find ESPN game in this region, round 1, where team seeds match this matchup
-            const candidates = espnByRegionRound[`${region}-1`] || [];
-            const match = candidates.find(eg => {
-                const homeSeed = getTeamSeed(eg.homeTeamId);
-                const awaySeed = getTeamSeed(eg.awayTeamId);
-                return (homeSeed === top && awaySeed === bot) || (homeSeed === bot && awaySeed === top);
-            });
-            // If we didn't find a direct R1 match, check if there's a First Four game that feeds this seed
-            // We can detect this if we look at the R0 (First Four) games for this region and seed.
+            const espnKey = `${region}-1-${slot}`;
+            const match = espnBySlot[espnKey];
+            // Check for First Four game that feeds this slot
             const ffCandidates = espnByRegionRound[`${region}-0`] || [];
-            let fallbackTeamId = null;
-            let fallbackPlayingSeed = null;
+            let ffFallbackHome = null;
+            let ffFallbackAway = null;
             if (!match && ffCandidates.length > 0) {
-                // Determine if 'top' or 'bot' seed is the one playing in the First Four
-                // Usually it's the 11 or 16 seed (so 'bot' often matches 11 or 16)
                 for (const ffGame of ffCandidates) {
-                    const homeSeed = getTeamSeed(ffGame.homeTeamId);
-                    const awaySeed = getTeamSeed(ffGame.awayTeamId);
-                    // If the FF game's seeds match one of the expected seeds for this R1 game
-                    if (homeSeed === top || homeSeed === bot || awaySeed === top || awaySeed === bot) {
-                        // We found the First Four game that feeds this R1 slot
-                        const homeDbTeam = espnTeams[ffGame.homeTeamId];
-                        const awayDbTeam = espnTeams[ffGame.awayTeamId];
-                        if (homeDbTeam && awayDbTeam) {
-                            fallbackTeamId = `${homeDbTeam.name}/${awayDbTeam.name}`;
-                            fallbackPlayingSeed = homeSeed; // Which seed slot this represents (e.g. 16 or 11)
-                        }
+                    const homeInfo = NCAA_2026_BRACKET[ffGame.homeTeamId];
+                    const awayInfo = NCAA_2026_BRACKET[ffGame.awayTeamId];
+                    const info = homeInfo !== null && homeInfo !== void 0 ? homeInfo : awayInfo;
+                    if ((info === null || info === void 0 ? void 0 : info.slot) === slot && (info === null || info === void 0 ? void 0 : info.region) === region) {
+                        ffFallbackHome = ffGame.homeTeamId;
+                        ffFallbackAway = ffGame.awayTeamId;
                         break;
                     }
                 }
             }
             if (match) {
-                // Ensure higher seed (lower number) is homeTeamId for consistency
-                const homeSeed = getTeamSeed(match.homeTeamId);
-                const topEspnId = homeSeed === top ? match.homeTeamId : match.awayTeamId;
-                const botEspnId = homeSeed === top ? match.awayTeamId : match.homeTeamId;
-                const topScore = homeSeed === top ? match.homeScore : match.awayScore;
-                const botScore = homeSeed === top ? match.awayScore : match.homeScore;
-                // Resolve ESPN numeric IDs → display names so bracket renders correctly
-                const topTeamName = ((_a = espnTeams[topEspnId]) === null || _a === void 0 ? void 0 : _a.name) || topEspnId;
-                const botTeamName = ((_b = espnTeams[botEspnId]) === null || _b === void 0 ? void 0 : _b.name) || botEspnId;
-                const winnerName = match.winnerTeamId ? (((_c = espnTeams[match.winnerTeamId]) === null || _c === void 0 ? void 0 : _c.name) || match.winnerTeamId) : null;
-                updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: topTeamName, awayTeamId: botTeamName, homeScore: topScore, awayScore: botScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
+                // Use bracket info to determine which team is top (higher seed = lower number)
+                const homeInfo = NCAA_2026_BRACKET[match.homeTeamId];
+                const homeIsTop = (_a = homeInfo === null || homeInfo === void 0 ? void 0 : homeInfo.isTop) !== null && _a !== void 0 ? _a : (getTeamSeed(match.homeTeamId) === top);
+                const topTeamId = homeIsTop ? match.homeTeamId : match.awayTeamId;
+                const botTeamId = homeIsTop ? match.awayTeamId : match.homeTeamId;
+                const topScore = homeIsTop ? match.homeScore : match.awayScore;
+                const botScore = homeIsTop ? match.awayScore : match.homeScore;
+                const winnerName = (_b = match.winnerTeamId) !== null && _b !== void 0 ? _b : null;
+                updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: topTeamId, awayTeamId: botTeamId, homeScore: topScore, awayScore: botScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
                 skeletonToEspn[skeletonId] = match;
                 mappedCount++;
             }
-            else if (fallbackTeamId && fallbackPlayingSeed !== null) {
-                // We don't have a scheduled R1 match yet (likely because the Play-In game hasn't finished),
-                // but we know WHO is playing in the Play-In game for this slot. Let's update the skeleton
-                // to show "TeamA/TeamB" instead of "Winner of Play-In"
-                // Which of the two spots does the play-in winner occupy?
-                // `fallbackPlayingSeed` tells us the expected seed (e.g. 16)
-                let newTopTeamId = updated[skeletonId].homeTeamId;
-                let newBotTeamId = updated[skeletonId].awayTeamId;
-                if (top === fallbackPlayingSeed) {
-                    newTopTeamId = fallbackTeamId;
+            else if (ffFallbackHome && ffFallbackAway) {
+                // Show the play-in teams in the slot until the FF game finishes
+                const homeInfo = NCAA_2026_BRACKET[ffFallbackHome];
+                if (homeInfo === null || homeInfo === void 0 ? void 0 : homeInfo.isTop) {
+                    updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: `${ffFallbackHome}/${ffFallbackAway}` });
                 }
-                else if (bot === fallbackPlayingSeed) {
-                    newBotTeamId = fallbackTeamId;
+                else {
+                    updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { awayTeamId: `${ffFallbackHome}/${ffFallbackAway}` });
                 }
-                updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: newTopTeamId, awayTeamId: newBotTeamId });
             }
         }
     }
@@ -522,10 +615,10 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
                 const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
                 if (match) {
                     // feeder winners are already resolved to names from the R1 step above
-                    const winnerName = match.winnerTeamId ? (((_d = espnTeams[match.winnerTeamId]) === null || _d === void 0 ? void 0 : _d.name) || match.winnerTeamId) : null;
+                    const winnerName = match.winnerTeamId ? (((_c = espnTeams[match.winnerTeamId]) === null || _c === void 0 ? void 0 : _c.name) || match.winnerTeamId) : null;
                     // Scores: match home/away refers to ESPN IDs, map to correct side
                     const homeEspnId = match.homeTeamId;
-                    const homeIsFeeder1 = ((_e = espnTeams[homeEspnId]) === null || _e === void 0 ? void 0 : _e.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
+                    const homeIsFeeder1 = ((_d = espnTeams[homeEspnId]) === null || _d === void 0 ? void 0 : _d.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
                     updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore, awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
                     skeletonToEspn[skeletonId] = match;
                     mappedCount++;
@@ -553,9 +646,9 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
         const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
         const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
         if (match) {
-            const winnerName = match.winnerTeamId ? (((_f = espnTeams[match.winnerTeamId]) === null || _f === void 0 ? void 0 : _f.name) || match.winnerTeamId) : null;
+            const winnerName = match.winnerTeamId ? (((_e = espnTeams[match.winnerTeamId]) === null || _e === void 0 ? void 0 : _e.name) || match.winnerTeamId) : null;
             const homeEspnId = match.homeTeamId;
-            const homeIsFeeder1 = ((_g = espnTeams[homeEspnId]) === null || _g === void 0 ? void 0 : _g.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
+            const homeIsFeeder1 = ((_f = espnTeams[homeEspnId]) === null || _f === void 0 ? void 0 : _f.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
             updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore, awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
             mappedCount++;
         }
@@ -574,9 +667,9 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
             const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
             const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
             if (match) {
-                const winnerName = match.winnerTeamId ? (((_h = espnTeams[match.winnerTeamId]) === null || _h === void 0 ? void 0 : _h.name) || match.winnerTeamId) : null;
+                const winnerName = match.winnerTeamId ? (((_g = espnTeams[match.winnerTeamId]) === null || _g === void 0 ? void 0 : _g.name) || match.winnerTeamId) : null;
                 const homeEspnId = match.homeTeamId;
-                const homeIsFeeder1 = ((_j = espnTeams[homeEspnId]) === null || _j === void 0 ? void 0 : _j.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
+                const homeIsFeeder1 = ((_h = espnTeams[homeEspnId]) === null || _h === void 0 ? void 0 : _h.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
                 updated[champId] = Object.assign(Object.assign({}, updated[champId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore, awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
                 mappedCount++;
             }
