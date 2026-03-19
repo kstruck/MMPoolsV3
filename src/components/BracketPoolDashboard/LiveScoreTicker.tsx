@@ -1,12 +1,74 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import type { Tournament } from '../../types';
 import { Clock, Tv, PlayCircle, Trophy } from 'lucide-react';
+
+interface LiveESPNGame {
+    id: string;
+    homeScore: string;
+    awayScore: string;
+    status: 'pre' | 'in' | 'post';
+    period: number;
+    clock: string;
+}
 
 interface LiveScoreTickerProps {
     tournament: Tournament | null;
 }
 
 export const LiveScoreTicker: React.FC<LiveScoreTickerProps> = ({ tournament }) => {
+    // Live scores polled from ESPN every 30s — overlaid on top of static importedGames data
+    const [liveScores, setLiveScores] = useState<Record<string, LiveESPNGame>>({});
+
+    const fetchLiveScores = useCallback(async () => {
+        try {
+            // NCAA tournament games (groups=100)
+            const res = await fetch(
+                'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=200&groups=100'
+            );
+            if (!res.ok) return;
+
+            const data = await res.json();
+            const events: unknown[] = data.events || [];
+
+            const scoreMap: Record<string, LiveESPNGame> = {};
+            events.forEach((event) => {
+                const e = event as Record<string, unknown>;
+                const id = String(e.id ?? '');
+                if (!id) return;
+
+                const competitions = e.competitions as unknown[];
+                const competition = (competitions?.[0] ?? {}) as Record<string, unknown>;
+                const competitors = (competition.competitors ?? []) as Record<string, unknown>[];
+
+                const home = competitors.find(c => c.homeAway === 'home') ?? {};
+                const away = competitors.find(c => c.homeAway === 'away') ?? {};
+
+                const statusObj = (e.status ?? {}) as Record<string, unknown>;
+                const typeObj = (statusObj.type ?? {}) as Record<string, unknown>;
+                const state = (typeObj.state as 'pre' | 'in' | 'post') || 'pre';
+
+                scoreMap[id] = {
+                    id,
+                    homeScore: String((home as Record<string, unknown>).score ?? ''),
+                    awayScore: String((away as Record<string, unknown>).score ?? ''),
+                    status: state,
+                    period: Number(statusObj.period ?? 0),
+                    clock: String(statusObj.displayClock ?? ''),
+                };
+            });
+
+            setLiveScores(scoreMap);
+        } catch {
+            // Silently fail — stale data is acceptable for the ticker
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchLiveScores();
+        const interval = setInterval(fetchLiveScores, 30_000);
+        return () => clearInterval(interval);
+    }, [fetchLiveScores]);
+
     const activeGames = useMemo(() => {
         if (!tournament?.importedGames) return [];
 
@@ -23,19 +85,36 @@ export const LiveScoreTicker: React.FC<LiveScoreTickerProps> = ({ tournament }) 
         const endOfDay = dayEnd.toISOString();
 
         return games.filter(g => {
-            const isLive = g.status === 'IN_PROGRESS';
+            const live = liveScores[g.id];
+            const effectiveStatus = live
+                ? (live.status === 'in' ? 'IN_PROGRESS' : live.status === 'post' ? 'FINAL' : g.status)
+                : g.status;
+            const isLive = effectiveStatus === 'IN_PROGRESS';
             const isToday = g.startTime >= startOfDay && g.startTime <= endOfDay;
             return isLive || isToday;
         }).sort((a, b) => {
-            if (a.status === 'IN_PROGRESS' && b.status !== 'IN_PROGRESS') return -1;
-            if (b.status === 'IN_PROGRESS' && a.status !== 'IN_PROGRESS') return 1;
+            const aLive = (liveScores[a.id]?.status === 'in') || a.status === 'IN_PROGRESS';
+            const bLive = (liveScores[b.id]?.status === 'in') || b.status === 'IN_PROGRESS';
+            if (aLive && !bLive) return -1;
+            if (bLive && !aLive) return 1;
             return a.startTime.localeCompare(b.startTime);
-        }).map(g => ({
-            ...g,
-            homeTeam: teams[g.homeTeamId],
-            awayTeam: teams[g.awayTeamId]
-        }));
-    }, [tournament]);
+        }).map(g => {
+            const live = liveScores[g.id];
+            const effectiveStatus = live
+                ? (live.status === 'in' ? 'IN_PROGRESS' : live.status === 'post' ? 'FINAL' : g.status)
+                : g.status;
+            return {
+                ...g,
+                homeScore: live?.homeScore ?? g.homeScore,
+                awayScore: live?.awayScore ?? g.awayScore,
+                status: effectiveStatus,
+                period: live?.period ?? g.period,
+                clock: live?.clock ?? g.clock,
+                homeTeam: teams[g.homeTeamId],
+                awayTeam: teams[g.awayTeamId],
+            };
+        });
+    }, [tournament, liveScores]);
 
     if (!tournament || activeGames.length === 0) return null;
 
