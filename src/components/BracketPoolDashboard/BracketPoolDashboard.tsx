@@ -523,14 +523,20 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     // Submit final bracket
     const handleSubmitBracket = useCallback(async () => {
-        if (!activeEntryId) return;
+        if (!activeEntryId) {
+            setError('Could not find your bracket entry. Please close and re-open the bracket editor.');
+            return;
+        }
 
         if (entries.some(e => e.name.toLowerCase() === entryName.trim().toLowerCase() && e.id !== activeEntryId)) {
             setError('That bracket name is already taken. Please choose another.');
             return;
         }
 
-        const reqPicks = tournament ? Object.keys(tournament.games).length : (pool.tournamentType === 'conference' ? 10 : 63);
+        // Exclude First Four games (round 0) — they are not shown in the bracket UI pick slots
+        const reqPicks = tournament
+            ? Object.values(tournament.games).filter(g => g.round >= 1).length
+            : (pool.tournamentType === 'conference' ? 10 : 63);
         const currentPicksCount = Object.keys(picks).length;
 
         if (currentPicksCount < reqPicks) {
@@ -566,7 +572,10 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     }, [pool.id, pool.tournamentType, tournament, activeEntryId, picks, tieBreakerPrediction, entryName, setIsCreating, entries]);
 
     const pickCount = Object.keys(picks).length;
-    const requiredPicks = tournament ? Object.keys(tournament.games).length : (pool.tournamentType === 'conference' ? 10 : 63);
+    // Exclude First Four games (round 0) — they are not shown in the bracket UI pick slots
+    const requiredPicks = tournament
+        ? Object.values(tournament.games).filter(g => g.round >= 1).length
+        : (pool.tournamentType === 'conference' ? 10 : 63);
     // NCAA tournaments (men's/women's) should NEVER use the conference bracket builder,
     // even if tournamentType was accidentally set to 'conference' on the pool.
     const isNcaaTournament = pool.tournamentId?.startsWith('mens-') || pool.tournamentId?.startsWith('womens-');
