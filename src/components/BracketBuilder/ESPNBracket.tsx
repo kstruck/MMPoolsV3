@@ -18,8 +18,10 @@
  *   [SOUTH left→right]               [MIDWEST right→left]
  */
 
-import React, { useMemo, useCallback, createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
-import type { Tournament, Game, Team } from '../../types';
+import React, { useMemo, useCallback, useContext, useLayoutEffect, useRef, useState } from 'react';
+import { TeamDataContext } from './teamDataContext';
+import type { Tournament, Game } from '../../types';
+
 import { getTeamLogo } from '../../constants';
 import { Trophy, Check, X, Link, Printer } from 'lucide-react';
 
@@ -41,8 +43,8 @@ const COLS_LTR = [1, 2, 3, 4].map(r => ({
 // Total height for one region stack = 8 games × step
 const REGION_H = 8 * STEP_R1;
 
-// ─── Team Data Context (avoids threading importedTeams through every prop) ────────────
-const TeamDataContext = createContext<Record<string, Team>>({});
+// TeamDataContext is now in teamDataContext.ts (shared with MatchNode)
+
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -385,6 +387,84 @@ const RegionPanel: React.FC<RegionPanelProps> = ({
     );
 };
 
+// ─── Champion Pick Banner ──────────────────────────────────────────────────
+
+interface ChampionBannerProps {
+    picks: Record<string, string>;
+    champGameId?: string;
+}
+
+const ChampionBanner: React.FC<ChampionBannerProps> = ({ picks, champGameId }) => {
+    const teamData = useContext(TeamDataContext);
+    const champPick = champGameId ? picks[champGameId] : undefined;
+    const champion = champPick ? teamData[champPick] : null;
+    const champName = champion?.name ?? champPick ?? null;
+    const champLogo = champPick ? getTeamLogo(champPick, 'ncaa') : null;
+
+    if (!champPick) {
+        return (
+            <div className="mt-3 mb-1 flex flex-col items-center gap-1.5 w-[160px]">
+                <div className="w-[2px] h-5 bg-amber-500/20" />
+                <div className="rounded-lg border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 flex flex-col items-center gap-1 w-full">
+                    <Trophy className="w-5 h-5 text-amber-500/50" />
+                    <div className="text-[9px] text-amber-400/70 uppercase tracking-widest font-bold text-center">
+                        Pick Your Champion
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mt-3 mb-1 flex flex-col items-center gap-1 w-[160px]">
+            {/* Connector line */}
+            <div className="w-[2px] h-5 bg-amber-500/40" />
+
+            {/* Banner card */}
+            <div
+                className="relative w-full rounded-xl overflow-hidden border border-amber-500/50 shadow-lg shadow-amber-500/20"
+                style={{ background: 'linear-gradient(145deg, #1a2f4a 0%, #0e1929 60%, #1a2f4a 100%)' }}
+            >
+                {/* Gold accent top bar */}
+                <div className="h-[3px] w-full bg-gradient-to-r from-amber-600 via-amber-400 to-amber-600" />
+
+                <div className="flex flex-col items-center px-2 py-3 gap-2">
+                    {/* MY CHAMPIONSHIP PICK label */}
+                    <div className="text-[8px] font-black text-amber-400 uppercase tracking-[0.2em] text-center leading-none">
+                        My Championship Pick
+                    </div>
+
+                    {/* Team logo */}
+                    <div className="relative">
+                        {champLogo ? (
+                            <img
+                                src={champLogo}
+                                alt={champName ?? ''}
+                                className="w-12 h-12 object-contain drop-shadow-lg"
+                                crossOrigin="anonymous"
+                            />
+                        ) : (
+                            <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                <Trophy className="w-6 h-6 text-amber-400" />
+                            </div>
+                        )}
+                        {/* Glow ring */}
+                        <div className="absolute inset-0 rounded-full ring-2 ring-amber-400/30 pointer-events-none" />
+                    </div>
+
+                    {/* Team name */}
+                    <div className="text-[11px] font-black text-white text-center leading-tight tracking-tight line-clamp-2">
+                        {champName}
+                    </div>
+                </div>
+
+                {/* Gold accent bottom bar */}
+                <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
+            </div>
+        </div>
+    );
+};
+
 // ─── Final Four Center ─────────────────────────────────────────────────────
 
 const FinalFourCenter: React.FC<ESPNBracketProps> = ({
@@ -415,9 +495,6 @@ const FinalFourCenter: React.FC<ESPNBracketProps> = ({
     const champAway = ff2 ? picks[ff2.id] : undefined;
 
     const elims = eliminatedTeamIds ?? new Set<string>();
-    const totalGames = Object.keys(tournament.games).length;
-    const totalPicks = Object.keys(picks).length;
-    const pct = totalGames > 0 ? Math.round((totalPicks / totalGames) * 100) : 0;
 
     // Center the FF panel vertically relative to the total region height (2 regions + gap)
     // Total available height = 2 × REGION_H + label/header space ≈ 1140px
@@ -449,8 +526,8 @@ const FinalFourCenter: React.FC<ESPNBracketProps> = ({
             />
 
             {/* Spacer */}
-            <div className="my-4 flex flex-col items-center">
-                <div className="w-px h-4 bg-amber-600/30" />
+            <div className="my-3 flex flex-col items-center">
+                <div className="w-px h-3 bg-amber-600/30" />
             </div>
 
             {/* Championship */}
@@ -470,11 +547,8 @@ const FinalFourCenter: React.FC<ESPNBracketProps> = ({
                 />
             </div>
 
-            {/* Trophy */}
-            <div className="mt-4 flex flex-col items-center gap-1">
-                <Trophy className="w-5 h-5 text-amber-500/70" />
-                <div className="text-[9px] text-slate-600">{pct}% picks</div>
-            </div>
+            {/* ESPN-Style Champion Pick Banner */}
+            <ChampionBanner picks={picks} champGameId={champGame?.id} />
 
             {/* Spacer */}
             <div className="my-4 flex flex-col items-center">
@@ -671,7 +745,7 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
     useLayoutEffect(() => {
         const recalc = () => {
             const avail = containerRef.current?.clientWidth ?? window.innerWidth;
-            setZoom(Math.min(1, Math.max(0.55, avail / NATURAL_W)));
+            setZoom(Math.min(1, Math.max(0.40, avail / NATURAL_W)));
         };
         recalc();
         const ro = new ResizeObserver(recalc);

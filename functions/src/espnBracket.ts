@@ -394,24 +394,28 @@ async function fetchAndMapESPNGameData(seasonYear: number) {
         const homeEspnId = homeComp.team.id;
         const awayEspnId = awayComp.team.id;
 
-        // --- WS4: Resolve tournament seed AND region from direct bracket lookup.
-        // ESPN's API does NOT include tournament seeds (curatedRank is AP poll rank, not bracket seed).
-        // ESPN also MISLABELS Midwest games as West — use NCAA_2026_BRACKET to override.
+        // --- WS4: Resolve tournament seed AND region directly from ESPN API data.
+        // IMPORTANT: For NCAA tournament events, `curatedRank.current` IS the bracket seed
+        // (confirmed from live API: Arizona=1, LIU=16, Kentucky=7, Santa Clara=10, etc.).
+        // The region is correctly parsed from competition.notes[0].headline by parseRegionAndRound.
+        // DO NOT use NCAA_2026_BRACKET for seeds/regions — it has incorrect data.
         const homeDisplayNameRaw = homeComp.team.displayName.replace(/^\(\d+\)\s*/, '');
         const awayDisplayNameRaw = awayComp.team.displayName.replace(/^\(\d+\)\s*/, '');
 
-        const homeBracketInfo = seasonYear === 2026 ? NCAA_2026_BRACKET[homeDisplayNameRaw] : null;
-        const awayBracketInfo = seasonYear === 2026 ? NCAA_2026_BRACKET[awayDisplayNameRaw] : null;
+        // Use curatedRank.current as the primary seed source.
+        // For tournament events this IS the bracket seed, not the AP poll rank.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const homeSeed = (homeComp as any).curatedRank?.current ?? 99;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const awaySeed = (awayComp as any).curatedRank?.current ?? 99;
 
-        // ESPN display names include seed: "(1) Duke Blue Devils" → seed 1.
-        // Prioritize ESPN data; use bracket map only as fallback for unmapped teams.
-        const homeSeed = parseSeedFromName(homeComp.team.displayName) ?? homeBracketInfo?.seed ?? 99;
-        const awaySeed = parseSeedFromName(awayComp.team.displayName) ?? awayBracketInfo?.seed ?? 99;
+        // Use the region parsed from notes as the primary region source.
+        // parseRegionAndRound (line ~510) correctly parses headlines like:
+        //   "NCAA Men's Basketball Championship - Midwest Region - 1st Round" → "Midwest"
+        // ESPN does NOT mislabel Midwest as West in the notes — confirmed from live API.
+        const resolvedRegion = region !== 'TBD' ? region : 'TBD';
 
-        // Use bracket table for region — this corrects ESPN's Midwest→West mislabeling
-        const resolvedRegion = homeBracketInfo?.region ?? awayBracketInfo?.region ?? region;
-
-        // Strip seed prefix from name for cleaner display, e.g. "(1) Duke Blue Devils" -> "Duke Blue Devils"
+        // Clean display name (no seed prefix needed from API, but strip it just in case)
         const homeDisplayName = homeDisplayNameRaw;
         const awayDisplayName = awayDisplayNameRaw;
 
@@ -486,15 +490,6 @@ async function fetchAndMapESPNGameData(seasonYear: number) {
     return { games, teams, count: events.length };
 }
 
-/**
- * WS4: Parse tournament seed from team display name.
- * ESPN formats tournament teams as "(1) Duke Blue Devils".
- * Returns the numeric seed or null if not found.
- */
-function parseSeedFromName(displayName: string): number | null {
-    const match = displayName.match(/^\((\d+)\)/);
-    return match ? parseInt(match[1]) : null;
-}
 
 /**
  * WS5: Parse region and round from ESPN notes[].headline.
@@ -528,9 +523,9 @@ function parseRegionAndRound(notes?: { type: string; headline: string }[]): { re
     // Parse region from headline
     let region = 'TBD';
     if (headlineLower.includes('east')) region = 'East';
+    else if (headlineLower.includes('midwest')) region = 'Midwest'; // ← must precede 'west' ('midwest' contains 'west')
     else if (headlineLower.includes('west')) region = 'West';
     else if (headlineLower.includes('south')) region = 'South';
-    else if (headlineLower.includes('midwest')) region = 'Midwest';
     else if (round >= 5) region = 'Final Four'; // Final Four + Championship have no region
 
     return { region, round };
@@ -570,21 +565,19 @@ function mapESPNGamesToSkeleton(
     }
 
     // Build espnBySlot for R1.
-    // SLOT is derived from seed matchup (reliable) rather than bracket map (had wrong slots).
-    // REGION comes from bracket map only (needed to fix ESPN's Midwest→West mislabeling).
+    // SLOT is derived from seed matchup (reliable).
+    // REGION comes from g.region which is parsed from competition.notes[0].headline (correct).
     for (const g of Object.values(espnGames)) {
         if (g.round !== 1) continue;
-        const homeInfo = NCAA_2026_BRACKET[g.homeTeamId];
-        const awayInfo = NCAA_2026_BRACKET[g.awayTeamId];
 
-        // Region override from bracket map; fall back to ESPN-provided region
-        const resolvedRegion = homeInfo?.region ?? awayInfo?.region ?? g.region;
+        // Use the region from the game (correctly parsed from ESPN notes headline)
+        const resolvedRegion = g.region;
         if (!resolvedRegion || resolvedRegion === 'TBD') {
             logger.warn(`R1: No region for game ${g.homeTeamId} vs ${g.awayTeamId}`);
             continue;
         }
 
-        // Derive slot from seed matchup — so Duke(1) vs Siena(16) → slot 1 regardless of map
+        // Derive slot from seed matchup — so Duke(1) vs Siena(16) → slot 1
         const homeSeed = espnTeams[g.homeTeamId]?.seed ?? 99;
         const awaySeed = espnTeams[g.awayTeamId]?.seed ?? 99;
         const topSeed = Math.min(homeSeed, awaySeed);
@@ -622,10 +615,11 @@ function mapESPNGamesToSkeleton(
 
             if (!match && ffCandidates.length > 0) {
                 for (const ffGame of ffCandidates) {
-                    const homeInfo = NCAA_2026_BRACKET[ffGame.homeTeamId];
-                    const awayInfo = NCAA_2026_BRACKET[ffGame.awayTeamId];
-                    const info = homeInfo ?? awayInfo;
-                    if (info?.slot === slot && info?.region === region) {
+                    // Match First Four by seed — if any FF team has a seed matching the slot's top/bot
+                    const ffHomeSeed = espnTeams[ffGame.homeTeamId]?.seed ?? 99;
+                    const ffAwaySeed = espnTeams[ffGame.awayTeamId]?.seed ?? 99;
+                    const slotMatchup = R1_SEED_MATCHUPS.find(m => m.slot === slot);
+                    if (slotMatchup && (ffHomeSeed === slotMatchup.bot || ffAwaySeed === slotMatchup.bot)) {
                         ffFallbackHome = ffGame.homeTeamId;
                         ffFallbackAway = ffGame.awayTeamId;
                         break;

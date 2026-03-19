@@ -3,6 +3,7 @@ import type { Tournament, BracketRegion } from '../../types';
 import { MatchNode } from './MatchNode';
 import { RegionTabs } from './RegionTabs';
 import { ESPNBracket } from './ESPNBracket';
+import { TeamDataContext } from './teamDataContext';
 import { ChevronRight, ChevronLeft, Trophy, Star, Dices, Wand2, LayoutGrid, List } from 'lucide-react';
 
 interface BracketBuilderProps {
@@ -272,6 +273,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                         comparisonPicks={comparisonPicks}
                     />
                 ) : (
+                    <TeamDataContext.Provider value={tournament.importedTeams ?? {}}>
                     <div className="p-4">
                         {activeRegion === 'FF' ? (
                             <FinalFourBracket
@@ -294,6 +296,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                             />
                         )}
                     </div>
+                    </TeamDataContext.Provider>
                 )}
             </div>
 

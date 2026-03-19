@@ -845,113 +845,115 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
 
                             </div>
-                        ) : (
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                                <div className="flex flex-wrap justify-between items-center gap-3 p-4 border-b border-slate-800 bg-slate-950">
-                                    <div>
-                                        <input
-                                            type="text"
-                                            value={entryName}
-                                            onChange={(e) => setEntryName(e.target.value)}
-                                            className="font-bold text-white bg-transparent border-b border-transparent hover:border-slate-700 focus:border-indigo-500 focus:outline-none px-1 py-0.5 transition-colors w-full sm:w-64"
-                                            placeholder="Bracket Name"
-                                        />
-                                        <div className="text-xs text-slate-500 px-1 mt-1">{pickCount}/{requiredPicks} picks</div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => { setIsCreating(false); setActiveEntryId(null); setPicks({}); setTieBreakerPrediction(undefined); }}
-                                            className="text-slate-400 hover:text-white px-3 py-2 rounded text-sm"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleSaveDraft}
-                                            disabled={submitting}
-                                            className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold flex items-center gap-2 text-sm"
-                                        >
-                                            <Save size={14} /> Save Draft
-                                        </button>
-                                        <button
-                                            onClick={handleSubmitBracket}
-                                            disabled={submitting}
-                                            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded font-bold flex items-center gap-2 text-sm"
-                                        >
-                                            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                                            Submit Bracket
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="p-4 overflow-x-auto">
-                                    {tournament ? (
-                                        isConference ? (
-                                            <ConferenceBracketBuilder
-                                                tournament={tournament}
-                                                picks={picks}
-                                                onPick={(slot, team) => setPicks(prev => ({ ...prev, [slot]: team }))}
-                                                readOnly={false}
-                                            />
-                                        ) : (
-                                            <BracketBuilder
-                                                tournament={tournament}
-                                                picks={picks}
-                                                onPick={(slot, team) => setPicks(prev => ({ ...prev, [slot]: team }))}
-                                                readOnly={false}
-                                            />
-                                        )
-                                    ) : (
-                                        <div className="text-center py-10 text-slate-500">
-                                            Tournament data not yet available.
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Tiebreaker and Action Buttons (Bottom) */}
-                                <div className="p-4 xl:px-6 border-t border-slate-800 bg-slate-900/50 flex flex-col xl:flex-row items-center justify-between gap-4">
-                                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full xl:w-auto">
-                                        <div className="flex-1">
-                                            <label className="text-sm font-bold text-amber-400 block mb-1">🏆 Tiebreaker</label>
-                                            <p className="text-xs text-slate-400">Predict the total combined score of the championship game.</p>
-                                        </div>
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            max={500}
-                                            value={tieBreakerPrediction ?? ''}
-                                            onChange={(e) => setTieBreakerPrediction(e.target.value ? parseInt(e.target.value) : undefined)}
-                                            placeholder="e.g. 145"
-                                            className={`bg-slate-900 border ${error?.includes('tie-breaker') ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'border-slate-600'} rounded-lg px-4 py-2 text-white w-32 text-center font-mono text-lg focus:outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
-                                        />
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2 w-full xl:w-auto justify-end">
-                                        <button
-                                            onClick={() => { setIsCreating(false); setActiveEntryId(null); setPicks({}); setTieBreakerPrediction(undefined); }}
-                                            className="text-slate-400 hover:text-white px-3 py-2 rounded text-sm font-bold"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleSaveDraft}
-                                            disabled={submitting}
-                                            className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold flex items-center justify-center gap-2 text-sm"
-                                        >
-                                            <Save size={14} /> Save Draft
-                                        </button>
-                                        <button
-                                            onClick={handleSubmitBracket}
-                                            disabled={submitting}
-                                            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold flex items-center justify-center gap-2 text-sm shadow-lg shadow-emerald-500/20"
-                                        >
-                                            {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                                            Submit Bracket
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        ) : null}
                     </div>
                 )}
+
+                {/* ── Full-Screen Bracket Editor Portal ─────────────────────────────── */}
+                {isCreating && createPortal(
+                    <div className="fixed inset-0 z-[60] flex flex-col bg-slate-950 animate-in fade-in duration-150">
+                        {/* ── Top bar ─────────────────────────────────────────────────── */}
+                        <div className="flex-shrink-0 flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
+                            <div>
+                                <input
+                                    type="text"
+                                    value={entryName}
+                                    onChange={(e) => setEntryName(e.target.value)}
+                                    className="font-bold text-white bg-transparent border-b border-transparent hover:border-slate-700 focus:border-indigo-500 focus:outline-none px-1 py-0.5 transition-colors w-52 sm:w-72"
+                                    placeholder="Bracket Name"
+                                />
+                                <div className="text-xs text-slate-500 px-1 mt-0.5">{pickCount}/{requiredPicks} picks</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => { setIsCreating(false); setActiveEntryId(null); setPicks({}); setTieBreakerPrediction(undefined); }}
+                                    className="text-slate-400 hover:text-white px-3 py-2 rounded text-sm font-medium flex items-center gap-1.5"
+                                >
+                                    <X size={14} /> Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveDraft}
+                                    disabled={submitting}
+                                    className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold flex items-center gap-1.5 text-sm"
+                                >
+                                    <Save size={14} /> Save Draft
+                                </button>
+                                <button
+                                    onClick={handleSubmitBracket}
+                                    disabled={submitting}
+                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded font-bold flex items-center gap-1.5 text-sm shadow-lg shadow-emerald-500/30"
+                                >
+                                    {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                                    Submit Bracket
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* ── Bracket canvas — fills remaining height, vertical scroll only ─ */}
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+                            {tournament ? (
+                                isConference ? (
+                                    <ConferenceBracketBuilder
+                                        tournament={tournament}
+                                        picks={picks}
+                                        onPick={(slot, team) => setPicks(prev => ({ ...prev, [slot]: team }))}
+                                        readOnly={false}
+                                    />
+                                ) : (
+                                    <BracketBuilder
+                                        tournament={tournament}
+                                        picks={picks}
+                                        onPick={(slot, team) => setPicks(prev => ({ ...prev, [slot]: team }))}
+                                        readOnly={false}
+                                    />
+                                )
+                            ) : (
+                                <div className="text-center py-16 text-slate-500">
+                                    Tournament data not yet available.
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ── Bottom bar: tiebreaker + actions ──────────────────────────── */}
+                        <div className="flex-shrink-0 px-4 py-3 border-t border-slate-800 bg-slate-900/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <div className="bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+                                <div>
+                                    <label className="text-xs font-bold text-amber-400 block leading-none mb-0.5">🏆 Tiebreaker</label>
+                                    <p className="text-[11px] text-slate-400">Combined score of the championship game.</p>
+                                </div>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    max={500}
+                                    value={tieBreakerPrediction ?? ''}
+                                    onChange={(e) => setTieBreakerPrediction(e.target.value ? parseInt(e.target.value) : undefined)}
+                                    placeholder="e.g. 145"
+                                    className={`bg-slate-900 border ${error?.includes('tie-breaker') ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'border-slate-600'} rounded-lg px-4 py-2 text-white w-28 text-center font-mono text-lg focus:outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                                />
+                            </div>
+                            <div className="flex gap-2 ml-auto">
+                                <button
+                                    onClick={handleSaveDraft}
+                                    disabled={submitting}
+                                    className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold flex items-center gap-1.5 text-sm"
+                                >
+                                    <Save size={14} /> Save Draft
+                                </button>
+                                <button
+                                    onClick={handleSubmitBracket}
+                                    disabled={submitting}
+                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold flex items-center gap-1.5 text-sm shadow-lg shadow-emerald-500/30"
+                                >
+                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                                    Submit Bracket
+                                </button>
+                            </div>
+                        </div>
+                    </div>,
+                    document.body
+                )}
+
+
 
                 {/* Standings Tab */}
                 {!loading && activeTab === 'standings' && (
@@ -1956,7 +1958,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             {/* Viewing Entry Modal */}
             {viewingEntry && tournament && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-[98vw] max-h-[95vh] flex flex-col shadow-2xl">
                         <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-950 rounded-t-2xl">
                             <div>
                                 <h3 className="font-bold text-lg text-white flex items-center gap-2">

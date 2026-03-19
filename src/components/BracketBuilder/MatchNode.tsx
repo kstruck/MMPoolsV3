@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import type { Game } from '../../types';
 import { getTeamLogo } from '../../constants';
 import { Check, X } from 'lucide-react';
+import { TeamDataContext } from './teamDataContext';
 
 /** Extract numeric seed from team ID like "E1-Duke" → 1, "W16-FAMU" → 16 */
 function extractSeedFromId(teamId?: string): number | undefined {
@@ -24,6 +25,7 @@ interface MatchNodeProps {
 }
 
 export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readOnly, isChampionship, homeTeamIdOverride, awayTeamIdOverride, dynamicParticipants, eliminatedTeamIds, comparisonPicks }) => {
+    const teamCtx = useContext(TeamDataContext);
     // If no game yet (e.g. waiting for previous round), show placeholder
     if (!game) {
         return (
@@ -63,7 +65,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
         <div className={`flex flex-col border border-slate-700 bg-slate-900 rounded overflow-hidden ${nodeWidth} shadow-sm transition-all ${isChampionship ? 'scale-110 border-amber-500/50 shadow-amber-900/20' : 'hover:border-slate-600'} ${diffStatus ? 'z-10' : ''}`}>
             <TeamSlot
                 teamId={displayHomeId}
-                seed={extractSeedFromId(displayHomeId)}
+                seed={extractSeedFromId(displayHomeId) ?? teamCtx[displayHomeId ?? '']?.seed}
                 isPicked={isHomePicked}
                 pickStatus={getPickStatus(displayHomeId)}
                 isWinner={isHomeWinner}
@@ -76,7 +78,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
             <div className="border-t border-slate-800 relative"></div>
             <TeamSlot
                 teamId={displayAwayId}
-                seed={extractSeedFromId(displayAwayId)}
+                seed={extractSeedFromId(displayAwayId) ?? teamCtx[displayAwayId ?? '']?.seed}
                 isPicked={isAwayPicked}
                 pickStatus={getPickStatus(displayAwayId)}
                 isWinner={isAwayWinner}

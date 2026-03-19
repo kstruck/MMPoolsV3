@@ -80,8 +80,8 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
 
             let url = '';
             if (activeTab === 'basketball') {
-                // College Basketball (Mens) - Division I
-                url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${dateStr}&limit=500&groups=50`;
+                // College Basketball (Mens) - NCAA Tournament (groups=100)
+                url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=500&groups=100`;
             } else {
                 // Football
                 const leaguePath = activeTab === 'college' ? 'college-football' : 'nfl';
