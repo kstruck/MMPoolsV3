@@ -1,19 +1,46 @@
 /**
- * ESPNBracket.tsx
+ * ESPNBracket.tsx — Full ESPN-style NCAA bracket with correct alignment.
  *
- * Full ESPN-style NCAA Tournament bracket UI.
+ * Alignment math (per region, 8 games per side):
+ *   GAME_H  = 58px   (height of each matchup card)
+ *   STEP_R1 = 66px   (top-to-top distance between R1 cards; 58 + 8px gap)
+ *
+ *   For round r (1..4):
+ *     step(r)        = STEP_R1 × 2^(r-1)
+ *     paddingTop(r)  = (step(r) - STEP_R1) / 2
+ *     gap(r)         = step(r) - GAME_H
+ *
+ *   This guarantees each card in round r is vertically centered
+ *   between its two feeder cards in round r-1.
  *
  * Layout:
- *   [EAST left→right] [Final Four] [WEST right→left]
- *   [SOUTH left→right]             [MIDWEST right→left]
- *
- * Click a team → pick them. They cascade forward to next rounds.
+ *   [EAST left→right] | [Final Four] | [WEST right→left]
+ *   [SOUTH left→right]               [MIDWEST right→left]
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback } from 'react';
 import type { Tournament, Game } from '../../types';
 import { getTeamLogo } from '../../constants';
-import { Trophy, Check, X } from 'lucide-react';
+import { Trophy, Check, X, Link, Printer } from 'lucide-react';
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+
+const GAME_H = 58;   // px — height of each matchup card
+const STEP_R1 = 66;  // px — top-to-top step between R1 cards (58 + 8 gap)
+const COL_W = 148;   // px — width of each bracket column card
+const COL_GAP = 10;  // px — gap between columns
+
+/** Column configs for a left-to-right 8-team region (R1→R4) */
+const COLS_LTR = [1, 2, 3, 4].map(r => ({
+    round: r,
+    paddingTop: (STEP_R1 * Math.pow(2, r - 1) - STEP_R1) / 2,
+    gap: STEP_R1 * Math.pow(2, r - 1) - GAME_H,
+    label: ['Round of 64', 'Round of 32', 'Sweet 16', 'Elite 8'][r - 1],
+}));
+
+
+// Total height for one region stack = 8 games × step
+const REGION_H = 8 * STEP_R1; // 528px
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -24,11 +51,35 @@ interface ESPNBracketProps {
     readOnly?: boolean;
     eliminatedTeamIds?: Set<string>;
     comparisonPicks?: Record<string, string>;
+    // Optional entry stats for the header banner
+    entryName?: string;
+    entryScore?: number;
+    maxPossibleScore?: number;
+    rank?: number;
+    totalEntries?: number;
 }
 
-interface TeamSlot {
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+/** Extract numeric seed from team ID: "E1-OhioState" → 1, "W16-TCU" → 16 */
+function extractSeed(teamId?: string): number | undefined {
+    if (!teamId) return undefined;
+    const m = teamId.match(/^[A-Z]+(\d+)-/);
+    return m ? parseInt(m[1], 10) : undefined;
+}
+
+/** Extract display name from team ID: "E5-Duke Blue Devils" → "Duke Blue Devils" */
+function extractName(teamId?: string): string {
+    if (!teamId) return 'TBD';
+    const idx = teamId.indexOf('-');
+    if (idx === -1) return teamId;
+    return teamId.slice(idx + 1).replace(/-/g, ' ').trim();
+}
+
+// ─── Team Row ──────────────────────────────────────────────────────────────
+
+interface TeamRowProps {
     teamId?: string;
-    seed?: number;
     isPicked: boolean;
     pickStatus?: 'correct' | 'incorrect' | null;
     isWinner?: boolean;
@@ -37,55 +88,20 @@ interface TeamSlot {
     disabled: boolean;
 }
 
-// ─── Seed Extraction ───────────────────────────────────────────────────────
-
-/** Extracts seed from team ID like "E1-OhioState" → 1, "W16-TCU" → 16 */
-function extractSeed(teamId?: string): number | undefined {
-    if (!teamId) return undefined;
-    const m = teamId.match(/^[A-Z]+(\d+)-/);
-    return m ? parseInt(m[1], 10) : undefined;
-}
-
-/** Extracts display name from team ID like "E5-Duke Blue Devils" → "Duke Blue Devils" */
-function extractName(teamId?: string): string {
-    if (!teamId) return 'TBD';
-    const idx = teamId.indexOf('-');
-    if (idx === -1) return teamId;
-    return teamId.slice(idx + 1).replace(/-/g, ' ');
-}
-
-// ─── Region Color Accents ──────────────────────────────────────────────────
-
-const REGION_COLORS: Record<string, string> = {
-    East:    '#3b82f6', // blue
-    West:    '#f97316', // orange
-    South:   '#22c55e', // green
-    Midwest: '#a855f7', // purple
-};
-
-// ─── Individual Team Slot ──────────────────────────────────────────────────
-
-const TeamRow: React.FC<TeamSlot> = ({
-    teamId, seed, isPicked, pickStatus, isWinner, isEliminated, onClick, disabled
+const TeamRow: React.FC<TeamRowProps> = ({
+    teamId, isPicked, pickStatus, isWinner, isEliminated, onClick, disabled
 }) => {
     const name = extractName(teamId);
+    const seed = extractSeed(teamId);
     const logo = teamId ? getTeamLogo(teamId, 'ncaa') : null;
 
-    let bg = '';
-    let textColor = 'text-slate-300';
+    // Background / text color
+    let bg = 'hover:bg-slate-800 text-slate-300';
     if (isPicked) {
-        if (pickStatus === 'incorrect') {
-            bg = 'bg-red-800/40';
-            textColor = 'text-red-200';
-        } else if (pickStatus === 'correct') {
-            bg = 'bg-emerald-700/40';
-            textColor = 'text-emerald-100';
-        } else {
-            bg = 'bg-[#1e56a0]';
-            textColor = 'text-white';
-        }
+        if (pickStatus === 'incorrect') bg = 'bg-red-500/20 text-red-200';
+        else bg = 'bg-amber-600/90 text-white';
     } else if (isWinner) {
-        bg = 'bg-emerald-900/20';
+        bg = 'bg-emerald-500/10 text-slate-200';
     }
 
     return (
@@ -93,20 +109,19 @@ const TeamRow: React.FC<TeamSlot> = ({
             onClick={onClick}
             disabled={disabled}
             className={`
-                w-full flex items-center gap-1 px-1.5 h-[28px] text-left transition-all relative
-                ${bg} ${textColor}
-                ${!disabled && !isPicked ? 'hover:bg-[#1a3a6a] hover:text-white' : ''}
+                w-full flex items-center h-[28px] px-1.5 gap-1 text-left transition-colors relative
+                ${bg}
                 ${disabled ? 'cursor-default' : 'cursor-pointer'}
                 ${isEliminated && !isPicked ? 'opacity-40' : ''}
             `}
         >
-            {/* Seed badge */}
+            {/* Seed number — always show space so alignment is consistent */}
             <span className={`
-                text-[9px] font-bold min-w-[14px] text-center leading-none
-                ${isPicked ? 'text-blue-200' : 'text-slate-500'}
-                ${!teamId ? 'invisible' : ''}
+                text-[10px] font-bold w-[18px] text-right flex-shrink-0 leading-none
+                ${isPicked ? 'text-amber-200' : 'text-slate-500'}
+                ${!seed ? 'invisible' : ''}
             `}>
-                {seed ?? ''}
+                {seed ?? '0'}
             </span>
 
             {/* Logo */}
@@ -121,23 +136,33 @@ const TeamRow: React.FC<TeamSlot> = ({
                 <span className="w-[14px] h-[14px] flex-shrink-0" />
             )}
 
-            {/* Name */}
+            {/* Team name */}
             <span className={`
-                text-[10px] font-semibold truncate flex-1 tracking-tight
+                text-[10px] font-semibold truncate flex-1 tracking-tight leading-none
                 ${!teamId ? 'italic opacity-30' : ''}
                 ${isEliminated && !isPicked ? 'line-through decoration-red-500/50' : ''}
             `}>
                 {teamId ? name : 'TBD'}
             </span>
 
-            {/* Status icon */}
-            {pickStatus === 'correct' && <Check className="w-3 h-3 text-emerald-300 flex-shrink-0" />}
+            {/* Status icons */}
+            {pickStatus === 'correct' && <Check className="w-3 h-3 text-white flex-shrink-0" />}
             {pickStatus === 'incorrect' && <X className="w-3 h-3 text-red-400 flex-shrink-0" />}
             {isWinner && !pickStatus && !isPicked && <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />}
+            {isPicked && !pickStatus && !isEliminated && <span className="w-1.5 h-1.5 rounded-full bg-white/80 flex-shrink-0" />}
 
-            {/* Left highlight bar for picked */}
-            {isPicked && (
-                <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-blue-400" />
+            {/* Left accent bar */}
+            {isPicked && !pickStatus && (
+                <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-amber-400" />
+            )}
+            {pickStatus === 'correct' && (
+                <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-emerald-400" />
+            )}
+            {pickStatus === 'incorrect' && (
+                <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-red-500" />
+            )}
+            {isWinner && !isPicked && (
+                <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-emerald-500" />
             )}
         </button>
     );
@@ -153,205 +178,206 @@ interface MatchupCardProps {
     onPick: (slotId: string, teamId: string) => void;
     readOnly?: boolean;
     eliminatedTeamIds?: Set<string>;
-    dynamicParticipants?: boolean;
 }
 
 const MatchupCard: React.FC<MatchupCardProps> = ({
-    game, homeTeamId, awayTeamId, picks, onPick, readOnly, eliminatedTeamIds, dynamicParticipants
+    game, homeTeamId, awayTeamId, picks, onPick, readOnly, eliminatedTeamIds
 }) => {
+    const style: React.CSSProperties = {
+        width: COL_W,
+        height: GAME_H,
+        minHeight: GAME_H,
+        maxHeight: GAME_H,
+    };
+
     if (!game) {
         return (
-            <div className="flex flex-col border border-slate-800/60 rounded-sm bg-slate-900/30 overflow-hidden opacity-40" style={{ width: 148 }}>
-                <div className="h-[28px] border-b border-slate-800/60" />
-                <div className="h-[28px]" />
+            <div
+                className="border border-slate-800/50 rounded-sm bg-slate-900/20 flex flex-col overflow-hidden opacity-30 flex-shrink-0"
+                style={style}
+            >
+                <div style={{ height: 28 }} />
+                <div className="border-t border-slate-800/50 mx-2" />
+                <div style={{ height: 28 }} />
             </div>
         );
     }
 
-    const displayHome = dynamicParticipants ? homeTeamId : (homeTeamId ?? game.homeTeamId);
-    const displayAway = dynamicParticipants ? awayTeamId : (awayTeamId ?? game.awayTeamId);
-
     const picked = picks[game.id];
     const isFinal = game.status === 'FINAL';
-    const isHomeWinner = isFinal && game.winnerTeamId === displayHome;
-    const isAwayWinner = isFinal && game.winnerTeamId === displayAway;
+    const isHomeWinner = isFinal && game.winnerTeamId === homeTeamId;
+    const isAwayWinner = isFinal && game.winnerTeamId === awayTeamId;
 
     const getPickStatus = (tid?: string): 'correct' | 'incorrect' | null => {
-        if (!tid || !picked || tid !== picked) return null;
-        if (!isFinal) return null;
+        if (!tid || !picked || tid !== picked || !isFinal) return null;
         return game.winnerTeamId === tid ? 'correct' : 'incorrect';
     };
 
     return (
         <div
-            className="flex flex-col border border-slate-700/70 rounded-sm bg-[#111c2b] overflow-hidden shadow-sm transition-all hover:border-slate-600/80"
-            style={{ width: 148 }}
+            className="flex flex-col border border-slate-700/70 rounded-sm bg-[#111b2e] overflow-hidden shadow-sm hover:border-slate-600/80 transition-colors flex-shrink-0"
+            style={style}
         >
             <TeamRow
-                teamId={displayHome}
-                seed={extractSeed(displayHome)}
-                isPicked={picked === displayHome}
-                pickStatus={getPickStatus(displayHome)}
+                teamId={homeTeamId}
+                isPicked={picked === homeTeamId}
+                pickStatus={getPickStatus(homeTeamId)}
                 isWinner={isHomeWinner}
-                isEliminated={displayHome ? eliminatedTeamIds?.has(displayHome) : false}
-                onClick={() => !readOnly && displayHome && onPick(game.id, displayHome)}
-                disabled={!!(readOnly || !displayHome)}
+                isEliminated={homeTeamId ? eliminatedTeamIds?.has(homeTeamId) : false}
+                onClick={() => !readOnly && homeTeamId && onPick(game.id, homeTeamId)}
+                disabled={!!(readOnly || !homeTeamId)}
             />
-            <div className="border-t border-slate-700/50 mx-1" />
+            <div className="border-t border-slate-700/40 mx-2 flex-shrink-0" />
             <TeamRow
-                teamId={displayAway}
-                seed={extractSeed(displayAway)}
-                isPicked={picked === displayAway}
-                pickStatus={getPickStatus(displayAway)}
+                teamId={awayTeamId}
+                isPicked={picked === awayTeamId}
+                pickStatus={getPickStatus(awayTeamId)}
                 isWinner={isAwayWinner}
-                isEliminated={displayAway ? eliminatedTeamIds?.has(displayAway) : false}
-                onClick={() => !readOnly && displayAway && onPick(game.id, displayAway)}
-                disabled={!!(readOnly || !displayAway)}
+                isEliminated={awayTeamId ? eliminatedTeamIds?.has(awayTeamId) : false}
+                onClick={() => !readOnly && awayTeamId && onPick(game.id, awayTeamId)}
+                disabled={!!(readOnly || !awayTeamId)}
             />
         </div>
     );
 };
 
-// ─── Bracket Connector Lines ───────────────────────────────────────────────
+// ─── Bracket Column ────────────────────────────────────────────────────────
 
-/**
- * Renders two vertical stacked slots on the bracket, for each pair of R1 games
- * connecting to one R2 game. The connector is a CSS border approach.
- */
-const SLOT_HEIGHT = 64; // each matchup card is ~56px + 8px gap
-
-/** A column of matchup cards, spaced correctly so connectors align */
 interface BracketColumnProps {
     games: (Game | undefined)[];
     round: number;
+    label: string;
+    gap: number;
     picks: Record<string, string>;
     onPick: (slotId: string, teamId: string) => void;
     readOnly?: boolean;
     eliminatedTeamIds?: Set<string>;
-    // Overrides for dynamic participants
-    overrides: (readonly [string | undefined, string | undefined])[];
-    dynamicParticipants?: boolean;
-    align: 'left' | 'right';
+    /** For rounds > 1: participant IDs derived from previous picks */
+    overrideHome: (string | undefined)[];
+    overrideAway: (string | undefined)[];
 }
 
 const BracketColumn: React.FC<BracketColumnProps> = ({
-    games, picks, onPick, readOnly, eliminatedTeamIds, overrides, dynamicParticipants
-}) => {
-    // Number of "slots" in round 1 = 8 games (base)
-    // Each successive round halves the game count and doubles the spacing
-    const count = games.length;
-
-    return (
-        <div className="flex flex-col" style={{ gap: `${SLOT_HEIGHT * (8 / count) - 56}px` }}>
-            {games.map((game, i) => (
+    games, label, gap, picks, onPick, readOnly, eliminatedTeamIds,
+    overrideHome, overrideAway
+}) => (
+    <div className="flex flex-col flex-shrink-0" style={{ width: COL_W, gap }}>
+        {games.map((game, i) => {
+            const homeId = overrideHome[i] ?? game?.homeTeamId;
+            const awayId = overrideAway[i] ?? game?.awayTeamId;
+            return (
                 <MatchupCard
-                    key={game?.id ?? `placeholder-${i}`}
+                    key={game?.id ?? `ph-${label}-${i}`}
                     game={game}
-                    homeTeamId={overrides[i]?.[0]}
-                    awayTeamId={overrides[i]?.[1]}
+                    homeTeamId={homeId}
+                    awayTeamId={awayId}
                     picks={picks}
                     onPick={onPick}
                     readOnly={readOnly}
                     eliminatedTeamIds={eliminatedTeamIds}
-                    dynamicParticipants={dynamicParticipants}
                 />
-            ))}
-        </div>
-    );
+            );
+        })}
+    </div>
+);
+
+// ─── Region Panel ──────────────────────────────────────────────────────────
+
+const REGION_COLORS: Record<string, string> = {
+    East: '#60a5fa',
+    West: '#fb923c',
+    South: '#4ade80',
+    Midwest: '#c084fc',
 };
 
-// ─── Single Region Bracket (left-to-right or right-to-left) ───────────────
-
-interface RegionProps extends ESPNBracketProps {
+interface RegionPanelProps extends ESPNBracketProps {
     region: string;
     align: 'left' | 'right';
 }
 
-const RegionBracket: React.FC<RegionProps> = ({
+const RegionPanel: React.FC<RegionPanelProps> = ({
     region, align, tournament, picks, onPick, readOnly, eliminatedTeamIds
 }) => {
-    const color = REGION_COLORS[region] ?? '#3b82f6';
+    const color = REGION_COLORS[region] ?? '#60a5fa';
+    const elims = eliminatedTeamIds ?? new Set<string>();
 
-    const getGames = (round: number): Game[] =>
-        Object.values(tournament.games)
+    const getGames = (round: number): (Game | undefined)[] => {
+        const games = Object.values(tournament.games)
             .filter(g => g.region === region && g.round === round)
             .sort((a, b) => a.id.localeCompare(b.id));
+        // Pad to expected count
+        const expected = 8 / Math.pow(2, round - 1);
+        while (games.length < expected) games.push(undefined as unknown as Game);
+        return games as (Game | undefined)[];
+    };
 
-    const r1 = getGames(1); // 8
-    const r2 = getGames(2); // 4
-    const r3 = getGames(3); // 2
-    const r4 = getGames(4); // 1
+    const r1 = getGames(1); // 8 games
+    const r2 = getGames(2); // 4 games
+    const r3 = getGames(3); // 2 games
+    const r4 = getGames(4); // 1 game
 
-    // Build dynamic participant overrides
-    const r2Overrides: (readonly [string | undefined, string | undefined])[] = r2.map((_, i) => [
-        picks[r1[i * 2]?.id],
-        picks[r1[i * 2 + 1]?.id],
-    ] as const);
+    // Dynamic participant overrides: winners from previous round picks
+    const r1None = r1.map(() => undefined);
+    const r2Home = r2.map((_, i) => picks[r1[i * 2]?.id ?? ''] ?? undefined);
+    const r2Away = r2.map((_, i) => picks[r1[i * 2 + 1]?.id ?? ''] ?? undefined);
+    const r3Home = r3.map((_, i) => picks[r2[i * 2]?.id ?? ''] ?? undefined);
+    const r3Away = r3.map((_, i) => picks[r2[i * 2 + 1]?.id ?? ''] ?? undefined);
+    const r4Home = [picks[r3[0]?.id ?? ''] ?? undefined];
+    const r4Away = [picks[r3[1]?.id ?? ''] ?? undefined];
 
-    const r3Overrides: (readonly [string | undefined, string | undefined])[] = r3.map((_, i) => [
-        picks[r2[i * 2]?.id],
-        picks[r2[i * 2 + 1]?.id],
-    ] as const);
-
-    const r4Override: (readonly [string | undefined, string | undefined])[] = r4.map(() => [
-        picks[r3[0]?.id],
-        picks[r3[1]?.id],
-    ] as const);
-
-    const noOverrides8: (readonly [string | undefined, string | undefined])[] = r1.map(() => [undefined, undefined] as const);
-
-    // Columns: R1 (8 games), R2 (4), R3 (2), R4 (1)
-    const columns = [
-        { games: r1, overrides: noOverrides8, dynamic: false },
-        { games: r2, overrides: r2Overrides, dynamic: true },
-        { games: r3, overrides: r3Overrides, dynamic: true },
-        { games: r4, overrides: r4Override, dynamic: true },
+    const cols = [
+        { ...COLS_LTR[0], games: r1, oh: r1None, oa: r1None },
+        { ...COLS_LTR[1], games: r2, oh: r2Home, oa: r2Away },
+        { ...COLS_LTR[2], games: r3, oh: r3Home, oa: r3Away },
+        { ...COLS_LTR[3], games: r4, oh: r4Home, oa: r4Away },
     ];
 
-    const roundLabels = ['Round of 64', 'Round of 32', 'Sweet 16', 'Elite 8'];
-
-    // For right-aligned regions, reverse the column order
-    const orderedColumns = align === 'right' ? [...columns].reverse() : columns;
-    const orderedLabels = align === 'right' ? [...roundLabels].reverse() : roundLabels;
+    const orderedCols = align === 'right' ? [...cols].reverse() : cols;
 
     return (
-        <div className="flex flex-col">
-            {/* Region label */}
+        <div className="flex flex-col flex-shrink-0">
+            {/* Region name */}
             <div
-                className="text-center font-black text-xs tracking-[0.2em] uppercase mb-2 py-1 rounded-sm"
-                style={{ color, borderBottom: `2px solid ${color}30`, letterSpacing: '0.15em' }}
+                className="text-center text-[11px] font-black uppercase tracking-[0.18em] mb-1.5 pb-1"
+                style={{ color, borderBottom: `2px solid ${color}25` }}
             >
                 {region}
             </div>
 
-            {/* Round headers */}
-            <div className="flex gap-3 mb-1">
-                {orderedLabels.map((label, i) => (
+            {/* Round labels */}
+            <div className="flex mb-1" style={{ gap: COL_GAP }}>
+                {orderedCols.map((c, i) => (
                     <div
                         key={i}
-                        className="text-center text-[9px] font-semibold text-slate-500 uppercase tracking-widest"
-                        style={{ width: 148 }}
+                        className="text-center text-[8px] font-bold text-slate-600 uppercase tracking-widest"
+                        style={{ width: COL_W, flexShrink: 0 }}
                     >
-                        {label}
+                        {c.label}
                     </div>
                 ))}
             </div>
 
             {/* Bracket columns */}
-            <div className="flex gap-3">
-                {orderedColumns.map((col, i) => (
-                    <BracketColumn
+            <div className="flex" style={{ gap: COL_GAP, height: REGION_H }}>
+                {orderedCols.map((c, i) => (
+                    <div
                         key={i}
-                        round={i + 1}
-                        games={col.games as (Game | undefined)[]}
-                        picks={picks}
-                        onPick={onPick}
-                        readOnly={readOnly}
-                        eliminatedTeamIds={eliminatedTeamIds ?? new Set()}
-                        overrides={col.overrides}
-                        dynamicParticipants={col.dynamic}
-                        align={align}
-                    />
+                        className="flex flex-col flex-shrink-0"
+                        style={{ paddingTop: c.paddingTop, width: COL_W }}
+                    >
+                        <BracketColumn
+                            games={c.games as (Game | undefined)[]}
+                            round={c.round}
+                            label={c.label}
+                            gap={c.gap}
+                            picks={picks}
+                            onPick={onPick}
+                            readOnly={readOnly}
+                            eliminatedTeamIds={elims}
+                            overrideHome={c.oh}
+                            overrideAway={c.oa}
+                        />
+                    </div>
                 ))}
             </div>
         </div>
@@ -360,102 +386,252 @@ const RegionBracket: React.FC<RegionProps> = ({
 
 // ─── Final Four Center ─────────────────────────────────────────────────────
 
-type FinalFourCenterProps = ESPNBracketProps;
-
-const FinalFourCenter: React.FC<FinalFourCenterProps> = ({
+const FinalFourCenter: React.FC<ESPNBracketProps> = ({
     tournament, picks, onPick, readOnly, eliminatedTeamIds
 }) => {
     const ffGames = Object.values(tournament.games)
         .filter(g => g.round === 5)
         .sort((a, b) => a.id.localeCompare(b.id));
-
     const champGame = Object.values(tournament.games).find(g => g.round === 6);
 
     const getRegChamp = (region: string) => {
-        const game = Object.values(tournament.games).find(g => g.region === region && g.round === 4);
-        return game ? picks[game.id] : undefined;
+        const g = Object.values(tournament.games).find(g2 => g2.region === region && g2.round === 4);
+        return g ? picks[g.id] : undefined;
     };
 
-    const eastChamp = getRegChamp('East');
-    const westChamp = getRegChamp('West');
-    const southChamp = getRegChamp('South');
+    const eastChamp    = getRegChamp('East');
+    const westChamp    = getRegChamp('West');
+    const southChamp   = getRegChamp('South');
     const midwestChamp = getRegChamp('Midwest');
 
-    const f4Game1 = ffGames.find(g => g.id === 'R5-1') ?? ffGames[0]; // East vs West (South side bracket)
-    const f4Game2 = ffGames.find(g => g.id === 'R5-2') ?? ffGames[1]; // South vs Midwest
+    // South bracket (top): East vs West — but historically depends on bracket year.
+    // We'll do: top FF = East vs South (left-side champs), bottom FF = West vs Midwest (right-side)
+    // Actually NCAA: East vs West, South vs Midwest for the classic arrangement.
+    const ff1 = ffGames[0]; // East vs West (or just first FF game)
+    const ff2 = ffGames[1]; // South vs Midwest
 
-    const champHome = f4Game1 ? picks[f4Game1.id] : undefined;
-    const champAway = f4Game2 ? picks[f4Game2.id] : undefined;
+    const champHome = ff1 ? picks[ff1.id] : undefined;
+    const champAway = ff2 ? picks[ff2.id] : undefined;
 
+    const elims = eliminatedTeamIds ?? new Set<string>();
     const totalGames = Object.keys(tournament.games).length;
     const totalPicks = Object.keys(picks).length;
-    const pickPct = totalGames > 0 ? Math.round((totalPicks / totalGames) * 100) : 0;
+    const pct = totalGames > 0 ? Math.round((totalPicks / totalGames) * 100) : 0;
+
+    // Center the FF panel vertically relative to the total region height (2 regions + gap)
+    // Total available height = 2 × REGION_H + label/header space ≈ 1140px
+    // FF panel: 2 games + champ + trophy = ~350px
+    // We just let flexbox center it
 
     return (
         <div
-            className="flex flex-col items-center justify-center gap-0 min-w-[220px]"
-            style={{ paddingTop: 28 }}
+            className="flex flex-col items-center justify-center flex-shrink-0"
+            style={{ width: 160 }}
         >
             {/* Final Four label */}
-            <div className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest mb-1" style={{ width: 148, textAlign: 'center' }}>
+            <div className="text-[9px] font-bold text-amber-400 uppercase tracking-[0.18em] mb-2 text-center">
                 Final Four
             </div>
 
-            {/* FF Game 1: East champion enters from left */}
-            <div className="flex flex-col gap-0 items-center">
+            {/* FF Game 1 */}
+            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1 text-center">
+                East vs West
+            </div>
+            <MatchupCard
+                game={ff1}
+                homeTeamId={eastChamp}
+                awayTeamId={westChamp}
+                picks={picks}
+                onPick={onPick}
+                readOnly={readOnly}
+                eliminatedTeamIds={elims}
+            />
+
+            {/* Spacer */}
+            <div className="my-4 flex flex-col items-center">
+                <div className="w-px h-4 bg-amber-600/30" />
+            </div>
+
+            {/* Championship */}
+            <div className="text-[9px] font-bold text-amber-500 uppercase tracking-[0.12em] mb-1 text-center">
+                National Championship
+            </div>
+            <div className="relative">
+                <div className="absolute -inset-[2px] rounded bg-amber-500/5 border border-amber-500/25 pointer-events-none" />
                 <MatchupCard
-                    game={f4Game1}
-                    homeTeamId={eastChamp}
-                    awayTeamId={southChamp}
+                    game={champGame}
+                    homeTeamId={champHome}
+                    awayTeamId={champAway}
                     picks={picks}
                     onPick={onPick}
                     readOnly={readOnly}
-                    eliminatedTeamIds={eliminatedTeamIds}
-                    dynamicParticipants
+                    eliminatedTeamIds={elims}
                 />
-                <div className="my-3" />
+            </div>
 
-                {/* Championship */}
-                <div className="text-[9px] font-semibold text-amber-400 uppercase tracking-widest mb-1 text-center">
-                    National Championship
-                </div>
-                <div className="relative">
-                    <div
-                        className="absolute -inset-[2px] rounded bg-gradient-to-b from-amber-500/20 to-amber-600/10 border border-amber-500/30 pointer-events-none"
-                    />
-                    <MatchupCard
-                        game={champGame}
-                        homeTeamId={champHome}
-                        awayTeamId={champAway}
-                        picks={picks}
-                        onPick={onPick}
-                        readOnly={readOnly}
-                        eliminatedTeamIds={eliminatedTeamIds}
-                        dynamicParticipants
-                    />
-                </div>
+            {/* Trophy */}
+            <div className="mt-4 flex flex-col items-center gap-1">
+                <Trophy className="w-5 h-5 text-amber-500/70" />
+                <div className="text-[9px] text-slate-600">{pct}% picks</div>
+            </div>
 
-                {/* Trophy */}
-                <div className="mt-3 flex flex-col items-center gap-1">
-                    <Trophy className="w-6 h-6 text-amber-500 opacity-80" />
-                    <div className="text-[9px] text-slate-500">
-                        {pickPct}% complete
+            {/* Spacer */}
+            <div className="my-4 flex flex-col items-center">
+                <div className="w-px h-4 bg-amber-600/30" />
+            </div>
+
+            {/* FF Game 2 */}
+            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1 text-center">
+                South vs Midwest
+            </div>
+            <MatchupCard
+                game={ff2}
+                homeTeamId={southChamp}
+                awayTeamId={midwestChamp}
+                picks={picks}
+                onPick={onPick}
+                readOnly={readOnly}
+                eliminatedTeamIds={elims}
+            />
+        </div>
+    );
+};
+
+// ─── ESPN Stats Header ──────────────────────────────────────────────────────
+
+const ProgressRing: React.FC<{ value: number; max: number; size?: number }> = ({ value, max, size = 64 }) => {
+    const r = (size - 8) / 2;
+    const circ = 2 * Math.PI * r;
+    const pct = max > 0 ? Math.min(value / max, 1) : 0;
+    const dash = pct * circ;
+    return (
+        <svg width={size} height={size} className="-rotate-90">
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#1e293b" strokeWidth={6} />
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f97316" strokeWidth={6}
+                strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+                style={{ transition: 'stroke-dasharray 0.5s ease' }}
+            />
+        </svg>
+    );
+};
+
+interface StatsHeaderProps {
+    tournament: Tournament;
+    picks: Record<string, string>;
+    entryName?: string;
+    entryScore?: number;
+    maxPossibleScore?: number;
+    rank?: number;
+    totalEntries?: number;
+    pickCount: number;
+    totalPicks: number;
+}
+
+const StatsHeader: React.FC<StatsHeaderProps> = ({
+    tournament, picks, entryName, entryScore = 0, maxPossibleScore,
+    rank, totalEntries, pickCount, totalPicks
+}) => {
+    // Find championship pick
+    const champGame = Object.values(tournament.games).find(g => g.round === 6);
+    const champPick = champGame ? picks[champGame.id] : undefined;
+    const champName = extractName(champPick);
+    const champLogo = champPick ? getTeamLogo(champPick, 'ncaa') : null;
+
+    // Calculated max (simple: 63 games × average points)
+    const maxPts = maxPossibleScore ?? 192; // R1=10, R2=20, R3=40, R4=80, R5=160, R6=320
+    const pct = totalEntries && rank ? Math.round(((totalEntries - rank) / totalEntries) * 100) : null;
+
+    const copyLink = useCallback(() => {
+        navigator.clipboard.writeText(window.location.href)
+            .then(() => alert('Link copied!'))
+            .catch(() => {});
+    }, []);
+
+    const printBracket = useCallback(() => window.print(), []);
+
+    return (
+        <div className="bg-[#0e1929] border-b border-slate-800 px-4 py-3">
+            <div className="max-w-screen-xl mx-auto flex flex-wrap items-center gap-4">
+
+                {/* Champion pick */}
+                <div className="flex items-center gap-3 min-w-[160px]">
+                    {champLogo ? (
+                        <img src={champLogo} alt={champName} className="w-12 h-12 object-contain" crossOrigin="anonymous" />
+                    ) : (
+                        <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center">
+                            <Trophy className="w-6 h-6 text-amber-500" />
+                        </div>
+                    )}
+                    <div>
+                        {entryName && <div className="text-[11px] text-slate-500 leading-none mb-0.5">{entryName}</div>}
+                        <div className="text-xs font-bold text-white">{champPick ? champName : 'No Champion Picked'}</div>
+                        <div className="text-[9px] text-slate-500 uppercase tracking-wider mt-0.5">Champion Pick</div>
                     </div>
                 </div>
 
-                <div className="my-3" />
+                {/* Divider */}
+                <div className="w-px h-10 bg-slate-800 hidden sm:block" />
 
-                {/* FF Game 2: South vs Midwest */}
-                <MatchupCard
-                    game={f4Game2}
-                    homeTeamId={westChamp}
-                    awayTeamId={midwestChamp}
-                    picks={picks}
-                    onPick={onPick}
-                    readOnly={readOnly}
-                    eliminatedTeamIds={eliminatedTeamIds}
-                    dynamicParticipants
-                />
+                {/* Rank / PCT / Pts */}
+                <div className="flex items-center gap-5">
+                    <div className="text-center">
+                        <div className="text-lg font-black text-white leading-none">{rank ?? '--'}</div>
+                        <div className="text-[9px] text-slate-500 uppercase tracking-wider mt-0.5">Rank</div>
+                    </div>
+                    <div className="text-center">
+                        <div className="text-lg font-black text-white leading-none">{pct !== null ? `${pct}%` : '--'}</div>
+                        <div className="text-[9px] text-slate-500 uppercase tracking-wider mt-0.5">PCT</div>
+                    </div>
+                    <div className="text-center">
+                        <div className="text-lg font-black text-amber-400 leading-none">{entryScore}</div>
+                        <div className="text-[9px] text-slate-500 uppercase tracking-wider mt-0.5">PTS</div>
+                    </div>
+                </div>
+
+                {/* Picks progress bar */}
+                <div className="flex-1 hidden md:block">
+                    <div className="flex items-center justify-between text-[9px] text-slate-500 mb-1">
+                        <span>{pickCount}/{totalPicks} Picks Made</span>
+                        <span>{totalPicks > 0 ? Math.round((pickCount / totalPicks) * 100) : 0}%</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-amber-500 transition-all duration-500 rounded-full"
+                            style={{ width: `${totalPicks > 0 ? (pickCount / totalPicks) * 100 : 0}%` }}
+                        />
+                    </div>
+                </div>
+
+                {/* Progress ring */}
+                <div className="flex items-center gap-2 hidden lg:flex">
+                    <div className="relative">
+                        <ProgressRing value={entryScore} max={maxPts} size={60} />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <div className="text-[10px] font-bold text-white leading-none">{entryScore}</div>
+                            <div className="text-[7px] text-slate-500 leading-none">{maxPts} MAX</div>
+                        </div>
+                    </div>
+                    <div className="text-[9px] text-slate-500 space-y-0.5">
+                        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />Points Gained</div>
+                        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-700 inline-block" />Points Unplayed</div>
+                    </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 ml-auto">
+                    <button
+                        onClick={copyLink}
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 rounded text-[11px] font-medium text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+                    >
+                        <Link className="w-3 h-3" /> Copy Link
+                    </button>
+                    <button
+                        onClick={printBracket}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 rounded text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                    >
+                        <Printer className="w-3 h-3" /> Print Bracket
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -464,82 +640,80 @@ const FinalFourCenter: React.FC<FinalFourCenterProps> = ({
 // ─── Main ESPN Bracket ─────────────────────────────────────────────────────
 
 export const ESPNBracket: React.FC<ESPNBracketProps> = ({
-    tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks
+    tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks,
+    entryName, entryScore, maxPossibleScore, rank, totalEntries,
 }) => {
-    const elims = eliminatedTeamIds ?? new Set<string>();
+    const bracketRef = useRef<HTMLDivElement>(null);
+    const innerRef = useRef<HTMLDivElement>(null);
 
-    // Memoize to avoid re-renders when parent re-renders
-    const bracketContent = useMemo(() => (
-        <div className="flex gap-4 items-start min-w-fit">
-            {/* LEFT PANEL → East (top), South (bottom) */}
-            <div className="flex flex-col gap-6">
-                <RegionBracket
-                    region="East"
-                    align="left"
-                    tournament={tournament}
-                    picks={picks}
-                    onPick={onPick}
-                    readOnly={readOnly}
-                    eliminatedTeamIds={elims}
-                    comparisonPicks={comparisonPicks}
-                />
-                <RegionBracket
-                    region="South"
-                    align="left"
-                    tournament={tournament}
-                    picks={picks}
-                    onPick={onPick}
-                    readOnly={readOnly}
-                    eliminatedTeamIds={elims}
-                    comparisonPicks={comparisonPicks}
-                />
-            </div>
+    // Picks progress counts
+    const totalGames = Object.keys(tournament.games).length;
+    const pickCount = Object.keys(picks).length;
 
-            {/* CENTER → Final Four + Championship */}
-            <FinalFourCenter
-                tournament={tournament}
-                picks={picks}
-                onPick={onPick}
-                readOnly={readOnly}
-                eliminatedTeamIds={elims}
-                comparisonPicks={comparisonPicks}
-            />
+    // Auto-scale bracket to fit available width without scrolling
+    useEffect(() => {
+        const update = () => {
+            if (!bracketRef.current || !innerRef.current) return;
+            const available = bracketRef.current.clientWidth;
+            const natural = innerRef.current.scrollWidth;
+            const scale = natural > available ? available / natural : 1;
+            innerRef.current.style.transform = `scale(${scale})`;
+            innerRef.current.style.transformOrigin = 'top left';
+            bracketRef.current.style.height = `${innerRef.current.scrollHeight * scale}px`;
+        };
+        update();
+        const ro = new ResizeObserver(update);
+        if (bracketRef.current) ro.observe(bracketRef.current);
+        return () => ro.disconnect();
+    }, [tournament, picks]);
 
-            {/* RIGHT PANEL → West (top), Midwest (bottom) */}
-            <div className="flex flex-col gap-6">
-                <RegionBracket
-                    region="West"
-                    align="right"
-                    tournament={tournament}
-                    picks={picks}
-                    onPick={onPick}
-                    readOnly={readOnly}
-                    eliminatedTeamIds={elims}
-                    comparisonPicks={comparisonPicks}
-                />
-                <RegionBracket
-                    region="Midwest"
-                    align="right"
-                    tournament={tournament}
-                    picks={picks}
-                    onPick={onPick}
-                    readOnly={readOnly}
-                    eliminatedTeamIds={elims}
-                    comparisonPicks={comparisonPicks}
-                />
-            </div>
-        </div>
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    ), [tournament, picks, readOnly, elims]);
+    const regionProps = useMemo(() => ({
+        tournament,
+        picks,
+        onPick,
+        readOnly,
+        eliminatedTeamIds: eliminatedTeamIds ?? new Set<string>(),
+        comparisonPicks,
+    }), [tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks]);
 
     return (
-        <div
-            id="bracket-printable-area"
-            className="w-full overflow-x-auto overflow-y-hidden bg-[#0b1421] rounded-lg"
-            style={{ minHeight: 600 }}
-        >
-            <div className="p-4 w-fit mx-auto">
-                {bracketContent}
+        <div id="bracket-printable-area" className="w-full bg-[#0b1421]">
+            {/* Stats header — full width, outside scaled area */}
+            <StatsHeader
+                tournament={tournament}
+                picks={picks}
+                entryName={entryName}
+                entryScore={entryScore}
+                maxPossibleScore={maxPossibleScore}
+                rank={rank}
+                totalEntries={totalEntries}
+                pickCount={pickCount}
+                totalPicks={totalGames}
+            />
+
+            {/* Scaled bracket canvas */}
+            <div
+                ref={bracketRef}
+                className="w-full relative overflow-hidden"
+            >
+                <div ref={innerRef} className="p-4 w-fit">
+                    <div className="flex items-center gap-3">
+                        {/* LEFT: East (top) + South (bottom) */}
+                        <div className="flex flex-col gap-4">
+                            <RegionPanel {...regionProps} region="East" align="left" />
+                            <RegionPanel {...regionProps} region="South" align="left" />
+                        </div>
+
+                        {/* CENTER: Final Four */}
+                        <FinalFourCenter {...regionProps} />
+
+                        {/* RIGHT: West (top) + Midwest (bottom) */}
+                        <div className="flex flex-col gap-4">
+                            <RegionPanel {...regionProps} region="West" align="right" />
+                            <RegionPanel {...regionProps} region="Midwest" align="right" />
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );

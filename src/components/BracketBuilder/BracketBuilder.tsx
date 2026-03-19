@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { Tournament, BracketRegion } from '../../types';
 import { MatchNode } from './MatchNode';
 import { RegionTabs } from './RegionTabs';
@@ -18,7 +18,19 @@ type ViewType = 'espn' | 'tabs';
 
 export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly, viewMode = 'tabs', comparisonPicks }) => {
     const [activeRegion, setActiveRegion] = useState<BracketRegion | 'FF'>('East');
-    const [view, setView] = useState<ViewType>('espn'); // Default to ESPN full bracket
+    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+    const [view, setView] = useState<ViewType>(() => window.innerWidth < 768 ? 'tabs' : 'espn');
+
+    // Force region view on mobile; restore ESPN full on desktop
+    useEffect(() => {
+        const handleResize = () => {
+            const mobile = window.innerWidth < 768;
+            setIsMobile(mobile);
+            if (mobile) setView('tabs');
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Calculate completion status for tabs
     const completionStatus = useMemo(() => {
@@ -215,19 +227,21 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                         {totalPicks} / {totalGames} picks
                     </div>
 
-                    {/* Right: View toggle */}
+                    {/* Right: View toggle — Full only on desktop */}
                     <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
-                        <button
-                            onClick={() => setView('espn')}
-                            title="Full Bracket (ESPN-style)"
-                            className={`px-2 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'espn' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
-                        >
-                            <LayoutGrid size={11} /> <span className="hidden sm:inline">Full</span>
-                        </button>
+                        {!isMobile && (
+                            <button
+                                onClick={() => setView('espn')}
+                                title="Full Bracket (ESPN-style)"
+                                className={`px-2 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'espn' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                            >
+                                <LayoutGrid size={11} /> <span className="hidden sm:inline">Full</span>
+                            </button>
+                        )}
                         <button
                             onClick={() => setView('tabs')}
                             title="Region-by-Region"
-                            className={`px-2 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'tabs' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                            className={`px-2 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'tabs' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
                         >
                             <List size={11} /> <span className="hidden sm:inline">Regions</span>
                         </button>

@@ -3,6 +3,13 @@ import type { Game } from '../../types';
 import { getTeamLogo } from '../../constants';
 import { Check, X } from 'lucide-react';
 
+/** Extract numeric seed from team ID like "E1-Duke" → 1, "W16-FAMU" → 16 */
+function extractSeedFromId(teamId?: string): number | undefined {
+    if (!teamId) return undefined;
+    const m = teamId.match(/^[A-Z]+?(\d+)-/);
+    return m ? parseInt(m[1], 10) : undefined;
+}
+
 interface MatchNodeProps {
     game?: Game;
     picks: Record<string, string>;
@@ -56,7 +63,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
         <div className={`flex flex-col border border-slate-700 bg-slate-900 rounded overflow-hidden ${nodeWidth} shadow-sm transition-all ${isChampionship ? 'scale-110 border-amber-500/50 shadow-amber-900/20' : 'hover:border-slate-600'} ${diffStatus ? 'z-10' : ''}`}>
             <TeamSlot
                 teamId={displayHomeId}
-                seed={undefined}
+                seed={extractSeedFromId(displayHomeId)}
                 isPicked={isHomePicked}
                 pickStatus={getPickStatus(displayHomeId)}
                 isWinner={isHomeWinner}
@@ -69,7 +76,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
             <div className="border-t border-slate-800 relative"></div>
             <TeamSlot
                 teamId={displayAwayId}
-                seed={undefined}
+                seed={extractSeedFromId(displayAwayId)}
                 isPicked={isAwayPicked}
                 pickStatus={getPickStatus(displayAwayId)}
                 isWinner={isAwayWinner}
@@ -126,15 +133,21 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
             `}
         >
             <div className="flex items-center gap-1 sm:gap-2 w-full overflow-hidden z-10">
-                {logoUrl ? (
+                {/* Seed badge — always reserve space for alignment */}
+                <span className={`text-[11px] font-bold w-5 text-right flex-shrink-0 leading-none
+                    ${isPicked ? 'text-amber-200' : 'text-slate-500'}
+                    ${!seed ? 'opacity-0' : ''}`}
+                >
+                    {seed ?? '0'}
+                </span>
+
+                {logoUrl && (
                     <img
                         src={logoUrl}
                         alt={teamName}
-                        className="w-4 h-4 sm:w-5 sm:h-5 object-contain"
+                        className="w-4 h-4 sm:w-5 sm:h-5 object-contain flex-shrink-0"
                         crossOrigin="anonymous"
                     />
-                ) : (
-                    seed && <span className="text-[10px] font-mono opacity-60 w-3">{seed}</span>
                 )}
 
                 <span className={`text-[10px] sm:text-xs font-bold truncate tracking-tight flex-1 ${!teamId ? 'italic opacity-40' : ''} ${isEliminated ? 'line-through decoration-red-500/50' : ''}`}>
