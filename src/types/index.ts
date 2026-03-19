@@ -774,6 +774,8 @@ export interface Team {
   seed: number;
   region: string;
   logoUrl?: string;
+  wins?: number;   // Season wins (from ESPN import)
+  losses?: number; // Season losses (from ESPN import)
 }
 
 // --- POOL THEMES ---

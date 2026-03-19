@@ -403,9 +403,10 @@ async function fetchAndMapESPNGameData(seasonYear: number) {
         const homeBracketInfo = seasonYear === 2026 ? NCAA_2026_BRACKET[homeDisplayNameRaw] : null;
         const awayBracketInfo = seasonYear === 2026 ? NCAA_2026_BRACKET[awayDisplayNameRaw] : null;
 
-        // Use bracket table for seed; fall back to parsing from name or 99
-        const homeSeed = homeBracketInfo?.seed ?? parseSeedFromName(homeComp.team.displayName) ?? 99;
-        const awaySeed = awayBracketInfo?.seed ?? parseSeedFromName(awayComp.team.displayName) ?? 99;
+        // ESPN display names include seed: "(1) Duke Blue Devils" → seed 1.
+        // Prioritize ESPN data; use bracket map only as fallback for unmapped teams.
+        const homeSeed = parseSeedFromName(homeComp.team.displayName) ?? homeBracketInfo?.seed ?? 99;
+        const awaySeed = parseSeedFromName(awayComp.team.displayName) ?? awayBracketInfo?.seed ?? 99;
 
         // Use bracket table for region — this corrects ESPN's Midwest→West mislabeling
         const resolvedRegion = homeBracketInfo?.region ?? awayBracketInfo?.region ?? region;
@@ -418,27 +419,41 @@ async function fetchAndMapESPNGameData(seasonYear: number) {
         const homeTeamKey = homeDisplayName;
         const awayTeamKey = awayDisplayName;
 
-        // Store Teams if not exists
-        if (!teams[homeTeamKey]) {
-            teams[homeTeamKey] = {
-                id: homeTeamKey,
-                name: homeDisplayName,
-                seed: homeSeed,
-                region: resolvedRegion,
-                logoUrl: homeComp.team.logo,
-                externalId: homeEspnId,
-            } as Team & { externalId?: string };
-        }
-        if (!teams[awayTeamKey]) {
-            teams[awayTeamKey] = {
-                id: awayTeamKey,
-                name: awayDisplayName,
-                seed: awaySeed,
-                region: resolvedRegion,
-                logoUrl: awayComp.team.logo,
-                externalId: awayEspnId,
-            } as Team & { externalId?: string };
-        }
+        // Parse win/loss record — ESPN sends records[] array; first entry is overall record
+        const parseRecord = (comp: { records?: { displayValue?: string; summary?: string }[] }) => {
+            const rec = comp.records?.[0];
+            const val = rec?.displayValue ?? rec?.summary ?? ''; // e.g. "26-5"
+            const parts = val.match(/^(\d+)-(\d+)/);
+            return parts ? { wins: parseInt(parts[1]), losses: parseInt(parts[2]) } : { wins: 0, losses: 0 };
+        };
+
+        // Store Teams if not exists (update seed/record on subsequent imports)
+        const homeRecord = parseRecord(homeComp);
+        const awayRecord = parseRecord(awayComp);
+
+        teams[homeTeamKey] = {
+            ...(teams[homeTeamKey] ?? {}),
+            id: homeTeamKey,
+            name: homeDisplayName,
+            seed: homeSeed,
+            region: resolvedRegion,
+            logoUrl: homeComp.team.logo,
+            wins: homeRecord.wins,
+            losses: homeRecord.losses,
+            externalId: homeEspnId,
+        } as Team & { externalId?: string; wins?: number; losses?: number };
+
+        teams[awayTeamKey] = {
+            ...(teams[awayTeamKey] ?? {}),
+            id: awayTeamKey,
+            name: awayDisplayName,
+            seed: awaySeed,
+            region: resolvedRegion,
+            logoUrl: awayComp.team.logo,
+            wins: awayRecord.wins,
+            losses: awayRecord.losses,
+            externalId: awayEspnId,
+        } as Team & { externalId?: string; wins?: number; losses?: number };
 
         // Determine winner name (by display name key)
         const homeScore = parseInt(homeComp.score || '0');
@@ -554,21 +569,35 @@ function mapESPNGamesToSkeleton(
         }
     }
 
-    // Build espnBySlot for R1 using NCAA_2026_BRACKET direct lookup.
-    // Index every R1 ESPN game by looking up BOTH teams in the bracket table.
-    // If both map to the same region+slot, use that as the key.
+    // Build espnBySlot for R1.
+    // SLOT is derived from seed matchup (reliable) rather than bracket map (had wrong slots).
+    // REGION comes from bracket map only (needed to fix ESPN's Midwest→West mislabeling).
     for (const g of Object.values(espnGames)) {
         if (g.round !== 1) continue;
         const homeInfo = NCAA_2026_BRACKET[g.homeTeamId];
         const awayInfo = NCAA_2026_BRACKET[g.awayTeamId];
-        const info = homeInfo ?? awayInfo;
-        if (!info) {
-            logger.warn(`R1: No bracket info for game ${g.homeTeamId} vs ${g.awayTeamId}`);
+
+        // Region override from bracket map; fall back to ESPN-provided region
+        const resolvedRegion = homeInfo?.region ?? awayInfo?.region ?? g.region;
+        if (!resolvedRegion || resolvedRegion === 'TBD') {
+            logger.warn(`R1: No region for game ${g.homeTeamId} vs ${g.awayTeamId}`);
             continue;
         }
-        const key = `${info.region}-1-${info.slot}`;
+
+        // Derive slot from seed matchup — so Duke(1) vs Siena(16) → slot 1 regardless of map
+        const homeSeed = espnTeams[g.homeTeamId]?.seed ?? 99;
+        const awaySeed = espnTeams[g.awayTeamId]?.seed ?? 99;
+        const topSeed = Math.min(homeSeed, awaySeed);
+        const botSeed = Math.max(homeSeed, awaySeed);
+        const matchup = R1_SEED_MATCHUPS.find(m => m.top === topSeed && m.bot === botSeed);
+        if (!matchup) {
+            logger.warn(`R1: No matchup for seeds ${topSeed}v${botSeed} (${g.homeTeamId} vs ${g.awayTeamId})`);
+            continue;
+        }
+
+        const key = `${resolvedRegion}-1-${matchup.slot}`;
         espnBySlot[key] = g;
-        logger.info(`R1 mapped: ${key} = ${g.homeTeamId} vs ${g.awayTeamId}`);
+        logger.info(`R1 mapped: ${key} = ${g.homeTeamId}(${homeSeed}) vs ${g.awayTeamId}(${awaySeed})`);
     }
 
     // Helper: get team seed from espnTeams map
@@ -605,9 +634,8 @@ function mapESPNGamesToSkeleton(
             }
 
             if (match) {
-                // Use bracket info to determine which team is top (higher seed = lower number)
-                const homeInfo = NCAA_2026_BRACKET[match.homeTeamId];
-                const homeIsTop = homeInfo?.isTop ?? (getTeamSeed(match.homeTeamId) === top);
+                // Determine top/bottom by seed — top = lower seed number (e.g. seed 1 is top)
+                const homeIsTop = getTeamSeed(match.homeTeamId) === top;
                 const topTeamId  = homeIsTop ? match.homeTeamId  : match.awayTeamId;
                 const botTeamId  = homeIsTop ? match.awayTeamId  : match.homeTeamId;
                 const topScore   = homeIsTop ? match.homeScore    : match.awayScore;

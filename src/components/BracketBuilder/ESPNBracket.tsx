@@ -18,8 +18,8 @@
  *   [SOUTH left→right]               [MIDWEST right→left]
  */
 
-import React, { useMemo, useCallback } from 'react';
-import type { Tournament, Game } from '../../types';
+import React, { useMemo, useCallback, createContext, useContext } from 'react';
+import type { Tournament, Game, Team } from '../../types';
 import { getTeamLogo } from '../../constants';
 import { Trophy, Check, X, Link, Printer } from 'lucide-react';
 
@@ -29,9 +29,6 @@ const GAME_H = 68;   // px — height of each matchup card
 const STEP_R1 = 78;  // px — top-to-top step between R1 cards (68 + 10px gap)
 const COL_W = 172;   // px — width of each bracket column card
 const COL_GAP = 10;  // px — gap between columns
-
-// NCAA bracket seed order for Round 1 (top to bottom within each region)
-const R1_SEED_ORDER = [1, 8, 5, 4, 6, 3, 7, 2];
 
 /** Column configs for a left-to-right 8-team region (R1→R4) */
 const COLS_LTR = [1, 2, 3, 4].map(r => ({
@@ -43,6 +40,9 @@ const COLS_LTR = [1, 2, 3, 4].map(r => ({
 
 // Total height for one region stack = 8 games × step
 const REGION_H = 8 * STEP_R1;
+
+// ─── Team Data Context (avoids threading importedTeams through every prop) ────────────
+const TeamDataContext = createContext<Record<string, Team>>({});
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -62,21 +62,7 @@ interface ESPNBracketProps {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-/** Extract numeric seed from team ID: "E1-OhioState" → 1, "W16-TCU" → 16 */
-function extractSeed(teamId?: string): number | undefined {
-    if (!teamId) return undefined;
-    const m = teamId.match(/^[A-Z]+(\d+)-/);
-    return m ? parseInt(m[1], 10) : undefined;
-}
-
-/** Extract display name from team ID: "E5-Duke Blue Devils" → "Duke Blue Devils" */
-function extractName(teamId?: string): string {
-    if (!teamId) return 'TBD';
-    const idx = teamId.indexOf('-');
-    if (idx === -1) return teamId;
-    return teamId.slice(idx + 1).replace(/-/g, ' ').trim();
-}
+// homeTeamId is the full display name ("Duke Blue Devils"); seeds come from importedTeams.
 
 // ─── Team Row ──────────────────────────────────────────────────────────────
 
@@ -93,8 +79,13 @@ interface TeamRowProps {
 const TeamRow: React.FC<TeamRowProps> = ({
     teamId, isPicked, pickStatus, isWinner, isEliminated, onClick, disabled
 }) => {
-    const name = extractName(teamId);
-    const seed = extractSeed(teamId);
+    const teamData = useContext(TeamDataContext);
+    // teamId IS the display name (e.g. "Duke Blue Devils") — look up extra data
+    const team = teamId ? teamData[teamId] : null;
+    const name = team?.name ?? teamId ?? 'TBD';
+    const seed = team?.seed;
+    const record = (team?.wins != null && team?.losses != null)
+        ? `${team.wins}-${team.losses}` : null;
     const logo = teamId ? getTeamLogo(teamId, 'ncaa') : null;
 
     // Background / text color
@@ -111,16 +102,15 @@ const TeamRow: React.FC<TeamRowProps> = ({
             onClick={onClick}
             disabled={disabled}
             className={`
-                w-full flex items-center h-[32px] px-1.5 gap-1.5 text-left transition-colors relative
+                w-full flex items-center h-[34px] px-1.5 gap-1.5 text-left transition-colors relative
                 ${bg}
                 ${disabled ? 'cursor-default' : 'cursor-pointer'}
                 ${isEliminated && !isPicked ? 'opacity-40' : ''}
             `}
         >
-            {/* Seed number — always reserve space; show as a chip when present */}
+            {/* Seed number — from importedTeams */}
             <span className={`
                 text-[11px] font-black w-[20px] text-center flex-shrink-0 leading-none
-                rounded-sm
                 ${seed ? (isPicked ? 'text-amber-200' : 'text-slate-400') : 'invisible'}
             `}>
                 {seed ?? 0}
@@ -146,6 +136,15 @@ const TeamRow: React.FC<TeamRowProps> = ({
             `}>
                 {teamId ? name : 'TBD'}
             </span>
+
+            {/* Win-loss record */}
+            {record && (
+                <span className={`text-[9px] flex-shrink-0 leading-none ${
+                    isPicked ? 'text-amber-200/80' : 'text-slate-600'
+                }`}>
+                    {record}
+                </span>
+            )}
 
             {/* Status icons */}
             {pickStatus === 'correct' && <Check className="w-3 h-3 text-white flex-shrink-0" />}
@@ -306,22 +305,7 @@ const RegionPanel: React.FC<RegionPanelProps> = ({
     const getGames = (round: number): (Game | undefined)[] => {
         const games = Object.values(tournament.games)
             .filter(g => g.region === region && g.round === round)
-            .sort((a, b) => {
-                if (round === 1) {
-                    // Sort R1 by NCAA bracket position using the top-seed slot
-                    const sA = extractSeed(a.homeTeamId) ?? 99;
-                    const sB = extractSeed(b.homeTeamId) ?? 99;
-                    const posA = R1_SEED_ORDER.indexOf(sA);
-                    const posB = R1_SEED_ORDER.indexOf(sB);
-                    // Fall back to seed value if not found in order (e.g. play-in)
-                    if (posA === -1 && posB === -1) return sA - sB;
-                    if (posA === -1) return 1;
-                    if (posB === -1) return -1;
-                    return posA - posB;
-                }
-                // R2+ sort by game ID (positional after import)
-                return a.id.localeCompare(b.id);
-            });
+            .sort((a, b) => a.id.localeCompare(b.id)); // Game IDs encode slot (R1-East-1, R1-East-2…)
         // Pad to expected count
         const expected = 8 / Math.pow(2, round - 1);
         while (games.length < expected) games.push(undefined as unknown as Game);
@@ -551,7 +535,9 @@ const StatsHeader: React.FC<StatsHeaderProps> = ({
     // Find championship pick
     const champGame = Object.values(tournament.games).find(g => g.round === 6);
     const champPick = champGame ? picks[champGame.id] : undefined;
-    const champName = extractName(champPick);
+    // teamId IS the display name, so champPick is already the display name
+    const teamData = useContext(TeamDataContext);
+    const champName = champPick ? (teamData[champPick]?.name ?? champPick) : 'No pick';
     const champLogo = champPick ? getTeamLogo(champPick, 'ncaa') : null;
 
     // Calculated max (simple: 63 games × average points)
@@ -673,7 +659,10 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
         comparisonPicks,
     }), [tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks]);
 
+    const importedTeams = tournament.importedTeams ?? {};
+
     return (
+        <TeamDataContext.Provider value={importedTeams}>
         <div id="bracket-printable-area" className="w-full bg-[#0b1421]">
             {/* Stats header — full width */}
             <StatsHeader
@@ -690,7 +679,7 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
 
             {/* Bracket canvas — scrollable horizontally, full size for readability */}
             <div className="w-full overflow-x-auto">
-                <div className="p-4 w-fit min-w-max">
+                <div className="py-4 px-2 w-fit min-w-max">
                     <div className="flex items-center gap-3">
                         {/* LEFT: East (top) + South (bottom) */}
                         <div className="flex flex-col gap-4">
@@ -710,5 +699,6 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
                 </div>
             </div>
         </div>
+        </TeamDataContext.Provider>
     );
 };

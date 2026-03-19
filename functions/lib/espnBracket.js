@@ -339,7 +339,7 @@ function getFFSlot(region) {
  * Shared logic to fetch and map ESPN data.
  */
 async function fetchAndMapESPNGameData(seasonYear) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
     // Validate fetch availability
     if (typeof fetch === 'undefined') {
         throw new Error("Server configuration error: fetch not found");
@@ -374,9 +374,10 @@ async function fetchAndMapESPNGameData(seasonYear) {
         const awayDisplayNameRaw = awayComp.team.displayName.replace(/^\(\d+\)\s*/, '');
         const homeBracketInfo = seasonYear === 2026 ? NCAA_2026_BRACKET[homeDisplayNameRaw] : null;
         const awayBracketInfo = seasonYear === 2026 ? NCAA_2026_BRACKET[awayDisplayNameRaw] : null;
-        // Use bracket table for seed; fall back to parsing from name or 99
-        const homeSeed = (_b = (_a = homeBracketInfo === null || homeBracketInfo === void 0 ? void 0 : homeBracketInfo.seed) !== null && _a !== void 0 ? _a : parseSeedFromName(homeComp.team.displayName)) !== null && _b !== void 0 ? _b : 99;
-        const awaySeed = (_d = (_c = awayBracketInfo === null || awayBracketInfo === void 0 ? void 0 : awayBracketInfo.seed) !== null && _c !== void 0 ? _c : parseSeedFromName(awayComp.team.displayName)) !== null && _d !== void 0 ? _d : 99;
+        // ESPN display names include seed: "(1) Duke Blue Devils" → seed 1.
+        // Prioritize ESPN data; use bracket map only as fallback for unmapped teams.
+        const homeSeed = (_b = (_a = parseSeedFromName(homeComp.team.displayName)) !== null && _a !== void 0 ? _a : homeBracketInfo === null || homeBracketInfo === void 0 ? void 0 : homeBracketInfo.seed) !== null && _b !== void 0 ? _b : 99;
+        const awaySeed = (_d = (_c = parseSeedFromName(awayComp.team.displayName)) !== null && _c !== void 0 ? _c : awayBracketInfo === null || awayBracketInfo === void 0 ? void 0 : awayBracketInfo.seed) !== null && _d !== void 0 ? _d : 99;
         // Use bracket table for region — this corrects ESPN's Midwest→West mislabeling
         const resolvedRegion = (_f = (_e = homeBracketInfo === null || homeBracketInfo === void 0 ? void 0 : homeBracketInfo.region) !== null && _e !== void 0 ? _e : awayBracketInfo === null || awayBracketInfo === void 0 ? void 0 : awayBracketInfo.region) !== null && _f !== void 0 ? _f : region;
         // Strip seed prefix from name for cleaner display, e.g. "(1) Duke Blue Devils" -> "Duke Blue Devils"
@@ -385,27 +386,19 @@ async function fetchAndMapESPNGameData(seasonYear) {
         // Key teams by display name for bracket UI rendering
         const homeTeamKey = homeDisplayName;
         const awayTeamKey = awayDisplayName;
-        // Store Teams if not exists
-        if (!teams[homeTeamKey]) {
-            teams[homeTeamKey] = {
-                id: homeTeamKey,
-                name: homeDisplayName,
-                seed: homeSeed,
-                region: resolvedRegion,
-                logoUrl: homeComp.team.logo,
-                externalId: homeEspnId,
-            };
-        }
-        if (!teams[awayTeamKey]) {
-            teams[awayTeamKey] = {
-                id: awayTeamKey,
-                name: awayDisplayName,
-                seed: awaySeed,
-                region: resolvedRegion,
-                logoUrl: awayComp.team.logo,
-                externalId: awayEspnId,
-            };
-        }
+        // Parse win/loss record — ESPN sends records[] array; first entry is overall record
+        const parseRecord = (comp) => {
+            var _a, _b, _c;
+            const rec = (_a = comp.records) === null || _a === void 0 ? void 0 : _a[0];
+            const val = (_c = (_b = rec === null || rec === void 0 ? void 0 : rec.displayValue) !== null && _b !== void 0 ? _b : rec === null || rec === void 0 ? void 0 : rec.summary) !== null && _c !== void 0 ? _c : ''; // e.g. "26-5"
+            const parts = val.match(/^(\d+)-(\d+)/);
+            return parts ? { wins: parseInt(parts[1]), losses: parseInt(parts[2]) } : { wins: 0, losses: 0 };
+        };
+        // Store Teams if not exists (update seed/record on subsequent imports)
+        const homeRecord = parseRecord(homeComp);
+        const awayRecord = parseRecord(awayComp);
+        teams[homeTeamKey] = Object.assign(Object.assign({}, ((_g = teams[homeTeamKey]) !== null && _g !== void 0 ? _g : {})), { id: homeTeamKey, name: homeDisplayName, seed: homeSeed, region: resolvedRegion, logoUrl: homeComp.team.logo, wins: homeRecord.wins, losses: homeRecord.losses, externalId: homeEspnId });
+        teams[awayTeamKey] = Object.assign(Object.assign({}, ((_h = teams[awayTeamKey]) !== null && _h !== void 0 ? _h : {})), { id: awayTeamKey, name: awayDisplayName, seed: awaySeed, region: resolvedRegion, logoUrl: awayComp.team.logo, wins: awayRecord.wins, losses: awayRecord.losses, externalId: awayEspnId });
         // Determine winner name (by display name key)
         const homeScore = parseInt(homeComp.score || '0');
         const awayScore = parseInt(awayComp.score || '0');
@@ -423,9 +416,9 @@ async function fetchAndMapESPNGameData(seasonYear) {
             round: round,
             region: region,
             // Live Score Details
-            period: (_h = (_g = competition.status) === null || _g === void 0 ? void 0 : _g.period) !== null && _h !== void 0 ? _h : null,
-            clock: (_k = (_j = competition.status) === null || _j === void 0 ? void 0 : _j.displayClock) !== null && _k !== void 0 ? _k : null, // e.g. "12:35"
-            broadcast: (_p = (_o = (_m = (_l = competition.broadcasts) === null || _l === void 0 ? void 0 : _l[0]) === null || _m === void 0 ? void 0 : _m.names) === null || _o === void 0 ? void 0 : _o[0]) !== null && _p !== void 0 ? _p : null, // e.g. "CBS"
+            period: (_k = (_j = competition.status) === null || _j === void 0 ? void 0 : _j.period) !== null && _k !== void 0 ? _k : null,
+            clock: (_m = (_l = competition.status) === null || _l === void 0 ? void 0 : _l.displayClock) !== null && _m !== void 0 ? _m : null, // e.g. "12:35"
+            broadcast: (_r = (_q = (_p = (_o = competition.broadcasts) === null || _o === void 0 ? void 0 : _o[0]) === null || _p === void 0 ? void 0 : _p.names) === null || _q === void 0 ? void 0 : _q[0]) !== null && _r !== void 0 ? _r : null, // e.g. "CBS"
             externalId: event.id
         };
         games[gameId] = game;
@@ -503,7 +496,7 @@ function parseRegionAndRound(notes) {
  * Returns updated skeleton games map ready to write to Firestore.
  */
 function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     const updated = Object.assign({}, skeletonGames);
     let mappedCount = 0;
     // Build espnBySlot: key = "{region}-R{round}" for quick lookup
@@ -519,22 +512,33 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
             espnByRegionRound[key].push(g);
         }
     }
-    // Build espnBySlot for R1 using NCAA_2026_BRACKET direct lookup.
-    // Index every R1 ESPN game by looking up BOTH teams in the bracket table.
-    // If both map to the same region+slot, use that as the key.
+    // Build espnBySlot for R1.
+    // SLOT is derived from seed matchup (reliable) rather than bracket map (had wrong slots).
+    // REGION comes from bracket map only (needed to fix ESPN's Midwest→West mislabeling).
     for (const g of Object.values(espnGames)) {
         if (g.round !== 1)
             continue;
         const homeInfo = NCAA_2026_BRACKET[g.homeTeamId];
         const awayInfo = NCAA_2026_BRACKET[g.awayTeamId];
-        const info = homeInfo !== null && homeInfo !== void 0 ? homeInfo : awayInfo;
-        if (!info) {
-            logger.warn(`R1: No bracket info for game ${g.homeTeamId} vs ${g.awayTeamId}`);
+        // Region override from bracket map; fall back to ESPN-provided region
+        const resolvedRegion = (_b = (_a = homeInfo === null || homeInfo === void 0 ? void 0 : homeInfo.region) !== null && _a !== void 0 ? _a : awayInfo === null || awayInfo === void 0 ? void 0 : awayInfo.region) !== null && _b !== void 0 ? _b : g.region;
+        if (!resolvedRegion || resolvedRegion === 'TBD') {
+            logger.warn(`R1: No region for game ${g.homeTeamId} vs ${g.awayTeamId}`);
             continue;
         }
-        const key = `${info.region}-1-${info.slot}`;
+        // Derive slot from seed matchup — so Duke(1) vs Siena(16) → slot 1 regardless of map
+        const homeSeed = (_d = (_c = espnTeams[g.homeTeamId]) === null || _c === void 0 ? void 0 : _c.seed) !== null && _d !== void 0 ? _d : 99;
+        const awaySeed = (_f = (_e = espnTeams[g.awayTeamId]) === null || _e === void 0 ? void 0 : _e.seed) !== null && _f !== void 0 ? _f : 99;
+        const topSeed = Math.min(homeSeed, awaySeed);
+        const botSeed = Math.max(homeSeed, awaySeed);
+        const matchup = R1_SEED_MATCHUPS.find(m => m.top === topSeed && m.bot === botSeed);
+        if (!matchup) {
+            logger.warn(`R1: No matchup for seeds ${topSeed}v${botSeed} (${g.homeTeamId} vs ${g.awayTeamId})`);
+            continue;
+        }
+        const key = `${resolvedRegion}-1-${matchup.slot}`;
         espnBySlot[key] = g;
-        logger.info(`R1 mapped: ${key} = ${g.homeTeamId} vs ${g.awayTeamId}`);
+        logger.info(`R1 mapped: ${key} = ${g.homeTeamId}(${homeSeed}) vs ${g.awayTeamId}(${awaySeed})`);
     }
     // Helper: get team seed from espnTeams map
     const getTeamSeed = (teamId) => { var _a; return ((_a = espnTeams[teamId]) === null || _a === void 0 ? void 0 : _a.seed) || 99; };
@@ -565,14 +569,13 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
                 }
             }
             if (match) {
-                // Use bracket info to determine which team is top (higher seed = lower number)
-                const homeInfo = NCAA_2026_BRACKET[match.homeTeamId];
-                const homeIsTop = (_a = homeInfo === null || homeInfo === void 0 ? void 0 : homeInfo.isTop) !== null && _a !== void 0 ? _a : (getTeamSeed(match.homeTeamId) === top);
+                // Determine top/bottom by seed — top = lower seed number (e.g. seed 1 is top)
+                const homeIsTop = getTeamSeed(match.homeTeamId) === top;
                 const topTeamId = homeIsTop ? match.homeTeamId : match.awayTeamId;
                 const botTeamId = homeIsTop ? match.awayTeamId : match.homeTeamId;
                 const topScore = homeIsTop ? match.homeScore : match.awayScore;
                 const botScore = homeIsTop ? match.awayScore : match.homeScore;
-                const winnerName = (_b = match.winnerTeamId) !== null && _b !== void 0 ? _b : null;
+                const winnerName = (_g = match.winnerTeamId) !== null && _g !== void 0 ? _g : null;
                 updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: topTeamId, awayTeamId: botTeamId, homeScore: topScore, awayScore: botScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
                 skeletonToEspn[skeletonId] = match;
                 mappedCount++;
@@ -615,10 +618,10 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
                 const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
                 if (match) {
                     // feeder winners are already resolved to names from the R1 step above
-                    const winnerName = match.winnerTeamId ? (((_c = espnTeams[match.winnerTeamId]) === null || _c === void 0 ? void 0 : _c.name) || match.winnerTeamId) : null;
+                    const winnerName = match.winnerTeamId ? (((_h = espnTeams[match.winnerTeamId]) === null || _h === void 0 ? void 0 : _h.name) || match.winnerTeamId) : null;
                     // Scores: match home/away refers to ESPN IDs, map to correct side
                     const homeEspnId = match.homeTeamId;
-                    const homeIsFeeder1 = ((_d = espnTeams[homeEspnId]) === null || _d === void 0 ? void 0 : _d.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
+                    const homeIsFeeder1 = ((_j = espnTeams[homeEspnId]) === null || _j === void 0 ? void 0 : _j.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
                     updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore, awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
                     skeletonToEspn[skeletonId] = match;
                     mappedCount++;
@@ -646,9 +649,9 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
         const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
         const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
         if (match) {
-            const winnerName = match.winnerTeamId ? (((_e = espnTeams[match.winnerTeamId]) === null || _e === void 0 ? void 0 : _e.name) || match.winnerTeamId) : null;
+            const winnerName = match.winnerTeamId ? (((_k = espnTeams[match.winnerTeamId]) === null || _k === void 0 ? void 0 : _k.name) || match.winnerTeamId) : null;
             const homeEspnId = match.homeTeamId;
-            const homeIsFeeder1 = ((_f = espnTeams[homeEspnId]) === null || _f === void 0 ? void 0 : _f.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
+            const homeIsFeeder1 = ((_l = espnTeams[homeEspnId]) === null || _l === void 0 ? void 0 : _l.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
             updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore, awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
             mappedCount++;
         }
@@ -667,9 +670,9 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
             const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
             const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
             if (match) {
-                const winnerName = match.winnerTeamId ? (((_g = espnTeams[match.winnerTeamId]) === null || _g === void 0 ? void 0 : _g.name) || match.winnerTeamId) : null;
+                const winnerName = match.winnerTeamId ? (((_m = espnTeams[match.winnerTeamId]) === null || _m === void 0 ? void 0 : _m.name) || match.winnerTeamId) : null;
                 const homeEspnId = match.homeTeamId;
-                const homeIsFeeder1 = ((_h = espnTeams[homeEspnId]) === null || _h === void 0 ? void 0 : _h.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
+                const homeIsFeeder1 = ((_o = espnTeams[homeEspnId]) === null || _o === void 0 ? void 0 : _o.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
                 updated[champId] = Object.assign(Object.assign({}, updated[champId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore, awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
                 mappedCount++;
             }
