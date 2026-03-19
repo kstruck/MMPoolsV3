@@ -567,7 +567,10 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     const pickCount = Object.keys(picks).length;
     const requiredPicks = tournament ? Object.keys(tournament.games).length : (pool.tournamentType === 'conference' ? 10 : 63);
-    const isConference = pool.tournamentType === 'conference';
+    // NCAA tournaments (men's/women's) should NEVER use the conference bracket builder,
+    // even if tournamentType was accidentally set to 'conference' on the pool.
+    const isNcaaTournament = pool.tournamentId?.startsWith('mens-') || pool.tournamentId?.startsWith('womens-');
+    const isConference = pool.tournamentType === 'conference' && !isNcaaTournament;
 
     return (
         <div className="min-h-screen bg-slate-950 pb-20">
