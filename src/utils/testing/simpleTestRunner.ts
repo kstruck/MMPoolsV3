@@ -89,7 +89,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
                         tournamentResults: scenario.tournamentResults
                     }
                 };
-                result = await runBracketScenario('bracket-basic', 'actual', bracketSettings);
+                result = await runBracketScenario('bracket-basic', 'actual', bracketSettings as Parameters<typeof runBracketScenario>[2]);
             }
         } else if (poolType === 'NFL_PLAYOFFS') {
             // Route to playoff simulator
@@ -106,7 +106,7 @@ export async function runPredefinedTest(scenarioId: string): Promise<SimpleTestR
                 }
             };
             // Playoff Simulator is now statically imported
-            result = await runPlayoffScenario('playoff-basic', 'actual', playoffSettings);
+            result = await runPlayoffScenario('playoff-basic', 'actual', playoffSettings as Parameters<typeof runPlayoffScenario>[2]);
         } else {
             // SQUARES (default)
             const settings = {
