@@ -18,17 +18,20 @@
  *   [SOUTH left→right]               [MIDWEST right→left]
  */
 
-import React, { useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import type { Tournament, Game } from '../../types';
 import { getTeamLogo } from '../../constants';
 import { Trophy, Check, X, Link, Printer } from 'lucide-react';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-const GAME_H = 58;   // px — height of each matchup card
-const STEP_R1 = 66;  // px — top-to-top step between R1 cards (58 + 8 gap)
-const COL_W = 148;   // px — width of each bracket column card
+const GAME_H = 68;   // px — height of each matchup card
+const STEP_R1 = 78;  // px — top-to-top step between R1 cards (68 + 10px gap)
+const COL_W = 172;   // px — width of each bracket column card
 const COL_GAP = 10;  // px — gap between columns
+
+// NCAA bracket seed order for Round 1 (top to bottom within each region)
+const R1_SEED_ORDER = [1, 8, 5, 4, 6, 3, 7, 2];
 
 /** Column configs for a left-to-right 8-team region (R1→R4) */
 const COLS_LTR = [1, 2, 3, 4].map(r => ({
@@ -38,9 +41,8 @@ const COLS_LTR = [1, 2, 3, 4].map(r => ({
     label: ['Round of 64', 'Round of 32', 'Sweet 16', 'Elite 8'][r - 1],
 }));
 
-
 // Total height for one region stack = 8 games × step
-const REGION_H = 8 * STEP_R1; // 528px
+const REGION_H = 8 * STEP_R1;
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -109,19 +111,19 @@ const TeamRow: React.FC<TeamRowProps> = ({
             onClick={onClick}
             disabled={disabled}
             className={`
-                w-full flex items-center h-[28px] px-1.5 gap-1 text-left transition-colors relative
+                w-full flex items-center h-[32px] px-1.5 gap-1.5 text-left transition-colors relative
                 ${bg}
                 ${disabled ? 'cursor-default' : 'cursor-pointer'}
                 ${isEliminated && !isPicked ? 'opacity-40' : ''}
             `}
         >
-            {/* Seed number — always show space so alignment is consistent */}
+            {/* Seed number — always reserve space; show as a chip when present */}
             <span className={`
-                text-[10px] font-bold w-[18px] text-right flex-shrink-0 leading-none
-                ${isPicked ? 'text-amber-200' : 'text-slate-500'}
-                ${!seed ? 'invisible' : ''}
+                text-[11px] font-black w-[20px] text-center flex-shrink-0 leading-none
+                rounded-sm
+                ${seed ? (isPicked ? 'text-amber-200' : 'text-slate-400') : 'invisible'}
             `}>
-                {seed ?? '0'}
+                {seed ?? 0}
             </span>
 
             {/* Logo */}
@@ -138,7 +140,7 @@ const TeamRow: React.FC<TeamRowProps> = ({
 
             {/* Team name */}
             <span className={`
-                text-[10px] font-semibold truncate flex-1 tracking-tight leading-none
+                text-[11px] font-semibold truncate flex-1 tracking-tight leading-none
                 ${!teamId ? 'italic opacity-30' : ''}
                 ${isEliminated && !isPicked ? 'line-through decoration-red-500/50' : ''}
             `}>
@@ -304,7 +306,22 @@ const RegionPanel: React.FC<RegionPanelProps> = ({
     const getGames = (round: number): (Game | undefined)[] => {
         const games = Object.values(tournament.games)
             .filter(g => g.region === region && g.round === round)
-            .sort((a, b) => a.id.localeCompare(b.id));
+            .sort((a, b) => {
+                if (round === 1) {
+                    // Sort R1 by NCAA bracket position using the top-seed slot
+                    const sA = extractSeed(a.homeTeamId) ?? 99;
+                    const sB = extractSeed(b.homeTeamId) ?? 99;
+                    const posA = R1_SEED_ORDER.indexOf(sA);
+                    const posB = R1_SEED_ORDER.indexOf(sB);
+                    // Fall back to seed value if not found in order (e.g. play-in)
+                    if (posA === -1 && posB === -1) return sA - sB;
+                    if (posA === -1) return 1;
+                    if (posB === -1) return -1;
+                    return posA - posB;
+                }
+                // R2+ sort by game ID (positional after import)
+                return a.id.localeCompare(b.id);
+            });
         // Pad to expected count
         const expected = 8 / Math.pow(2, round - 1);
         while (games.length < expected) games.push(undefined as unknown as Game);
@@ -643,29 +660,9 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
     tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks,
     entryName, entryScore, maxPossibleScore, rank, totalEntries,
 }) => {
-    const bracketRef = useRef<HTMLDivElement>(null);
-    const innerRef = useRef<HTMLDivElement>(null);
-
     // Picks progress counts
     const totalGames = Object.keys(tournament.games).length;
     const pickCount = Object.keys(picks).length;
-
-    // Auto-scale bracket to fit available width without scrolling
-    useEffect(() => {
-        const update = () => {
-            if (!bracketRef.current || !innerRef.current) return;
-            const available = bracketRef.current.clientWidth;
-            const natural = innerRef.current.scrollWidth;
-            const scale = natural > available ? available / natural : 1;
-            innerRef.current.style.transform = `scale(${scale})`;
-            innerRef.current.style.transformOrigin = 'top left';
-            bracketRef.current.style.height = `${innerRef.current.scrollHeight * scale}px`;
-        };
-        update();
-        const ro = new ResizeObserver(update);
-        if (bracketRef.current) ro.observe(bracketRef.current);
-        return () => ro.disconnect();
-    }, [tournament, picks]);
 
     const regionProps = useMemo(() => ({
         tournament,
@@ -678,7 +675,7 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
 
     return (
         <div id="bracket-printable-area" className="w-full bg-[#0b1421]">
-            {/* Stats header — full width, outside scaled area */}
+            {/* Stats header — full width */}
             <StatsHeader
                 tournament={tournament}
                 picks={picks}
@@ -691,12 +688,9 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
                 totalPicks={totalGames}
             />
 
-            {/* Scaled bracket canvas */}
-            <div
-                ref={bracketRef}
-                className="w-full relative overflow-hidden"
-            >
-                <div ref={innerRef} className="p-4 w-fit">
+            {/* Bracket canvas — scrollable horizontally, full size for readability */}
+            <div className="w-full overflow-x-auto">
+                <div className="p-4 w-fit min-w-max">
                     <div className="flex items-center gap-3">
                         {/* LEFT: East (top) + South (bottom) */}
                         <div className="flex flex-col gap-4">
