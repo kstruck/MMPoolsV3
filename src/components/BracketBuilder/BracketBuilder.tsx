@@ -20,9 +20,8 @@ type ViewType = 'espn' | 'tabs';
 export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly, viewMode = 'tabs', comparisonPicks }) => {
     const [activeRegion, setActiveRegion] = useState<BracketRegion | 'FF'>('East');
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-    // Default everyone to tabs (Regions) — works on all devices.
-    // Desktop users who want the ESPN full view can click "Full".
-    const [view, setView] = useState<ViewType>('tabs');
+    // Mobile → Regions, Desktop → Full bracket
+    const [view, setView] = useState<ViewType>(() => window.innerWidth < 768 ? 'tabs' : 'espn');
 
     useEffect(() => {
         const handleResize = () => {
