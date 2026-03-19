@@ -866,7 +866,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => { setIsCreating(false); setActiveEntryId(null); setPicks({}); setTieBreakerPrediction(undefined); }}
+                                    onClick={() => { setIsCreating(false); setActiveEntryId(null); setPicks({}); setTieBreakerPrediction(undefined); setError(null); }}
                                     className="text-slate-400 hover:text-white px-3 py-2 rounded text-sm font-medium flex items-center gap-1.5"
                                 >
                                     <X size={14} /> Cancel
@@ -888,6 +888,19 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </button>
                             </div>
                         </div>
+
+                        {/* ── Error / Success strip inside portal ───────────────────────── */}
+                        {error && (
+                            <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 py-2.5 bg-red-950/80 border-b border-red-800 text-red-300 text-sm animate-in fade-in">
+                                <span>⚠️ {error}</span>
+                                <button onClick={() => setError(null)} className="text-red-400 hover:text-red-200 font-bold ml-4 flex-shrink-0">✕</button>
+                            </div>
+                        )}
+                        {showSuccess && (
+                            <div className="flex-shrink-0 px-4 py-2.5 bg-emerald-950/80 border-b border-emerald-800 text-emerald-300 text-sm animate-in fade-in flex items-center gap-2">
+                                <Check size={14} /> Bracket submitted successfully!
+                            </div>
+                        )}
 
                         {/* ── Bracket canvas — fills remaining height, vertical scroll only ─ */}
                         <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
