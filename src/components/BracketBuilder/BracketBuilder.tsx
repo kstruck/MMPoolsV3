@@ -228,26 +228,38 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                         {totalPicks} / {totalGames} picks
                     </div>
 
-                    {/* Right: View toggle — Full only on desktop */}
+                    {/* Right: View toggle — always visible; Regions default/recommended on mobile */}
                     <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
-                        {!isMobile && (
-                            <button
-                                onClick={() => setView('espn')}
-                                title="Full Bracket (ESPN-style)"
-                                className={`px-2 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'espn' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
-                            >
-                                <LayoutGrid size={11} /> <span className="hidden sm:inline">Full</span>
-                            </button>
-                        )}
                         <button
                             onClick={() => setView('tabs')}
-                            title="Region-by-Region"
-                            className={`px-2 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'tabs' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                            title="Region-by-Region (recommended for mobile)"
+                            className={`px-2 sm:px-3 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'tabs' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
                         >
-                            <List size={11} /> <span className="hidden sm:inline">Regions</span>
+                            <List size={11} /> Regions
+                        </button>
+                        <button
+                            onClick={() => setView('espn')}
+                            title="Full Bracket (ESPN-style, best on desktop)"
+                            className={`px-2 sm:px-3 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'espn' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                        >
+                            <LayoutGrid size={11} /> Full
                         </button>
                     </div>
                 </div>
+
+                {/* Mobile context banner — tells users which mode they're in */}
+                {isMobile && view === 'tabs' && (
+                    <div className="mt-2 px-3 py-1.5 bg-indigo-950/70 border border-indigo-700/40 rounded-lg text-[10px] text-indigo-300 flex items-center gap-1.5">
+                        <span>📱</span>
+                        <span><strong>Region mode</strong> — pick one region at a time. Great for phones! Tap <strong>Full</strong> if you prefer the complete bracket view.</span>
+                    </div>
+                )}
+                {isMobile && view === 'espn' && (
+                    <div className="mt-2 px-3 py-1.5 bg-amber-950/70 border border-amber-700/40 rounded-lg text-[10px] text-amber-300 flex items-center gap-1.5">
+                        <span>🖥️</span>
+                        <span>Full bracket is best on a <strong>desktop or tablet</strong>. Tap <strong>Regions</strong> for easier phone picking.</span>
+                    </div>
+                )}
 
                 {/* Region tabs — only shown in tabs view */}
                 {view === 'tabs' && (
