@@ -15,6 +15,48 @@
             ]
         },
         {
+            "collectionGroup": "pools",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "entries",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                {
+                    "fieldPath": "ownerUid",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "score",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "entries",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                {
+                    "fieldPath": "paidStatus",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "ownerName",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
             "collectionGroup": "themes",
             "queryScope": "COLLECTION",
             "fields": [

@@ -25,6 +25,12 @@
 
 - [x] Infrastructure & Tooling
   - [x] Skill: Security Scanner Integration (vulnerability scanning & SAST)
+  - [x] Gap Analysis & Remediation (March 2026)
+
+> [!IMPORTANT]
+> **🚀 LAUNCH REMINDER — Pool Creation Gate**
+> The `/create-pool`, `/bracket-wizard`, `/grid-wizard`, `/playoff-wizard`, and `/props-wizard` routes are all gated behind `isSuperAdmin()` in `App.tsx` (lines 357–408). This is a **deliberate closed-beta decision**.
+> Before public launch, create an `isManager` role claim and open these routes to authorized managers.
 
 ---
 

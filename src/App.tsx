@@ -29,6 +29,7 @@ const PricingPage = React.lazy(() => import('./components/PricingPage').then(m =
 const AboutPage = React.lazy(() => import('./components/AboutPage').then(m => ({ default: m.AboutPage })));
 const CharityPage = React.lazy(() => import('./components/CharityPage').then(m => ({ default: m.CharityPage })));
 const AuthActionHandler = React.lazy(() => import('./components/AuthActionHandler').then(m => ({ default: m.AuthActionHandler })));
+const ContactPage = React.lazy(() => import('./components/ContactPage').then(m => ({ default: m.ContactPage })));
 
 // Lazy-loaded routes
 const PoolRoute = React.lazy(() => import('./components/routes/PoolRoute').then(m => ({ default: m.PoolRoute })));
@@ -273,11 +274,12 @@ const App: React.FC = () => {
             </>
           } />
           <Route path="/contact" element={
-            <>
-              <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-              <SupportPage />
-              <Footer />
-            </>
+            <ContactPage
+              user={user}
+              onLogin={() => handleOpenAuth('login')}
+              onLogout={handleLogout}
+              onCreatePool={handleCreatePoolClick}
+            />
           } />
           <Route path="/profile" element={
             user ? (

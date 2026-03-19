@@ -240,6 +240,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         }
     }, [pool.tournamentId]);
 
+    // Auto-default editLockAt from tournament when pool has no override
+    useEffect(() => {
+        if (!pool.lockAt && tournament?.lockAt && !editLockAt) {
+            setEditLockAt(tournament.lockAt);
+        }
+    }, [tournament?.lockAt, pool.lockAt, editLockAt]);
+
     // Load share analytics for managers
     useEffect(() => {
         if (isManager && activeTab === 'manager') {
@@ -1709,23 +1716,37 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 {/* Auto-Lock Time */}
                                 <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
                                     <label className="text-xs text-slate-400 uppercase mb-2 block">Auto-Lock Time</label>
-                                    <p className="text-xs text-slate-500 mb-3">
+                                    <p className="text-xs text-slate-500 mb-2">
                                         Pool will automatically lock at this time (typically tournament start).
                                     </p>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="datetime-local"
-                                            value={editLockAt ? new Date(editLockAt).toISOString().slice(0, 16) : ''}
-                                            onChange={(e) => {
-                                                const timestamp = e.target.value ? new Date(e.target.value).getTime() : undefined;
-                                                setEditLockAt(timestamp);
-                                            }}
-                                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm"
-                                        />
+                                    {/* Quick-fill from tournament */}
+                                    {tournament?.lockAt && editLockAt !== tournament.lockAt && (
+                                        <button
+                                            onClick={() => setEditLockAt(tournament.lockAt)}
+                                            className="mb-3 text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-lg px-3 py-1.5 transition-colors"
+                                        >
+                                            <Lock size={11} />
+                                            Use tournament lock: {new Date(tournament.lockAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
+                                        </button>
+                                    )}
+                                    {tournament?.lockAt && editLockAt === tournament.lockAt && (
+                                        <p className="mb-3 text-xs text-emerald-400 flex items-center gap-1.5">
+                                            <Check size={11} /> Synced with tournament lock date
+                                        </p>
+                                    )}
+                                    <div className="flex gap-2 items-end">
+                                        <div className="flex-1">
+                                            <DateTimePicker
+                                                label=""
+                                                value={editLockAt}
+                                                onChange={ts => setEditLockAt(ts ?? undefined)}
+                                                placeholder="Pick a lock date & time…"
+                                            />
+                                        </div>
                                         <button
                                             onClick={handleSaveLockAt}
                                             disabled={savingSettings || !editLockAt}
-                                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 mb-0.5"
                                         >
                                             {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
                                             {settingsSaved ? 'Saved!' : 'Save'}

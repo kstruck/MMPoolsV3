@@ -33,3 +33,21 @@ dist-ssr
 # Test files
 test-*.html
 *-test.html
+
+# Debug & scratch files
+debug_*.cjs
+codemod.cjs
+replace_script*.py
+tmp_*.py
+old_*.ts
+
+# Deploy & lint logs
+deploy_log*.txt
+lint_report.txt
+test-output.txt
+test-builder.ts
+
+# Security scan outputs (may contain sensitive data)
+security_scan_results*.json
+git_superadmin.txt
+FIX_INSTRUCTIONS.md

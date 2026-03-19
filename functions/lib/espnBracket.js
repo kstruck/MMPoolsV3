@@ -274,49 +274,60 @@ async function fetchAndMapESPNGameData(seasonYear) {
         const awayComp = competition.competitors.find(c => c.homeAway === 'away');
         if (!homeComp || !awayComp)
             continue;
-        const homeTeamId = homeComp.team.id;
-        const awayTeamId = awayComp.team.id;
+        const homeEspnId = homeComp.team.id;
+        const awayEspnId = awayComp.team.id;
         // --- WS4: Extract actual tournament seed from team name, e.g. "(1) Duke Blue Devils" ---
         const homeSeed = parseSeedFromName(homeComp.team.displayName) || ((_a = homeComp.curatedRank) === null || _a === void 0 ? void 0 : _a.current) || 99;
         const awaySeed = parseSeedFromName(awayComp.team.displayName) || ((_b = awayComp.curatedRank) === null || _b === void 0 ? void 0 : _b.current) || 99;
         // Strip seed prefix from name for cleaner display, e.g. "(1) Duke Blue Devils" -> "Duke Blue Devils"
         const homeDisplayName = homeComp.team.displayName.replace(/^\(\d+\)\s*/, '');
         const awayDisplayName = awayComp.team.displayName.replace(/^\(\d+\)\s*/, '');
+        // KEY CHANGE: Key teams by display name, not ESPN numeric ID.
+        // This means games' homeTeamId/awayTeamId are the display names (e.g. "Duke Blue Devils"),
+        // which the bracket UI can render directly without a lookup table.
+        const homeTeamKey = homeDisplayName;
+        const awayTeamKey = awayDisplayName;
         // Store Teams if not exists (update region if we now know it)
-        if (!teams[homeTeamId]) {
-            teams[homeTeamId] = {
-                id: homeTeamId,
+        if (!teams[homeTeamKey]) {
+            teams[homeTeamKey] = {
+                id: homeTeamKey,
                 name: homeDisplayName,
                 seed: homeSeed,
                 region: region,
-                logoUrl: homeComp.team.logo
+                logoUrl: homeComp.team.logo,
+                externalId: homeEspnId, // Keep ESPN numeric ID for score sync
             };
         }
-        else if (teams[homeTeamId].region === 'TBD' && region !== 'TBD') {
-            teams[homeTeamId].region = region;
+        else if (teams[homeTeamKey].region === 'TBD' && region !== 'TBD') {
+            teams[homeTeamKey].region = region;
         }
-        if (!teams[awayTeamId]) {
-            teams[awayTeamId] = {
-                id: awayTeamId,
+        if (!teams[awayTeamKey]) {
+            teams[awayTeamKey] = {
+                id: awayTeamKey,
                 name: awayDisplayName,
                 seed: awaySeed,
                 region: region,
-                logoUrl: awayComp.team.logo
+                logoUrl: awayComp.team.logo,
+                externalId: awayEspnId, // Keep ESPN numeric ID for score sync
             };
         }
-        else if (teams[awayTeamId].region === 'TBD' && region !== 'TBD') {
-            teams[awayTeamId].region = region;
+        else if (teams[awayTeamKey].region === 'TBD' && region !== 'TBD') {
+            teams[awayTeamKey].region = region;
         }
-        // Create Game
+        // Determine winner name (by display name key)
+        const homeScore = parseInt(homeComp.score || '0');
+        const awayScore = parseInt(awayComp.score || '0');
+        const winnerKey = status === 'FINAL' ? (homeScore > awayScore ? homeTeamKey : awayTeamKey) : null;
+        // Create Game — use display name keys as team IDs
         const game = {
             id: gameId,
             startTime: competition.date,
             status: status === 'FINAL' ? 'FINAL' : status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'SCHEDULED',
-            homeTeamId: homeTeamId,
-            awayTeamId: awayTeamId,
-            homeScore: parseInt(homeComp.score || '0'),
-            awayScore: parseInt(awayComp.score || '0'),
-            winnerTeamId: status === 'FINAL' ? (parseInt(homeComp.score || '0') > parseInt(awayComp.score || '0') ? homeTeamId : awayTeamId) : null,
+            homeTeamId: homeTeamKey,
+            awayTeamId: awayTeamKey,
+            homeScore,
+            awayScore,
+            winnerTeamId: winnerKey,
             round: round,
             region: region,
             // Live Score Details
@@ -400,6 +411,7 @@ function parseRegionAndRound(notes) {
  * Returns updated skeleton games map ready to write to Firestore.
  */
 function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     const updated = Object.assign({}, skeletonGames);
     let mappedCount = 0;
     // Index ESPN games by region+round for fast lookup
@@ -454,11 +466,15 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
             if (match) {
                 // Ensure higher seed (lower number) is homeTeamId for consistency
                 const homeSeed = getTeamSeed(match.homeTeamId);
-                const topTeamId = homeSeed === top ? match.homeTeamId : match.awayTeamId;
-                const botTeamId = homeSeed === top ? match.awayTeamId : match.homeTeamId;
+                const topEspnId = homeSeed === top ? match.homeTeamId : match.awayTeamId;
+                const botEspnId = homeSeed === top ? match.awayTeamId : match.homeTeamId;
                 const topScore = homeSeed === top ? match.homeScore : match.awayScore;
                 const botScore = homeSeed === top ? match.awayScore : match.homeScore;
-                updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: topTeamId, awayTeamId: botTeamId, homeScore: topScore, awayScore: botScore, status: match.status, winnerTeamId: match.winnerTeamId, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
+                // Resolve ESPN numeric IDs → display names so bracket renders correctly
+                const topTeamName = ((_a = espnTeams[topEspnId]) === null || _a === void 0 ? void 0 : _a.name) || topEspnId;
+                const botTeamName = ((_b = espnTeams[botEspnId]) === null || _b === void 0 ? void 0 : _b.name) || botEspnId;
+                const winnerName = match.winnerTeamId ? (((_c = espnTeams[match.winnerTeamId]) === null || _c === void 0 ? void 0 : _c.name) || match.winnerTeamId) : null;
+                updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: topTeamName, awayTeamId: botTeamName, homeScore: topScore, awayScore: botScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
                 skeletonToEspn[skeletonId] = match;
                 mappedCount++;
             }
@@ -505,7 +521,12 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
                 const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
                 const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
                 if (match) {
-                    updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: match.homeTeamId === feeder1.winnerTeamId ? match.homeScore : match.awayScore, awayScore: match.homeTeamId === feeder1.winnerTeamId ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: match.winnerTeamId, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
+                    // feeder winners are already resolved to names from the R1 step above
+                    const winnerName = match.winnerTeamId ? (((_d = espnTeams[match.winnerTeamId]) === null || _d === void 0 ? void 0 : _d.name) || match.winnerTeamId) : null;
+                    // Scores: match home/away refers to ESPN IDs, map to correct side
+                    const homeEspnId = match.homeTeamId;
+                    const homeIsFeeder1 = ((_e = espnTeams[homeEspnId]) === null || _e === void 0 ? void 0 : _e.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
+                    updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore, awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
                     skeletonToEspn[skeletonId] = match;
                     mappedCount++;
                 }
@@ -532,7 +553,10 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
         const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
         const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
         if (match) {
-            updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: match.homeTeamId === feeder1.winnerTeamId ? match.homeScore : match.awayScore, awayScore: match.homeTeamId === feeder1.winnerTeamId ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: match.winnerTeamId, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
+            const winnerName = match.winnerTeamId ? (((_f = espnTeams[match.winnerTeamId]) === null || _f === void 0 ? void 0 : _f.name) || match.winnerTeamId) : null;
+            const homeEspnId = match.homeTeamId;
+            const homeIsFeeder1 = ((_g = espnTeams[homeEspnId]) === null || _g === void 0 ? void 0 : _g.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
+            updated[skeletonId] = Object.assign(Object.assign({}, updated[skeletonId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore, awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
             mappedCount++;
         }
     }
@@ -550,7 +574,10 @@ function mapESPNGamesToSkeleton(skeletonGames, espnGames, espnTeams) {
             const expectedTeams = new Set([feeder1.winnerTeamId, feeder2.winnerTeamId]);
             const match = candidates.find(eg => expectedTeams.has(eg.homeTeamId) && expectedTeams.has(eg.awayTeamId));
             if (match) {
-                updated[champId] = Object.assign(Object.assign({}, updated[champId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: match.homeTeamId === feeder1.winnerTeamId ? match.homeScore : match.awayScore, awayScore: match.homeTeamId === feeder1.winnerTeamId ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: match.winnerTeamId, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
+                const winnerName = match.winnerTeamId ? (((_h = espnTeams[match.winnerTeamId]) === null || _h === void 0 ? void 0 : _h.name) || match.winnerTeamId) : null;
+                const homeEspnId = match.homeTeamId;
+                const homeIsFeeder1 = ((_j = espnTeams[homeEspnId]) === null || _j === void 0 ? void 0 : _j.name) === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
+                updated[champId] = Object.assign(Object.assign({}, updated[champId]), { homeTeamId: feeder1.winnerTeamId, awayTeamId: feeder2.winnerTeamId, homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore, awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore, status: match.status, winnerTeamId: winnerName, startTime: match.startTime, period: match.period, clock: match.clock, broadcast: match.broadcast, externalId: match.externalId });
                 mappedCount++;
             }
         }
@@ -819,8 +846,8 @@ function mapESPNConferenceGamesToSkeleton(existingGames, slots, espnEvents, team
             return null;
         const homeScore = parseInt(home.score || '0');
         const awayScore = parseInt(away.score || '0');
-        const status = comp.status.type.state === 'pre' ? 'SCHEDULED' :
-            comp.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL';
+        const status = (comp.status.type.state === 'pre' ? 'SCHEDULED' :
+            comp.status.type.state === 'in' ? 'IN_PROGRESS' : 'FINAL');
         // Translate ESPN numeric IDs to skeleton short IDs (fallback: raw ESPN id)
         const homeShortId = espnToShort[home.team.id] || home.team.id;
         const awayShortId = espnToShort[away.team.id] || away.team.id;
@@ -842,7 +869,7 @@ function mapESPNConferenceGamesToSkeleton(existingGames, slots, espnEvents, team
             broadcast: (_h = (_g = (_f = (_e = comp.broadcasts) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.names) === null || _g === void 0 ? void 0 : _g[0]) !== null && _h !== void 0 ? _h : null,
             externalId: e.id
         };
-    }).filter(m => m !== null);
+    }).filter((m) => m !== null);
     // Match by passing teams from feeders down
     const maxRound = Math.max(...Object.values(updated).map(g => g.round));
     for (let currentRound = 1; currentRound <= maxRound; currentRound++) {
@@ -924,7 +951,8 @@ exports.importConferenceTournamentFromESPN = (0, https_1.onCall)(async (request)
         return { success: true, count: events.length, mapped: mappedCount };
     }
     catch (error) {
-        return { success: false, message: `Import failed: ${error.message}` };
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        return { success: false, message: `Import failed: ${msg}` };
     }
 });
 /**

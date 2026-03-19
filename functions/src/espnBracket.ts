@@ -298,8 +298,8 @@ async function fetchAndMapESPNGameData(seasonYear: number) {
 
         if (!homeComp || !awayComp) continue;
 
-        const homeTeamId = homeComp.team.id;
-        const awayTeamId = awayComp.team.id;
+        const homeEspnId = homeComp.team.id;
+        const awayEspnId = awayComp.team.id;
 
         // --- WS4: Extract actual tournament seed from team name, e.g. "(1) Duke Blue Devils" ---
         const homeSeed = parseSeedFromName(homeComp.team.displayName) || homeComp.curatedRank?.current || 99;
@@ -309,40 +309,53 @@ async function fetchAndMapESPNGameData(seasonYear: number) {
         const homeDisplayName = homeComp.team.displayName.replace(/^\(\d+\)\s*/, '');
         const awayDisplayName = awayComp.team.displayName.replace(/^\(\d+\)\s*/, '');
 
+        // KEY CHANGE: Key teams by display name, not ESPN numeric ID.
+        // This means games' homeTeamId/awayTeamId are the display names (e.g. "Duke Blue Devils"),
+        // which the bracket UI can render directly without a lookup table.
+        const homeTeamKey = homeDisplayName;
+        const awayTeamKey = awayDisplayName;
+
         // Store Teams if not exists (update region if we now know it)
-        if (!teams[homeTeamId]) {
-            teams[homeTeamId] = {
-                id: homeTeamId,
+        if (!teams[homeTeamKey]) {
+            teams[homeTeamKey] = {
+                id: homeTeamKey,
                 name: homeDisplayName,
                 seed: homeSeed,
                 region: region,
-                logoUrl: homeComp.team.logo
-            };
-        } else if (teams[homeTeamId].region === 'TBD' && region !== 'TBD') {
-            teams[homeTeamId].region = region;
+                logoUrl: homeComp.team.logo,
+                externalId: homeEspnId, // Keep ESPN numeric ID for score sync
+            } as Team & { externalId?: string };
+        } else if ((teams[homeTeamKey] as Team & { region?: string }).region === 'TBD' && region !== 'TBD') {
+            teams[homeTeamKey].region = region;
         }
-        if (!teams[awayTeamId]) {
-            teams[awayTeamId] = {
-                id: awayTeamId,
+        if (!teams[awayTeamKey]) {
+            teams[awayTeamKey] = {
+                id: awayTeamKey,
                 name: awayDisplayName,
                 seed: awaySeed,
                 region: region,
-                logoUrl: awayComp.team.logo
-            };
-        } else if (teams[awayTeamId].region === 'TBD' && region !== 'TBD') {
-            teams[awayTeamId].region = region;
+                logoUrl: awayComp.team.logo,
+                externalId: awayEspnId, // Keep ESPN numeric ID for score sync
+            } as Team & { externalId?: string };
+        } else if ((teams[awayTeamKey] as Team & { region?: string }).region === 'TBD' && region !== 'TBD') {
+            teams[awayTeamKey].region = region;
         }
 
-        // Create Game
+        // Determine winner name (by display name key)
+        const homeScore = parseInt(homeComp.score || '0');
+        const awayScore = parseInt(awayComp.score || '0');
+        const winnerKey = status === 'FINAL' ? (homeScore > awayScore ? homeTeamKey : awayTeamKey) : null;
+
+        // Create Game — use display name keys as team IDs
         const game: Game = {
             id: gameId,
             startTime: competition.date,
             status: status === 'FINAL' ? 'FINAL' : status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'SCHEDULED',
-            homeTeamId: homeTeamId,
-            awayTeamId: awayTeamId,
-            homeScore: parseInt(homeComp.score || '0'),
-            awayScore: parseInt(awayComp.score || '0'),
-            winnerTeamId: status === 'FINAL' ? (parseInt(homeComp.score || '0') > parseInt(awayComp.score || '0') ? homeTeamId : awayTeamId) : null,
+            homeTeamId: homeTeamKey,
+            awayTeamId: awayTeamKey,
+            homeScore,
+            awayScore,
+            winnerTeamId: winnerKey,
             round: round,
             region: region,
 
@@ -486,19 +499,24 @@ function mapESPNGamesToSkeleton(
             if (match) {
                 // Ensure higher seed (lower number) is homeTeamId for consistency
                 const homeSeed = getTeamSeed(match.homeTeamId);
-                const topTeamId = homeSeed === top ? match.homeTeamId : match.awayTeamId;
-                const botTeamId = homeSeed === top ? match.awayTeamId : match.homeTeamId;
+                const topEspnId = homeSeed === top ? match.homeTeamId : match.awayTeamId;
+                const botEspnId = homeSeed === top ? match.awayTeamId : match.homeTeamId;
                 const topScore = homeSeed === top ? match.homeScore : match.awayScore;
                 const botScore = homeSeed === top ? match.awayScore : match.homeScore;
 
+                // Resolve ESPN numeric IDs → display names so bracket renders correctly
+                const topTeamName = espnTeams[topEspnId]?.name || topEspnId;
+                const botTeamName = espnTeams[botEspnId]?.name || botEspnId;
+                const winnerName = match.winnerTeamId ? (espnTeams[match.winnerTeamId]?.name || match.winnerTeamId) : null;
+
                 updated[skeletonId] = {
                     ...updated[skeletonId],
-                    homeTeamId: topTeamId,
-                    awayTeamId: botTeamId,
+                    homeTeamId: topTeamName,
+                    awayTeamId: botTeamName,
                     homeScore: topScore,
                     awayScore: botScore,
                     status: match.status,
-                    winnerTeamId: match.winnerTeamId,
+                    winnerTeamId: winnerName,
                     startTime: match.startTime,
                     period: match.period,
                     clock: match.clock,
@@ -563,14 +581,19 @@ function mapESPNGamesToSkeleton(
                 );
 
                 if (match) {
+                    // feeder winners are already resolved to names from the R1 step above
+                    const winnerName = match.winnerTeamId ? (espnTeams[match.winnerTeamId]?.name || match.winnerTeamId) : null;
+                    // Scores: match home/away refers to ESPN IDs, map to correct side
+                    const homeEspnId = match.homeTeamId;
+                    const homeIsFeeder1 = espnTeams[homeEspnId]?.name === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
                     updated[skeletonId] = {
                         ...updated[skeletonId],
                         homeTeamId: feeder1.winnerTeamId, // Keep bracket order: winner of top feeder
                         awayTeamId: feeder2.winnerTeamId,
-                        homeScore: match.homeTeamId === feeder1.winnerTeamId ? match.homeScore : match.awayScore,
-                        awayScore: match.homeTeamId === feeder1.winnerTeamId ? match.awayScore : match.homeScore,
+                        homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore,
+                        awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore,
                         status: match.status,
-                        winnerTeamId: match.winnerTeamId,
+                        winnerTeamId: winnerName,
                         startTime: match.startTime,
                         period: match.period,
                         clock: match.clock,
@@ -608,14 +631,17 @@ function mapESPNGamesToSkeleton(
         );
 
         if (match) {
+            const winnerName = match.winnerTeamId ? (espnTeams[match.winnerTeamId]?.name || match.winnerTeamId) : null;
+            const homeEspnId = match.homeTeamId;
+            const homeIsFeeder1 = espnTeams[homeEspnId]?.name === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
             updated[skeletonId] = {
                 ...updated[skeletonId],
                 homeTeamId: feeder1.winnerTeamId,
                 awayTeamId: feeder2.winnerTeamId,
-                homeScore: match.homeTeamId === feeder1.winnerTeamId ? match.homeScore : match.awayScore,
-                awayScore: match.homeTeamId === feeder1.winnerTeamId ? match.awayScore : match.homeScore,
+                homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore,
+                awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore,
                 status: match.status,
-                winnerTeamId: match.winnerTeamId,
+                winnerTeamId: winnerName,
                 startTime: match.startTime,
                 period: match.period,
                 clock: match.clock,
@@ -644,14 +670,17 @@ function mapESPNGamesToSkeleton(
             );
 
             if (match) {
+                const winnerName = match.winnerTeamId ? (espnTeams[match.winnerTeamId]?.name || match.winnerTeamId) : null;
+                const homeEspnId = match.homeTeamId;
+                const homeIsFeeder1 = espnTeams[homeEspnId]?.name === feeder1.winnerTeamId || homeEspnId === feeder1.winnerTeamId;
                 updated[champId] = {
                     ...updated[champId],
                     homeTeamId: feeder1.winnerTeamId,
                     awayTeamId: feeder2.winnerTeamId,
-                    homeScore: match.homeTeamId === feeder1.winnerTeamId ? match.homeScore : match.awayScore,
-                    awayScore: match.homeTeamId === feeder1.winnerTeamId ? match.awayScore : match.homeScore,
+                    homeScore: homeIsFeeder1 ? match.homeScore : match.awayScore,
+                    awayScore: homeIsFeeder1 ? match.awayScore : match.homeScore,
                     status: match.status,
-                    winnerTeamId: match.winnerTeamId,
+                    winnerTeamId: winnerName,
                     startTime: match.startTime,
                     period: match.period,
                     clock: match.clock,

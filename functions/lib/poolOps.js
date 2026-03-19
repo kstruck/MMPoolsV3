@@ -99,15 +99,14 @@ exports.createPool = (0, https_1.onCall)(async (request) => {
 // Used to fix pools affected by the home/away reversal bug
 // SuperAdmin only - re-fetches ESPN scores and recalculates all winners
 exports.recalculatePoolWinners = (0, https_1.onCall)(async (request) => {
-    var _a;
     const db = admin.firestore();
     // Auth check
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
     }
     const uid = request.auth.uid;
-    const userDoc = await db.collection('users').doc(uid).get();
-    if (!userDoc.exists || ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) !== 'SUPER_ADMIN') {
+    // Use JWT custom claim (tamper-proof) instead of Firestore document lookup
+    if (request.auth.token.role !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError('permission-denied', 'SuperAdmin access required.');
     }
     const { poolId } = request.data;
@@ -219,14 +218,11 @@ exports.toggleWinnerPaid = (0, https_1.onCall)(async (request) => {
 });
 // ============ FIX PARTICIPANT IDS (Backfill) ============
 exports.fixParticipantIds = (0, https_1.onCall)(async (request) => {
-    var _a;
     const db = admin.firestore();
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
-    // Super Admin Check
-    const uid = request.auth.uid;
-    const userDoc = await db.collection('users').doc(uid).get();
-    if (((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) !== 'SUPER_ADMIN') {
+    // Super Admin Check — use JWT custom claim (tamper-proof)
+    if (request.auth.token.role !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError('permission-denied', 'SuperAdmin only.');
     }
     const dryRun = request.data.dryRun === true;
