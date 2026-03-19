@@ -763,11 +763,16 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lock Date/Time</label>
                             <input
                                 type="datetime-local"
-                                value={new Date(formData.lockAt).toISOString().slice(0, 16)}
+                                value={(() => {
+                                    const d = new Date(formData.lockAt);
+                                    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                                        .toISOString()
+                                        .slice(0, 16);
+                                })()}
                                 onChange={(e) => update({ lockAt: new Date(e.target.value).getTime() })}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
                             />
-                            <p className="text-xs text-slate-500 mt-1">When should the pool lock?</p>
+                            <p className="text-xs text-slate-500 mt-1">When should the pool lock? (your local time)</p>
                         </div>
 
                         <div>

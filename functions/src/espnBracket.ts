@@ -404,10 +404,10 @@ function parseRegionAndRound(notes?: { type: string; headline: string }[]): { re
     let round = 1;
     const headlineLower = headline.toLowerCase();
     if (headlineLower.includes('first four')) round = 0;
-    else if (headlineLower.includes('first round')) round = 1;
-    else if (headlineLower.includes('second round')) round = 2;
-    else if (headlineLower.includes('sweet 16') || headlineLower.includes('sweet sixteen')) round = 3;
-    else if (headlineLower.includes('elite eight') || headlineLower.includes('elite 8')) round = 4;
+    else if (headlineLower.includes('first round') || headlineLower.includes('1st round')) round = 1;
+    else if (headlineLower.includes('second round') || headlineLower.includes('2nd round')) round = 2;
+    else if (headlineLower.includes('sweet 16') || headlineLower.includes('sweet sixteen') || headlineLower.includes('3rd round')) round = 3;
+    else if (headlineLower.includes('elite eight') || headlineLower.includes('elite 8') || headlineLower.includes('4th round')) round = 4;
     else if (headlineLower.includes('final four') || headlineLower.includes('national semifinal')) round = 5;
     else if (headlineLower.includes('national championship') || headlineLower.includes('championship')) round = 6;
 

@@ -107,10 +107,14 @@ export const TournamentManager: React.FC = () => {
             if (docSnap.exists()) {
                 const data = { id: docSnap.id, ...docSnap.data() } as Tournament;
                 setTournament(data);
-                // Initialize lockAt editor with current value
+                // Initialize lockAt editor with current value in LOCAL time
+                // toISOString() gives UTC - we need local time for datetime-local inputs
                 if (data.lockAt) {
                     const d = new Date(data.lockAt);
-                    setEditLockAt(d.toISOString().slice(0, 16)); // yyyy-MM-ddTHH:mm
+                    const localISO = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                        .toISOString()
+                        .slice(0, 16);
+                    setEditLockAt(localISO);
                 } else {
                     setEditLockAt('');
                 }
@@ -133,7 +137,7 @@ export const TournamentManager: React.FC = () => {
         try {
             const functions = getFunctions();
             let importFnName = 'importTournamentFromESPN';
-            const params: any = {
+            const params: Record<string, unknown> = {
                 tournamentId: selectedTournamentId,
                 seasonYear: selectedYear
             };
