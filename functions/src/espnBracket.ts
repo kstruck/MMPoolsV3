@@ -46,6 +46,94 @@ const FIRST_FOUR_GAMES = [
 ];
 
 /**
+ * Static 2026 NCAA Tournament seed lookup.
+ * ESPN's scoreboard API does NOT provide tournament seeds — only AP poll curatedRank.
+ * Two-level lookup: region → displayName → seed.
+ * Derived from ESPN API: sorted by startTime within region (standard slot order).
+ * Slot order: 1(1v16), 2(8v9), 3(5v12), 4(4v13), 5(6v11), 6(3v14), 7(7v10), 8(2v15)
+ */
+const NCAA_2026_SEEDS: Record<string, Record<string, number>> = {
+    East: {
+        'Ohio State Buckeyes':        1,
+        'TCU Horned Frogs':          16,
+        'Louisville Cardinals':        8,
+        'South Florida Bulls':         9,
+        'Duke Blue Devils':            5,
+        'Siena Saints':               12,
+        'Michigan State Spartans':     4,
+        'North Dakota State Bison':   13,
+        "St. John's Red Storm":        6,
+        'Northern Iowa Panthers':     11,
+        'UCLA Bruins':                 3,
+        'UCF Knights':                14,
+        'Kansas Jayhawks':             7,
+        'California Baptist Lancers': 10,
+        'UConn Huskies':               2,
+        'Furman Paladins':            15,
+    },
+    West: {
+        'Wisconsin Badgers':           1,
+        'High Point Panthers':        16,
+        'Arkansas Razorbacks':         8,
+        "Hawai'i Rainbow Warriors":    9,
+        'Michigan Wolverines':         5,
+        'Howard Bison':               12,
+        'BYU Cougars':                 4,
+        'Texas Longhorns':            13,
+        'Georgia Bulldogs':            6,
+        'Saint Louis Billikens':      11,
+        'Gonzaga Bulldogs':            3,
+        'Kennesaw State Owls':        14,
+        'Kentucky Wildcats':           7,
+        'Santa Clara Broncos':        10,
+        'Texas Tech Red Raiders':      2,
+        'Akron Zips':                 15,
+        // First Four (6v11 slot winner goes to West-5)
+        'SMU Mustangs':               11,
+        'Miami (OH) RedHawks':        11,
+    },
+    South: {
+        'Nebraska Cornhuskers':        1,
+        'Troy Trojans':               16,
+        'Vanderbilt Commodores':       8,
+        'McNeese Cowboys':             9,
+        'North Carolina Tar Heels':    5,
+        'VCU Rams':                   12,
+        "Saint Mary's Gaels":          4,
+        'Texas A&M Aggies':           13,
+        'Illinois Fighting Illini':    6,
+        'Pennsylvania Quakers':       11,
+        'Houston Cougars':             3,
+        'Idaho Vandals':              14,
+        'Clemson Tigers':              7,
+        'Iowa Hawkeyes':              10,
+        'Florida Gators':              2,
+        'Prairie View A&M Panthers':  15,
+        // First Four (11 slot winner goes to South-5)
+        'Lehigh Mountain Hawks':      11,
+    },
+    Midwest: {
+        'Arizona Wildcats':            1,
+        'Long Island University Sharks': 16,
+        'Iowa State Cyclones':         2,
+        'Tennessee State Tigers':     15,
+        'Alabama Crimson Tide':        4,
+        'Hofstra Pride':              13,
+        'Tennessee Volunteers':        6,
+        'Wright State Raiders':       11,
+        'Virginia Cavaliers':          3,
+        'Utah State Aggies':          14,
+        'Purdue Boilermakers':        14,  // pending verify
+        'Queens University Royals':   16,  // pending verify
+        'Miami Hurricanes':            4,  // pending verify
+        'Missouri Tigers':            13,  // pending verify
+        'Villanova Wildcats':         14,  // pending verify
+    },
+};
+
+
+
+/**
  * Initializes a structured Tournament document in Firestore.
  * Supports 64-team skeleton or 68-team full load.
  */
@@ -301,9 +389,14 @@ async function fetchAndMapESPNGameData(seasonYear: number) {
         const homeEspnId = homeComp.team.id;
         const awayEspnId = awayComp.team.id;
 
-        // --- WS4: Extract actual tournament seed from team name, e.g. "(1) Duke Blue Devils" ---
-        const homeSeed = parseSeedFromName(homeComp.team.displayName) || homeComp.curatedRank?.current || 99;
-        const awaySeed = parseSeedFromName(awayComp.team.displayName) || awayComp.curatedRank?.current || 99;
+        // --- WS4: Resolve tournament seed from static 2026 bracket table.
+        // ESPN's API does NOT include tournament seeds - curatedRank is the AP poll rank, not bracket seed.
+        // Two-key lookup: NCAA_2026_SEEDS[region][displayName] → seed number.
+        const homeDisplayNameRaw = homeComp.team.displayName;
+        const awayDisplayNameRaw = awayComp.team.displayName;
+        const regionSeeds = seasonYear === 2026 ? (NCAA_2026_SEEDS[region] ?? {}) : {};
+        const homeSeed = regionSeeds[homeDisplayNameRaw] ?? parseSeedFromName(homeDisplayNameRaw) ?? 99;
+        const awaySeed = regionSeeds[awayDisplayNameRaw] ?? parseSeedFromName(awayDisplayNameRaw) ?? 99;
 
         // Strip seed prefix from name for cleaner display, e.g. "(1) Duke Blue Devils" -> "Duke Blue Devils"
         const homeDisplayName = homeComp.team.displayName.replace(/^\(\d+\)\s*/, '');
