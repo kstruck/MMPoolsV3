@@ -18,7 +18,7 @@
  *   [SOUTH left→right]               [MIDWEST right→left]
  */
 
-import React, { useMemo, useCallback, createContext, useContext } from 'react';
+import React, { useMemo, useCallback, createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
 import type { Tournament, Game, Team } from '../../types';
 import { getTeamLogo } from '../../constants';
 import { Trophy, Check, X, Link, Printer } from 'lucide-react';
@@ -111,9 +111,9 @@ const TeamRow: React.FC<TeamRowProps> = ({
             {/* Seed number — from importedTeams */}
             <span className={`
                 text-[11px] font-black w-[20px] text-center flex-shrink-0 leading-none
-                ${seed ? (isPicked ? 'text-amber-200' : 'text-slate-400') : 'invisible'}
+                ${seed != null ? (isPicked ? 'text-amber-200' : 'text-slate-400') : 'invisible'}
             `}>
-                {seed ?? 0}
+                {seed != null ? seed : ''}
             </span>
 
             {/* Logo */}
@@ -661,6 +661,25 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
 
     const importedTeams = tournament.importedTeams ?? {};
 
+    // ── Adaptive zoom: fit the full bracket in the available space ───────────
+    // Natural bracket width ≈ 1820px (4×4 region cols × 2 sides + FF center).
+    // We scale it down so users never need to scroll horizontally.
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [zoom, setZoom] = useState(1);
+    const NATURAL_W = 4 * (COL_W + COL_GAP) * 2 + 2 * (COL_W + COL_GAP) + 60; // ~1820px
+
+    useLayoutEffect(() => {
+        const recalc = () => {
+            const avail = containerRef.current?.clientWidth ?? window.innerWidth;
+            setZoom(Math.min(1, Math.max(0.55, avail / NATURAL_W)));
+        };
+        recalc();
+        const ro = new ResizeObserver(recalc);
+        if (containerRef.current) ro.observe(containerRef.current);
+        return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     return (
         <TeamDataContext.Provider value={importedTeams}>
         <div id="bracket-printable-area" className="w-full bg-[#0b1421]">
@@ -677,9 +696,9 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
                 totalPicks={totalGames}
             />
 
-            {/* Bracket canvas — scrollable horizontally, full size for readability */}
-            <div className="w-full overflow-x-auto">
-                <div className="py-4 px-2 w-fit min-w-max">
+            {/* Bracket canvas — zoom scales to fit, no horizontal scrollbar */}
+            <div ref={containerRef} className="w-full overflow-hidden">
+                <div style={{ zoom }} className="py-4 px-2 w-fit min-w-max mx-auto">
                     <div className="flex items-center gap-3">
                         {/* LEFT: East (top) + South (bottom) */}
                         <div className="flex flex-col gap-4">
