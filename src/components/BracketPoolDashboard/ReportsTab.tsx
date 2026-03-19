@@ -269,35 +269,42 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
 
                     {/* Final Four Picks Chart */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
                             <FileText size={18} className="text-indigo-400" /> Final Four Picks
                         </h3>
-                        <div className="h-[500px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={popularityData.finalFour} layout="vertical" margin={{ left: 40, right: 40 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
-                                    <XAxis type="number" hide />
-                                    <YAxis
-                                        dataKey="name"
-                                        type="category"
-                                        width={100}
-                                        tick={{ fill: '#94a3b8', fontSize: 14 }}
-                                        interval={0}
-                                    />
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#fff' }}
-                                        cursor={{ fill: '#1e293b', opacity: 0.4 }}
-                                    />
-                                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
-                                        {popularityData.finalFour.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill="#8b5cf6" />
-                                        ))}
-                                        <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={12} fontWeight="bold" />
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                        <p className="text-xs text-slate-500 mb-4">
+                            {popularityData.finalFour.length} unique teams picked for the Final Four across all entries
+                        </p>
+                        {/* Scrollable wrapper — chart grows to fit all rows */}
+                        <div className="overflow-y-auto max-h-[600px] pr-1">
+                            <div style={{ height: Math.max(300, popularityData.finalFour.length * 26 + 40) }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={popularityData.finalFour} layout="vertical" margin={{ left: 0, right: 40, top: 4, bottom: 4 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                                        <XAxis type="number" hide />
+                                        <YAxis
+                                            dataKey="name"
+                                            type="category"
+                                            width={140}
+                                            tick={{ fill: '#94a3b8', fontSize: 11 }}
+                                            interval={0}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#fff' }}
+                                            cursor={{ fill: '#1e293b', opacity: 0.4 }}
+                                        />
+                                        <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={14}>
+                                            {popularityData.finalFour.map((_, index) => (
+                                                <Cell key={`cell-${index}`} fill="#8b5cf6" />
+                                            ))}
+                                            <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={11} fontWeight="bold" />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
+
                 </div>
             )}
         </div>
