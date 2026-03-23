@@ -788,12 +788,15 @@ const updateTournamentScores = async (db, tournamentId, dryRun = false) => {
                 const existingGames = existingData.games || {};
                 const { updatedGames, mappedCount } = mapESPNGamesToSkeleton(existingGames, games, teams);
                 logger.info(`Mapped ${mappedCount} games to skeleton for scoring.`);
-                await tournamentRef.set({
-                    importedGames: games,
-                    importedTeams: teams,
+                // NOTE: Do NOT write importedGames/importedTeams in the scheduler path.
+                // Those raw ESPN blobs can contain `undefined` values (e.g. TBD team logoUrl)
+                // which crash Firestore. The manual importTournamentFromESPN already saves them.
+                // The scorer only needs the mapped `games` object.
+                await tournamentRef.set(sanitizeForFirestore({
                     games: updatedGames,
-                    lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+                    lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+                    lastSyncStatus: `Synced ${mappedCount} games at ${new Date().toISOString()}`,
+                }), { merge: true });
                 try {
                     const scoredCount = await (0, bracketScoring_1.scoreTournamentEntries)(db, tournamentId);
                     logger.info(`Scoring complete. Scored ${scoredCount} entries.`);
@@ -1053,12 +1056,17 @@ exports.importConferenceTournamentFromESPN = (0, https_1.onCall)(async (request)
  * those brackets to the actual team ID so scoring works correctly.
  */
 exports.syncPlayInPicks = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c;
     // 1. Authorization
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated.');
     }
-    const userRole = request.auth.token['role'] || 'user';
-    if (userRole !== 'super_admin') {
+    let userRole = request.auth.token.role;
+    if (!userRole && request.auth.uid) {
+        const userDoc = await admin.firestore().collection('users').doc(request.auth.uid).get();
+        userRole = (_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role;
+    }
+    if (userRole !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError('permission-denied', 'Only super admins can sync play-in picks.');
     }
     const { tournamentId } = request.data;
@@ -1097,55 +1105,66 @@ exports.syncPlayInPicks = (0, https_1.onCall)(async (request) => {
             }
         }
     }
-    // 4. Fetch all entries for this tournament
-    const entriesRef = db.collection('entries').where('tournamentId', '==', tournamentId);
-    const entriesSnap = await entriesRef.get();
-    if (entriesSnap.empty) {
-        return { success: true, message: "No entries found to sync." };
+    // 4. Fetch all pools linked to this tournament, then iterate their entries subcollections.
+    // Entries are stored at pools/{poolId}/entries/{entryId} — NOT at a top-level /entries collection.
+    const poolsSnap = await db.collection('pools')
+        .where('type', '==', 'BRACKET')
+        .where('tournamentId', '==', tournamentId)
+        .get();
+    if (poolsSnap.empty) {
+        return { success: true, message: "No pools found for this tournament." };
     }
     let updatedCount = 0;
-    const batch = db.batch();
+    let currentBatch = db.batch();
     let batchSize = 0;
-    // 5. Check each entry for unresolved play-in picks
-    entriesSnap.forEach(docSnap => {
-        const entry = docSnap.data();
-        let needsUpdate = false;
-        const newBracket = Object.assign({}, entry.bracket);
-        // For every pick in their bracket
-        for (const [slotId, teamId] of Object.entries(entry.bracket)) {
-            // Is it a play-in placeholder format like "Wagner/Howard"?
-            if (teamId && teamId.includes('/')) {
-                const parts = teamId.split('/');
-                const teamA = parts[0];
-                const teamB = parts[1];
-                // If one of these teams is now legitimately in Round 1
-                if (resolvedR1Teams.has(teamA)) {
-                    newBracket[slotId] = teamA;
-                    needsUpdate = true;
+    // 5. Check each entry across all pools for unresolved play-in picks
+    for (const poolDoc of poolsSnap.docs) {
+        const entriesSnap = await db.collection('pools').doc(poolDoc.id).collection('entries').get();
+        if (entriesSnap.empty)
+            continue;
+        for (const docSnap of entriesSnap.docs) {
+            const entry = docSnap.data();
+            if (!entry.picks)
+                continue;
+            let needsUpdate = false;
+            const newPicks = Object.assign({}, entry.picks);
+            // For every pick in their bracket
+            for (const [slotId, teamId] of Object.entries(entry.picks)) {
+                // Is it a play-in placeholder format like "SMU Mustangs/Miami (OH) RedHawks"?
+                if (teamId && teamId.includes('/')) {
+                    const parts = teamId.split('/');
+                    const teamA = (_b = parts[0]) === null || _b === void 0 ? void 0 : _b.trim();
+                    const teamB = (_c = parts[1]) === null || _c === void 0 ? void 0 : _c.trim();
+                    // If one of these teams is now legitimately in Round 1, use that team
+                    if (teamA && resolvedR1Teams.has(teamA)) {
+                        newPicks[slotId] = teamA;
+                        needsUpdate = true;
+                    }
+                    else if (teamB && resolvedR1Teams.has(teamB)) {
+                        newPicks[slotId] = teamB;
+                        needsUpdate = true;
+                    }
                 }
-                else if (resolvedR1Teams.has(teamB)) {
-                    newBracket[slotId] = teamB;
-                    needsUpdate = true;
+            }
+            if (needsUpdate) {
+                currentBatch.update(docSnap.ref, { picks: newPicks });
+                updatedCount++;
+                batchSize++;
+                // Commit and start a new batch at the Firestore limit
+                if (batchSize >= 400) {
+                    await currentBatch.commit();
+                    currentBatch = db.batch();
+                    batchSize = 0;
                 }
             }
         }
-        if (needsUpdate) {
-            batch.update(docSnap.ref, { bracket: newBracket });
-            updatedCount++;
-            batchSize++;
-            // Firestore batch limit is 500, but let's be safe
-            if (batchSize >= 400) {
-                // Technically we should wait for batch.commit() here in a padded loop,
-                // but for ~100 brackets this simple logic is fine. For scale, use a commit chunks array.
-            }
-        }
-    });
+    }
     if (batchSize > 0) {
-        await batch.commit();
+        await currentBatch.commit();
     }
     return {
         success: true,
-        message: `Synced ${updatedCount} entries with resolved play-in winners.`
+        message: `Synced ${updatedCount} entries across ${poolsSnap.size} pool(s) with resolved play-in winners.`
     };
 });
 //# sourceMappingURL=espnBracket.js.map

@@ -5,6 +5,20 @@
             "queryScope": "COLLECTION",
             "fields": [
                 {
+                    "fieldPath": "type",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "tournamentId",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "pools",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
                     "fieldPath": "scores.gameStatus",
                     "order": "ASCENDING"
                 },

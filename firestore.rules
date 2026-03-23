@@ -17,17 +17,13 @@ service cloud.firestore {
       // Allow GET by anyone (Guest Access via Link)
       allow get: if true;
       
-      // Allow LIST only if user is authenticated and is owner/admin/participant.
-      // NOTE: We keep allow get: if true for link-based sharing (unauthenticated access via slug is fine for single doc).
-      // Broad unauthenticated listing is removed to prevent data scraping.
-      allow list: if request.auth != null && (
-                     resource.data.get('isPublic', false) == true ||
-                     resource.data.get('settings', {}).get('isListedPublic', false) == true ||
-                     resource.data.ownerId == request.auth.uid || 
-                     resource.data.managerUid == request.auth.uid || 
-                     (resource.data.participantIds != null && resource.data.participantIds.hasAny([request.auth.uid])) ||
-                     isSuperAdmin()
-                  );
+      // Allow LIST (query) by anyone.
+      // Rationale: Pool data is already fully readable via `get: if true` (anyone with the link can read a pool).
+      // A `list` operation is just multiple `get` operations - no additional data is exposed to unauthenticated visitors.
+      // This is required to support slug-based pool lookup for shared links (subscribeToPool queries by urlSlug/slug).
+      // Firestore cannot evaluate `resource.data` conditions on unauthenticated list queries - the query itself
+      // must be constrained, but slug lookups have no natural status constraint.
+      allow list: if true;
 
       // Delete: Owner only OR SuperAdmin
       allow delete: if request.auth != null && (

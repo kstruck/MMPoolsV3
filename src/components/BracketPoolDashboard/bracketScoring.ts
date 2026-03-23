@@ -8,7 +8,7 @@ import type { BracketEntry, Tournament, BracketPool, Game } from '../../types';
 
 // Standard round point values
 const ROUND_VALUES_CLASSIC = [10, 20, 40, 80, 160, 320];
-const ROUND_VALUES_FIBONACCI = [10, 20, 30, 50, 80, 130];
+const ROUND_VALUES_FIBONACCI = [2, 3, 5, 8, 13, 21];
 
 export interface ScoringResult {
     score: number;

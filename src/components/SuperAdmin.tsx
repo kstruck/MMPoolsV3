@@ -302,6 +302,24 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
+    const [isScoringBrackets, setIsScoringBrackets] = React.useState(false);
+    const handleScoreBracketEntries = async () => {
+        if (!confirm('Score all locked bracket entries now?\n\nThis will recalculate scores for every participant in every locked bracket pool.')) return;
+        setIsScoringBrackets(true);
+        try {
+            const functions = getFunctions();
+            const scoreFn = httpsCallable(functions, 'scoreBracketEntries');
+            const result = await scoreFn({});
+            const data = result.data as { message?: string; scored?: number };
+            alert(`✅ ${data?.message ?? 'Scoring complete!'} (${data?.scored ?? '?'} pools scored)`);
+        } catch (e: unknown) {
+            logger.error('Score bracket entries failed:', e);
+            alert('Error scoring brackets: ' + (e instanceof Error ? e.message : String(e)));
+        } finally {
+            setIsScoringBrackets(false);
+        }
+    };
+
 
     const handleForceReopenPool = async (pool: Pool) => {
         if (pool.type !== 'BRACKET') {
@@ -893,6 +911,13 @@ export const SuperAdmin: React.FC = () => {
                             className="shrink-0 bg-amber-500 hover:bg-amber-400 text-black font-extrabold px-5 py-3 rounded-xl text-sm transition-all shadow-lg shadow-amber-500/30 whitespace-nowrap"
                         >
                             🔧 Re-Init Big 12 Now
+                        </button>
+                        <button
+                            onClick={handleScoreBracketEntries}
+                            disabled={isScoringBrackets}
+                            className="shrink-0 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-extrabold px-5 py-3 rounded-xl text-sm transition-all shadow-lg shadow-emerald-500/30 whitespace-nowrap flex items-center gap-2"
+                        >
+                            <Trophy size={16} /> {isScoringBrackets ? 'Scoring...' : 'Score Bracket Entries'}
                         </button>
                     </div>
                     <TournamentManager />

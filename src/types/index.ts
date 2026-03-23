@@ -696,6 +696,7 @@ export interface BracketEntry {
   paidStatus: 'PAID' | 'UNPAID';
   paymentMethod?: 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other';
   score: number;
+  maxPossibleScore?: number; // Set by scoring function; max points still achievable
   rank?: number;
   amountWon?: number;
   isWinner?: boolean;

@@ -19,19 +19,19 @@ const ROUND_CONFIG: Record<string, { labels: string[]; classic: number[]; espn: 
         labels: ['R64', 'R32', 'Sweet 16', 'Elite 8', 'Final 4', 'Champ'],
         classic: [1, 2, 4, 8, 16, 32],
         espn: [10, 20, 40, 80, 160, 320],
-        fibonacci: [1, 2, 3, 5, 8, 13],
+        fibonacci: [2, 3, 5, 8, 13, 21],
     },
     big12: {
         labels: ['Round 1', 'Quarterfinals', 'Semifinals', 'Final', 'Champ'],
         classic: [1, 2, 4, 8, 16],
         espn: [10, 20, 40, 80, 160],
-        fibonacci: [1, 2, 3, 5, 8],
+        fibonacci: [3, 5, 8, 13, 21],
     },
     bigeast: {
         labels: ['First Round', 'Quarterfinals', 'Semifinals', 'Champ'],
         classic: [1, 2, 4, 8],
         espn: [10, 20, 40, 80],
-        fibonacci: [1, 2, 3, 5],
+        fibonacci: [5, 8, 13, 21],
     },
 };
 

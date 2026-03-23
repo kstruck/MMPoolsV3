@@ -4,11 +4,11 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Tournament, BracketPool, BracketEntry } from "./types";
 
 
-// Scoring Constants
+// Scoring Constants — must match ROUND_CONFIG in BracketWizard.tsx
 const SCORING_Multipliers = {
-    CLASSIC: [10, 20, 40, 80, 160, 320], // Standard X10 for readable int scores
-    ESPN: [10, 20, 40, 80, 160, 320],    // Same as Classic usually
-    FIBONACCI: [10, 20, 30, 50, 80, 130],
+    CLASSIC:  [10, 20, 40, 80, 160, 320],        // Standard ESPN-style 10x base
+    ESPN:     [10, 20, 40, 80, 160, 320],         // ESPN-style 10x base
+    FIBONACCI: [2, 3, 5, 8, 13, 21],
 };
 
 /**
@@ -28,12 +28,30 @@ export const getEliminatedTeams = (tournament: Tournament): Set<string> => {
     return eliminated;
 };
 
+/**
+ * @deprecated Team IDs are now display names (e.g. "Arkansas Razorbacks"), not formatted IDs.
+ * Use getSeedForTeam(teamId, tournament) instead.
+ */
 export function extractSeedFromTeamId(teamId: string | undefined | null): number | null {
     if (!teamId) return null;
-    // Expected format: "E1-Duke" or "S10-NorthCarolina"
+    // Legacy regex — may not match display-name team IDs. Use getSeedForTeam when tournament is available.
     const match = teamId.match(/^[A-Za-z]+(\d+)-/);
     if (match) return parseInt(match[1], 10);
     return null;
+}
+
+/**
+ * Looks up the seed for a team by display name using the tournament's importedTeams map.
+ * Falls back to the legacy regex for backwards compatibility.
+ */
+function getSeedForTeam(teamId: string | undefined | null, tournament: Tournament): number | null {
+    if (!teamId) return null;
+    // Primary: look up in importedTeams (keyed by display name, e.g. "Arkansas Razorbacks" → { seed: 4 })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seed = (tournament as any).importedTeams?.[teamId]?.seed;
+    if (typeof seed === 'number' && seed > 0) return seed;
+    // Fallback: legacy regex for old-format IDs
+    return extractSeedFromTeamId(teamId);
 }
 
 /**
@@ -48,6 +66,7 @@ export const calculateEntryMaxScore = (
     const system = settings.scoringSystem;
     let multipliers = SCORING_Multipliers.CLASSIC;
 
+    if (system === 'ESPN') multipliers = SCORING_Multipliers.ESPN;
     if (system === 'FIBONACCI') multipliers = SCORING_Multipliers.FIBONACCI;
     if (system === 'CUSTOM' && settings.customScoring && settings.customScoring.length > 0) {
         multipliers = settings.customScoring;
@@ -79,9 +98,9 @@ export const calculateEntryMaxScore = (
                 maxScore += points;
 
                 if (upsetBonusEnabled) {
-                    const winnerSeed = extractSeedFromTeamId(game.winnerTeamId);
+                    const winnerSeed = getSeedForTeam(game.winnerTeamId, tournament);
                     const loserId = game.homeTeamId === game.winnerTeamId ? game.awayTeamId : game.homeTeamId;
-                    const loserSeed = extractSeedFromTeamId(loserId);
+                    const loserSeed = getSeedForTeam(loserId, tournament);
 
                     if (winnerSeed && loserSeed && winnerSeed > loserSeed) {
                         maxScore += (winnerSeed - loserSeed) * upsetMultiplier;
@@ -93,11 +112,11 @@ export const calculateEntryMaxScore = (
                 maxScore += points;
 
                 if (upsetBonusEnabled) {
-                    const pickSeed = extractSeedFromTeamId(pickedTeamId);
+                    const pickSeed = getSeedForTeam(pickedTeamId, tournament);
                     if (pickSeed) {
                         const opponentId = game.homeTeamId === pickedTeamId ? game.awayTeamId : (game.awayTeamId === pickedTeamId ? game.homeTeamId : null);
                         if (opponentId && !eliminatedTeams!.has(opponentId)) {
-                            const oppSeed = extractSeedFromTeamId(opponentId);
+                            const oppSeed = getSeedForTeam(opponentId, tournament);
                             if (oppSeed && pickSeed > oppSeed) {
                                 maxScore += (pickSeed - oppSeed) * upsetMultiplier;
                             }
@@ -124,6 +143,7 @@ export const calculateEntryScore = (
     const system = settings.scoringSystem;
     let multipliers = SCORING_Multipliers.CLASSIC;
 
+    if (system === 'ESPN') multipliers = SCORING_Multipliers.ESPN;
     if (system === 'FIBONACCI') multipliers = SCORING_Multipliers.FIBONACCI;
     if (system === 'CUSTOM' && settings.customScoring && settings.customScoring.length > 0) {
         multipliers = settings.customScoring;
@@ -151,9 +171,9 @@ export const calculateEntryScore = (
             }
 
             if (upsetBonusEnabled) {
-                const winnerSeed = extractSeedFromTeamId(game.winnerTeamId);
+                const winnerSeed = getSeedForTeam(game.winnerTeamId, tournament);
                 const loserId = game.homeTeamId === game.winnerTeamId ? game.awayTeamId : game.homeTeamId;
-                const loserSeed = extractSeedFromTeamId(loserId);
+                const loserSeed = getSeedForTeam(loserId, tournament);
 
                 if (winnerSeed && loserSeed && winnerSeed > loserSeed) {
                     score += (winnerSeed - loserSeed) * upsetMultiplier;
@@ -187,15 +207,14 @@ export const scoreTournamentEntries = async (db: admin.firestore.Firestore, tour
 
     const poolsSnap = await db.collection('pools')
         .where('type', '==', 'BRACKET')
+        .where('tournamentId', '==', tournamentId)
         .get();
 
-    const pools = poolsSnap.docs
-        .map(d => {
-            const poolData = d.data() as BracketPool;
-            poolData.id = d.id;
-            return poolData;
-        })
-        .filter(p => p.tournamentId === tournamentId);
+    const pools = poolsSnap.docs.map(d => {
+        const poolData = d.data() as BracketPool;
+        poolData.id = d.id;
+        return poolData;
+    });
 
     let totalEntriesScored = 0;
 
@@ -273,7 +292,8 @@ export const scoreTournamentEntries = async (db: admin.firestore.Firestore, tour
         // 4. Batch Updates
         const updates = scoredEntries.filter(se =>
             se.entry.score !== se.originalEntry.score ||
-            se.entry.rank !== se.originalEntry.rank
+            se.entry.rank !== se.originalEntry.rank ||
+            se.max !== (se.originalEntry as unknown as { maxScore?: number }).maxScore
         );
 
         if (updates.length > 0) {
@@ -284,6 +304,7 @@ export const scoreTournamentEntries = async (db: admin.firestore.Firestore, tour
                 batch.update(upd.docRef, {
                     score: upd.entry.score,
                     rank: upd.entry.rank,
+                    maxScore: upd.max,
                     updatedAt: Date.now()
                 });
                 batchCount++;

@@ -1388,7 +1388,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm">
                                                         <option value="CLASSIC">Classic (1-2-4-8-16-32)</option>
                                                         <option value="ESPN">ESPN (10-20-40-80-160-320)</option>
-                                                        <option value="FIBONACCI">Fibonacci (1-1-2-3-5-8)</option>
+                                                        <option value="FIBONACCI">Fibonacci (2-3-5-8-13-21)</option>
                                                         <option value="CUSTOM">Custom</option>
                                                     </select>
                                                 </div>
@@ -2025,6 +2025,11 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         picks={viewingEntry.picks}
                                         onPick={() => { }}
                                         readOnly={true}
+                                        entryName={viewingEntry.name}
+                                        entryScore={viewingEntry.score ?? 0}
+                                        maxPossibleScore={viewingEntry.maxPossibleScore ?? undefined}
+                                        rank={[...entries].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).findIndex(e => e.id === viewingEntry.id) + 1}
+                                        totalEntries={entries.length}
                                     />
                                 )
                             ) : (
@@ -2082,6 +2087,11 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             picks={viewingEntry.picks}
                             onPick={() => { }}
                             readOnly={true}
+                            entryName={viewingEntry.name}
+                            entryScore={viewingEntry.score ?? 0}
+                            maxPossibleScore={viewingEntry.maxPossibleScore ?? undefined}
+                            rank={[...entries].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).findIndex(e => e.id === viewingEntry.id) + 1}
+                            totalEntries={entries.length}
                         />
                     )}
                 </div>,

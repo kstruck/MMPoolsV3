@@ -13,11 +13,17 @@ interface BracketBuilderProps {
     readOnly?: boolean;
     viewMode?: 'tabs' | 'full';
     comparisonPicks?: Record<string, string>;
+    // Optional entry stats for the ESPNBracket header banner
+    entryName?: string;
+    entryScore?: number;
+    maxPossibleScore?: number;
+    rank?: number;
+    totalEntries?: number;
 }
 
 type ViewType = 'espn' | 'tabs';
 
-export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly, viewMode = 'tabs', comparisonPicks }) => {
+export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly, viewMode = 'tabs', comparisonPicks, entryName, entryScore, maxPossibleScore, rank, totalEntries }) => {
     const [activeRegion, setActiveRegion] = useState<BracketRegion | 'FF'>('East');
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
     // Mobile → Regions, Desktop → Full bracket
@@ -86,6 +92,11 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                 readOnly={readOnly}
                 eliminatedTeamIds={eliminatedTeamIds}
                 comparisonPicks={comparisonPicks}
+                entryName={entryName}
+                entryScore={entryScore}
+                maxPossibleScore={maxPossibleScore}
+                rank={rank}
+                totalEntries={totalEntries}
             />
         );
     }
@@ -283,6 +294,11 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                         readOnly={readOnly}
                         eliminatedTeamIds={eliminatedTeamIds}
                         comparisonPicks={comparisonPicks}
+                        entryName={entryName}
+                        entryScore={entryScore}
+                        maxPossibleScore={maxPossibleScore}
+                        rank={rank}
+                        totalEntries={totalEntries}
                     />
                 ) : (
                     <TeamDataContext.Provider value={tournament.importedTeams ?? {}}>
@@ -338,7 +354,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 
 // --- Sub-components (kept for Regions tab view) ---
 
-const FullBracketView: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<string> }> = ({ tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks }) => {
+const FullBracketView: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<string> }> = ({ tournament, picks, onPick, readOnly, eliminatedTeamIds, comparisonPicks, entryName, entryScore, maxPossibleScore, rank, totalEntries }) => {
     return (
         <ESPNBracket
             tournament={tournament}
@@ -347,6 +363,11 @@ const FullBracketView: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<s
             readOnly={readOnly}
             eliminatedTeamIds={eliminatedTeamIds}
             comparisonPicks={comparisonPicks}
+            entryName={entryName}
+            entryScore={entryScore}
+            maxPossibleScore={maxPossibleScore}
+            rank={rank}
+            totalEntries={totalEntries}
         />
     );
 };
