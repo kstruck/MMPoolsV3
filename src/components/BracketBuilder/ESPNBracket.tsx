@@ -685,7 +685,7 @@ interface StatsHeaderProps {
     totalPicks: number;
 }
 
-const StatsHeader: React.FC<StatsHeaderProps> = ({
+export const StatsHeader: React.FC<StatsHeaderProps> = ({
     tournament, picks, entryName, entryScore = 0, maxPossibleScore,
     rank, totalEntries, pickCount, totalPicks
 }) => {

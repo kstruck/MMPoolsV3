@@ -319,23 +319,32 @@ exports.scoreBracketEntries = (0, https_1.onCall)(async (request) => {
         if (tournamentId) {
             // Score a specific tournament
             totalScored = await (0, exports.scoreTournamentEntries)(db, tournamentId);
+            logger.info(`Scored ${totalScored} entries for tournament ${tournamentId}.`);
         }
         else {
-            // Score ALL active / in-progress tournaments
-            const tournamentsSnap = await db.collection('tournaments').get();
-            for (const doc of tournamentsSnap.docs) {
+            // Score only tournaments that are linked to at least one BRACKET pool.
+            // Querying pools first avoids scoring test/seed/empty tournament docs.
+            const poolsSnap = await db.collection('pools')
+                .where('type', '==', 'BRACKET')
+                .get();
+            // Collect unique tournament IDs that have active pools
+            const tournamentIds = [...new Set(poolsSnap.docs
+                    .map(d => d.data().tournamentId)
+                    .filter((id) => !!id))];
+            logger.info(`Scoring ${tournamentIds.length} pool-linked tournament(s): ${tournamentIds.join(', ')}`);
+            for (const tid of tournamentIds) {
                 try {
-                    const count = await (0, exports.scoreTournamentEntries)(db, doc.id);
+                    const count = await (0, exports.scoreTournamentEntries)(db, tid);
                     totalScored += count;
-                    logger.info(`Scored ${count} entries for tournament ${doc.id}.`);
+                    logger.info(`Scored ${count} entries for tournament ${tid}.`);
                 }
                 catch (err) {
-                    logger.warn(`Skipped tournament ${doc.id}:`, err);
+                    logger.warn(`Skipped tournament ${tid}:`, err);
                 }
             }
         }
         logger.info(`Total scored: ${totalScored} entries.`);
-        return { success: true, scored: totalScored, message: `Scoring complete!` };
+        return { success: true, scored: totalScored, message: `Scoring complete! (${totalScored} entries)` };
     }
     catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error';
@@ -348,8 +357,8 @@ exports.scoreBracketEntries = (0, https_1.onCall)(async (request) => {
  */
 exports.finalizeTournamentPayouts = (0, https_1.onCall)(async (request) => {
     var _a, _b;
-    // 1. Auth Check
-    if (!request.auth || request.auth.token.role !== 'ADMIN')
+    // 1. Auth Check — must be SUPER_ADMIN
+    if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN')
         throw new https_1.HttpsError('permission-denied', 'Admin only.');
     const { tournamentId } = request.data;
     if (!tournamentId)

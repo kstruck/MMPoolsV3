@@ -178,6 +178,8 @@ exports.onAIRequest = (0, firestore_1.onDocumentCreated)({
         // Summarise completed & pending games
         let completedGames = [];
         let pendingGames = [];
+        // Team seed map for AI context
+        const teamSeedMap = {};
         if (tournament) {
             const games = Object.values(tournament.games);
             completedGames = games
@@ -186,14 +188,28 @@ exports.onAIRequest = (0, firestore_1.onDocumentCreated)({
             pendingGames = games
                 .filter(g => g.status !== 'FINAL')
                 .map(g => ({ id: g.id, round: g.round, home: g.homeTeamId, away: g.awayTeamId, status: g.status }));
+            // Build seed map so AI knows which teams are favorites/upsets
+            if (tournament.importedTeams) {
+                for (const [teamId, teamData] of Object.entries(tournament.importedTeams)) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const seed = teamData.seed;
+                    if (seed !== undefined)
+                        teamSeedMap[teamId] = seed;
+                }
+            }
         }
+        // Scoring values for Fibonacci or Classic so AI can calculate scenarios
+        const scoringSystem = (_c = (_b = bracketPool.settings) === null || _b === void 0 ? void 0 : _b.scoringSystem) !== null && _c !== void 0 ? _c : 'classic';
+        const scoringValues = Object.assign({ fibonacci: [1, 2, 3, 5, 8, 13], classic: [1, 2, 4, 8, 16, 32] }, (((_d = bracketPool.settings) === null || _d === void 0 ? void 0 : _d.customScoring) ? { custom: bracketPool.settings.customScoring } : {}));
+        // Identify the requesting user's top competitor (highest-ranked entry NOT owned by them)
+        const topCompetitor = allEntries.find(e => e.ownerUid !== userId);
         facts = {
             context: "BRACKET_INSIGHT",
             userQuestion: requestData.question,
             poolConfig: {
                 name: bracketPool.name,
-                scoringSystem: (_b = bracketPool.settings) === null || _b === void 0 ? void 0 : _b.scoringSystem,
-                customScoring: (_d = (_c = bracketPool.settings) === null || _c === void 0 ? void 0 : _c.customScoring) !== null && _d !== void 0 ? _d : null,
+                scoringSystem,
+                scoringValues, // e.g. { fibonacci: [1,2,3,5,8,13] }
                 upsetBonus: (_f = (_e = bracketPool.settings) === null || _e === void 0 ? void 0 : _e.upsetBonus) !== null && _f !== void 0 ? _f : null,
                 entryFee: (_g = bracketPool.settings) === null || _g === void 0 ? void 0 : _g.entryFee,
                 totalEntries: allEntries.length,
@@ -202,6 +218,12 @@ exports.onAIRequest = (0, firestore_1.onDocumentCreated)({
             },
             standings,
             userEntries,
+            teamSeeds: teamSeedMap, // { "DUKE": 1, "GONZAGA": 2, ... }
+            topCompetitor: topCompetitor ? {
+                name: topCompetitor.name,
+                score: topCompetitor.score,
+                picks: topCompetitor.picks,
+            } : null,
             tournament: tournament ? {
                 id: tournament.id,
                 isFinalized: tournament.isFinalized,

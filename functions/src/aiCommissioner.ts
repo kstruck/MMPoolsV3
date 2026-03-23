@@ -187,6 +187,8 @@ export const onAIRequest = onDocumentCreated({
         // Summarise completed & pending games
         let completedGames: object[] = [];
         let pendingGames: object[] = [];
+        // Team seed map for AI context
+        const teamSeedMap: Record<string, number> = {};
         if (tournament) {
             const games = Object.values(tournament.games);
             completedGames = games
@@ -195,15 +197,35 @@ export const onAIRequest = onDocumentCreated({
             pendingGames = games
                 .filter(g => g.status !== 'FINAL')
                 .map(g => ({ id: g.id, round: g.round, home: g.homeTeamId, away: g.awayTeamId, status: g.status }));
+
+            // Build seed map so AI knows which teams are favorites/upsets
+            if (tournament.importedTeams) {
+                for (const [teamId, teamData] of Object.entries(tournament.importedTeams)) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const seed = (teamData as any).seed;
+                    if (seed !== undefined) teamSeedMap[teamId] = seed;
+                }
+            }
         }
+
+        // Scoring values for Fibonacci or Classic so AI can calculate scenarios
+        const scoringSystem = bracketPool.settings?.scoringSystem ?? 'classic';
+        const scoringValues: Record<string, number[]> = {
+            fibonacci: [1, 2, 3, 5, 8, 13],               // rounds 1-6
+            classic:   [1, 2, 4, 8, 16, 32],
+            ...(bracketPool.settings?.customScoring ? { custom: bracketPool.settings.customScoring } : {}),
+        };
+
+        // Identify the requesting user's top competitor (highest-ranked entry NOT owned by them)
+        const topCompetitor = allEntries.find(e => e.ownerUid !== userId);
 
         facts = {
             context: "BRACKET_INSIGHT",
             userQuestion: requestData.question,
             poolConfig: {
                 name: bracketPool.name,
-                scoringSystem: bracketPool.settings?.scoringSystem,
-                customScoring: bracketPool.settings?.customScoring ?? null,
+                scoringSystem,
+                scoringValues,                  // e.g. { fibonacci: [1,2,3,5,8,13] }
                 upsetBonus: bracketPool.settings?.upsetBonus ?? null,
                 entryFee: bracketPool.settings?.entryFee,
                 totalEntries: allEntries.length,
@@ -212,6 +234,12 @@ export const onAIRequest = onDocumentCreated({
             },
             standings,
             userEntries,
+            teamSeeds: teamSeedMap,              // { "DUKE": 1, "GONZAGA": 2, ... }
+            topCompetitor: topCompetitor ? {
+                name: topCompetitor.name,
+                score: topCompetitor.score,
+                picks: topCompetitor.picks,
+            } : null,
             tournament: tournament ? {
                 id: tournament.id,
                 isFinalized: tournament.isFinalized,

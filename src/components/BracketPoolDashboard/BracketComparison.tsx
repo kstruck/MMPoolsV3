@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { BracketEntry, Tournament } from '../../types';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
+import { StatsHeader } from '../BracketBuilder/ESPNBracket';
 import { Users, Info } from 'lucide-react';
 
 interface BracketComparisonProps {
@@ -70,6 +71,22 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
         };
     }, [entry1, entry2, tournament, maxRound]);
 
+    // Total entries count for PCT calculation in StatsHeader
+    const totalEntries = validEntries.length;
+
+    // Compute rank for an entry (by score descending; 1-indexed)
+    const getRank = (entry: BracketEntry) => {
+        const sorted = [...validEntries].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+        const idx = sorted.findIndex(e => e.id === entry.id);
+        return idx >= 0 ? idx + 1 : undefined;
+    };
+
+    // Compute pick counts for an entry
+    const getPickCount = (entry: BracketEntry) =>
+        Object.values(entry.picks || {}).filter(v => v && v !== 'TBD').length;
+
+    const totalGames = Object.keys(tournament.games).length;
+
     if (validEntries.length < 2) {
         return (
             <div className="bg-slate-800 rounded-xl p-8 text-center text-slate-400 border border-slate-700">
@@ -126,7 +143,7 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
 
             {/* Stats Summary */}
             {comparisonStats && (
-                <div className="mt-6 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 flex flex-col md:flex-row gap-4 justify-between items-center text-sm">
+                <div className="mt-2 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 flex flex-col md:flex-row gap-4 justify-between items-center text-sm">
                     <div className="flex items-center gap-2">
                         <span className="font-mono text-xl font-bold text-white">{comparisonStats.matchCount}</span>
                         <span className="text-slate-400">/ {comparisonStats.totalPicks} matching picks</span>
@@ -150,10 +167,23 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
             {/* Brackets Side-by-Side */}
             {entry1 && entry2 && (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-w-0">
+                    {/* Entry 1 */}
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-w-0 overflow-hidden">
                         <div className="bg-slate-900/80 p-3 border-b border-slate-700 text-center font-bold truncate">
                             {entry1.name}
                         </div>
+                        {/* Stats Header for Entry 1 */}
+                        <StatsHeader
+                            tournament={tournament}
+                            picks={entry1.picks}
+                            entryName={entry1.name}
+                            entryScore={entry1.score ?? 0}
+                            maxPossibleScore={entry1.maxPossibleScore}
+                            rank={getRank(entry1)}
+                            totalEntries={totalEntries}
+                            pickCount={getPickCount(entry1)}
+                            totalPicks={totalGames}
+                        />
                         <div className="relative">
                             {isConference ? (
                                 <ConferenceBracketBuilder
@@ -175,10 +205,23 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
                         </div>
                     </div>
 
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-w-0">
+                    {/* Entry 2 */}
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-w-0 overflow-hidden">
                         <div className="bg-slate-900/80 p-3 border-b border-slate-700 text-center font-bold truncate">
                             {entry2.name}
                         </div>
+                        {/* Stats Header for Entry 2 */}
+                        <StatsHeader
+                            tournament={tournament}
+                            picks={entry2.picks}
+                            entryName={entry2.name}
+                            entryScore={entry2.score ?? 0}
+                            maxPossibleScore={entry2.maxPossibleScore}
+                            rank={getRank(entry2)}
+                            totalEntries={totalEntries}
+                            pickCount={getPickCount(entry2)}
+                            totalPicks={totalGames}
+                        />
                         <div className="relative">
                             {isConference ? (
                                 <ConferenceBracketBuilder

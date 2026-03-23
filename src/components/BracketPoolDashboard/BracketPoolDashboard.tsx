@@ -1153,7 +1153,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         {/* Pick History */}
                         {bracketSubTab === 'history' && (
                             tournament && userEntries.length > 0 ? (
-                                <PickHistory entry={userEntries[0]} tournament={tournament} pool={pool} />
+                                <PickHistory entry={userEntries[0]} entries={userEntries} tournament={tournament} pool={pool} />
                             ) : (
                                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
                                     <p>{!tournament ? 'Tournament data not yet available.' : 'Submit a bracket to see your pick history.'}</p>

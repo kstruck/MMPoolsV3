@@ -1,16 +1,25 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { BracketEntry, Tournament, BracketPool } from '../../types';
 import { calculateScore } from './bracketScoring';
-import { TrendingUp, Check, X } from 'lucide-react';
+import { TrendingUp, Check, X, ChevronDown } from 'lucide-react';
 
 interface PickHistoryProps {
-    entry: BracketEntry;
+    entry: BracketEntry;          // default / first entry (kept for backward compat)
+    entries?: BracketEntry[];     // all of the user's entries (optional, enables selector)
     tournament: Tournament;
     pool: BracketPool;
 }
 
-export const PickHistory: React.FC<PickHistoryProps> = ({ entry, tournament, pool }) => {
-    const result = useMemo(() => calculateScore(entry, tournament, pool.settings), [entry, tournament, pool.settings]);
+export const PickHistory: React.FC<PickHistoryProps> = ({ entry, entries, tournament, pool }) => {
+    const allEntries = entries && entries.length > 0 ? entries : [entry];
+    const [selectedId, setSelectedId] = useState<string>(allEntries[0]?.id ?? '');
+
+    const selectedEntry = allEntries.find(e => e.id === selectedId) ?? allEntries[0];
+
+    const result = useMemo(
+        () => calculateScore(selectedEntry, tournament, pool.settings),
+        [selectedEntry, tournament, pool.settings]
+    );
 
     // Build cumulative score progression for sparkline
     const cumulativeScores = useMemo(() => {
@@ -25,10 +34,32 @@ export const PickHistory: React.FC<PickHistoryProps> = ({ entry, tournament, poo
 
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-                <TrendingUp size={20} className="text-emerald-400" />
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+                <TrendingUp size={20} className="text-emerald-400 flex-shrink-0" />
                 <h3 className="text-xl font-bold text-white">Pick History</h3>
-                <span className="text-xs text-slate-500 ml-auto">Entry: {entry.name}</span>
+
+                {/* Bracket selector — only shown when the user has multiple entries */}
+                {allEntries.length > 1 ? (
+                    <div className="ml-auto relative">
+                        <select
+                            value={selectedId}
+                            onChange={e => setSelectedId(e.target.value)}
+                            className="appearance-none bg-slate-800 border border-slate-700 rounded-lg
+                                       pl-3 pr-8 py-1.5 text-sm text-white font-medium
+                                       focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        >
+                            {allEntries.map(e => (
+                                <option key={e.id} value={e.id}>{e.name}</option>
+                            ))}
+                        </select>
+                        <ChevronDown
+                            size={14}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                        />
+                    </div>
+                ) : (
+                    <span className="text-xs text-slate-500 ml-auto">Entry: {selectedEntry.name}</span>
+                )}
             </div>
             <p className="text-slate-400 text-sm mb-4">Round-by-round performance for your bracket.</p>
 
