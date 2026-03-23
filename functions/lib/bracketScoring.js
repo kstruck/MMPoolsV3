@@ -308,22 +308,38 @@ exports.scoreTournamentEntries = scoreTournamentEntries;
  * Cloud Function to score ALL entries for a given tournament.
  */
 exports.scoreBracketEntries = (0, https_1.onCall)(async (request) => {
-    // 1. Auth Check (Admin or System)
-    if (!request.auth || request.auth.token.role !== 'ADMIN') {
+    // Auth Check — must be a SUPER_ADMIN (matches all other admin functions in the codebase)
+    if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError('permission-denied', 'Admin only.');
     }
-    const { tournamentId } = request.data;
-    if (!tournamentId)
-        throw new https_1.HttpsError('invalid-argument', 'Missing tournamentId');
     const db = admin.firestore();
+    const { tournamentId } = request.data;
     try {
-        const count = await (0, exports.scoreTournamentEntries)(db, tournamentId);
-        logger.info(`Scored ${count} entries for tournament ${tournamentId}.`);
-        return { success: true, scored: count };
+        let totalScored = 0;
+        if (tournamentId) {
+            // Score a specific tournament
+            totalScored = await (0, exports.scoreTournamentEntries)(db, tournamentId);
+        }
+        else {
+            // Score ALL active / in-progress tournaments
+            const tournamentsSnap = await db.collection('tournaments').get();
+            for (const doc of tournamentsSnap.docs) {
+                try {
+                    const count = await (0, exports.scoreTournamentEntries)(db, doc.id);
+                    totalScored += count;
+                    logger.info(`Scored ${count} entries for tournament ${doc.id}.`);
+                }
+                catch (err) {
+                    logger.warn(`Skipped tournament ${doc.id}:`, err);
+                }
+            }
+        }
+        logger.info(`Total scored: ${totalScored} entries.`);
+        return { success: true, scored: totalScored, message: `Scoring complete!` };
     }
     catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error';
-        logger.error(`Error scoring tournament ${tournamentId}:`, e);
+        logger.error('Error scoring bracket entries:', e);
         throw new https_1.HttpsError('internal', msg || 'An unknown error occurred during scoring.');
     }
 });
