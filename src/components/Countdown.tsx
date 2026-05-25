@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const SELECTION_SUNDAY = new Date('2026-03-15T18:00:00-04:00').getTime();
+const NFL_KICKOFF = new Date('2026-09-09T18:20:00-06:00').getTime();
 
 const TimeBox = ({ value, label }: { value: number; label: string }) => (
     <div className="flex flex-col items-center justify-center bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-lg py-3 w-20 md:w-24 shadow-xl">
@@ -14,11 +14,11 @@ const TimeBox = ({ value, label }: { value: number; label: string }) => (
 );
 
 export const Countdown: React.FC = () => {
-    const [timeLeft, setTimeLeft] = useState(() => Math.max(0, SELECTION_SUNDAY - Date.now()));
+    const [timeLeft, setTimeLeft] = useState(() => Math.max(0, NFL_KICKOFF - Date.now()));
 
     useEffect(() => {
         const timer = setInterval(() => {
-            setTimeLeft(Math.max(0, SELECTION_SUNDAY - Date.now()));
+            setTimeLeft(Math.max(0, NFL_KICKOFF - Date.now()));
         }, 1000);
         return () => clearInterval(timer);
     }, []);
