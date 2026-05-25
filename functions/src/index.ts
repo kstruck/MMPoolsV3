@@ -31,3 +31,8 @@ export { generateTestScenario, validateTestResults, generateTestReport } from ".
 export { setSuperAdminClaim } from "./adminClaims";
 export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "./conferenceTournaments";
 export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring";
+
+// --- NFL POOLS FUNCTIONS ---
+export { syncNFLScoresJob, importNFLSchedule } from "./nflSchedule";
+export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
+

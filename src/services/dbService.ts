@@ -24,7 +24,7 @@ import { poolRepository } from "./poolRepository";
 import { userRepository } from "./userRepository";
 import { errorHandler, ErrorSeverity } from "./errorHandler";
 export { db };
-import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage } from "../types";
+import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 
 /** Global statistics tracked across all pools */
 export interface GlobalStats {
@@ -909,5 +909,121 @@ export const dbService = {
             });
             throw error;
         }
+    },
+
+    // --- NFL POOLS ---
+    createNFLPool: async (pool: Record<string, unknown>): Promise<string> => {
+        try {
+            const createNFLPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createNFLPool');
+            const result = await createNFLPoolFn(pool);
+            const { poolId } = result.data;
+            return poolId;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'createNFLPool', pool }
+            });
+            throw error;
+        }
+    },
+
+    joinNFLPool: async (poolId: string): Promise<void> => {
+        try {
+            const joinNFLPoolFn = httpsCallable<{ poolId: string }, { success: boolean }>(functions, 'joinNFLPool');
+            await joinNFLPoolFn({ poolId });
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'joinNFLPool', poolId }
+            });
+            throw error;
+        }
+    },
+
+    submitNFLPicks: async (data: { poolId: string; week: number; picks: Record<string, string>; confidence?: Record<string, number>; tiebreakerPrediction?: number }): Promise<void> => {
+        try {
+            const submitNFLPicksFn = httpsCallable(functions, 'submitNFLPicks');
+            await submitNFLPicksFn(data);
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'submitNFLPicks', data }
+            });
+            throw error;
+        }
+    },
+
+    executeSurvivorRebuy: async (poolId: string, week: number): Promise<void> => {
+        try {
+            const executeSurvivorRebuyFn = httpsCallable(functions, 'executeSurvivorRebuy');
+            await executeSurvivorRebuyFn({ poolId, week });
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'executeSurvivorRebuy', poolId, week }
+            });
+            throw error;
+        }
+    },
+
+    scoreNFLWeek: async (poolId: string, week: number): Promise<{ message: string }> => {
+        try {
+            const scoreNFLWeekFn = httpsCallable<{ poolId: string; week: number }, { success: boolean; message: string }>(functions, 'scoreNFLWeek');
+            const result = await scoreNFLWeekFn({ poolId, week });
+            return { message: result.data.message };
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'scoreNFLWeek', poolId, week }
+            });
+            throw error;
+        }
+    },
+
+    importNFLSchedule: async (data: { season: string; seasonType: number; weeks?: number[] }): Promise<{ success: boolean; importedCount: number }> => {
+        try {
+            const importNFLScheduleFn = httpsCallable<{ season: string; seasonType: number; weeks?: number[] }, { success: boolean; importedCount: number }>(functions, 'importNFLSchedule');
+            const result = await importNFLScheduleFn(data);
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'importNFLSchedule', data }
+            });
+            throw error;
+        }
+    },
+
+    subscribeToNFLGames: (season: string, callback: (games: NFLGame[]) => void) => {
+        const q = query(collection(db, "nfl_games"), where("season", "==", season), orderBy("startTime", "asc"));
+        return onSnapshot(q, (snapshot) => {
+            const games = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as NFLGame));
+            callback(games);
+        }, (error) => {
+            logger.error("Error subscribing to NFL games:", error);
+            callback([]);
+        });
+    },
+
+    subscribeToNFLEntries: (poolId: string, callback: (entries: any[]) => void) => {
+        const q = collection(db, "pools", poolId, "entries");
+        return onSnapshot(q, (snapshot) => {
+            const entries = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+            callback(entries);
+        }, (error) => {
+            logger.error("Error subscribing to NFL entries:", error);
+            callback([]);
+        });
+    },
+
+    subscribeToWeeklyRecaps: (poolId: string, callback: (recaps: WeeklyRecap[]) => void) => {
+        const q = query(collection(db, "pools", poolId, "weekly_recaps"), orderBy("week", "asc"));
+        return onSnapshot(q, (snapshot) => {
+            const recaps = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as WeeklyRecap));
+            callback(recaps);
+        }, (error) => {
+            logger.error("Error subscribing to Weekly Recaps:", error);
+            callback([]);
+        });
     }
 };

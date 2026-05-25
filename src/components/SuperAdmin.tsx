@@ -39,7 +39,7 @@ export const SuperAdmin: React.FC = () => {
     // UI State
     type NavGroup = 'Dashboard' | 'Management' | 'Game Ops' | 'Configuration';
     const [activeGroup, setActiveGroup] = useState<NavGroup>('Dashboard');
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
@@ -76,6 +76,14 @@ export const SuperAdmin: React.FC = () => {
     const [playoffTeams, setPlayoffTeams] = useState<PlayoffTeam[]>([]);
     const [isSavingPlayoffs, setIsSavingPlayoffs] = useState(false);
     const [showResultsManager, setShowResultsManager] = useState(false);
+
+    // NFL Importer State
+    const [nflSeason, setNflSeason] = useState('2026');
+    const [nflSeasonType, setNflSeasonType] = useState<number>(2);
+    const [nflWeeks, setNflWeeks] = useState<string>('all');
+    const [selectedNflWeek, setSelectedNflWeek] = useState<number>(1);
+    const [isImportingNfl, setIsImportingNfl] = useState(false);
+    const [nflImportResult, setNflImportResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     const fetchUsers = () => {
         dbService.getAllUsers()
@@ -581,6 +589,35 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
+    const handleImportNFLSchedule = async () => {
+        setIsImportingNfl(true);
+        setNflImportResult(null);
+
+        const weeksParam = nflWeeks === 'all'
+            ? Array.from({ length: 18 }, (_, i) => i + 1)
+            : [selectedNflWeek];
+
+        try {
+            const res = await dbService.importNFLSchedule({
+                season: nflSeason,
+                seasonType: nflSeasonType,
+                weeks: weeksParam
+            });
+            setNflImportResult({
+                type: 'success',
+                message: `Successfully imported ${res.importedCount} NFL games for the ${nflSeason} season!`
+            });
+        } catch (err: any) {
+            logger.error('Failed to import NFL schedule:', err);
+            setNflImportResult({
+                type: 'error',
+                message: err.message || 'Bulk schedule import failed. Please verify API configurations.'
+            });
+        } finally {
+            setIsImportingNfl(false);
+        }
+    };
+
     // Group pools by sport/league (using existing league field from setup wizard)
     const getLeagueDisplayName = (league: string | undefined) => {
         switch (league) {
@@ -723,6 +760,7 @@ export const SuperAdmin: React.FC = () => {
             { id: 'tournament', label: 'Tournament', icon: <Trophy size={16} /> },
             { id: 'playoffs', label: 'Playoffs', icon: <Trophy size={16} /> },
             { id: 'props', label: 'Global Props', icon: <List size={16} /> },
+            { id: 'nfl', label: 'NFL Schedule', icon: <Shield size={16} /> },
         ],
         'Configuration': [
             { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
@@ -2903,8 +2941,103 @@ export const SuperAdmin: React.FC = () => {
                         )}
                     </div>
                 </div>
-            )
-            }
+            )}
+
+            {/* ============ NFL SCHEDULE TAB ============ */}
+            {activeTab === 'nfl' && (
+                <div className="space-y-6">
+                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-3 bg-indigo-500/20 rounded-xl text-indigo-400">
+                                <Activity size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">NFL Schedule Bulk Importer</h3>
+                                <p className="text-sm text-slate-400">Import weekly or seasonal game data from official ESPN feeds.</p>
+                            </div>
+                        </div>
+
+                        {nflImportResult && (
+                            <div className={`p-4 rounded-xl text-xs font-bold mb-6 flex gap-2 items-center ${
+                                nflImportResult.type === 'success'
+                                    ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-400'
+                                    : 'bg-rose-500/10 border border-rose-500/25 text-rose-400'
+                            }`}>
+                                {nflImportResult.type === 'success' ? <CheckCircle size={18} /> : <XCircle size={18} />}
+                                {nflImportResult.message}
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Season Input */}
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Season Year</label>
+                                <input
+                                    type="text"
+                                    value={nflSeason}
+                                    onChange={(e) => setNflSeason(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-indigo-500"
+                                    placeholder="e.g. 2026"
+                                />
+                            </div>
+
+                            {/* Season Type Selection */}
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Season Type</label>
+                                <select
+                                    value={nflSeasonType}
+                                    onChange={(e) => setNflSeasonType(parseInt(e.target.value))}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-indigo-500"
+                                >
+                                    <option value={1}>Preseason</option>
+                                    <option value={2}>Regular Season</option>
+                                    <option value={3}>Postseason</option>
+                                </select>
+                            </div>
+
+                            {/* Weeks Filter */}
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Weeks Filter</label>
+                                <select
+                                    value={nflWeeks}
+                                    onChange={(e) => setNflWeeks(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-indigo-500"
+                                >
+                                    <option value="all">All 18 Weeks (Regular)</option>
+                                    <option value="specific">Specific Week Only</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Specific Week Selector */}
+                        {nflWeeks === 'specific' && (
+                            <div className="mt-6 max-w-xs">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Select Week</label>
+                                <select
+                                    value={selectedNflWeek}
+                                    onChange={(e) => setSelectedNflWeek(parseInt(e.target.value))}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-indigo-500"
+                                >
+                                    {Array.from({ length: 18 }, (_, i) => i + 1).map(w => (
+                                        <option key={w} value={w}>Week {w}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        <div className="mt-8 flex justify-end">
+                            <button
+                                onClick={handleImportNFLSchedule}
+                                disabled={isImportingNfl || !nflSeason}
+                                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold px-6 py-3 rounded-xl text-sm transition-all hover:scale-[1.02] shadow-lg shadow-indigo-600/15 flex items-center gap-2 cursor-pointer"
+                            >
+                                <RefreshCw size={16} className={isImportingNfl ? 'animate-spin' : ''} />
+                                {isImportingNfl ? 'Seeding games...' : 'Bulk Import ESPN NFL Schedule'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div >
     );

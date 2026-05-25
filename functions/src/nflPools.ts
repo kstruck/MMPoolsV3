@@ -1,0 +1,675 @@
+import * as admin from 'firebase-admin';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { writeAuditEvent } from './audit';
+import { assertPoolOwnerOrSuperAdmin } from './poolOps';
+import {
+  NFLGame,
+  NFLPickemPool,
+  NFLSurvivorPool,
+  NFLMarginPool,
+  NFLPickemEntry,
+  SurvivorEntry,
+  MarginEntry,
+  WeeklyRecap
+} from './nflPoolTypes';
+import {
+  scorePickemEntry,
+  validateConfidenceValues,
+  evaluateSurvivorWeek,
+  updateSurvivorStatus,
+  checkAutoSurviveExemption,
+  scoreMarginWeek,
+  sortMarginLeaderboard
+} from './nflScoringEngine';
+import { fetchNFLWeekSchedule } from './nflSchedule';
+
+/**
+ * Creates an NFL pool (Pick'em, Survivor, or Margin).
+ */
+export const createNFLPool = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in.');
+  }
+
+  const uid = request.auth.uid;
+  const db = admin.firestore();
+  
+  // deep clean raw data
+  const data = JSON.parse(JSON.stringify(request.data || {}));
+
+  const { type, name, season } = data;
+  if (!type || !['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(type)) {
+    throw new HttpsError('invalid-argument', 'Invalid or missing pool type.');
+  }
+  if (!name || !season) {
+    throw new HttpsError('invalid-argument', 'Missing required fields: name, season.');
+  }
+
+  const poolRef = db.collection('pools').doc();
+  const poolId = poolRef.id;
+  const now = Date.now();
+
+  const newPool: any = {
+    ...data,
+    id: poolId,
+    createdByUid: uid,
+    ownerId: uid,
+    managerUid: uid,
+    createdAt: now,
+    updatedAt: now,
+    status: 'OPEN',
+    isLocked: false,
+    participantIds: [uid]
+  };
+
+  const userRef = db.collection('users').doc(uid);
+
+  await db.runTransaction(async (transaction) => {
+    const userDoc = await transaction.get(userRef);
+    if (!userDoc.exists) {
+      throw new HttpsError('not-found', 'User profile not found.');
+    }
+
+    const userData = userDoc.data();
+    const currentRole = userData?.role || 'PARTICIPANT';
+
+    // 1. Write the pool document
+    transaction.set(poolRef, newPool);
+
+    // 2. Upgrade role to POOL_MANAGER if they are a standard participant
+    if (currentRole === 'PARTICIPANT') {
+      transaction.update(userRef, { role: 'POOL_MANAGER' });
+    }
+
+    // 3. Write Manager Index mapping
+    transaction.set(userRef.collection('managedPools').doc(poolId), {
+      poolId,
+      createdAt: now,
+      name: newPool.name,
+      type: newPool.type
+    });
+
+    // 4. Write User Participation mapping
+    transaction.set(userRef.collection('participations').doc(poolId), {
+      poolId,
+      joinedAt: now,
+      name: newPool.name,
+      type: newPool.type,
+      role: 'MANAGER'
+    });
+  });
+
+  // Log creation to audit trail
+  await writeAuditEvent({
+    poolId: poolId,
+    type: 'POOL_CREATED',
+    message: `NFL Pool "${name}" (${type}) created by manager ${uid}`,
+    severity: 'INFO',
+    actor: { uid, role: 'ADMIN', label: 'Host' },
+    payload: { name, type, season }
+  });
+
+  return { success: true, poolId };
+});
+
+/**
+ * Join an NFL Pool using a shared invite link.
+ */
+export const joinNFLPool = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in.');
+  }
+
+  const uid = request.auth.uid;
+  const db = admin.firestore();
+  const { poolId } = request.data;
+
+  if (!poolId) {
+    throw new HttpsError('invalid-argument', 'poolId is required.');
+  }
+
+  const poolRef = db.collection('pools').doc(poolId);
+  const userRef = db.collection('users').doc(uid);
+
+  const poolSnap = await poolRef.get();
+  if (!poolSnap.exists) {
+    throw new HttpsError('not-found', `Pool ${poolId} not found.`);
+  }
+
+  const pool = poolSnap.data() as any;
+
+  await db.runTransaction(async (transaction) => {
+    const poolDoc = await transaction.get(poolRef);
+    const poolData = poolDoc.data();
+    if (!poolData) throw new HttpsError('not-found', 'Pool data not found');
+
+    const participantIds = poolData.participantIds || [];
+    if (participantIds.includes(uid)) {
+      return; // Already joined
+    }
+
+    // 1. Add participant to pool collection
+    transaction.update(poolRef, {
+      participantIds: admin.firestore.FieldValue.arrayUnion(uid)
+    });
+
+    // 2. Add participation to user profile
+    transaction.set(userRef.collection('participations').doc(poolId), {
+      poolId,
+      joinedAt: Date.now(),
+      name: poolData.name,
+      type: poolData.type,
+      role: 'PARTICIPANT'
+    });
+  });
+
+  await writeAuditEvent({
+    poolId,
+    type: 'POOL_STATUS_CHANGED',
+    message: `User ${uid} joined NFL Pool "${pool.name}"`,
+    severity: 'INFO',
+    actor: { uid, role: 'USER', label: 'Participant' }
+  });
+
+  return { success: true };
+});
+
+/**
+ * Securely submits picks for an NFL Pool with strict server-side kickoff lock checks.
+ */
+export const submitNFLPicks = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in.');
+  }
+
+  const uid = request.auth.uid;
+  const db = admin.firestore();
+  
+  // deep clean input
+  const data = JSON.parse(JSON.stringify(request.data || {}));
+  const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
+
+  if (!poolId || !week || !picks) {
+    throw new HttpsError('invalid-argument', 'Missing poolId, week, or picks.');
+  }
+
+  const poolRef = db.collection('pools').doc(poolId);
+  const poolSnap = await poolRef.get();
+  if (!poolSnap.exists) {
+    throw new HttpsError('not-found', 'Pool not found.');
+  }
+
+  const pool = poolSnap.data() as any;
+  const type = pool.type;
+  const now = Date.now();
+
+  // 1. Fetch weekly games from firestore to validate lock-deadlines
+  const gamesSnap = await db.collection('nfl_games')
+    .where('season', '==', pool.season)
+    .where('week', '==', week)
+    .get();
+
+  const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
+  if (games.length === 0) {
+    throw new HttpsError('not-found', `No NFL games found for week ${week}.`);
+  }
+
+  // 2. Determine lock context
+  const lockBufferMs = (pool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
+  
+  // Check if first game of the week has kicked off
+  const earliestGameTime = Math.min(...games.map(g => g.startTime));
+  const weekLocked = now >= (earliestGameTime - lockBufferMs);
+
+  // Write variables inside transactions
+  const entryRef = poolRef.collection('entries').doc(uid);
+
+  await db.runTransaction(async (transaction) => {
+    const entrySnap = await transaction.get(entryRef);
+    const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+
+    // --- LOCK CHECKS & POOL SPECIFIC VALIDATIONS ---
+
+    if (type === 'NFL_PICKEM') {
+      const settings = pool.settings;
+      const weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';
+
+      if (weeklyLockMode) {
+        if (weekLocked) {
+          throw new HttpsError('failed-precondition', 'WEEK_LOCKED: All picks in weekly lock pools are locked.');
+        }
+
+        // Validate unique confidence set if enabled
+        if (settings.confidenceMode) {
+          const confResult = validateConfidenceValues(picks, confidence || {}, games);
+          if (!confResult.valid) {
+            throw new HttpsError('invalid-argument', confResult.error ?? 'Invalid confidence values.');
+          }
+        }
+      } else {
+        // PER_GAME lock checks
+        for (const [gameId, pickedTeam] of Object.entries(picks)) {
+          const game = games.find(g => g.id === gameId);
+          if (!game) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
+
+          const isGameLocked = now >= (game.startTime - lockBufferMs);
+          const oldPick = existingEntry?.picks?.[gameId];
+
+          if (isGameLocked && oldPick !== pickedTeam) {
+            throw new HttpsError('failed-precondition', `GAME_LOCKED: Pick for game ${gameId} is locked.`);
+          }
+        }
+      }
+
+      // Update Pick'em Entry
+      const pickemEntry: NFLPickemEntry = {
+        id: uid,
+        poolId,
+        ownerUid: uid,
+        userName: request.auth?.token.name || 'Participant',
+        picks: { ...(existingEntry?.picks || {}), ...picks },
+        confidence: settings.confidenceMode ? confidence : undefined,
+        weeklyTiebreakers: {
+          ...(existingEntry?.weeklyTiebreakers || {}),
+          ...(tiebreakerPrediction !== undefined ? { [week]: tiebreakerPrediction } : {})
+        },
+        totalScore: existingEntry?.totalScore ?? 0,
+        submittedAt: now,
+        paidStatus: existingEntry?.paidStatus ?? 'UNPAID'
+      };
+
+      transaction.set(entryRef, pickemEntry, { merge: true });
+
+    } else if (type === 'NFL_SURVIVOR') {
+      if (weekLocked) {
+        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Survivor pools lock at the kickoff of the first game.');
+      }
+
+      const survivorEntry = (existingEntry as SurvivorEntry) || {
+        id: uid,
+        poolId,
+        ownerUid: uid,
+        userName: request.auth?.token.name || 'Participant',
+        status: 'ALIVE',
+        strikesUsed: 0,
+        rebuysUsed: 0,
+        usedTeams: [],
+        picks: {},
+        exemptWeeks: [],
+        submittedAt: now,
+        paidStatus: 'UNPAID'
+      };
+
+      if (survivorEntry.status === 'ELIMINATED') {
+        throw new HttpsError('failed-precondition', 'ELIMINATED: Eliminated players cannot submit picks.');
+      }
+
+      const teamPicked = picks[week]; // Keyed by week index e.g. week 1
+      if (!teamPicked) {
+        throw new HttpsError('invalid-argument', 'Missing Survivor team selection.');
+      }
+
+      // Check single-pick reuse
+      if (survivorEntry.usedTeams.includes(teamPicked)) {
+        throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
+      }
+
+      // Validate team is playing and not on bye
+      const teamIsPlaying = games.some(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
+      if (!teamIsPlaying) {
+        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
+      }
+
+      // Update used teams and selections
+      const oldUsed = survivorEntry.usedTeams.filter(t => t !== survivorEntry.picks[week]);
+      survivorEntry.picks[week] = teamPicked;
+      survivorEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
+      survivorEntry.submittedAt = now;
+
+      transaction.set(entryRef, survivorEntry, { merge: true });
+
+    } else if (type === 'NFL_MARGIN') {
+      if (weekLocked) {
+        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Margin pools lock at the kickoff of the first game.');
+      }
+
+      const marginEntry = (existingEntry as MarginEntry) || {
+        id: uid,
+        poolId,
+        ownerUid: uid,
+        userName: request.auth?.token.name || 'Participant',
+        picks: {},
+        usedTeams: [],
+        weeklyScores: {},
+        seasonTotal: 0,
+        negativeBurden: 0,
+        positiveWeeks: 0,
+        bestWeek: 0,
+        submittedAt: now,
+        paidStatus: 'UNPAID'
+      };
+
+      const teamPicked = picks[week];
+      if (!teamPicked) {
+        throw new HttpsError('invalid-argument', 'Missing Margin team selection.');
+      }
+
+      // Validate reuse
+      if (marginEntry.usedTeams.includes(teamPicked)) {
+        throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
+      }
+
+      // Validate team playing
+      const teamIsPlaying = games.some(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
+      if (!teamIsPlaying) {
+        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
+      }
+
+      const oldUsed = marginEntry.usedTeams.filter(t => t !== marginEntry.picks[week]);
+      marginEntry.picks[week] = teamPicked;
+      marginEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
+      marginEntry.submittedAt = now;
+
+      transaction.set(entryRef, marginEntry, { merge: true });
+    }
+  });
+
+  return { success: true };
+});
+
+/**
+ * Triggers a Survivor rebuy/buy-back for an eliminated participant.
+ */
+export const executeSurvivorRebuy = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in.');
+  }
+
+  const uid = request.auth.uid;
+  const db = admin.firestore();
+  const { poolId, week } = request.data;
+
+  if (!poolId || !week) {
+    throw new HttpsError('invalid-argument', 'poolId and week are required.');
+  }
+
+  const poolRef = db.collection('pools').doc(poolId);
+  const poolSnap = await poolRef.get();
+  if (!poolSnap.exists) {
+    throw new HttpsError('not-found', 'Pool not found.');
+  }
+
+  const pool = poolSnap.data() as NFLSurvivorPool;
+  if (pool.type !== 'NFL_SURVIVOR') {
+    throw new HttpsError('invalid-argument', 'Rebuys are only applicable to Survivor pools.');
+  }
+
+  const settings = pool.settings;
+  
+  // 1. Verify Deadline cutoff
+  if (week > settings.rebuyDeadlineWeek) {
+    throw new HttpsError('failed-precondition', `PAST_DEADLINE: Rebuys are blocked after week ${settings.rebuyDeadlineWeek}.`);
+  }
+
+  const entryRef = poolRef.collection('entries').doc(uid);
+
+  await db.runTransaction(async (transaction) => {
+    const entrySnap = await transaction.get(entryRef);
+    if (!entrySnap.exists) {
+      throw new HttpsError('not-found', 'Participant entry not found.');
+    }
+
+    const entry = entrySnap.data() as SurvivorEntry;
+    if (entry.status !== 'ELIMINATED') {
+      throw new HttpsError('failed-precondition', 'NOT_ELIMINATED: Player is still alive.');
+    }
+
+    // 2. Verify Limit
+    if (entry.rebuysUsed >= settings.maxRebuys) {
+      throw new HttpsError('failed-precondition', `MAX_REBUYS_EXCEEDED: You have reached the limit of ${settings.maxRebuys} rebuys.`);
+    }
+
+    // 3. Reset strikes, increment rebuysUsed, retain previously used teams
+    transaction.update(entryRef, {
+      status: 'ALIVE',
+      strikesUsed: 0,
+      rebuysUsed: entry.rebuysUsed + 1,
+      eliminatedWeek: null
+    });
+  });
+
+  await writeAuditEvent({
+    poolId,
+    type: 'SURVIVOR_REBUY',
+    message: `Participant ${uid} successfully purchased Survivor Rebuy #${week}`,
+    severity: 'INFO',
+    actor: { uid, role: 'USER', label: 'Participant' },
+    payload: { week }
+  });
+
+  return { success: true };
+});
+
+/**
+ * Evaluates and scores an NFL week. Fetches all games, parses scores, evaluates picks,
+ * updates standings, and creates automated weekly recap summaries.
+ * SuperAdmin or Pool Owner only.
+ */
+export const scoreNFLWeek = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be logged in.');
+  }
+
+  const uid = request.auth.uid;
+  const db = admin.firestore();
+  
+  const { poolId, week } = request.data;
+  if (!poolId || !week) {
+    throw new HttpsError('invalid-argument', 'poolId and week are required.');
+  }
+
+  const poolRef = db.collection('pools').doc(poolId);
+  const poolSnap = await poolRef.get();
+  if (!poolSnap.exists) {
+    throw new HttpsError('not-found', 'Pool not found.');
+  }
+
+  const pool = poolSnap.data() as any;
+  
+  // RBAC checks
+  let userRole = request.auth.token.role || 'USER';
+  try {
+    assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
+  } catch {
+    throw new HttpsError('permission-denied', 'Only pool managers or super admins can trigger scoring.');
+  }
+
+  // 1. Retrieve all NFL games for this season and week
+  const gamesSnap = await db.collection('nfl_games')
+    .where('season', '==', pool.season)
+    .where('week', '==', week)
+    .get();
+
+  const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
+  if (games.length === 0) {
+    throw new HttpsError('failed-precondition', `No games found to score for week ${week}.`);
+  }
+
+  // Confirm all games are final
+  const activeGamesCount = games.filter(g => g.status !== 'FINAL' && g.status !== 'CANCELLED').length;
+  if (activeGamesCount > 0 && userRole !== 'SUPER_ADMIN') {
+    throw new HttpsError('failed-precondition', `ACTIVE_GAMES: Cannot score the week while ${activeGamesCount} games are still active.`);
+  }
+
+  // 2. Fetch all entries
+  const entriesSnap = await poolRef.collection('entries').get();
+  if (entriesSnap.empty) {
+    return { success: true, message: 'No entries to score.' };
+  }
+
+  const batch = db.batch();
+
+  // Recaps highlighting metrics
+  let sharpUser: { uid: string; name: string; val: number } | null = null;
+  let biggestUpset: { uid: string; name: string; gameId: string; team: string } | null = null;
+  let closestTie: { uid: string; name: string; diff: number } | null = null;
+
+  // Track closest MNF game score
+  const mnfGame = games.find(g => g.isMonday && g.status === 'FINAL');
+  const mnfTotalScore = mnfGame ? ((mnfGame.scores?.home ?? 0) + (mnfGame.scores?.away ?? 0)) : null;
+
+  // Survivor tracking
+  let aliveCount = 0;
+
+  for (const doc of entriesSnap.docs) {
+    const entryRef = doc.ref;
+
+    if (pool.type === 'NFL_PICKEM') {
+      const entry = doc.data() as NFLPickemEntry;
+      const { points, correctCount } = scorePickemEntry(entry, games, pool);
+
+      const weeklyPoints = { ...(entry.weeklyPoints || {}), [week]: points };
+      const totalScore = Object.values(weeklyPoints).reduce((sum, p) => sum + p, 0);
+
+      batch.update(entryRef, {
+        weeklyPoints,
+        totalScore
+      });
+
+      // Sharp calculation
+      if (!sharpUser || points > sharpUser.val) {
+        sharpUser = { uid: entry.ownerUid, name: entry.userName, val: points };
+      }
+
+      // Tiebreaker
+      if (mnfTotalScore !== null) {
+        const prediction = entry.weeklyTiebreakers?.[week] ?? 0;
+        const diff = Math.abs(prediction - mnfTotalScore);
+        if (!closestTie || diff < closestTie.diff) {
+          closestTie = { uid: entry.ownerUid, name: entry.userName, diff };
+        }
+      }
+
+    } else if (pool.type === 'NFL_SURVIVOR') {
+      const entry = doc.data() as SurvivorEntry;
+      if (entry.status === 'ELIMINATED') continue;
+
+      const autoSurviveEnabled = pool.settings.autoSurviveExemptionEnabled ?? true;
+      const isExempt = checkAutoSurviveExemption(entry.usedTeams, games, autoSurviveEnabled);
+
+      if (isExempt) {
+        // Log auto survive
+        const exemptWeeks = [...(entry.exemptWeeks || []), week];
+        batch.update(entryRef, { exemptWeeks });
+        aliveCount++;
+      } else {
+        const { survived, strikeLogged } = evaluateSurvivorWeek(entry, week, games, pool);
+
+        const newStrikes = entry.strikesUsed + (strikeLogged ? 1 : 0);
+        let freshEntry: SurvivorEntry = {
+          ...entry,
+          strikesUsed: newStrikes
+        };
+
+        freshEntry = updateSurvivorStatus(freshEntry, pool);
+        if (freshEntry.status === 'ELIMINATED') {
+          freshEntry.eliminatedWeek = week;
+        } else {
+          aliveCount++;
+        }
+
+        batch.update(entryRef, {
+          status: freshEntry.status,
+          strikesUsed: freshEntry.strikesUsed,
+          eliminatedWeek: freshEntry.eliminatedWeek ?? null
+        });
+
+        if (strikeLogged) {
+          await writeAuditEvent({
+            poolId,
+            type: 'SURVIVOR_AUTO_STRIKE',
+            message: `Participant ${entry.userName} suffered a strike in week ${week}`,
+            severity: 'WARNING',
+            actor: { uid: 'system', role: 'SYSTEM', label: 'Scoring Engine' },
+            payload: { week }
+          });
+        }
+      }
+
+    } else if (pool.type === 'NFL_MARGIN') {
+      const entry = doc.data() as MarginEntry;
+      const pick = entry.picks[week];
+      let weekScore = 0;
+
+      if (pick) {
+        const res = scoreMarginWeek(pick, games);
+        weekScore = res ?? 0;
+      } else {
+        // Auto-Strike / Non-submission in Margin counts as -14 (standard heavy burden penalty)
+        weekScore = -14;
+      }
+
+      const weeklyScores = { ...(entry.weeklyScores || {}), [week]: weekScore };
+      const seasonTotal = Object.values(weeklyScores).reduce((sum, s) => sum + s, 0);
+
+      // Compute negative burden
+      const negativeBurden = Object.values(weeklyScores)
+        .filter(s => s < 0)
+        .reduce((sum, s) => sum + Math.abs(s), 0);
+
+      // Positive weeks count
+      const positiveWeeks = Object.values(weeklyScores).filter(s => s > 0).length;
+
+      // Best single week
+      const bestWeek = Object.values(weeklyScores).length > 0 ? Math.max(...Object.values(weeklyScores)) : 0;
+
+      batch.update(entryRef, {
+        weeklyScores,
+        seasonTotal,
+        negativeBurden,
+        positiveWeeks,
+        bestWeek
+      });
+    }
+  }
+
+  // 3. Margin leaderboard sorting
+  if (pool.type === 'NFL_MARGIN') {
+    const updatedEntriesSnap = await poolRef.collection('entries').get();
+    const updatedEntries = updatedEntriesSnap.docs.map(doc => doc.data() as MarginEntry);
+    const ranked = sortMarginLeaderboard(updatedEntries);
+    
+    // Write standings back
+    for (let index = 0; index < ranked.length; index++) {
+      const r = ranked[index];
+      const docRef = poolRef.collection('entries').doc(r.ownerUid);
+      batch.update(docRef, { rank: index + 1 });
+    }
+  }
+
+  await batch.commit();
+
+  // 4. Generate automated Weekly Recap
+  const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);
+  const recapDoc: WeeklyRecap = {
+    id: `week_${week}`,
+    poolId,
+    week,
+    sharpOfWeek: sharpUser ? { userId: sharpUser.uid, userName: sharpUser.name, score: sharpUser.val } : undefined,
+    closestTiebreaker: closestTie ? { userId: closestTie.uid, userName: closestTie.name, diff: closestTie.diff } : undefined,
+    attritionCount: pool.type === 'NFL_SURVIVOR' ? aliveCount : undefined,
+    createdAt: Date.now()
+  };
+  await recapRef.set(recapDoc);
+
+  await writeAuditEvent({
+    poolId,
+    type: 'SCORE_FINALIZED',
+    message: `NFL Pool Scoring concluded for Week ${week}`,
+    severity: 'INFO',
+    actor: { uid, role: 'ADMIN', label: 'Host' },
+    payload: { week }
+  });
+
+  return { success: true, message: `Week ${week} scored successfully.` };
+});

@@ -1,0 +1,687 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Check, ChevronRight, ChevronLeft, ShieldAlert, Sparkles, Coins, Palette } from 'lucide-react';
+import { dbService } from '../../services/dbService';
+import { logger } from '../../utils/logger';
+import type { User } from '../../types';
+
+interface NFLPoolWizardProps {
+  user: User;
+  onComplete: () => void;
+  onCancel: () => void;
+}
+
+export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, onCancel }) => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const poolType = (searchParams.get('type') || 'NFL_PICKEM') as 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
+
+  const [step, setStep] = useState(1);
+  const TOTAL_STEPS = 5;
+  const [isCreating, setIsCreating] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // 1. Sensible defaults based on pool type
+  const [name, setName] = useState('');
+  const [season, setSeason] = useState('2026');
+  const [seasonType, setSeasonType] = useState<1 | 2>(2); // 1 = Preseason, 2 = Regular
+  const [entryFee, setEntryFee] = useState(20);
+  const [paymentInstructions, setPaymentInstructions] = useState('');
+  const [isListedPublic, setIsListedPublic] = useState(false);
+
+  // Pick'em settings
+  const [confidenceMode, setConfidenceMode] = useState(false);
+  const [pickemLockMode, setPickemLockMode] = useState<'PER_GAME' | 'WEEKLY'>('PER_GAME');
+  const [lockBufferMinutes, setLockBufferMinutes] = useState(5);
+  const [pickemPayoutMode, setPickemPayoutMode] = useState<'SEASON' | 'WEEKLY' | 'HYBRID'>('SEASON');
+
+  // Survivor settings
+  const [maxStrikes, setMaxStrikes] = useState(0); // 0 = sudden death
+  const [maxRebuys, setMaxRebuys] = useState(0); // 0 = no rebuys
+  const [rebuyDeadlineWeek, setRebuyDeadlineWeek] = useState(8);
+  const [rebuyCost, setRebuyCost] = useState(20);
+  const [pickLosersMode, setPickLosersMode] = useState(false);
+  const [autoSurviveExemptionEnabled, setAutoSurviveExemptionEnabled] = useState(true);
+
+  // Margin settings
+  const [marginPayoutMode, setMarginPayoutMode] = useState<'SEASON' | 'WEEKLY' | 'HYBRID'>('SEASON');
+
+  // Branding Customization
+  const [primaryColor, setPrimaryColor] = useState('#0f172a'); // default dark slate
+  const [accentColor, setAccentColor] = useState('#6366f1'); // default indigo
+
+  // Force Weekly Lock if Confidence Mode is enabled
+  useEffect(() => {
+    if (confidenceMode) {
+      setPickemLockMode('WEEKLY');
+    }
+  }, [confidenceMode]);
+
+  // Synchronize rebuy cost with entry fee by default
+  useEffect(() => {
+    setRebuyCost(entryFee);
+  }, [entryFee]);
+
+  // Set default pool names
+  useEffect(() => {
+    const typeLabel =
+      poolType === 'NFL_PICKEM' ? "Weekly Pick'em" :
+      poolType === 'NFL_SURVIVOR' ? "Survivor Pool" : "Margin Pool";
+    setName(`${user.name || 'My'}'s 2026 NFL ${typeLabel}`);
+  }, [poolType, user.name]);
+
+  // Form Validation
+  const validateStep = (currentStep: number): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (currentStep === 1) {
+      if (!name.trim()) newErrors.name = 'Pool name is required.';
+      if (entryFee < 0) newErrors.entryFee = 'Entry fee cannot be negative.';
+    }
+
+    if (currentStep === 2) {
+      if (poolType === 'NFL_SURVIVOR') {
+        if (maxStrikes < 0) newErrors.maxStrikes = 'Strikes cannot be negative.';
+        if (maxRebuys < 0) newErrors.maxRebuys = 'Rebuy limit cannot be negative.';
+        if (rebuyDeadlineWeek < 1 || rebuyDeadlineWeek > 18) {
+          newErrors.rebuyDeadlineWeek = 'Deadline week must be between 1 and 18.';
+        }
+        if (rebuyCost < 0) newErrors.rebuyCost = 'Rebuy cost cannot be negative.';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleNext = () => {
+    if (validateStep(step)) {
+      setStep(s => Math.min(TOTAL_STEPS, s + 1));
+    }
+  };
+
+  const handleBack = () => {
+    setStep(s => Math.max(1, s - 1));
+  };
+
+  const handleLaunch = async () => {
+    if (!validateStep(step)) return;
+    setIsCreating(true);
+
+    try {
+      const payouts = {
+        places: [{ rank: 1, percentage: 100 }],
+        bonuses: []
+      };
+
+      // Construct Settings depending on selected NFL pool type
+      let settings: any = {
+        entryFee,
+        paymentInstructions,
+        isListedPublic,
+        payouts
+      };
+
+      if (poolType === 'NFL_PICKEM') {
+        settings = {
+          ...settings,
+          confidenceMode,
+          lockMode: pickemLockMode,
+          lockBufferMinutes,
+          payoutMode: pickemPayoutMode,
+          pickMode: 'STRAIGHT'
+        };
+      } else if (poolType === 'NFL_SURVIVOR') {
+        settings = {
+          ...settings,
+          maxStrikes,
+          maxRebuys,
+          rebuyDeadlineWeek,
+          rebuyCost,
+          pickLosersMode,
+          autoSurviveExemptionEnabled
+        };
+      } else if (poolType === 'NFL_MARGIN') {
+        settings = {
+          ...settings,
+          payoutMode: marginPayoutMode
+        };
+      }
+
+      const poolData = {
+        type: poolType,
+        league: 'NFL',
+        name,
+        season,
+        seasonType,
+        settings,
+        branding: {
+          logo: '',
+          bgColor: '#0b1329', // dark navy themed for NFL
+          primaryColor,
+          secondaryColor: accentColor
+        }
+      };
+
+      logger.log(`[NFLPoolWizard] Launching NFL pool:`, poolData);
+      const poolId = await dbService.createNFLPool(poolData);
+      
+      // Proactively import schedule for that season & preseason type
+      // Our function creates the doc, backend job fetches schedule.
+      
+      navigate(`/pool/${poolId}`);
+      onComplete();
+    } catch (err: any) {
+      logger.error('Failed to create NFL pool:', err);
+      alert(`Failed to create pool: ${err.message || 'Unknown error'}`);
+      setIsCreating(false);
+    }
+  };
+
+  const isSuperAdminUser = user.role === 'SUPER_ADMIN';
+
+  return (
+    <div className="flex-grow bg-slate-950 text-slate-100 flex flex-col items-center py-10 px-4">
+      <div className="max-w-3xl w-full">
+        <button onClick={onCancel} className="flex items-center gap-2 text-slate-500 hover:text-white mb-6 transition-colors font-bold text-sm">
+          <ArrowLeft size={16} /> Cancel & Back
+        </button>
+
+        {/* Dynamic header title depending on selection */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
+              const s = i + 1;
+              return (
+                <div
+                  key={s}
+                  className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                    step >= s
+                      ? 'bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.6)]'
+                      : 'bg-slate-800'
+                  }`}
+                ></div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between items-end">
+            <div>
+              <span className="text-blue-500 font-extrabold uppercase text-xs tracking-widest block mb-1">
+                NFL Setup Wizard
+              </span>
+              <h1 className="text-3xl font-black text-white drop-shadow-md">
+                {step === 1 && 'Basic Configurations'}
+                {step === 2 && 'Custom Pool Rules'}
+                {step === 3 && 'Payment Settings'}
+                {step === 4 && 'Aesthetic Customization'}
+                {step === 5 && 'Verify & Launch'}
+              </h1>
+            </div>
+            <span className="text-slate-500 font-bold font-mono text-sm">Step {step} of {TOTAL_STEPS}</span>
+          </div>
+        </div>
+
+        {/* Wizard Form Sections */}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 md:p-8 min-h-[380px] shadow-2xl backdrop-blur-sm">
+          {/* STEP 1: BASICS */}
+          {step === 1 && (
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-slate-300 mb-2">Pool Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="e.g. Gridiron Gang Weekly Pick'em"
+                  className={`w-full bg-slate-950 border rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${
+                    errors.name ? 'border-red-500 focus:ring-red-500' : 'border-slate-800'
+                  }`}
+                />
+                {errors.name && <p className="text-red-500 text-xs font-bold mt-1.5">{errors.name}</p>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-300 mb-2">NFL Season</label>
+                  <select
+                    value={season}
+                    onChange={e => setSeason(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  >
+                    <option value="2026">2026 Season</option>
+                    <option value="2027">2027 Season</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-300 mb-2">Entry Fee ($)</label>
+                  <input
+                    type="number"
+                    value={entryFee}
+                    onChange={e => setEntryFee(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
+                  {errors.entryFee && <p className="text-red-500 text-xs font-bold mt-1.5">{errors.entryFee}</p>}
+                </div>
+              </div>
+
+              {isSuperAdminUser && (
+                <div className="bg-slate-950/80 border border-indigo-900/50 rounded-2xl p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="text-indigo-400" size={24} />
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Pre-Season Test Mode</h4>
+                      <p className="text-xs text-slate-400">Treats preseason games as active. Perfect for simulated audits.</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={seasonType === 1}
+                    onChange={e => setSeasonType(e.target.checked ? 1 : 2)}
+                    className="w-5 h-5 rounded border-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEP 2: RULES */}
+          {step === 2 && (
+            <div className="space-y-6">
+              {/* PICK'EM RULES */}
+              {poolType === 'NFL_PICKEM' && (
+                <>
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Confidence Mode</h4>
+                      <p className="text-xs text-slate-400">Players rank games 1 to N (N = games in week). Highest gets most points.</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={confidenceMode}
+                      onChange={e => setConfidenceMode(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-800 text-blue-500 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">Lock Mode</label>
+                      <select
+                        value={pickemLockMode}
+                        disabled={confidenceMode}
+                        onChange={e => setPickemLockMode(e.target.value as 'PER_GAME' | 'WEEKLY')}
+                        className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${
+                          confidenceMode ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        <option value="PER_GAME">Per-Game Lock (kickoff time)</option>
+                        <option value="WEEKLY">Weekly Lock (first game kickoff)</option>
+                      </select>
+                      {confidenceMode && (
+                        <p className="text-[10px] text-yellow-500 font-bold mt-1">
+                          * Weekly lock forced in Confidence Mode
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">Kickoff Lock Buffer</label>
+                      <select
+                        value={lockBufferMinutes}
+                        onChange={e => setLockBufferMinutes(parseInt(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      >
+                        <option value="0">0 Mins (Exactly at kickoff)</option>
+                        <option value="5">5 Mins Grace (Recommended)</option>
+                        <option value="10">10 Mins Grace</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-300 mb-2">Payout Method</label>
+                    <select
+                      value={pickemPayoutMode}
+                      onChange={e => setPickemPayoutMode(e.target.value as 'SEASON' | 'WEEKLY' | 'HYBRID')}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    >
+                      <option value="SEASON">Season-End Standings Only</option>
+                      <option value="WEEKLY">Weekly Winner Only</option>
+                      <option value="HYBRID">Hybrid (Season-End + Weekly Prizes)</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* SURVIVOR RULES */}
+              {poolType === 'NFL_SURVIVOR' && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">Strikes Limit (Mulligans)</label>
+                      <select
+                        value={maxStrikes}
+                        onChange={e => setMaxStrikes(parseInt(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      >
+                        <option value="0">0 Strikes (Sudden Death)</option>
+                        <option value="1">1 Strike (Double Elimination)</option>
+                        <option value="2">2 Strikes (Triple Elimination)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">Max Rebuys (Buy-backs)</label>
+                      <select
+                        value={maxRebuys}
+                        onChange={e => setMaxRebuys(parseInt(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      >
+                        <option value="0">No Buy-backs Allowed</option>
+                        <option value="1">1 Buy-back Limit</option>
+                        <option value="2">2 Buy-backs Limit</option>
+                        <option value="3">3 Buy-backs Limit</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {maxRebuys > 0 && (
+                    <div className="grid grid-cols-2 gap-4 bg-slate-950/40 p-4 border border-slate-800 rounded-2xl">
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-400 mb-1.5 uppercase">Rebuy Cutoff Week</label>
+                        <input
+                          type="number"
+                          value={rebuyDeadlineWeek}
+                          onChange={e => setRebuyDeadlineWeek(Math.max(1, Math.min(18, parseInt(e.target.value) || 1)))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        />
+                        {errors.rebuyDeadlineWeek && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.rebuyDeadlineWeek}</p>}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-400 mb-1.5 uppercase">Rebuy Fee ($)</label>
+                        <input
+                          type="number"
+                          value={rebuyCost}
+                          onChange={e => setRebuyCost(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        />
+                        {errors.rebuyCost && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.rebuyCost}</p>}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Pick-Loser Mode</h4>
+                        <p className="text-xs text-slate-400">Inverts logic: Pick a team to LOSE. Survive if they lose or tie.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={pickLosersMode}
+                        onChange={e => setPickLosersMode(e.target.checked)}
+                        className="w-5 h-5 rounded border-slate-800 text-red-500 focus:ring-red-500 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-white">Auto-Survive Exemption</h4>
+                        <p className="text-xs text-slate-400">Survive automatically if all playing teams are either already used or on bye.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={autoSurviveExemptionEnabled}
+                        onChange={e => setAutoSurviveExemptionEnabled(e.target.checked)}
+                        className="w-5 h-5 rounded border-slate-800 text-green-500 focus:ring-green-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* MARGIN RULES */}
+              {poolType === 'NFL_MARGIN' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-300 mb-2">Payout Method</label>
+                    <select
+                      value={marginPayoutMode}
+                      onChange={e => setMarginPayoutMode(e.target.value as 'SEASON' | 'WEEKLY' | 'HYBRID')}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    >
+                      <option value="SEASON">Season-End Margin Totals Only</option>
+                      <option value="WEEKLY">Weekly Highest Margin Wins</option>
+                      <option value="HYBRID">Hybrid (Season-End + Weekly Winners)</option>
+                    </select>
+                  </div>
+
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-yellow-500">
+                      <ShieldAlert size={18} />
+                      <span className="text-xs font-bold uppercase tracking-wider">Strict Tiebreaker Cascade</span>
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Margin pools use a strict 5-level sort cascade to rank players:
+                    </p>
+                    <ol className="text-xs text-slate-400 space-y-1 list-decimal list-inside pl-1 font-bold">
+                      <li>Highest Total Season Points</li>
+                      <li>Lowest Seasonal "Negative Burden" (sum of abs(losing margins))</li>
+                      <li>Most Positive Weeks (weeks scored &gt; 0)</li>
+                      <li>Highest Single-Week Score</li>
+                      <li>Deterministic Coin Flip</li>
+                    </ol>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* STEP 3: PAYMENTS */}
+          {step === 3 && (
+            <div className="space-y-6">
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex gap-4 items-center">
+                <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400">
+                  <Coins size={28} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Payment Reminders</h4>
+                  <p className="text-xs text-slate-400">Managers can mark participants as Paid. Auto-email payment reminders are enabled by default.</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-300 mb-2">Payment Instructions / Venmo Handle</label>
+                <textarea
+                  value={paymentInstructions}
+                  onChange={e => setPaymentInstructions(e.target.value)}
+                  placeholder="e.g. Venmo @my-venmo-username. Please mention pool name in Venmo comment."
+                  rows={4}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm resize-none"
+                />
+              </div>
+
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-white">List Pool Publicly</h4>
+                  <p className="text-xs text-slate-400">Allow other platform users to find and request to join this pool via public browser.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isListedPublic}
+                  onChange={e => setIsListedPublic(e.target.checked)}
+                  className="w-5 h-5 rounded border-slate-800 text-blue-500 focus:ring-blue-500 cursor-pointer"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4: BRANDING */}
+          {step === 4 && (
+            <div className="space-y-6">
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex gap-4 items-center">
+                <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400">
+                  <Palette size={28} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Pool Custom Branding</h4>
+                  <p className="text-xs text-slate-400">Personalise the look and feel of your dashboard. Choose your primary and accent themes.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-300 mb-2">Primary Color (Background)</label>
+                  <div className="flex gap-3 items-center">
+                    <input
+                      type="color"
+                      value={primaryColor}
+                      onChange={e => setPrimaryColor(e.target.value)}
+                      className="w-10 h-10 border border-slate-800 rounded cursor-pointer bg-transparent"
+                    />
+                    <input
+                      type="text"
+                      value={primaryColor}
+                      onChange={e => setPrimaryColor(e.target.value)}
+                      className="flex-grow bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-300 mb-2">Accent Theme Color</label>
+                  <div className="flex gap-3 items-center">
+                    <input
+                      type="color"
+                      value={accentColor}
+                      onChange={e => setAccentColor(e.target.value)}
+                      className="w-10 h-10 border border-slate-800 rounded cursor-pointer bg-transparent"
+                    />
+                    <input
+                      type="text"
+                      value={accentColor}
+                      onChange={e => setAccentColor(e.target.value)}
+                      className="flex-grow bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-300 mb-3">NFL Theme Presets</label>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => { setPrimaryColor('#0b1329'); setAccentColor('#6366f1'); }}
+                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:border-slate-500 text-xs font-bold transition-all"
+                  >
+                    🏈 Dark Navy & Indigo
+                  </button>
+                  <button
+                    onClick={() => { setPrimaryColor('#1c0c0c'); setAccentColor('#e11d48'); }}
+                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:border-slate-500 text-xs font-bold transition-all"
+                  >
+                    🔥 Dark Crimson & Rose
+                  </button>
+                  <button
+                    onClick={() => { setPrimaryColor('#061c14'); setAccentColor('#10b981'); }}
+                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg hover:border-slate-500 text-xs font-bold transition-all"
+                  >
+                    🌲 Forest Green & Emerald
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 5: REVIEW */}
+          {step === 5 && (
+            <div className="space-y-6">
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <h3 className="text-xl font-bold text-white border-b border-slate-800 pb-2">
+                  Pool Setup Summary
+                </h3>
+
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                  <span className="text-slate-500 font-bold">Pool Name:</span>
+                  <span className="text-white font-extrabold">{name}</span>
+
+                  <span className="text-slate-500 font-bold">Pool Type:</span>
+                  <span className="text-blue-400 font-extrabold">
+                    {poolType === 'NFL_PICKEM' ? "NFL Weekly Pick'em" :
+                     poolType === 'NFL_SURVIVOR' ? "NFL Survivor Pool" : "NFL Margin Pool"}
+                  </span>
+
+                  <span className="text-slate-500 font-bold">NFL Season:</span>
+                  <span className="text-white font-bold">{season} ({seasonType === 1 ? 'Preseason' : 'Regular Season'})</span>
+
+                  <span className="text-slate-500 font-bold">Entry Fee:</span>
+                  <span className="text-emerald-400 font-extrabold">${entryFee}</span>
+
+                  {poolType === 'NFL_PICKEM' && (
+                    <>
+                      <span className="text-slate-500 font-bold">Confidence Mode:</span>
+                      <span className="text-white font-bold">{confidenceMode ? 'Enabled' : 'Disabled'}</span>
+
+                      <span className="text-slate-500 font-bold">Lock Mode:</span>
+                      <span className="text-white font-bold">{pickemLockMode}</span>
+                    </>
+                  )}
+
+                  {poolType === 'NFL_SURVIVOR' && (
+                    <>
+                      <span className="text-slate-500 font-bold">Max strikes limit:</span>
+                      <span className="text-white font-bold">{maxStrikes} (mulligans)</span>
+
+                      <span className="text-slate-500 font-bold">Max rebuys limit:</span>
+                      <span className="text-white font-bold">{maxRebuys > 0 ? `${maxRebuys} rebuys allowed` : 'None'}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500 text-center leading-relaxed">
+                By launching, this pool will immediately be initialized. A shareable invite link will be generated for your participants.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Wizard Navigation Footer */}
+        <div className="flex justify-between items-center pt-8 border-t border-slate-800 mt-8">
+          <button
+            onClick={handleBack}
+            disabled={step === 1}
+            className={`text-slate-400 hover:text-white font-bold text-sm flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-slate-900 transition-colors ${
+              step === 1 ? 'opacity-0 pointer-events-none' : ''
+            }`}
+          >
+            <ChevronLeft size={16} /> Back
+          </button>
+
+          {step < TOTAL_STEPS ? (
+            <button
+              onClick={handleNext}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-blue-500/20 flex items-center gap-2 transition-all hover:scale-105"
+            >
+              Next Step <ChevronRight size={20} strokeWidth={3} />
+            </button>
+          ) : (
+            <button
+              onClick={handleLaunch}
+              disabled={isCreating}
+              className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100 animate-pulse"
+            >
+              {isCreating ? 'Launching Pool...' : (
+                <>
+                  Launch Pool <Check size={20} strokeWidth={3} />
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

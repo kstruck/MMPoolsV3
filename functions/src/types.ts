@@ -263,7 +263,10 @@ export type AuditEventType =
     | 'SQUARE_MARKED_PAID'
     | 'PAYMENT_CONFIRMED'
     | 'AI_ARTIFACT_CREATED'
-    | 'NOTIFICATION_SENT';
+    | 'NOTIFICATION_SENT'
+    | 'SURVIVOR_REBUY'
+    | 'SURVIVOR_AUTO_STRIKE'
+    | 'SCHEDULE_FLEX';
 
 export interface AuditLogEvent {
     id: string;
@@ -397,8 +400,22 @@ export interface Team {
 }
 
 // --- Core Pool Types
-export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
-export type Pool = GameState | BracketPool | PlayoffPool | PropsPool;
+import {
+  NFLGame,
+  NFLPickemPool,
+  NFLSurvivorPool,
+  NFLMarginPool,
+  NFLPickemEntry,
+  SurvivorEntry,
+  MarginEntry,
+  WeeklyRecap
+} from './nflPoolTypes';
+
+export * from './nflPoolTypes';
+
+// --- Core Pool Types
+export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS' | 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
+export type Pool = GameState | BracketPool | PlayoffPool | PropsPool | NFLPickemPool | NFLSurvivorPool | NFLMarginPool;
 
 // --- NFL Playoff Pool Types ---
 

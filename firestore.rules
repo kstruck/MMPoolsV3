@@ -8,6 +8,12 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
     
+    // NFL GAMES
+    match /nfl_games/{gameId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+    
     function isSuperAdmin() {
       return request.auth != null && request.auth.token.get('role', '') == 'SUPER_ADMIN';
     }
@@ -124,6 +130,12 @@ service cloud.firestore {
       match /propCards/{userId} {
         allow read: if request.auth != null;
         allow write: if isSuperAdmin();
+      }
+
+      // WEEKLY RECAPS
+      match /weekly_recaps/{recapId} {
+        allow read: if true;
+        allow write: if false; // Only via Cloud Functions
       }
 
       // BRACKET/PLAYOFF ENTRIES

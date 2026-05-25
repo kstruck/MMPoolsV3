@@ -14,6 +14,7 @@ import { AICommissioner } from '../AICommissioner';
 import { BracketPoolDashboard } from '../BracketPoolDashboard/BracketPoolDashboard';
 import { PropsPoolDashboard } from '../PropsPoolDashboard/PropsPoolDashboard';
 import { PlayoffDashboard } from '../PlayoffPool/PlayoffDashboard';
+import { NFLPoolDashboard } from '../NFLPoolDashboard/NFLPoolDashboard';
 
 
 import { dbService } from '../../services/dbService';
@@ -231,6 +232,30 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         pool={pool as PlayoffPool}
                         user={user}
                         onBack={() => navigate('/')}
+                    />
+                </div>
+                <Footer />
+            </div>
+        );
+    }
+
+    if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
+        return (
+            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+                <Header
+                    user={user}
+                    isManager={isManager}
+                    onOpenAuth={onOpenAuth}
+                    onLogout={onLogout}
+                    onCreatePool={onCreatePool}
+                />
+                <div className="flex-grow">
+                    <NFLPoolDashboard
+                        pool={pool}
+                        user={user}
+                        isManager={isManager}
+                        onBack={() => navigate('/')}
+                        onOpenAuth={onOpenAuth}
                     />
                 </div>
                 <Footer />

@@ -134,6 +134,60 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                         </span>
                     </button>
 
+                    {/* NFL POOLS SECTION */}
+                    <div className="col-span-1 md:col-span-2 flex items-center justify-center my-6">
+                        <div className="h-[1px] bg-slate-800 flex-grow max-w-[100px]" />
+                        <span className="text-slate-500 text-xs font-bold uppercase px-4 tracking-wider">NFL Pools — Upcoming 2026 Season</span>
+                        <div className="h-[1px] bg-slate-800 flex-grow max-w-[100px]" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 col-span-1 md:col-span-2 w-full">
+                        {/* WEEKLY PICK'EM CARD */}
+                        <button
+                            onClick={() => navigate('/nfl-wizard?type=NFL_PICKEM')}
+                            className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-blue-500 rounded-2xl p-6 text-left transition-all hover:-translate-y-1 shadow-xl flex flex-col"
+                        >
+                            <div className="absolute top-4 right-4 bg-blue-500/20 p-2.5 rounded-xl group-hover:bg-blue-500 transition-colors">
+                                <Trophy size={20} className="text-blue-400 group-hover:text-white" />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2 pr-10">Weekly Pick'em</h3>
+                            <p className="text-slate-400 text-sm mb-4 flex-grow">Pick winners for all games weekly. Supports Standard (1pt/win) or unique Confidence rankings.</p>
+                            <span className="inline-flex items-center gap-1.5 text-blue-400 text-sm font-bold group-hover:translate-x-1 transition-transform mt-auto">
+                                Setup Pick'em <ArrowRight size={14} />
+                            </span>
+                        </button>
+
+                        {/* SURVIVOR CARD */}
+                        <button
+                            onClick={() => navigate('/nfl-wizard?type=NFL_SURVIVOR')}
+                            className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-red-500 rounded-2xl p-6 text-left transition-all hover:-translate-y-1 shadow-xl flex flex-col"
+                        >
+                            <div className="absolute top-4 right-4 bg-red-500/20 p-2.5 rounded-xl group-hover:bg-red-500 transition-colors">
+                                <Trophy size={20} className="text-red-400 group-hover:text-white" />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2 pr-10">Survivor Pool</h3>
+                            <p className="text-slate-400 text-sm mb-4 flex-grow">Pick 1 winner per week. Lose/tie = take a strike. Supports mulligans and buy-backs.</p>
+                            <span className="inline-flex items-center gap-1.5 text-red-400 text-sm font-bold group-hover:translate-x-1 transition-transform mt-auto">
+                                Setup Survivor <ArrowRight size={14} />
+                            </span>
+                        </button>
+
+                        {/* MARGIN CARD */}
+                        <button
+                            onClick={() => navigate('/nfl-wizard?type=NFL_MARGIN')}
+                            className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-teal-500 rounded-2xl p-6 text-left transition-all hover:-translate-y-1 shadow-xl flex flex-col"
+                        >
+                            <div className="absolute top-4 right-4 bg-teal-500/20 p-2.5 rounded-xl group-hover:bg-teal-500 transition-colors">
+                                <Trophy size={20} className="text-teal-400 group-hover:text-white" />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2 pr-10">Margin Pool</h3>
+                            <p className="text-slate-400 text-sm mb-4 flex-grow">Choose 1 team per week. Score is their margin of victory. Negative differential hurts you.</p>
+                            <span className="inline-flex items-center gap-1.5 text-teal-400 text-sm font-bold group-hover:translate-x-1 transition-transform mt-auto">
+                                Setup Margin <ArrowRight size={14} />
+                            </span>
+                        </button>
+                    </div>
+
                     {/* SPLITTER FOR PROPS */}
                     <div className="col-span-1 md:col-span-2 flex items-center justify-center my-4">
                         <div className="h-[1px] bg-slate-800 flex-grow max-w-[100px]" />

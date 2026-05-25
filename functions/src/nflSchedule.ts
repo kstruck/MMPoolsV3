@@ -1,0 +1,230 @@
+import * as admin from 'firebase-admin';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { writeAuditEvent } from './audit';
+import { NFLGame } from './types';
+
+// Safe integer parsing helper
+const safeInt = (val: any): number => {
+  if (val === null || val === undefined) return 0;
+  const parsed = parseInt(val);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+/**
+ * Fetch a weekly NFL schedule from the official ESPN Scoreboard API.
+ * seasonType: 1 = Preseason, 2 = Regular Season, 3 = Postseason
+ */
+export async function fetchNFLWeekSchedule(
+  week: number,
+  season: string,
+  seasonType: 1 | 2 | 3
+): Promise<NFLGame[]> {
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error(`ESPN Scoreboard API returned HTTP status ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    if (!data.events || !Array.isArray(data.events)) {
+      return [];
+    }
+
+    const games: NFLGame[] = [];
+
+    for (const event of data.events) {
+      const competition = event.competitions?.[0];
+      if (!competition) continue;
+
+      const competitors = competition.competitors || [];
+      const homeComp = competitors.find((c: any) => c.homeAway === 'home');
+      const awayComp = competitors.find((c: any) => c.homeAway === 'away');
+
+      if (!homeComp || !awayComp) continue;
+
+      const gameId = `espn_${event.id}`;
+      const startTime = new Date(competition.date || event.date).getTime();
+      const statusType = event.status?.type?.state || 'pre';
+      const status: 'SCHEDULED' | 'IN_PROGRESS' | 'FINAL' | 'CANCELLED' =
+        statusType === 'post' ? 'FINAL' : statusType === 'in' ? 'IN_PROGRESS' : 'SCHEDULED';
+
+      // Check if this is a Monday Night Football game (MNF) - usually Monday in US, which starts after UTC Monday night or Tuesday early
+      const startDateObj = new Date(startTime);
+      const isMonday = startDateObj.getDay() === 1; // 1 = Monday
+
+      games.push({
+        id: gameId,
+        espnGameId: event.id,
+        week: week,
+        season: season,
+        seasonType: seasonType,
+        homeTeam: {
+          id: homeComp.team?.id || '',
+          name: homeComp.team?.name || homeComp.team?.displayName || 'Home Team',
+          abbreviation: homeComp.team?.abbreviation || 'HOME',
+          logoUrl: homeComp.team?.logo || ''
+        },
+        awayTeam: {
+          id: awayComp.team?.id || '',
+          name: awayComp.team?.name || awayComp.team?.displayName || 'Away Team',
+          abbreviation: awayComp.team?.abbreviation || 'AWAY',
+          logoUrl: awayComp.team?.logo || ''
+        },
+        scores: status !== 'SCHEDULED' ? {
+          home: safeInt(homeComp.score),
+          away: safeInt(awayComp.score)
+        } : undefined,
+        startTime: startTime,
+        status: status,
+        clock: event.status?.displayClock || '0:00',
+        period: safeInt(event.status?.period),
+        isMonday: isMonday
+      });
+    }
+
+    return games;
+  } catch (err) {
+    console.error(`[nflSchedule] fetchNFLWeekSchedule failed for week ${week}, season ${season}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Bulk import a full season (or specific week) of NFL games into Firestore.
+ */
+export async function importNFLSeason(
+  season: string,
+  seasonType: 1 | 2 | 3,
+  weeks: number[] = Array.from({ length: 18 }, (_, i) => i + 1)
+): Promise<{ success: boolean; importedCount: number }> {
+  const db = admin.firestore();
+  let importedCount = 0;
+
+  console.log(`[nflSchedule] Starting import of season ${season} (type: ${seasonType}) for weeks: ${weeks.join(', ')}`);
+
+  for (const week of weeks) {
+    const games = await fetchNFLWeekSchedule(week, season, seasonType);
+    if (games.length === 0) {
+      console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping.`);
+      continue;
+    }
+
+    const batch = db.batch();
+    for (const game of games) {
+      const gameRef = db.collection('nfl_games').doc(game.id);
+      batch.set(gameRef, game, { merge: true });
+      importedCount++;
+    }
+    await batch.commit();
+    console.log(`[nflSchedule] Week ${week} imported successfully with ${games.length} games.`);
+  }
+
+  await writeAuditEvent({
+    poolId: 'system',
+    type: 'POOL_STATUS_CHANGED', // Closest system type
+    message: `Imported ${importedCount} NFL games for ${season} (type: ${seasonType})`,
+    severity: 'INFO',
+    actor: { uid: 'system', role: 'SYSTEM', label: 'NFL Scheduler' }
+  });
+
+  return { success: true, importedCount };
+}
+
+/**
+ * Scheduled sync function that fetches active NFL schedules and scores,
+ * updates game statuses in Firestore, and updates kickoff times (schedule flexing).
+ */
+export const syncNFLScoresJob = onSchedule('*/5 * * * *', async (event) => {
+  const db = admin.firestore();
+  const now = Date.now();
+
+  // Find games that are either in progress, final but not synced/completed in scoring,
+  // or scheduled to start soon (within next 2 hours or in the last 12 hours)
+  const activeGamesSnap = await db.collection('nfl_games')
+    .where('startTime', '<=', now + 2 * 60 * 60 * 1000) // starts in next 2 hours
+    .get();
+
+  if (activeGamesSnap.empty) {
+    return;
+  }
+
+  // Group active games by season and week to batch API requests
+  const weeksToSync = new Map<string, { week: number; season: string; seasonType: 1 | 2 | 3 }>();
+  activeGamesSnap.forEach(doc => {
+    const data = doc.data() as NFLGame;
+    // Only fetch if game status is not FINAL, or if it was recently finalised
+    if (data.status !== 'FINAL' || (data.status === 'FINAL' && data.startTime > now - 24 * 60 * 60 * 1000)) {
+      const key = `${data.season}_${data.seasonType}_${data.week}`;
+      if (!weeksToSync.has(key)) {
+        weeksToSync.set(key, { week: data.week, season: data.season, seasonType: data.seasonType });
+      }
+    }
+  });
+
+  if (weeksToSync.size === 0) {
+    return;
+  }
+
+  console.log(`[nflSchedule] Syncing active scores for ${weeksToSync.size} week slots`);
+
+  for (const [_, slot] of weeksToSync) {
+    const freshGames = await fetchNFLWeekSchedule(slot.week, slot.season, slot.seasonType);
+    if (freshGames.length === 0) continue;
+
+    const batch = db.batch();
+    for (const freshGame of freshGames) {
+      const gameRef = db.collection('nfl_games').doc(freshGame.id);
+      const existingDoc = activeGamesSnap.docs.find(d => d.id === freshGame.id);
+
+      if (existingDoc) {
+        const existingData = existingDoc.data() as NFLGame;
+
+        // Check for schedule flexing (startTime changed)
+        if (existingData.startTime !== freshGame.startTime) {
+          console.log(`[nflSchedule] Flex scheduling detected for game ${freshGame.id}: ${new Date(existingData.startTime).toLocaleTimeString()} -> ${new Date(freshGame.startTime).toLocaleTimeString()}`);
+          
+          await writeAuditEvent({
+            poolId: 'system',
+            type: 'SCHEDULE_FLEX',
+            message: `NFL Flex Schedule: Game ${freshGame.awayTeam.abbreviation} @ ${freshGame.homeTeam.abbreviation} moved from ${new Date(existingData.startTime).toISOString()} to ${new Date(freshGame.startTime).toISOString()}`,
+            severity: 'INFO',
+            actor: { uid: 'system', role: 'SYSTEM', label: 'NFL Score Sync' },
+            payload: { gameId: freshGame.id, oldTime: existingData.startTime, newTime: freshGame.startTime }
+          });
+        }
+      }
+
+      batch.set(gameRef, freshGame, { merge: true });
+    }
+    await batch.commit();
+  }
+});
+
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+
+/**
+ * SuperAdmin-only HTTPS callable to trigger manual NFL schedule imports.
+ */
+export const importNFLSchedule = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in.');
+  }
+
+  const userRole = request.auth.token.role || 'USER';
+  if (userRole !== 'SUPER_ADMIN') {
+    throw new HttpsError('permission-denied', 'Only super admins can trigger NFL schedule imports.');
+  }
+
+  const data = request.data || {};
+  const season = data.season ? String(data.season) : '2026';
+  const seasonType = data.seasonType !== undefined ? parseInt(String(data.seasonType)) as 1 | 2 | 3 : 2;
+  const weeks = data.weeks ? (Array.isArray(data.weeks) ? data.weeks.map(Number) : [Number(data.weeks)]) : Array.from({ length: 18 }, (_, i) => i + 1);
+
+  try {
+    const res = await importNFLSeason(season, seasonType, weeks);
+    return { success: true, importedCount: res.importedCount };
+  } catch (err: any) {
+    throw new HttpsError('internal', err.message || 'NFL Season bulk import failed.');
+  }
+});

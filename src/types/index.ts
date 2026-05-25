@@ -15,9 +15,22 @@ export interface BanterMessage {
 }
 
 // Core Pool Types
+import {
+  NFLGame,
+  NFLPickemPool,
+  NFLSurvivorPool,
+  NFLMarginPool,
+  NFLPickemEntry,
+  SurvivorEntry,
+  MarginEntry,
+  WeeklyRecap
+} from './nflPoolTypes';
+
+export * from './nflPoolTypes';
+
 // Core Pool Types
-export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS';
-export type Pool = GameState | BracketPool | PlayoffPool | PropsPool;
+export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS' | 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
+export type Pool = GameState | BracketPool | PlayoffPool | PropsPool | NFLPickemPool | NFLSurvivorPool | NFLMarginPool;
 
 // --- NFL Playoff Pool Types ---
 
@@ -526,7 +539,10 @@ export type AuditEventType =
   | 'ADMIN_OVERRIDE_SQUARE_STATE'
   | 'PROP_CARD_PURCHASED'
   | 'PROP_QUESTION_GRADED'
-  | 'AI_ARTIFACT_CREATED';
+  | 'AI_ARTIFACT_CREATED'
+  | 'SURVIVOR_REBUY'
+  | 'SURVIVOR_AUTO_STRIKE'
+  | 'SCHEDULE_FLEX';
 
 export interface AuditLogEvent {
   id: string; // Auto-generated

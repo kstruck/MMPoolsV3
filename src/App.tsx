@@ -40,6 +40,8 @@ const BracketWizard = React.lazy(() => import('./components/BracketWizard/Bracke
 const PlayoffWizard = React.lazy(() => import('./components/PlayoffPool/PlayoffWizard').then(m => ({ default: m.PlayoffWizard })));
 const PropsWizard = React.lazy(() => import('./components/PropsWizard/PropsWizard').then(m => ({ default: m.PropsWizard })));
 const SetupWizard = React.lazy(() => import('./components/SetupWizard').then(m => ({ default: m.SetupWizard })));
+const NFLPoolWizard = React.lazy(() => import('./components/NFLPoolWizard/NFLPoolWizard').then(m => ({ default: m.NFLPoolWizard })));
+const JoinPool = React.lazy(() => import('./components/JoinPool').then(m => ({ default: m.JoinPool })));
 
 // Lazy-loaded admin
 const SuperAdmin = React.lazy(() => import('./components/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
@@ -407,6 +409,25 @@ const App: React.FC = () => {
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
+          } />
+
+          <Route path="/nfl-wizard" element={
+            isAdmin && user ? (
+              <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <NFLPoolWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                <Footer />
+              </div>
+            ) : <Navigate to="/" replace />
+          } />
+
+          <Route path="/join/:poolId" element={
+            <JoinPool
+              user={user}
+              onOpenAuth={handleOpenAuth}
+              onLogout={handleLogout}
+              onCreatePool={handleCreatePoolClick}
+            />
           } />
 
           <Route path="*" element={<Navigate to="/" replace />} />
