@@ -85,7 +85,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <Grid3X3 size={20} className="text-violet-400 group-hover:text-white" />
                                 </div>
                                 <h3 className="text-xl font-bold text-white mb-2 pr-10">Gameday Squares</h3>
-                                <p className="text-slate-400 text-sm mb-4 flex-grow">Classic 10x10 grid for Super Bowl and MNF. Interactive square selection and live updates.</p>
+                                <p className="text-slate-400 text-sm mb-4 flex-grow">Classic 10x10 grid for the Super Bowl, MNF, Thanksgiving weekend, or any game of the season. Interactive square selection and live updates.</p>
                                 <ul className="text-xs text-slate-500 space-y-2 mb-6 mt-auto">
                                     <li className="flex items-center gap-2">✓ Interactive live 10x10 grid</li>
                                     <li className="flex items-center gap-2">✓ Automated scoring & payouts</li>
