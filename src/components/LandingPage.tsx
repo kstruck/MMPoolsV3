@@ -180,7 +180,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             <div className="rounded-2xl p-2 shadow-2xl" style={{ backgroundColor: '#1E293B', border: '1px solid #334155' }}>
               <div className="rounded-xl overflow-hidden relative group" style={{ backgroundColor: BRAND.navy }}>
                 <img
-                  src="/bracket-app-hero.png"
+                  src="/nfl-pools-hero.png"
                   alt="March Melee Pools NFL Survivor and Weekly Pick'em Dashboard"
                   loading="lazy"
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
