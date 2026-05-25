@@ -35,12 +35,16 @@ A modern, real-time sports pool application supporting both **NCAA March Madness
 
 ### Gameday Squares (Super Bowl & MNF)
 
+* **Direct Pool Selection & Setup:** **NEW!** Gameday Squares is now a fully active and selectable pool option on the creation page, complete with a dedicated setup wizard.
 * **Interactive 100-Square Grid:** Real-time selection and ownership tracking.
 * **Live Scoreboard:** Intelligent syncing with ESPN.
 * **Automated Winners:** Instant highlighting of winning squares for every quarter and score change (if "Every Score Pays" is active).
 * **Charity Integration:** Built-in fundraising tools.
 
 ### Pool Management
+
+* **Reorganized Pool Selection Hub:** **NEW!** Completely restructured the `/create-pool` dashboard. Prioritized all active NFL & Gameday Pools (Gameday Squares, Weekly Pick'em, Survivor, and Margin Pools) in a high-fidelity grid at the top of the page.
+* **Offseason Muting & Gray-out:** **NEW!** Muted and grayed-out the March Madness Bracket option for the offseason (along with the Playoff Challenge), badging them with lock statuses to guide managers to currently active pool types.
 
 * **Setup Wizard:** Enhanced 7-step flow to configure teams, costs, reminder rules, and payouts.
 * **Integrated Payments:** **NEW!** Pool managers can now add their **Venmo** handle and **Google Pay** details directly in the setup wizard. Participants see clickable payment links directly on the specific pool card.

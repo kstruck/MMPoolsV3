@@ -155,6 +155,7 @@ exports.submitNFLPicks = (0, https_1.onCall)(async (request) => {
     // 1. Fetch weekly games from firestore to validate lock-deadlines
     const gamesSnap = await db.collection('nfl_games')
         .where('season', '==', pool.season)
+        .where('seasonType', '==', Number(pool.seasonType || 2))
         .where('week', '==', week)
         .get();
     const games = gamesSnap.docs.map(doc => doc.data());
@@ -390,6 +391,7 @@ exports.scoreNFLWeek = (0, https_1.onCall)(async (request) => {
     // 1. Retrieve all NFL games for this season and week
     const gamesSnap = await db.collection('nfl_games')
         .where('season', '==', pool.season)
+        .where('seasonType', '==', Number(pool.seasonType || 2))
         .where('week', '==', week)
         .get();
     const games = gamesSnap.docs.map(doc => doc.data());
