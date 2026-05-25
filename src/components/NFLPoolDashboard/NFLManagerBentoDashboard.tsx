@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { User as UserType, Pool, NFLGame } from '../../types';
+import { dbService } from '../../services/dbService';
 import { 
   Lock, 
   Volume2, 
@@ -44,67 +45,82 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const [aiMood, setAiMood] = useState<'savage' | 'professional' | 'analyst'>('savage');
   const [banterText, setBanterText] = useState('');
   const [banterFeed, setBanterFeed] = useState<string[]>([
-    "🚨 COMMISSIONER: Sarah K. is currently leading, but historically has collapsed in Week 13. Place your bets accordingly!",
-    "🚨 COMMISSIONER: Friendly reminder that unsubmitted survivor picks lock at kickoff. Don't be that person."
+    "🚨 COMMISSIONER: Warm welcome to the active NFL pool. Good luck!",
+    "🚨 COMMISSIONER: Friendly reminder that unsubmitted picks lock at kickoff. Don't be that person."
   ]);
   
   const [isNudging, setIsNudging] = useState<string | null>(null);
-  
-  // Track dynamic list of paid users in state for immediate interaction
-  const [paidUserIds, setPaidUserIds] = useState<Record<string, boolean>>(() => {
-    const states: Record<string, boolean> = {};
-    entries.forEach(e => {
-      states[e.ownerUid || e.id] = e.isPaid || false;
-    });
-    // Set some defaults if empty
-    if (Object.keys(states).length === 0) {
-      states['JD'] = true;
-      states['MS'] = false;
-      states['DB'] = true;
-    }
-    return states;
-  });
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const togglePayment = (id: string) => {
-    setPaidUserIds(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
+  const togglePayment = async (entryId: string, currentPaid: boolean) => {
+    setTogglingId(entryId);
+    try {
+      const nextStatus = currentPaid ? 'UNPAID' : 'PAID';
+      await dbService.updateBracketEntryPayment(pool.id, entryId, nextStatus);
+    } catch (err) {
+      console.error("Failed to update payment status:", err);
+      alert("Failed to update payment status in database.");
+    } finally {
+      setTogglingId(null);
+    }
   };
 
-  // 1. Calculations for Pick submissions status
-  const submissionStats = useMemo(() => {
-    const total = entries.length || 12;
-    const submitted = entries.filter(e => e.picks && e.picks[`week_${week}`]).length || 10;
-    const percentage = Math.round((submitted / total) * 100) || 83;
-    return { total, submitted, percentage };
-  }, [entries, week]);
+  const topPlayerName = useMemo(() => {
+    if (entries.length === 0) return 'Sarah K.';
+    const sorted = [...entries].sort((a, b) => {
+      if (pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
+      if (pool.type === 'NFL_SURVIVOR') {
+        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
+        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
+      }
+      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
+    });
+    return sorted[0]?.userName || sorted[0]?.ownerName || 'Sarah K.';
+  }, [entries, pool.type]);
+
+  React.useEffect(() => {
+    setBanterFeed([
+      `🚨 COMMISSIONER: ${topPlayerName} is currently leading, but historically has collapsed in Week 13. Place your bets accordingly!`,
+      "🚨 COMMISSIONER: Friendly reminder that unsubmitted picks lock at kickoff. Don't be that person."
+    ]);
+  }, [topPlayerName]);
 
   // Derived unsubmitted players list
   const unsubmittedPlayers = useMemo(() => {
-    const list = entries.filter(e => !e.picks || !e.picks[`week_${week}`]);
-    if (list.length === 0) {
-      return [
-        { id: 'MS', name: 'Mark S.', email: 'mark@domain.com' },
-        { id: 'EL', name: 'Emily L.', email: 'emily@domain.com' }
-      ];
-    }
+    const list = entries.filter(e => {
+      if (!e.picks) return true;
+      if (pool.type === 'NFL_PICKEM') {
+        const keys = Object.keys(e.picks);
+        return !keys.some(k => k.includes(`week_${week}`) || k.includes(`_${week}`));
+      } else {
+        return !e.picks[week];
+      }
+    });
     return list.map(e => ({
-      id: e.ownerUid || e.id,
-      name: e.ownerName || 'User ' + e.id.substring(0, 4),
+      id: e.id,
+      name: e.userName || e.ownerName || 'User ' + e.id.substring(0, 4),
       email: e.email || 'user@example.com'
     }));
-  }, [entries, week]);
+  }, [entries, week, pool.type]);
+
+  // 1. Calculations for Pick submissions status
+  const submissionStats = useMemo(() => {
+    const total = entries.length;
+    const pendingCount = unsubmittedPlayers.length;
+    const submitted = total - pendingCount;
+    const percentage = total > 0 ? Math.round((submitted / total) * 100) : 0;
+    return { total, submitted, percentage };
+  }, [entries, unsubmittedPlayers]);
 
   // Financial Ledger calculations
   const ledgerStats = useMemo(() => {
     const fee = castPool.settings?.entryFee || 20;
-    const totalPlayers = entries.length || 12;
-    const paidCount = Object.values(paidUserIds).filter(Boolean).length;
+    const totalPlayers = entries.length;
+    const paidCount = entries.filter(e => e.paidStatus === 'PAID').length;
     const collected = paidCount * fee;
     const remaining = (totalPlayers - paidCount) * fee;
     return { fee, collected, remaining, total: totalPlayers * fee };
-  }, [entries, paidUserIds, castPool.settings?.entryFee]);
+  }, [entries, castPool.settings?.entryFee]);
 
   const handleNudge = (name: string) => {
     setIsNudging(name);
@@ -129,13 +145,44 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     setBanterText('');
   };
 
-  // Mock list of transactions for Commissioner Auditing
-  const auditLogs = [
-    { time: '10 mins ago', msg: 'Commissioner finalized standings for Week 11', severity: 'INFO' },
-    { time: '1 hour ago', msg: 'System executed automated schedule synchronization with ESPN APIs', severity: 'SYSTEM' },
-    { time: '2 hours ago', msg: 'David B. submitted picks for Week 12', severity: 'USER' },
-    { time: '1 day ago', msg: 'Commissioner marked John D. buy-in buy-in as PAID', severity: 'INFO' }
-  ];
+  const auditLogs = useMemo(() => {
+    const logs = [
+      { time: '10 mins ago', msg: `Commissioner finalized standings for Week ${week - 1 > 0 ? week - 1 : 1}`, severity: 'INFO' },
+      { time: '1 hour ago', msg: `System executed automated schedule synchronization with ESPN APIs for ${_games.length} games`, severity: 'SYSTEM' }
+    ];
+
+    const picker = entries.find(e => e.picks && Object.keys(e.picks).length > 0);
+    if (picker) {
+      logs.push({
+        time: '2 hours ago',
+        msg: `${picker.userName || picker.ownerName} submitted picks for Week ${week}`,
+        severity: 'USER'
+      });
+    } else {
+      logs.push({
+        time: '2 hours ago',
+        msg: `No active picks sheet submissions processed yet for Week ${week}`,
+        severity: 'USER'
+      });
+    }
+
+    const paidPlayer = entries.find(e => e.paidStatus === 'PAID');
+    if (paidPlayer) {
+      logs.push({
+        time: '1 day ago',
+        msg: `Commissioner marked ${paidPlayer.userName || paidPlayer.ownerName} buy-in as PAID`,
+        severity: 'INFO'
+      });
+    } else {
+      logs.push({
+        time: '1 day ago',
+        msg: `Buy-in tracking initialized for ${entries.length} members`,
+        severity: 'INFO'
+      });
+    }
+
+    return logs;
+  }, [entries, week, _games.length]);
 
   // SVG Radial circle calculations
   const radialRadius = 40;
@@ -279,48 +326,54 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           {/* Members list with payment accreditation checkboxes */}
           <div className="space-y-3.5">
             <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Player buy-in tracker</span>
-            {[
-              { id: 'JD', name: 'John D.', email: 'john@domain.com' },
-              { id: 'MS', name: 'Mark S.', email: 'mark@domain.com' },
-              { id: 'DB', name: 'David B.', email: 'david@domain.com' }
-            ].map((player) => {
-              const isPaid = paidUserIds[player.id];
-              return (
-                <div 
-                  key={player.id} 
-                  className={`flex justify-between items-center p-3 rounded-2xl border transition-all ${
-                    isPaid ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-950/40 border-slate-850'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-xl font-extrabold text-xs flex items-center justify-center border ${
-                      isPaid ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-slate-900 border-slate-800 text-slate-500'
-                    }`}>
-                      {player.id}
-                    </div>
-                    <div>
-                      <span className="text-xs font-extrabold text-white block uppercase leading-none mb-1">{player.name}</span>
-                      <span className="text-[9px] font-bold text-slate-500">{player.email}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => togglePayment(player.id)}
-                    className={`flex items-center gap-2 border px-3.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wide transition-all ${
-                      isPaid 
-                        ? 'bg-emerald-500/10 border-emerald-500/35 text-emerald-400 hover:bg-emerald-500/20' 
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'
+            {entries.length > 0 ? (
+              entries.map((player) => {
+                const entryId = player.id;
+                const isPaid = player.paidStatus === 'PAID';
+                return (
+                  <div 
+                    key={entryId} 
+                    className={`flex justify-between items-center p-3 rounded-2xl border transition-all ${
+                      isPaid ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-950/40 border-slate-850'
                     }`}
                   >
-                    {isPaid ? (
-                      <>
-                        <CheckCircle size={12} className="text-emerald-500" /> Paid
-                      </>
-                    ) : 'Mark Paid'}
-                  </button>
-                </div>
-              );
-            })}
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-xl font-extrabold text-xs flex items-center justify-center border ${
+                        isPaid ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-slate-900 border-slate-800 text-slate-500'
+                      }`}>
+                        {(player.userName || player.ownerName || 'U').substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <span className="text-xs font-extrabold text-white block uppercase leading-none mb-1">
+                          {player.userName || player.ownerName || 'Anonymous Player'}
+                        </span>
+                        <span className="text-[9px] font-bold text-slate-500">{player.email || 'No email registered'}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => togglePayment(entryId, isPaid)}
+                      disabled={togglingId === entryId}
+                      className={`flex items-center gap-2 border px-3.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wide transition-all ${
+                        isPaid 
+                          ? 'bg-emerald-500/10 border-emerald-500/35 text-emerald-400 hover:bg-emerald-500/20' 
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'
+                      }`}
+                    >
+                      {isPaid ? (
+                        <>
+                          <CheckCircle size={12} className="text-emerald-500" /> Paid
+                        </>
+                      ) : togglingId === entryId ? 'Saving...' : 'Mark Paid'}
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-slate-500 text-xs text-center py-6 font-bold bg-slate-950/40 border border-slate-800 rounded-2xl">
+                No entries registered yet.
+              </div>
+            )}
           </div>
         </div>
 

@@ -111,15 +111,116 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   isManager,
   onSelectTab
 }) => {
-  const [sidebarActive, setSidebarActive] = useState('dashboard');
-  
-  // Custom states for interactive elements (such as Mock Win Probability updates or live ticks)
-  const liveWinProb = 61;
+  const NFL_TEAM_COLORS: Record<string, { primary: string; secondary: string }> = {
+    'ARI': { primary: '#97233F', secondary: '#FFB612' },
+    'ATL': { primary: '#A71930', secondary: '#000000' },
+    'BAL': { primary: '#241773', secondary: '#9E7C0C' },
+    'BUF': { primary: '#00338D', secondary: '#C60C30' },
+    'CAR': { primary: '#0085CA', secondary: '#101820' },
+    'CHI': { primary: '#0B2265', secondary: '#C83803' },
+    'CIN': { primary: '#FB4F14', secondary: '#000000' },
+    'CLE': { primary: '#311D00', secondary: '#FF3C00' },
+    'DAL': { primary: '#003594', secondary: '#869397' },
+    'DEN': { primary: '#FB4F14', secondary: '#002244' },
+    'DET': { primary: '#0076B6', secondary: '#B0B7BC' },
+    'GB':  { primary: '#203731', secondary: '#FFB612' },
+    'HOU': { primary: '#03202F', secondary: '#A71930' },
+    'IND': { primary: '#002C5F', secondary: '#A2AAAD' },
+    'JAX': { primary: '#006778', secondary: '#D7A22A' },
+    'KC':  { primary: '#E31837', secondary: '#FFB612' },
+    'LV':  { primary: '#000000', secondary: '#A5ACAF' },
+    'LAC': { primary: '#0080C6', secondary: '#FFC20E' },
+    'LAR': { primary: '#003594', secondary: '#FFA300' },
+    'MIA': { primary: '#008E97', secondary: '#FC4C02' },
+    'MIN': { primary: '#4F2683', secondary: '#FFC62F' },
+    'NE':  { primary: '#002244', secondary: '#C60C30' },
+    'NO':  { primary: '#D3BC8D', secondary: '#101820' },
+    'NYG': { primary: '#0B2265', secondary: '#A71930' },
+    'NYJ': { primary: '#125740', secondary: '#FFFFFF' },
+    'PHI': { primary: '#004C54', secondary: '#A5ACAF' },
+    'PIT': { primary: '#FFB612', secondary: '#101820' },
+    'SF':  { primary: '#AA0000', secondary: '#B3995D' },
+    'SEA': { primary: '#002244', secondary: '#69BE28' },
+    'TB':  { primary: '#D50A0A', secondary: '#34302B' },
+    'TEN': { primary: '#4B92DB', secondary: '#C60C30' },
+    'WAS': { primary: '#5A1414', secondary: '#FFB612' }
+  };
 
-  // Quick statistics derived from entries
+  const getTeamColors = (teamName?: string) => {
+    if (!teamName) return { primary: '#64748b', secondary: '#cbd5e1' };
+    const nameUpper = teamName.toUpperCase();
+    for (const abbrev of Object.keys(NFL_TEAM_COLORS)) {
+      if (nameUpper.includes(abbrev) || abbrev.includes(nameUpper)) {
+        return NFL_TEAM_COLORS[abbrev];
+      }
+    }
+    return { primary: '#64748b', secondary: '#cbd5e1' };
+  };
+
+  const castPool = _pool as any;
+  const [sidebarActive, setSidebarActive] = useState('dashboard');
+
+  const myEntry = useMemo(() => {
+    if (!user) return null;
+    return entries.find(e => e.ownerUid === user.id || e.id === user.id) || null;
+  }, [entries, user]);
+
+  const userRank = useMemo(() => {
+    if (!user || entries.length === 0) return 'N/A';
+    const sorted = [...entries].sort((a, b) => {
+      if (_pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
+      if (_pool.type === 'NFL_SURVIVOR') {
+        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
+        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
+      }
+      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
+    });
+    const rankIndex = sorted.findIndex(e => e.ownerUid === user.id || e.id === user.id);
+    return rankIndex !== -1 ? `#${rankIndex + 1}` : 'N/A';
+  }, [entries, user, _pool.type]);
+
+  const focusGame = useMemo(() => {
+    if (_games.length === 0) return null;
+    const weekly = _games.filter(g => g.week === selectedWeek && Number(g.seasonType) === Number(castPool.seasonType));
+    if (weekly.length === 0) return null;
+    const live = weekly.find(g => g.status === 'IN_PROGRESS');
+    if (live) return live;
+    const upcoming = weekly.filter(g => g.status === 'SCHEDULED');
+    if (upcoming.length > 0) {
+      return upcoming.reduce((prev, curr) => prev.startTime < curr.startTime ? prev : curr);
+    }
+    return weekly[0];
+  }, [_games, selectedWeek, castPool.seasonType]);
+
+  const myPick = useMemo(() => {
+    if (!myEntry || !focusGame) return null;
+    if (_pool.type === 'NFL_PICKEM') {
+      return myEntry.picks?.[focusGame.id] || null;
+    } else if (_pool.type === 'NFL_SURVIVOR') {
+      return myEntry.picks?.[selectedWeek] || null;
+    } else if (_pool.type === 'NFL_MARGIN') {
+      return myEntry.picks?.[selectedWeek] || null;
+    }
+    return null;
+  }, [myEntry, focusGame, _pool.type, selectedWeek]);
+
+  const liveWinProb = useMemo(() => {
+    if (!focusGame || focusGame.status === 'SCHEDULED') return 50;
+    if (focusGame.status === 'FINAL') {
+      const home = focusGame.scores?.home ?? 0;
+      const away = focusGame.scores?.away ?? 0;
+      return home > away ? 100 : 0;
+    }
+    const home = focusGame.scores?.home ?? 0;
+    const away = focusGame.scores?.away ?? 0;
+    const diff = home - away;
+    const prob = 50 + diff * 5;
+    return Math.min(95, Math.max(5, prob));
+  }, [focusGame]);
+
   const survivalLeagueStats = useMemo(() => {
-    const total = entries.length || 32;
-    const alive = entries.filter(e => e.isAlive !== false).length || 14;
+    const total = entries.length;
+    const alive = entries.filter(e => e.status !== 'ELIMINATED').length;
     return {
       total,
       alive,
@@ -127,7 +228,121 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     };
   }, [entries]);
 
-  // Mock graph coordinates for custom SVG renders
+  const getTrendData = (name: string) => {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const trendType = Math.abs(hash) % 3;
+    if (trendType === 0) return { type: 'up', color: '#10B981' };
+    if (trendType === 1) return { type: 'down', color: '#FF6600' };
+    return { type: 'updown', color: '#3B82F6' };
+  };
+
+  const weeklyHistoryData = useMemo(() => {
+    const totalWeeks = Number(castPool.seasonType) === 1 ? 4 : 18;
+    const history = [];
+    for (let w = 1; w <= totalWeeks; w++) {
+      let val = 0;
+      if (myEntry) {
+        if (_pool.type === 'NFL_MARGIN') {
+          val = myEntry.weeklyScores?.[w] ?? 0;
+        } else if (_pool.type === 'NFL_PICKEM') {
+          val = myEntry.weeklyScores?.[w] ?? 0;
+        } else if (_pool.type === 'NFL_SURVIVOR') {
+          const survived = myEntry.eliminatedWeek ? w < myEntry.eliminatedWeek : true;
+          val = survived ? 1 : -1;
+        }
+      }
+      history.push({ week: w, value: val });
+    }
+    return history;
+  }, [myEntry, _pool.type, castPool.seasonType]);
+
+  const maxHistoryVal = useMemo(() => {
+    const vals = weeklyHistoryData.map(d => Math.abs(d.value));
+    const max = Math.max(...vals, 1);
+    return max;
+  }, [weeklyHistoryData]);
+
+  const displayedMembers = useMemo(() => {
+    if (entries.length === 0) return [];
+    const sorted = [...entries].sort((a, b) => {
+      if (_pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
+      if (_pool.type === 'NFL_SURVIVOR') {
+        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
+        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
+      }
+      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
+    });
+    return sorted.slice(0, 3).map(e => ({
+      name: e.userName || 'Anonymous',
+      week: `Week ${selectedWeek}`,
+      check: !!e.picks?.[selectedWeek] || !!e.picks?.[`week_${selectedWeek}`],
+      status: _pool.type === 'NFL_SURVIVOR' ? (e.status || 'ALIVE') : (e.paidStatus || 'UNPAID'),
+      strikes: e.strikesUsed || 0,
+      avatar: (e.userName || 'U').substring(0, 2).toUpperCase(),
+      highlight: e.ownerUid === user?.id
+    }));
+  }, [entries, _pool.type, selectedWeek, user]);
+
+
+  const userStats = useMemo(() => {
+    if (!myEntry) {
+      return [
+        { title: 'Weekly Pick', value: 'None', color: 'text-slate-400' },
+        { title: 'Season Total', value: '0', color: 'text-indigo-400' },
+        { title: 'Your Rank', value: 'N/A', color: 'text-orange-500' }
+      ];
+    }
+
+    let weeklyVal = 'No Pick';
+    let seasonTitle = 'Season Total';
+    let seasonVal = '0';
+
+    if (_pool.type === 'NFL_PICKEM') {
+      const weekPicks = Object.keys(myEntry.picks || {}).filter(k => k.startsWith(`week_${selectedWeek}`) || k.includes(`_${selectedWeek}`)).length;
+      weeklyVal = weekPicks > 0 ? `${weekPicks} Picks` : 'No Picks';
+      seasonVal = `${myEntry.totalScore || 0} pts`;
+    } else if (_pool.type === 'NFL_SURVIVOR') {
+      weeklyVal = myEntry.picks?.[selectedWeek] || 'No Pick';
+      seasonTitle = 'Strikes Used';
+      seasonVal = `${myEntry.strikesUsed || 0} / ${_pool.settings?.maxStrikes || 0}`;
+    } else if (_pool.type === 'NFL_MARGIN') {
+      weeklyVal = myEntry.picks?.[selectedWeek] || 'No Pick';
+      const margin = myEntry.weeklyScores?.[selectedWeek];
+      const marginStr = margin !== undefined ? (margin > 0 ? `+${margin}` : `${margin}`) : 'No Pick';
+      weeklyVal = myEntry.picks?.[selectedWeek] ? `${myEntry.picks[selectedWeek]} (${marginStr})` : 'No Pick';
+      seasonVal = `${myEntry.seasonTotal || 0} margin`;
+    }
+
+    return [
+      { title: 'Weekly Pick', value: weeklyVal, color: 'text-emerald-400' },
+      { title: seasonTitle, value: seasonVal, color: 'text-indigo-400' },
+      { title: 'Your Rank', value: userRank, color: 'text-orange-500' }
+    ];
+  }, [myEntry, _pool.type, selectedWeek, castPool.settings?.maxStrikes, userRank]);
+
+  const displayedStandings = useMemo(() => {
+    if (entries.length === 0) return [];
+    const sorted = [...entries].sort((a, b) => {
+      if (_pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
+      if (_pool.type === 'NFL_SURVIVOR') {
+        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
+        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
+      }
+      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
+    });
+    return sorted.slice(0, 5).map((e, idx) => ({
+      rank: idx + 1,
+      name: e.userName || 'Anonymous',
+      detail: _pool.type === 'NFL_SURVIVOR' ? (e.status || 'ALIVE') : `${e.paidStatus || 'UNPAID'}`,
+      pts: _pool.type === 'NFL_SURVIVOR' ? `${e.strikesUsed || 0} strikes` : _pool.type === 'NFL_MARGIN' ? `${e.seasonTotal || 0} margin` : `${e.totalScore || 0} pts`,
+      avatar: (e.userName || 'U').substring(0, 2).toUpperCase(),
+      highlight: e.ownerUid === user?.id || e.id === user?.id
+    }));
+  }, [entries, _pool.type, user]);
+
   const winProbabilityPath = "M 0 60 C 20 50, 40 85, 60 40 S 80 15, 100 12";
   const winProbabilityPathOverlay = "M 0 60 C 20 50, 40 85, 60 40 S 80 15, 100 12 L 100 100 L 0 100 Z";
   
@@ -141,16 +356,16 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           <div className="flex items-center gap-4 bg-slate-950/60 p-4 border border-slate-800/50 rounded-2xl">
             <div className="relative">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-indigo-600 flex items-center justify-center font-black text-white text-lg shadow-lg">
-                {user?.name?.substring(0, 2).toUpperCase() || 'DB'}
+                {user?.name?.substring(0, 2).toUpperCase() || 'GS'}
               </div>
               <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-slate-900 animate-pulse"></span>
             </div>
             <div>
-              <h4 className="font-extrabold text-white text-sm tracking-wide leading-tight uppercase">
-                {user?.name || 'David B.'}
+              <h4 className="font-extrabold text-white text-sm tracking-wide leading-tight uppercase truncate max-w-[120px]" title={user?.name || 'Guest Participant'}>
+                {user?.name || 'Guest'}
               </h4>
               <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mt-0.5">
-                Rank <span style={{ color: BRAND.orange }}>#42</span>
+                Rank <span style={{ color: BRAND.orange }}>{userRank}</span>
               </p>
             </div>
           </div>
@@ -213,8 +428,10 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           <div>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Live Weekly Pick'em</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Week {selectedWeek} Matches</p>
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
+                  {_pool.type === 'NFL_PICKEM' ? 'Live Weekly Pick\'em' : _pool.type === 'NFL_SURVIVOR' ? 'Weekly Survivor Match' : 'Margin Matchup'}
+                </h3>
+                <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Week {selectedWeek} Games</p>
               </div>
               <button 
                 onClick={() => onSelectTab('picks')}
@@ -224,100 +441,127 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
               </button>
             </div>
 
-            {/* Simulated Live Match Helmets & Score Panel */}
-            <div className="bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800 p-5 rounded-2xl mb-5 flex justify-between items-center relative overflow-hidden">
-              <div className="absolute top-2 left-2 z-10">
-                <span className="flex items-center gap-1.5 bg-red-500/25 border border-red-500/30 px-2 py-0.5 rounded-full text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse">
-                  <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping"></span> Live
-                </span>
-              </div>
-
-              {/* Helmet Team 1 (BAL) */}
-              <div className="flex flex-col items-center gap-1 select-none z-10">
-                <FootballHelmet primaryColor="#241773" secondaryColor="#9E7C0C" className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(36,23,115,0.4)]" />
-                <span className="text-xs font-black text-white mt-1">BAL 17</span>
-                <span className="text-[9px] font-bold text-slate-500">My Pick: BAL</span>
-              </div>
-
-              {/* Matchup Divider */}
-              <div className="text-center z-10">
-                <span className="text-[10px] font-bold text-slate-600 block uppercase mb-1">Q3 12:45</span>
-                <span className="text-lg font-black text-slate-400">VS</span>
-              </div>
-
-              {/* Helmet Team 2 (CIN) */}
-              <div className="flex flex-col items-center gap-1 select-none z-10">
-                <FootballHelmet primaryColor="#FB4F14" secondaryColor="#000000" className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(251,79,20,0.4)]" />
-                <span className="text-xs font-black text-white mt-1">CIN 14</span>
-                <span className="text-[9px] font-bold text-slate-500">Spread: +3.0</span>
-              </div>
-            </div>
-
-            {/* Live Match Stats / Win Probability Graph */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Win Probability Panel */}
-              <div className="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between">
-                <div>
-                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Win Probability</span>
-                  <span className="text-sm font-extrabold text-blue-400 leading-none">
-                    BAL {liveWinProb}%
-                  </span>
-                </div>
-                <div className="relative h-12 w-full mt-2 overflow-hidden rounded-lg bg-slate-900 border border-slate-800">
-                  <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    {/* Background shading */}
-                    <path d={winProbabilityPathOverlay} fill="url(#probability-shade)" opacity="0.15" />
-                    {/* Dynamic line */}
-                    <path d={winProbabilityPath} fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
-                  </svg>
-                  
-                  {/* Glowing pointer */}
-                  <div className="absolute top-[12%] right-[5%] h-2 w-2 rounded-full bg-blue-400 shadow-[0_0_10px_#3B82F6] animate-pulse"></div>
-
-                  {/* Gradient definitions inside SVG */}
-                  <svg className="hidden">
-                    <defs>
-                      <linearGradient id="probability-shade" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#3B82F6" />
-                        <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Matchup Odds listings */}
-              <div className="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Selected Week Odds</span>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between font-bold">
-                    <span className="text-slate-400">BAL @ CIN</span>
-                    <span className="text-white">+125</span>
+            {focusGame ? (
+              <>
+                {/* Live Match Helmets & Score Panel */}
+                <div className="bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800 p-5 rounded-2xl mb-5 flex justify-between items-center relative overflow-hidden">
+                  <div className="absolute top-2 left-2 z-10">
+                    {focusGame.status === 'IN_PROGRESS' ? (
+                      <span className="flex items-center gap-1.5 bg-red-500/25 border border-red-500/30 px-2 py-0.5 rounded-full text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse">
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping"></span> Live
+                      </span>
+                    ) : focusGame.status === 'FINAL' ? (
+                      <span className="bg-slate-800/80 border border-slate-750 px-2 py-0.5 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                        Final
+                      </span>
+                    ) : (
+                      <span className="bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full text-[9px] font-black text-amber-400 uppercase tracking-widest">
+                        Scheduled
+                      </span>
+                    )}
                   </div>
-                  <div className="flex justify-between font-bold">
-                    <span className="text-slate-400">NE @ MIA</span>
-                    <span className="text-white">+150</span>
+
+                  {/* Helmet Team 1 (Away) */}
+                  <div className="flex flex-col items-center gap-1 select-none z-10">
+                    <FootballHelmet 
+                      primaryColor={getTeamColors(focusGame.awayTeam.abbreviation || focusGame.awayTeam.name).primary} 
+                      secondaryColor={getTeamColors(focusGame.awayTeam.abbreviation || focusGame.awayTeam.name).secondary} 
+                      className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(59,130,246,0.3)]" 
+                    />
+                    <span className="text-xs font-black text-white mt-1">
+                      {focusGame.awayTeam.abbreviation} {focusGame.scores?.away ?? 0}
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-500">
+                      {myPick === focusGame.awayTeam.name || myPick === focusGame.awayTeam.abbreviation ? '★ Picked' : ''}
+                    </span>
                   </div>
-                  <div className="flex justify-between font-bold">
-                    <span className="text-slate-400">DAL @ PHI</span>
-                    <span className="text-white">+150</span>
+
+                  {/* Matchup Divider */}
+                  <div className="text-center z-10">
+                    <span className="text-[10px] font-bold text-slate-650 block uppercase mb-1">
+                      {focusGame.status === 'IN_PROGRESS' ? (focusGame.clock || `Q${focusGame.period || 1}`) : focusGame.status === 'FINAL' ? 'FT' : 'Kickoff'}
+                    </span>
+                    <span className="text-lg font-black text-slate-400">VS</span>
+                  </div>
+
+                  {/* Helmet Team 2 (Home) */}
+                  <div className="flex flex-col items-center gap-1 select-none z-10">
+                    <FootballHelmet 
+                      primaryColor={getTeamColors(focusGame.homeTeam.abbreviation || focusGame.homeTeam.name).primary} 
+                      secondaryColor={getTeamColors(focusGame.homeTeam.abbreviation || focusGame.homeTeam.name).secondary} 
+                      className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(239,68,68,0.3)]" 
+                    />
+                    <span className="text-xs font-black text-white mt-1">
+                      {focusGame.homeTeam.abbreviation} {focusGame.scores?.home ?? 0}
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-500">
+                      {myPick === focusGame.homeTeam.name || myPick === focusGame.homeTeam.abbreviation ? '★ Picked' : ''}
+                    </span>
                   </div>
                 </div>
+
+                {/* Live Match Stats / Win Probability Graph */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Win Probability Panel */}
+                  <div className="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between">
+                    <div>
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Win Probability</span>
+                      <span className="text-sm font-extrabold text-blue-400 leading-none">
+                        {focusGame.homeTeam.abbreviation} {liveWinProb}%
+                      </span>
+                    </div>
+                    <div className="relative h-12 w-full mt-2 overflow-hidden rounded-lg bg-slate-900 border border-slate-800">
+                      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <path d={winProbabilityPathOverlay} fill="url(#probability-shade)" opacity="0.15" />
+                        <path d={winProbabilityPath} fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
+                      </svg>
+                      
+                      <div className="absolute top-[12%] right-[5%] h-2 w-2 rounded-full bg-blue-400 shadow-[0_0_10px_#3B82F6] animate-pulse"></div>
+
+                      <svg className="hidden">
+                        <defs>
+                          <linearGradient id="probability-shade" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor="#3B82F6" />
+                            <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Matchup Odds listings */}
+                  <div className="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between">
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Weekly Focus</span>
+                    <div className="space-y-1.5 text-xs font-bold text-slate-400">
+                      <div className="flex justify-between">
+                        <span>Picks Status:</span>
+                        <span className="text-white">{myPick ? 'Submitted' : 'Pending'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Pick Selection:</span>
+                        <span className="text-white">{myPick || 'None'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 font-bold text-xs">
+                No active games scheduled for this week.
               </div>
-            </div>
+            )}
           </div>
           
           {/* Locks Banner footer inside card */}
           <div className="mt-5 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
             <span className="text-slate-500 font-bold uppercase flex items-center gap-1">
-              <Lock size={12} className="text-slate-600" /> Matches locking soon
+              <Lock size={12} className="text-slate-600" /> Picks Deadline
             </span>
             <span className="text-amber-400 font-extrabold uppercase animate-pulse">
-              11:45 PM EST LOCK
+              {_earliestGame ? new Date(_earliestGame.startTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : 'Kickoff'} Lock
             </span>
           </div>
         </div>
-
         {/* CARD B: SURVIVOR LEAGUE (Top Right) */}
         <div 
           className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
@@ -341,47 +585,53 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
             {/* List of active survivors and their strikes */}
             <div className="space-y-3.5 mb-5">
-              {[
-                { name: 'John D.', week: 'Week 11', check: true, status: 'ALIVE', strikes: 0, avatar: 'JD' },
-                { name: 'Mark S.', week: 'Week 11', check: true, status: 'ALIVE', strikes: 1, avatar: 'MS' },
-                { name: 'David B.', week: 'ME - Week 11', check: true, status: 'ALIVE', strikes: 0, avatar: 'DB', highlight: true }
-              ].map((member, i) => (
-                <div 
-                  key={i} 
-                  className={`flex justify-between items-center p-3 rounded-2xl border transition-all ${
-                    member.highlight 
-                      ? 'bg-gradient-to-r from-emerald-500/10 to-indigo-600/10 border-emerald-500/40 shadow-md' 
-                      : 'bg-slate-950/60 border-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center ${
-                      member.highlight ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-900 text-slate-400'
-                    }`}>
-                      {member.avatar}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-extrabold text-white uppercase">{member.name}</span>
-                        {member.check && <CheckCircle2 size={12} className="text-emerald-500" />}
+              {displayedMembers.length > 0 ? (
+                displayedMembers.map((member, i) => (
+                  <div 
+                    key={i} 
+                    className={`flex justify-between items-center p-3 rounded-2xl border transition-all ${
+                      member.highlight 
+                        ? 'bg-gradient-to-r from-emerald-500/10 to-indigo-600/10 border-emerald-500/40 shadow-md' 
+                        : 'bg-slate-950/60 border-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center ${
+                        member.highlight ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-900 text-slate-400'
+                      }`}>
+                        {member.avatar}
                       </div>
-                      <span className="text-[9px] font-bold text-slate-500 uppercase">{member.week}</span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-extrabold text-white uppercase">{member.name}</span>
+                          {member.check && <CheckCircle2 size={12} className="text-emerald-500" />}
+                        </div>
+                        <span className="text-[9px] font-bold text-slate-500 uppercase">{member.week}</span>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-3">
-                    <span className="bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full text-[9px] font-black text-emerald-400 tracking-wider">
-                      {member.status}
-                    </span>
-                    <div className="text-right">
-                      <span className="text-[9px] font-bold text-slate-500 block uppercase leading-none">Strikes</span>
-                      <span className={`text-xs font-black ${member.strikes > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
-                        {member.strikes}
+                    <div className="flex items-center gap-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-wider border ${
+                        member.status === 'ELIMINATED' 
+                          ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' 
+                          : 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                      }`}>
+                        {member.status}
                       </span>
+                      <div className="text-right">
+                        <span className="text-[9px] font-bold text-slate-500 block uppercase leading-none">Strikes</span>
+                        <span className={`text-xs font-black ${member.strikes > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                          {member.strikes}
+                        </span>
+                      </div>
                     </div>
                   </div>
+                ))
+              ) : (
+                <div className="text-slate-500 text-xs text-center py-6 font-bold bg-slate-950/40 border border-slate-800 rounded-2xl">
+                  No active entries.
                 </div>
-              ))}
+              )}
             </div>
 
             {/* Attrition/Survival Chart */}
@@ -416,7 +666,17 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           <div className="mt-5 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
             <span className="text-slate-500 font-bold uppercase">Survivor status</span>
             <span className="text-emerald-400 font-black uppercase">
-              David B. is Alive
+              {myEntry ? (
+                _pool.type === 'NFL_SURVIVOR' ? (
+                  myEntry.status === 'ELIMINATED' ? (
+                    <span className="text-rose-500">Eliminated</span>
+                  ) : (
+                    <span>You are Alive</span>
+                  )
+                ) : (
+                  myEntry.paidStatus === 'PAID' ? 'Buy-in: Paid' : <span className="text-amber-500">Buy-in: Unpaid</span>
+                )
+              ) : 'No entry in this pool'}
             </span>
           </div>
         </div>
@@ -433,22 +693,18 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Current Week Performance</p>
               </div>
               <span className="bg-slate-950 border border-slate-800 px-3 py-1 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                Week 12
+                Week {selectedWeek}
               </span>
             </div>
 
             {/* Margin Pool Metric blocks */}
             <div className="grid grid-cols-3 gap-3 mb-5">
-              {[
-                { title: 'Weekly Diff', value: '+38 pts', color: 'text-emerald-400' },
-                { title: 'Net Margin', value: '+21', color: 'text-emerald-400' },
-                { title: 'Rank', value: '#8', color: 'text-orange-500' }
-              ].map((stat, i) => (
+              {userStats.map((stat, i) => (
                 <div key={i} className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-2xl text-center">
                   <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">
                     {stat.title}
                   </span>
-                  <span className={`text-sm font-black ${stat.color} tracking-wide`}>
+                  <span className={`text-xs sm:text-sm font-black ${stat.color} tracking-wide truncate block`}>
                     {stat.value}
                   </span>
                 </div>
@@ -457,55 +713,75 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
             {/* Weekly Margin Bar Chart */}
             <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl mb-5">
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3">Weekly Net Margins</span>
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3">Weekly Net History</span>
               <div className="h-16 flex items-end justify-between gap-1 px-1">
-                {[12, 18, 14, 25, 29, 21, -8, 18, 14, 11, 23, 21].map((val, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center h-full justify-end relative group">
-                    <div 
-                      className={`w-full rounded-t-sm transition-all duration-300 group-hover:brightness-110 ${
-                        val < 0 
-                          ? 'bg-orange-500 shadow-[0_-2px_10px_rgba(255,102,0,0.3)]' 
-                          : i === 11 
-                            ? 'bg-gradient-to-t from-orange-500 to-indigo-600 shadow-[0_-2px_10px_rgba(255,102,0,0.4)]'
-                            : 'bg-blue-500 shadow-[0_-2px_10px_rgba(59,130,246,0.3)]'
-                      }`}
-                      style={{ 
-                        height: `${Math.abs(val) * 2.2}%`,
-                        maxHeight: '100%'
-                      }}
-                    ></div>
-                    {/* Hover tooltip */}
-                    <span className="absolute -top-6 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[8px] font-black text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
-                      {val > 0 ? `+${val}` : val}
-                    </span>
-                    <span className="text-[7px] font-bold text-slate-600 uppercase mt-1 block">
-                      {i + 1}
-                    </span>
-                  </div>
-                ))}
+                {weeklyHistoryData.map((d, i) => {
+                  const val = d.value;
+                  const isHighlighted = d.week === selectedWeek;
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center h-full justify-end relative group">
+                      <div 
+                        className={`w-full rounded-t-sm transition-all duration-300 group-hover:brightness-110 ${
+                          val < 0 
+                            ? 'bg-orange-500 shadow-[0_-2px_10px_rgba(255,102,0,0.3)]' 
+                            : isHighlighted 
+                              ? 'bg-gradient-to-t from-orange-500 to-indigo-600 shadow-[0_-2px_10px_rgba(255,102,0,0.4)] animate-pulse'
+                              : 'bg-blue-500 shadow-[0_-2px_10px_rgba(59,130,246,0.3)]'
+                        }`}
+                        style={{ 
+                          height: val === 0 ? '4px' : `${(Math.abs(val) / maxHistoryVal) * 80 + 10}%`,
+                          maxHeight: '100%'
+                        }}
+                      ></div>
+                      {/* Hover tooltip */}
+                      <span className="absolute -top-6 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[8px] font-black text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+                        {_pool.type === 'NFL_MARGIN' ? (val > 0 ? `+${val}` : val) : `${val}`}
+                      </span>
+                      <span className="text-[7px] font-bold text-slate-650 mt-1 block">
+                        {d.week}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             {/* Recent Pool Activity Feed */}
             <div className="space-y-2.5">
               <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Recent Pool Activity</span>
-              <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/40 text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-slate-850 flex items-center justify-center font-bold text-[9px] text-slate-400 border border-slate-800">
-                    AR
+              {entries.length > 0 ? (
+                <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/40 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-slate-850 flex items-center justify-center font-bold text-[9px] text-slate-400 border border-slate-800">
+                      {(entries[0]?.userName || 'U').substring(0, 2).toUpperCase()}
+                    </div>
+                    <span className="font-extrabold text-white text-[10px] uppercase truncate max-w-[80px]">
+                      {entries[0]?.userName || 'Anonymous'}
+                    </span>
+                    <span className="text-slate-500 text-[10px]">active in pool</span>
                   </div>
-                  <span className="font-extrabold text-white text-[10px] uppercase">Alex R.</span>
-                  <span className="text-slate-500 text-[10px]">submitted picks</span>
+                  <span className="text-emerald-400 font-bold text-[10px]">
+                    {_pool.type === 'NFL_SURVIVOR' ? 'Alive' : 'Joined'}
+                  </span>
                 </div>
-                <span className="text-emerald-400 font-bold text-[10px]">+38 pts</span>
-              </div>
+              ) : (
+                <div className="text-slate-600 text-[10px] italic">No recent pool activity.</div>
+              )}
             </div>
           </div>
 
           <div className="mt-5 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-            <span className="text-slate-500 font-bold uppercase">Margin statistics</span>
+            <span className="text-slate-500 font-bold uppercase">Performance Rating</span>
             <span className="text-emerald-400 font-black uppercase">
-              Consistent Performance
+              {myEntry ? (
+                _pool.type === 'NFL_PICKEM' ? (
+                  `${myEntry.totalScore || 0} Points Accumulated`
+                ) : _pool.type === 'NFL_SURVIVOR' ? (
+                  `${myEntry.strikesUsed || 0} Strikes Used`
+                ) : (
+                  `${myEntry.seasonTotal || 0} Total Margin`
+                )
+              ) : 'No Entry Found'}
             </span>
           </div>
         </div>
@@ -531,64 +807,67 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
             {/* Standings Rows with Highlight for David B (Active User) */}
             <div className="space-y-3">
-              {[
-                { rank: 1, name: 'Sarah K.', detail: 'TOP RANKED', pts: 198, trend: 'updown', avatar: 'SK', color: '#3B82F6' },
-                { rank: 2, name: 'Mark S.', detail: 'WEEK 11: 4', pts: 198, trend: 'down', avatar: 'MS', color: '#FF6600' },
-                { rank: 3, name: 'David B.', detail: 'ME - WEEK 11', pts: '#3rd', trend: 'up', avatar: 'DB', highlight: true, color: '#10B981' },
-                { rank: 4, name: 'Alex R.', detail: 'TOP RANKED', pts: 198, trend: 'up', avatar: 'AR', color: '#10B981' },
-                { rank: 5, name: 'Emily L.', detail: 'WEEK 11: 2', pts: 198, trend: 'down', avatar: 'EL', color: '#FF6600' }
-              ].map((row, i) => (
-                <div 
-                  key={i} 
-                  className={`flex justify-between items-center p-3 rounded-2xl border transition-all ${
-                    row.highlight 
-                      ? 'bg-gradient-to-r from-orange-500/10 to-indigo-600/10 border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.25)] scale-[1.02]' 
-                      : 'bg-slate-950/60 border-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-black text-slate-500 w-3 text-center">{row.rank}</span>
-                    <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center ${
-                      row.highlight ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-900 text-slate-400'
-                    }`}>
-                      {row.avatar}
-                    </div>
-                    <div>
-                      <span className="text-xs font-extrabold text-white block uppercase leading-none mb-1">{row.name}</span>
-                      <span className="text-[9px] font-bold text-slate-500 uppercase">{row.detail}</span>
-                    </div>
-                  </div>
+              {displayedStandings.length > 0 ? (
+                displayedStandings.map((row, i) => {
+                  const trend = getTrendData(row.name);
+                  return (
+                    <div 
+                      key={i} 
+                      className={`flex justify-between items-center p-3 rounded-2xl border transition-all ${
+                        row.highlight 
+                          ? 'bg-gradient-to-r from-orange-500/10 to-indigo-600/10 border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.25)] scale-[1.02]' 
+                          : 'bg-slate-950/60 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-black text-slate-500 w-3 text-center">{row.rank}</span>
+                        <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center ${
+                          row.highlight ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-900 text-slate-400'
+                        }`}>
+                          {row.avatar}
+                        </div>
+                        <div>
+                          <span className="text-xs font-extrabold text-white block uppercase leading-none mb-1">{row.name}</span>
+                          <span className="text-[9px] font-bold text-slate-500 uppercase">{row.detail}</span>
+                        </div>
+                      </div>
 
-                  <div className="flex items-center gap-4">
-                    {/* SVG Trend Sparkline */}
-                    <div className="w-12 h-6 overflow-hidden select-none">
-                      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        {row.trend === 'up' && (
-                          <path d="M 0 80 Q 40 70, 70 20 T 100 10" fill="none" stroke={row.color} strokeWidth="3" strokeLinecap="round" />
-                        )}
-                        {row.trend === 'down' && (
-                          <path d="M 0 10 Q 30 20, 60 70 T 100 90" fill="none" stroke={row.color} strokeWidth="3" strokeLinecap="round" />
-                        )}
-                        {row.trend === 'updown' && (
-                          <path d="M 0 50 Q 25 20, 50 80 T 100 50" fill="none" stroke={row.color} strokeWidth="3" strokeLinecap="round" />
-                        )}
-                      </svg>
-                    </div>
+                      <div className="flex items-center gap-4">
+                        {/* SVG Trend Sparkline */}
+                        <div className="w-12 h-6 overflow-hidden select-none">
+                          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            {trend.type === 'up' && (
+                              <path d="M 0 80 Q 40 70, 70 20 T 100 10" fill="none" stroke={trend.color} strokeWidth="3" strokeLinecap="round" />
+                            )}
+                            {trend.type === 'down' && (
+                              <path d="M 0 10 Q 30 20, 60 70 T 100 90" fill="none" stroke={trend.color} strokeWidth="3" strokeLinecap="round" />
+                            )}
+                            {trend.type === 'updown' && (
+                              <path d="M 0 50 Q 25 20, 50 80 T 100 50" fill="none" stroke={trend.color} strokeWidth="3" strokeLinecap="round" />
+                            )}
+                          </svg>
+                        </div>
 
-                    <div className="text-right w-12">
-                      <span className="text-[9px] font-bold text-slate-500 block uppercase leading-none">Score</span>
-                      <span className="text-xs font-black text-white font-mono">{row.pts}</span>
+                        <div className="text-right w-12">
+                          <span className="text-[9px] font-bold text-slate-500 block uppercase leading-none">Score</span>
+                          <span className="text-xs font-black text-white font-mono">{row.pts}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  );
+                })
+              ) : (
+                <div className="text-slate-500 text-xs text-center py-6 font-bold bg-slate-950/40 border border-slate-800 rounded-2xl">
+                  No active rankings.
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
           <div className="mt-5 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-            <span className="text-slate-500 font-bold uppercase">Standings index</span>
+            <span className="text-slate-500 font-bold uppercase">Standings Status</span>
             <span className="text-indigo-400 font-black uppercase">
-              David B. is #3
+              {userRank !== 'N/A' ? `You are Ranked ${userRank}` : 'Unranked (Submit Pick)'}
             </span>
           </div>
         </div>

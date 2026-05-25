@@ -1,191 +1,113 @@
-# March Melee Pools (MMPoolsV3)
+# March Melee Pools & Gridiron Gamble (MMPoolsV3)
 
-A modern, real-time sports pool application supporting both **NCAA March Madness Brackets** and **Gameday Squares**. Built for performance, aesthetics, and ease of use, this application allows users to create and manage bracket challenges and betting grids with automated scoring, real-time updates, and extensive customization options.
+A premium, modern, real-time sports pool platform designed for ultimate engagement and commissioner ease of use. MMPools supports classic **NCAA March Madness Brackets**, a complete **NFL Season Pool Suite (Weekly Pick'em, Survivor, Margin)**, high-fidelity **Gameday Squares**, and custom **Prop Bet Sheets**. 
+
+Built with React 19, TypeScript, and Tailwind CSS on the frontend, and backed by a robust Firebase serverless infrastructure, the application features real-time scores, automatic winner calculations, secure audit trails, and an AI Commissioner to resolve disputes instantly.
+
+---
 
 ## 🚀 Features
 
-### Core Experience
+### 🏈 NFL Season Pools Suite (NEW!)
+A comprehensive full-season NFL suite equipped with robust scoring engines, scheduled locks, and dynamic configurations.
+* **Weekly Pick'em Pools:** Outright winner selection of every scheduled game each week.
+  * **Confidence Mode:** Assign unique confidence weights (from 1 to N games). Correct picks earn points equal to the weight assigned.
+  * **Primetime Game Bonuses:** Configure custom bonus points for Thursday Night Football (TNF), Sunday Night Football (SNF), and Monday Night Football (MNF) selections.
+  * **Flex-Lock Modes:** Choose between per-game kickoff lock or a weekly lock (locks at kickoff of first game of the week).
+  * **Payout Modes:** Supports Season-long standings, Weekly "Sharp" payouts, or Hybrid (Season + Weekly) payout formats.
+  * **Weekly Tiebreaker:** Predict the combined score of the Monday Night Football game.
+* **Survivor Pools:** The ultimate test of endurance.
+  * **Double Play Modes:** Standard mode (pick a team to win) or "Pick Losers Mode" (pick a team to lose).
+  * **Mulligans & Strikes:** Configure "Sudden Death" (0 strikes) or allow up to N strikes/mulligans before elimination.
+  * **Rebuys:** Set up custom rebuy rules allowing users to buy back in before a specific deadline week (e.g., Week 4) at a custom rebuy price.
+  * **Bye Week Exemption:** Smart "Auto-Survive" exemption prevents elimination when a participant has zero eligible teams left to pick.
+* **Margin Pools:** High-stakes point differential tracking.
+  * **Margin Scoring:** Pick a single team each week. Your score is their victory or defeat margin (e.g., win by 14 = +14, lose by 7 = -7). No team can be picked twice.
+  * **Default Penalty:** Missing submissions penalize the participant with an automatic `-14` margin score.
+  * **5-Level Tiebreaker Standings Cascade:**
+    1. Highest Season Total victory margin.
+    2. Lowest Negative Burden (sum of absolute values of negative margins).
+    3. Most Positive Weeks (winning selections > 0 margin).
+    4. Highest Single-Week margin score.
+    5. Deterministic ID comparison.
+* **NFL Playoff Challenge (Rank 'Em):** Confidence pool designed specifically for the NFL postseason.
+  * **Drag-and-Drop Picker:** Interactive UI to reorder and rank all 14 playoff teams from 14 (most confident) to 1 (least confident).
+  * **Round Multiplier Scoring:** Points scale with each round (x1 Wild Card, x2 Divisional, x4 Conference, x8 Super Bowl).
+  * **Seed Underdog Bonus:** Optional configuration to reward underdog wins with extra points.
 
-* **Interactive 100-Square Grid:** Real-time selection and ownership tracking.
-* **Live Scoreboard V2:** Intelligent syncing with ESPN. Features fuzzy-match game detection (no gameId required), precise Eastern Time (ET) scheduling, and "Time TBD" handling. Displays quarter-by-quarter status and game clock.
-* **Participant Dashboard V2:** **NEW!** Completely redesigned experience for players.
-  * **Smart Filtering:** Automatically categorizes pools into "Open," "Live," and "Completed" tabs.
-  * **Search:** Quickly find pools by name or team.
-  * **Status Tracking:** Visual progress bars and status badges for every entry.
-  * **Unified Entries:** "My Entries" now seamlessly aggregates every pool you've joined, including private pools you don't manage.
-* **User Profiles:** Users can manage their display name, phone number, and social links via a new Profile Manager. Changes sync instantly across Firestore and Authentication.
-* **Enhanced Visualization:** **NEW!** Dynamic grid highlighting for active rows/columns, winning squares, and paid (Emerald) vs. reserved (Amber) status. Now supports **Hybrid Winner Highlighting**—visually distinguishing between standard period winners (Gold/Trophy) and "Every Score" event winners (Purple/Zap), with special gradients for dual winners.
-* **Dynamic Layouts:** Smart responsive design that adapts to pool settings (e.g., auto-centering status cards when Charity is disabled).
-* **Mobile-Responsive:** fully optimized design for desktop, tablet, and mobile devices.
-* **How it Works Guide:** **NEW!** Comprehensive, step-by-step interactive guide for new users, accessible directly from the main menu.
-* **User Accounts:** Secure Google Authentication and email registration via Firebase.
+---
 
-### College Basketball (March Madness & Conference Tournaments)
+### 🏀 College Basketball (March Madness & Conference Tournaments)
+Fully featured tournament suite designed to maximize excitement during Selection Sunday and the tournament run.
+* **Multi-Tournament Engine:** Full-fledged bracket engines for the NCAA Tournament (6 rounds), Big 12 Tournament (5 rounds, bye-team support), and Big East Tournament (4 rounds).
+* **Interactive Bracket Builder:** Sleek, drag-and-drop-like picker with "Smart Fill" capability for rapid bracket completion.
+* **Upset Bonus Logic:** Configure multiplier or flat bonuses for selecting lower-seeded underdog upsets.
+* **Standings & Live Leaderboard:** Round-by-round scoring, active leaderboards, and real-time standings.
+* **What-If Simulator:** Interactive sandbox that lets users simulate remaining games to see hypothetical standings.
+* **Advanced Analytics:** "Who to Root For" engine calculates exact win probabilities and potential ranks in real-time.
+* **Export Utilities:** Export standings to CSV files or generate beautiful brackets as printable PDFs.
 
-* **Multi-Tournament Support:** **NEW!** Full support for the Men's NCAA Tournament (6-rounds), Big 12 Tournament (5-rounds, incorporating bye-teams), and Big East Tournament (4-rounds) with dynamic scoring configurations.
-* **Charity Integration:** **NEW!** Built-in charity fundraising options tailored for bracket pools.
-* **BanterBoard & Payment Ledger:** **NEW!** Integrated trash-talk board and detailed payment tracking for pool members.
-* **Upset Bonus Logic:** **NEW!** Configurable extra points for correctly picking lower-seeded upsets.
-* **Export Options:** **NEW!** Export standings to CSV and generated brackets to PDF for easy sharing.
-* **Interactive Builder:** Mobile-friendly bracket picker with drag-and-drop-like ease. 'Smart Fill' features for rapid selection.
-* **Live Scoring:** Round-by-round scoring updates with active leaderboard table.
-* **Live Score Ticker:** Real-time scrolling ticker displaying live game scores, broadcast channels, and game status (powered by ESPN).
-* **Advanced Analytics:** "Who to Root For" engine calculates win probabilities and rank changes in real-time.
-* **What-If Simulator:** Forecast potential outcomes and standings based on hypothetical results.
+---
 
-### Gameday Squares (Super Bowl & MNF)
+### ⏹️ Gameday Squares (Super Bowl & Football Grids)
+A high-fidelity implementation of the classic football squares grid.
+* **Interactive 100-Square Grid:** Real-time square reservations, payments, and live axis numbers.
+* **Hybrid Winner Highlighting:** Visually distinguishes between standard period winners (Gold/Trophy) and "Every Score" event winners (Purple/Zap), with custom dual gradients.
+* **CSPRNG Numbers Generation:** Transactional axis numbers generator that supports a new set of random coordinates for every quarter ("4 Sets" mode).
+* **Final Prize Randomizer:** Secure final draw button that picks a winner from occupied squares if the final score lands on an empty grid intersection.
+* **Off the Top Charity:** Automated charity calculations that deduct a custom percentage of the pot to support non-profit causes.
 
-* **Direct Pool Selection & Setup:** **NEW!** Gameday Squares is now a fully active and selectable pool option on the creation page, complete with a dedicated setup wizard.
-* **Interactive 100-Square Grid:** Real-time selection and ownership tracking.
-* **Live Scoreboard:** Intelligent syncing with ESPN.
-* **Automated Winners:** Instant highlighting of winning squares for every quarter and score change (if "Every Score Pays" is active).
-* **Charity Integration:** Built-in fundraising tools.
+---
 
-### Pool Management
+### 🎯 Custom Prop Bets ("Side Hustle" Pools)
+Add custom betting cards alongside any major sport event.
+* **Dual-View Dashboard:** Enter and view picks on the left, check the live leaderboard on the right.
+* **Global Seed Catalog:** SuperAdmins can manage standard question templates to spin up a pool in seconds.
+* **Manager Grading Deck:** Quick-grading panel to award points instantly for correct props.
+* **Integrated Tiebreaker:** Custom score predictor to break ties at the top of the leaderboard.
 
-* **Reorganized Pool Selection Hub:** **NEW!** Completely restructured the `/create-pool` dashboard. Prioritized all active NFL & Gameday Pools (Gameday Squares, Weekly Pick'em, Survivor, and Margin Pools) in a high-fidelity grid at the top of the page.
-* **Offseason Muting & Gray-out:** **NEW!** Muted and grayed-out the March Madness Bracket option for the offseason (along with the Playoff Challenge), badging them with lock statuses to guide managers to currently active pool types.
+---
 
-* **Setup Wizard:** Enhanced 7-step flow to configure teams, costs, reminder rules, and payouts.
-* **Integrated Payments:** **NEW!** Pool managers can now add their **Venmo** handle and **Google Pay** details directly in the setup wizard. Participants see clickable payment links directly on the specific pool card.
-* **Charity & Fundraising:** ❤️ **NEW!** Dedicate a percentage of the pot to a charity of your choice. Includes automated "Off The Top" calculations and public support badges.
-* **Unclaimed Prize Handling:** **NEW!** Choose how to handle empty winning squares:
-  * **Rollover:** Unclaimed money automatically moves to the next quarter's pot.
-  * **Random Draw:** **NEW!** Activate a "Randomizer" button for the Final Prize to pick a lucky winner from occupied squares. **Security-Enhanced:** Only available when the game is over AND the final winning square is empty, ensuring fairness. The UI remains visible with a grayed-out button and condition checklist, ensuring transparency about when the feature will unlock.
-* **Email Broadcast Tool:** **NEW!** Pool managers can send mass emails to participants with recipient filtering (All, Paid, Unpaid), dynamic content inclusion (Rules, Payouts, Link), BCC for privacy, and 15-minute rate limiting. Payment links are automatically included in confirmation emails.
-* **Quarterly Numbers ('4 Sets'):** Optional mode to generate brand new axis numbers for every quarter. Numbers are generated transactionally by the server.
-* **College Football Support:** **NEW!** Full support for NCAA/CFB pools including conference filters and automatic logo fetching.
-* **Public Grids Sport Filter:** **NEW!** Filter active pools by NFL, NCAA Football, or view all. (NBA/NCAA Basketball coming soon).
-* **Improved Scoreboard:** **NEW!** Fully synchronized scoreboard for both NFL and College Football, displaying live clock, quarters, and final scores. **Robust Architecture:** Implements "Score Locking" to persist quarter scores as they happen, preventing data loss, and features intelligent parsing to handle messy API data (string/number mismatches).
-* **Custom Payouts:** Configurable percentage splits for Q1, Halftime, Q3, and Final scores.
-* **Manager Controls:** Lock/unlock grid, mark squares as paid, manual score overrides, new "Fix Pool Scores" emergency tool, and legacy "Force Sync" options.
-* **Pool Setup:** Automated pre-filling of manager contact info for streamlined creation.
-* **Auto-Lock System:** **NEW!** Pools automatically lock and generate random axis numbers at the scheduled kick-off time. **Now Robust:** Fixed frontend data saving to ensure reliability and corrected Timezone inputs to handle local game times accurately.
-* **Date & Time Display:** **NEW!** Pool cards now explicitly show the scheduled Game Time or Bracket Lock Time.
-* **Payout & Score History:** **Fixed!** "Fix Pool Scores" tool now correctly recalculates all past winners and payouts, ensuring the "Score Change History" audit log is always money-perfect. "No Money Won" status is now accurately reflected.
+### 🛠️ Core Experience & Smart Engine
+The foundational system powering MMPools.
+* **Live Scoreboard V2:** Intelligent, robust syncing with ESPN API featuring:
+  * **Fuzzy Match Game Detection:** Pairs active pools with scheduled matches without hardcoded IDs.
+  * **Score Locking:** Lock and persist quarter scores as they happen, preventing data corruption from API fluctuations.
+  * **Live Ticker:** Real-time ticker displaying active scores, TV networks, and game clocks.
+* **Participant Dashboard V2:** Redwood-styled home for players featuring unified entries (public, joined, private), smart status tracking (badges, progress bars), and real-time tabs for "Open", "Live", and "Completed" pools.
+* **AI Commissioner (Gemini-Powered):** Neutral, zero-hallucination assistant providing:
+  * **"Why I Won":** Generates human-friendly explanations of winning coordinates.
+  * **Dispute Helper:** Validates the immutable audit trail to verify that coordinates were generated fairly and payouts are mathematically sound.
+* **Immutable Audit Trail:** All critical operations (locking, number generation, transactions) are logged to an append-only collection. Client writes are locked down via Firestore rules for absolute integrity.
+* **Global Stats & Prizes:** Total prize money tracker updates via secure Cloud Functions (`onPoolCompleted`) to display all-time winnings on the home landing page.
 
-### 🏆 NFL Playoff Challenge (NEW)
+---
 
-* **Rank 'Em Style:** A brand new pool type for the NFL Postseason. Participants rank all 14 playoff teams from 14 points (Most Confident) to 1 point (Least Confident).
-* **Drag-and-Drop Interface:** Intuitive UI allows users to easily reorder teams before locking their entry.
-* **Scoring System:** Points are awarded for every win, multiplied by the round multiplier (x1 Wild Card, x2 Divisional, x4 Conference, x8 Super Bowl).
-* **Live Leaderboard:** Real-time standings sorted by **Maximum Possible Score** and current points.
-* **Tiebreaker:** Integrated Super Bowl total score prediction.
-* **Manager Controls:** Toggles for "Seed Bonus" (rewarding underdog picks) and full manual control over payment status.
+### 📢 Management, Communications & Invites
+Streamline pool administration and communication.
+* **Reorganized Pool Selection Hub:** Modern `/create-pool` dashboard prioritizing active NFL & Gameday pools. Features "Offseason Muting & Gray-out" to hide basketball pools during spring/summer.
+* **Customizable Host Profiles:** Pool managers can set their name, custom contact methods (email, phone, both, or none), and paste clickable **Venmo**, **Zelle**, or **Google Pay** links directly into setup wizards and pool invites.
+* **Communication Suite:** Pre-styled HTML emails sent via Cloud Functions and Trigger Email extension:
+  * **Welcome & Pick Confirmations:** Detailed breakdowns sent immediately upon entry.
+  * **Smart Payment Receipts:** Instantly generated when marked PAID by a manager.
+  * **Payment Due Alerts:** Automatically sent exactly **2 hours before pool lock**.
+  * **Post-Game Recaps:** Automated summaries with winners and payout highlights.
+* **Email Broadcast Tool:** Rate-limited BCC mass emails with custom targets (All, Paid, Unpaid).
+* **Waitlist Engine:** Secure waitlist collection and admin invite deck for grids exceeding 100 entries.
+* **Viral Referral System:** Attribution-based referral links (`?ref=`) that reward managers and track signups.
+* **Smart Reminders:** Integrated with SMS (Courier/Twilio) and Web-Push (FCM) to notify users of locks, payment deadlines, and scores.
 
-### 📧 Professional Communication Suite (NEW)
+---
 
-* **Unified Branding:** All system emails (Welcome, Reset Password, Receipts, Winner Alerts) now use a polished, standardized HTML template with the official logo and footer.
-* **Smart Receipts:** Automated "Payment Received" emails are triggers instantly when a manager marks an entry as PAID, giving users peace of mind.
-* **Urgency Reminders:** The system intelligently scans active Playoff Pools and sends a "Payment Due" reminder to unpaid users exactly **2 hours before the pool locks**, reducing ease of administration.
-* **Entry Confirmations:** Users receive a detailed "Entry Confirmed" email with a summary of their ranked picks immediately after submission.
+### 👑 Super Admin & Simulation Suite
+Full-control dashboards for site administrators.
+* **Real-time Feature Flags:** Instantly toggle "Bracket Pools" or trigger "Maintenance Mode" globally.
+* **Simulation Dashboard:** Verify game logic, standings math, and automated email/SMS alerts:
+  * **Scenario Runner:** Simulate entire matches or tournaments round-by-round.
+  * **Auto-Fill Grids:** Stress-test payment splits with 1,000+ random entries.
+* **Targeted Pool Repair:** Emergency "Fix Pool Scores" tool to recalculate specific pools without affecting global data.
 
-### 📦 Pool Lifecycle Management (NEW)
-
-* **Archive Pools:** Managers can archive completed pools to keep their dashboard clean. Active/Archived tabs filter pools by status. Archived pools can be restored at any time.
-* **Pool Duplication:** One-click duplication of existing pools preserves all settings (teams, payout rules, costs) while resetting squares and scores for a fresh start.
-* **Waitlist for Full Grids:** When a pool reaches 100 squares, interested participants can join a waitlist. **Enhanced:** Now secure for unauthenticated users via Cloud Functions, with dedicated Admin management to view and invite waitlisted players.
-* **Post-Game Summary Email:** Automated email sent to all participants when a game ends, containing final scores, winner highlights, and payout breakdowns.
-
-### 🏈 Live Scoreboard Page (NEW)
-
-* **Dedicated Scoreboard:** Full-page view of live NFL and College Football scores powered by ESPN API.
-* **Auto-Refresh:** Scores update every 30 seconds with manual refresh option.
-* **Smart Sorting:** Games sorted by status (Live first, then Upcoming, then Completed).
-* **League Tabs:** Toggle between NFL and College Football with one click.
-* **Scores History:** Reliable "Score Locking" ensures past quarter scores remain accurate even if the API feed fluctuates.
-
-### 🎲 Prop Bets ("Side Hustle") V2
-
-A fully integrated mini-game allowing pool managers to create custom prop bets (e.g., "Coin Toss Winner", "First TD Scorer").
-
-* **For Players:**
-  * **Dual-View Interface:** Enter picks on the left, view the live **Leaderboard** on the right.
-  * **Live Scoring:** Real-time updates on your card showing Correct/Incorrect status.
-  * **Tiebreaker:** Integrated total score prediction for close contents.
-* **For Managers:**
-  * **Global Seeds:** Import standard questions (managed by SuperAdmin) to set up a pool in seconds.
-  * **Custom Questions:** Create your own unique props with custom options.
-  * **Easy Grading:** One-click grading dashboard that instantly updates all player scores.
-  * **Cost Control:** Set a separate entry fee for the Prop Bet contest.
-
-### 🃏 Enhanced Status Card (NEW)
-
-* **Tabbed Interface:** The pool status card has been completely refactored into a sleek, tabbed design ("Overview", "Rules", "Payment") to organize critical information without clutter.
-* **Live Countdown Timer:** A dynamic countdown timer shows the exact time until kickoff.
-  * **Color-Coded Urgency:** The timer changes color based on proximity to the start time (Green > 1h, Amber < 1h, Red < 10m).
-  * **Status Updates:** Automatically switches to "Game In Progress" or "Game Complete" based on live status.
-
-### 🔔 Smart Reminder System & Notifications
-
-* **SMS Notifications:** **NEW!** Users can opt-in to receive critical alerts (like payment reminders or lock warnings) via text message.
-* **Automated Payment Reminders:** Scheduled system that identifies users with unpaid squares and sends focused email reminders.
-* **Game Time Alerts:** Notifies users shortly before the pool locks.
-* **Winner Announcements:** Instant email notifications sent to users when they win a quarter.
-* **Smart & Safe:** Built with rate-limiting, idempotency (never double-send), and user opt-in preferences (Global vs. Pool-specific settings).
-
-### 🛡️ Audit & Integrity (NEW)
-
-A military-grade audit logging system to ensure absolute fairness and transparency.
-
-* **Immutable Log:** All critical actions (Locking, Number Generation, Reservations) are written to an append-only `audit` collection.
-* **Tamper-Resistant:** Firestore Security Rules (`read: true, write: false`) prevent ANY client (even Pool Managers) from altering the log. Only trusted Cloud Functions can write entries.
-* **Public Verification:** A **"Fully Auditable"** badge on the pool view allows any player to inspect the complete, timestamped timeline of events, proving that numbers were generated fairly and payouts are accurate.
-
-### 💰 Global Stats & Prizes (NEW)
-
-* **Total Prizes Tracker:** Persistent global counter on the landing page showing the total amount of prize money awarded across all pools.
-* **Automated Tracking:** Secure Cloud Function (`onPoolCompleted`) automatically updates the global ledger whenever a pool is finalized, ensuring the total never decreases even if old pools are deleted.
-* **Final Payouts:** **NEW!** Implemented backend logic to accurately calculate and distribute "Every Score Wins" payouts when a game goes final, ensuring a fair split of the event pot.
-
-### 🧪 Advanced Simulation & Testing (NEW)
-
-* **Simulation Dashboard:** A powerful new SuperAdmin tool to verify game logic, winner calculation, and payouts without waiting for real games.
-  * **Scenario Runner:** Simulate entire games quarter-by-quarter or event-by-event (Touchdowns, Field Goals, Safeties).
-  * **Auto-Fill Grids:** Instantly populate grids with test users and random squares to stress-test payout algorithms.
-  * **Audit Verification:** Integrated view to confirm that specific game events correctly trigger "Event Winner" logs in the immutable audit trail.
-  * **Fix Scores:** Emergency tool to re-fetch ESPN data and regenerate all winner records retroactively if issues arise. Now supports **Targeted Pool Repair** to fix specific pools without affecting others.
-
-### 🎨 Design & Experience
-
-* **Brand Refreshed:** Updated visual identity with a larger, cleaner logo and "collage-style" hero imagery.
-* **Feature Showcase:** New interactive landing page section highlighting key features (Live Grid, Scoreboard, Scenarios) with a staggered, modern layout.
-
-### 🤖 AI Commissioner (Powered by Gemini)
-
-A neutral, AI-driven referee that brings clarity and trust to the game.
-
-* **"Why This Square Won":** Automatically generates clear, step-by-step explanations for every quarterly winner. It cites specific axis digits, the final score, and the grid intersection logic.
-* **Dispute Helper:** Included "Ask the Commissioner" tool allows users to verify fairness. e.g., "Did the numbers change?" The AI analyzes the secure Audit Log to provide factual, evidence-based answers.
-* **Zero-Hallucinations:** Built with strict "Facts Only" system prompts. If data is missing or unverifiable, the AI will refuse to make up an answer, ensuring absolute integrity.
-* **Idempotency:** Smart hashing ensures the AI never processes the same event twice, keeping API costs low and responses consistent.
-
-### 🔗 Referral System (NEW)
-
-Built-in viral growth mechanism to help pool managers expand their reach.
-
-* **Unique Referral Links:** Each pool manager receives a personalized referral link (`marchmeleepools.com/?ref=UID`).
-* **Automatic Tracking:** New signups via referral links are automatically attributed to the referrer in Firestore.
-* **Dashboard Stats:** Pool managers can view their referral count and copy their link directly from their Profile page.
-* **SuperAdmin Visibility:** Referral performance is tracked in the SuperAdmin dashboard for analytics.
-* **Email Promotion:** All outgoing site emails include a promotional footer encouraging users to create their own pools.
-
-### Super Admin Dashboard
-
-* **System Overview:** View all pools and registered users.
-* **User Management:** Edit user details or delete accounts.
-* **System Configuration:** **NEW!** Global feature flags to toggle "Bracket Pools" and "Maintenance Mode" in real-time without redeployment.
-* **Simulation Tools:** Advanced verification suite to test the full lifecycle:
-  * **Seed Test Tournament:** Populates a dummy 64-team bracket (Year 2025) with teams and R64 matchups.
-  * **Simulate Round:** Randomly decides winners for the current active round and advances the tournament state to test scoring and progressions.
-  * **Reset Scores:** Wipes simulation data to start fresh.
-
-### Verification & Compliance
-
-* **Security Audited:** **NEW!** Regular automated dependency scanning and manual code audits to ensure military-grade security. Includes patched dependencies and strict Content Security Policies (CSP) for Cloud Functions and client apps.
-* **Google OAuth Verified:** Fully compliant with Google API Services User Data Policy, including "Limited Use" disclosure.
-* **Legal Center:** Integrated Privacy Policy and Terms of Service pages with consistent site navigation and "Back to Home" functionality.
-* **Brand Compliance:** Uses official Google Sign-In branding and color palettes.
+---
 
 ## 🛠️ Tech Stack
 
@@ -195,8 +117,10 @@ Built-in viral growth mechanism to help pool managers expand their reach.
 * **APIs:**
   * **Data:** ESPN (Scoreboard)
   * **AI:** Google Gemini (AI Commissioner Features)
-  * **Email:** EmailJS & Firebase Trigger Email
+  * **Email & SMS:** EmailJS, Courier API, Twilio, & Firebase Trigger Email
 * **Deployment:** Docker (Nginx serving static assets)
+
+---
 
 ## 💻 Local Developement Setup
 
@@ -233,6 +157,8 @@ Built-in viral growth mechanism to help pool managers expand their reach.
 
     The app will be available at `http://localhost:5173`.
 
+---
+
 ## 🧪 Testing
 
 Run the automated test suite to verify scoring logic and edge cases:
@@ -242,9 +168,10 @@ npx vitest run
 ```
 
 Includes:
-
 * **2025 Tournament Replay:** Validates scoring engine against realistic bracket scenarios.
 * **Synthetic Scenarios:** Stress-tests the engine with 1,000+ combinations of random picks and results to ensure invariant integers (e.g. Max Possible Score >= Current Score).
+
+---
 
 ## 🔒 Authentication & Security
 
@@ -253,7 +180,6 @@ This project relies on **Firebase Cloud Functions (2nd Gen)** to enforce game in
 ### Cloud Functions (`/functions`)
 
 Sensitive operations are moved off the client-side to a trusted Node.js environment:
-
 * `lockPool(poolId)`: Securely locks the grid and generates the random 0-9 axis numbers using server-side CSPRNG. Logs the action to the secure Audit Trail.
 * `reserveSquare(poolId, squareId)`: Handles square purchases transactionally with race-condition prevention. Added to Audit Log.
 * `syncGameStatus` (Scheduled): Polls ESPN every 5 minutes (during games) to update scores and **generate new quarterly numbers** if the "4 Sets" rule is active.
@@ -261,26 +187,24 @@ Sensitive operations are moved off the client-side to a trusted Node.js environm
 * `onWinnerComputed` (Trigger): Listens for game score updates to instantly notify winners via email.
 
 ### Firestore Security Rules
-
 * **Audit Log:** `read: true` for transparency, `write: false` for everyone (Client-side writes blocked).
 * **Clients:** Explicitly blocked from writing to sensitive fields like `isLocked` and `axisNumbers`.
 * **Users:** Can only write to their own user profile.
 
 ### Email Service (Extension)
-
 Uses the **"Trigger Email from Firestore"** extension to send transaction confirmations.
+
+---
 
 ## 🚀 Deployment Guide (Coolify / Docker)
 
 This project is configured for deployment using **Docker**.
 
 ### Prerequisites
-
 * A Coolify instance (or any Docker-based hosting platform).
 * A connected GitHub repository.
 
 ### Steps
-
 1. **Create Service:** In Coolify, add a new resource -> "Git Repository".
 2. **Select Repository:** Choose `kstruck/MMPoolsV3` and the `main` branch.
 3. **Build Pack:** Select **Dockerfile**. The included `Dockerfile` handles the multi-stage build (Vite build -> Nginx serve).
@@ -289,6 +213,5 @@ This project is configured for deployment using **Docker**.
 6. **Deploy:** Click "Deploy".
 
 ### Production Notes
-
 * **Nginx:** The project uses a custom `nginx.conf` to handle client-side routing (SPA fallback to `index.html`).
 * **Caching:** A script in `index.html` automatically unregisters legacy Service Workers to prevent caching issues from older versions of the app.
