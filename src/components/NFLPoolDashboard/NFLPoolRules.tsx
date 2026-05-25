@@ -7,13 +7,14 @@ interface NFLPoolRulesProps {
 }
 
 export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool }) => {
+  const castPool = pool as any;
   const type = pool.type;
-  const settings = pool.settings || {};
+  const settings = castPool.settings || {};
 
   const entryFee = settings.entryFee ?? 0;
   const lockBuffer = settings.lockBufferMinutes ?? 5;
 
-  const branding = pool.branding || {};
+  const branding = castPool.branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';
 
   return (
@@ -181,7 +182,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool }) => {
                 <ol className="list-decimal list-inside space-y-1.5 font-mono text-[10px] text-slate-400 leading-normal">
                   <li>Highest Season Total victory margin.</li>
                   <li>Lowest Negative Burden (sum of absolute values of negative margins).</li>
-                  <li>Most Positive Weeks (winning selections > 0 margin).</li>
+                  <li>Most Positive Weeks (winning selections &gt; 0 margin).</li>
                   <li>Highest Single-Week margin score.</li>
                   <li>Deterministic ID comparison.</li>
                 </ol>

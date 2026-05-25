@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Trophy, Heart, ShieldAlert, Award, Star, ArrowUpRight, ArrowDownRight, Compass, Shield } from 'lucide-react';
+import { Trophy, Heart, ShieldAlert, Star } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
 
 interface NFLStandingsProps {
@@ -12,7 +12,6 @@ interface NFLStandingsProps {
 export const NFLStandings: React.FC<NFLStandingsProps> = ({
   pool,
   entries,
-  games,
   week
 }) => {
   const type = pool.type;

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Settings, Shield, DollarSign, Award, CheckCircle, XCircle, RefreshCw, Users, Activity, Play } from 'lucide-react';
+import { Settings, DollarSign, CheckCircle, XCircle, Users, Activity, Play } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { Pool, NFLGame } from '../../types';
@@ -77,7 +77,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     }
   };
 
-  const branding = pool.branding || {};
+  const branding = (pool as any).branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';
 
   return (

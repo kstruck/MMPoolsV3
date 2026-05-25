@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Lock, Edit2, AlertCircle, Save } from 'lucide-react';
+import { Lock, AlertCircle, Save } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame } from '../../types';
@@ -15,20 +15,20 @@ interface PickemPickEntryProps {
 
 export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   pool,
-  user,
   week,
   games,
   entry,
   isWeekLocked
 }) => {
+  const castPool = pool as any;
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [confidence, setConfidence] = useState<Record<string, number>>({});
   const [tiebreakerPrediction, setTiebreakerPrediction] = useState<number>(40);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const confidenceMode = pool.settings?.confidenceMode ?? false;
-  const bufferMinutes = pool.settings?.lockBufferMinutes ?? 5;
+  const confidenceMode = castPool.settings?.confidenceMode ?? false;
+  const bufferMinutes = castPool.settings?.lockBufferMinutes ?? 5;
 
   // Load existing picks when week, games, or entry changes
   useEffect(() => {
@@ -46,7 +46,6 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // Compute confidence range for this week: [17 - N .. 16]
   const N = games.length;
   const minVal = 17 - N;
-  const maxVal = 16;
   const availableConfidenceValues = useMemo(() => {
     return Array.from({ length: N }, (_, i) => minVal + i).reverse(); // high to low e.g., 16, 15, 14...
   }, [N, minVal]);

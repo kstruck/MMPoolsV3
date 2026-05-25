@@ -14,16 +14,10 @@ export interface BanterMessage {
   timestamp: number;
 }
 
-// Core Pool Types
-import {
-  NFLGame,
+import type {
   NFLPickemPool,
   NFLSurvivorPool,
-  NFLMarginPool,
-  NFLPickemEntry,
-  SurvivorEntry,
-  MarginEntry,
-  WeeklyRecap
+  NFLMarginPool
 } from './nflPoolTypes';
 
 export * from './nflPoolTypes';

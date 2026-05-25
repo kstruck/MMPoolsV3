@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Trophy, Grid3X3, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
 // import { settingsService } from '../services/settingsService';
 import { Header } from './Header';
@@ -28,6 +29,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
     onCreatePool,
     onSelectProps
 }) => {
+    const navigate = useNavigate();
     // const [settings, setSettings] = useState<SystemSettings | null>(null);
 
     // useEffect(() => {

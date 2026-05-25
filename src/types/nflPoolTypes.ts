@@ -1,4 +1,4 @@
-import { PayoutSettings } from './index';
+import type { PayoutSettings } from './index';
 
 export interface NFLGame {
   id: string; // e.g. "espn_401671234"

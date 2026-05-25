@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Calendar, Lock, Settings, Share2, HelpCircle, FileText, ChevronRight } from 'lucide-react';
+import { Calendar, Lock, Settings, Share2, FileText } from 'lucide-react';
 import { dbService } from '../../services/dbService';
-import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
 
 // Lazy load or import sub-views (we will create them next!)
@@ -25,9 +24,9 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   pool,
   user,
   isManager,
-  onBack,
   onOpenAuth
 }) => {
+  const castPool = pool as any;
   const [activeTab, setActiveTab] = useState<'picks' | 'standings' | 'recaps' | 'rules' | 'manager'>('picks');
 
   // Estimate current NFL Week based on date (standard season calculations)
@@ -54,12 +53,12 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // 1. Subscribe to NFL Games
   useEffect(() => {
     setIsLoading(true);
-    const unsub = dbService.subscribeToNFLGames(pool.season, (data) => {
+    const unsub = dbService.subscribeToNFLGames(castPool.season, (data) => {
       setGames(data);
       setIsLoading(false);
     });
     return () => unsub();
-  }, [pool.season]);
+  }, [castPool.season]);
 
   // 2. Subscribe to Pool Participant Entries
   useEffect(() => {
@@ -91,10 +90,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Check if the current selected week is locked (earliest game kicked off)
   const isWeekLocked = useMemo(() => {
     if (weeklyGames.length === 0) return false;
-    const bufferMs = (pool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
+    const bufferMs = (castPool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
     const earliestKickoff = Math.min(...weeklyGames.map(g => g.startTime));
     return Date.now() >= (earliestKickoff - bufferMs);
-  }, [weeklyGames, pool.settings?.lockBufferMinutes]);
+  }, [weeklyGames, castPool.settings?.lockBufferMinutes]);
 
   // Time remaining to earliest game this week
   const earliestGame = useMemo(() => {
@@ -109,7 +108,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     alert('Invite link copied to clipboard!');
   };
 
-  const branding = pool.branding || {};
+  const branding = castPool.branding || {};
   const accentHex = branding.secondaryColor || '#6366f1';
 
   return (

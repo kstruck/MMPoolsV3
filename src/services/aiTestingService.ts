@@ -178,7 +178,7 @@ export async function runAIEnhancedTest(
     logger.log('🧪 Running test...');
     const { runTest } = await import('../utils/testing/testingOrchestrator');
     const testResult = await runTest({
-        poolType,
+        poolType: poolType as any,
         scenario: scenario.scenarioName,
         mode,
         settings: {
@@ -202,7 +202,7 @@ export async function runAIEnhancedTest(
  * Get suggested test scenarios for a pool type
  */
 export async function getSuggestedScenarios(poolType: PoolType): Promise<string[]> {
-    const suggestions: Record<PoolType, string[]> = {
+    const suggestions: Partial<Record<PoolType, string[]>> = {
         SQUARES: [
             'Test a basic squares pool with 100% fill and standard payouts',
             'Test reverse scores with partial grid fill',

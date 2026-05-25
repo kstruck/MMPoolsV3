@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Trophy, ShieldAlert, Sparkles, Coins, Users, ArrowRight, LogIn } from 'lucide-react';
+import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { logger } from '../utils/logger';
 import { Header } from './Header';
@@ -21,6 +21,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
   const [pool, setPool] = useState<Pool | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
+  const castPool = pool as any;
 
   // Subscribe to pool configurations
   useEffect(() => {
@@ -109,7 +110,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
               <div>
                 <Coins className="text-emerald-400 w-6 h-6 mx-auto mb-1" />
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Entry Fee</span>
-                <span className="text-white font-black text-lg">${pool.settings?.entryFee ?? 0}</span>
+                <span className="text-white font-black text-lg">${castPool?.settings?.entryFee ?? 0}</span>
               </div>
               <div>
                 <Users className="text-blue-400 w-6 h-6 mx-auto mb-1" />
@@ -138,12 +139,12 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-blue-400">✓</span> 
-                    {pool.settings?.confidenceMode 
+                    {castPool?.settings?.confidenceMode 
                       ? 'Confidence rankings enabled (points scaled 1 to N)' 
                       : 'Standard scoring (1 point per correct pick)'}
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-blue-400">✓</span> Kickoff Lock Mode: <strong className="text-white font-bold">{pool.settings?.lockMode}</strong>
+                    <span className="text-blue-400">✓</span> Kickoff Lock Mode: <strong className="text-white font-bold">{castPool?.settings?.lockMode}</strong>
                   </li>
                 </ul>
               )}
@@ -151,17 +152,17 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
               {pool.type === 'NFL_SURVIVOR' && (
                 <ul className="text-sm text-slate-300 space-y-2.5">
                   <li className="flex items-center gap-2">
-                    <span className="text-red-400">✓</span> Mulligans: <strong className="text-white font-bold">{pool.settings?.maxStrikes} strikes before elimination</strong>
+                    <span className="text-red-400">✓</span> Mulligans: <strong className="text-white font-bold">{castPool?.settings?.maxStrikes} strikes before elimination</strong>
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-red-400">✓</span> 
-                    {pool.settings?.maxRebuys > 0 
-                      ? `${pool.settings.maxRebuys} rebuys permitted up to week ${pool.settings.rebuyDeadlineWeek}` 
+                    {castPool?.settings?.maxRebuys > 0 
+                      ? `${castPool?.settings.maxRebuys} rebuys permitted up to week ${castPool?.settings.rebuyDeadlineWeek}` 
                       : 'No rebuys/buy-backs allowed'}
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-red-400">✓</span> 
-                    {pool.settings?.pickLosersMode 
+                    {castPool?.settings?.pickLosersMode 
                       ? 'Pick-Loser Mode: Pick team to LOSE weekly' 
                       : 'Pick-Winner Mode: Pick team to WIN weekly'}
                   </li>

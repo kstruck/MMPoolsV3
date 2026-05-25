@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Lock, AlertCircle, Save, Percent, Award, ArrowUpRight, ArrowDownRight, Check } from 'lucide-react';
+import { Lock, AlertCircle, Save, Percent, ArrowUpRight, ArrowDownRight, Check } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame } from '../../types';
@@ -15,7 +15,6 @@ interface MarginPickEntryProps {
 
 export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
   pool,
-  user,
   week,
   games,
   entry,
@@ -25,7 +24,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const settings = pool.settings || {};
+  const settings = (pool as any).settings || {};
 
   // Load existing selection for this week when entry or week changes
   useEffect(() => {
@@ -104,7 +103,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
     return entry.weeklyScores[week] !== undefined ? entry.weeklyScores[week] : null;
   }, [entry, week]);
 
-  const branding = pool.branding || {};
+  const branding = (pool as any).branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';
 
   return (

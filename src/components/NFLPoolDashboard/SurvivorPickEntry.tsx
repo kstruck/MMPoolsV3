@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Lock, AlertCircle, Save, RotateCcw, Shield, ShieldAlert, Heart, Zap, Check } from 'lucide-react';
+import { Lock, AlertCircle, Save, RotateCcw, Shield, ShieldAlert, Heart, Check } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame } from '../../types';
@@ -15,7 +15,6 @@ interface SurvivorPickEntryProps {
 
 export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   pool,
-  user,
   week,
   games,
   entry,
@@ -26,7 +25,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   const [isRebuying, setIsRebuying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const settings = pool.settings || {};
+  const settings = (pool as any).settings || {};
   const maxStrikes = settings.maxStrikes ?? 0;
   const maxRebuys = settings.maxRebuys ?? 0;
   const rebuyDeadlineWeek = settings.rebuyDeadlineWeek ?? 4;
@@ -131,7 +130,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     }
   };
 
-  const branding = pool.branding || {};
+  const branding = (pool as any).branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';
 
   return (

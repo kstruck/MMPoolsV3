@@ -1,6 +1,6 @@
 import React from 'react';
 import type { User } from '../types';
-import { Trophy, LayoutGrid, CheckCircle2, Heart, BarChart3, Users, Shield, Zap, Percent } from 'lucide-react';
+import { Trophy, LayoutGrid, CheckCircle2, Heart, Users, Shield, Zap, Percent } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { Countdown } from './Countdown';

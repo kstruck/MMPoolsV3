@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { BarChart2, Lock, Eye, Check } from 'lucide-react';
+import { BarChart2, Lock, Eye } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
 
 interface PickDistributionProps {
@@ -17,7 +17,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   week,
   isWeekLocked
 }) => {
-  const settings = pool.settings || {};
+  const settings = (pool as any).settings || {};
   const lockBufferMinutes = settings.lockBufferMinutes ?? 5;
 
   const isGameLocked = (game: NFLGame): boolean => {
