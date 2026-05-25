@@ -35,6 +35,12 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
   const [lockBufferMinutes, setLockBufferMinutes] = useState(5);
   const [pickemPayoutMode, setPickemPayoutMode] = useState<'SEASON' | 'WEEKLY' | 'HYBRID'>('SEASON');
 
+  // Scoring options (Pick'em)
+  const [pointsPerPick, setPointsPerPick] = useState(1);
+  const [thursdayBonus, setThursdayBonus] = useState(0);
+  const [sundayNightBonus, setSundayNightBonus] = useState(0);
+  const [mondayBonus, setMondayBonus] = useState(0);
+
   // Survivor settings
   const [maxStrikes, setMaxStrikes] = useState(0); // 0 = sudden death
   const [maxRebuys, setMaxRebuys] = useState(0); // 0 = no rebuys
@@ -123,13 +129,20 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
       };
 
       if (poolType === 'NFL_PICKEM') {
+        const primetimeBonus: Record<string, number> = {};
+        if (thursdayBonus > 0) primetimeBonus.thursday = thursdayBonus;
+        if (sundayNightBonus > 0) primetimeBonus.sundayNight = sundayNightBonus;
+        if (mondayBonus > 0) primetimeBonus.monday = mondayBonus;
+
         settings = {
           ...settings,
           confidenceMode,
           lockMode: pickemLockMode,
           lockBufferMinutes,
           payoutMode: pickemPayoutMode,
-          pickMode: 'STRAIGHT'
+          pickMode: 'STRAIGHT',
+          pointsPerPick,
+          ...(Object.keys(primetimeBonus).length > 0 ? { primetimeBonus } : {})
         };
       } else if (poolType === 'NFL_SURVIVOR') {
         settings = {
@@ -155,6 +168,10 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
         season,
         seasonType,
         settings,
+        managerName: user.name || '',
+        contactEmail: user.email || '',
+        contactPhone: user.phone || '',
+        contactMethod: 'email',
         branding: {
           logo: '',
           bgColor: '#0b1329', // dark navy themed for NFL
@@ -350,6 +367,58 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
                       <option value="WEEKLY">Weekly Winner Only</option>
                       <option value="HYBRID">Hybrid (Season-End + Weekly Prizes)</option>
                     </select>
+                  </div>
+
+                  {/* ─── Scoring Configuration ─── */}
+                  <div className="bg-slate-950/60 border border-blue-900/30 rounded-2xl p-5 space-y-5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-blue-400 text-xs font-black uppercase tracking-widest">🏆 Scoring Configuration</span>
+                    </div>
+
+                    {/* Base points per pick */}
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-1">Base Points Per Correct Pick</label>
+                      <p className="text-xs text-slate-500 mb-2">Default is 1 pt. Set to 2 for a double-point pool, etc.</p>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          value={pointsPerPick}
+                          min={1}
+                          max={10}
+                          onChange={e => setPointsPerPick(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-28 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        />
+                        <span className="text-slate-400 text-xs font-bold">point(s) per correct pick</span>
+                      </div>
+                    </div>
+
+                    {/* Primetime bonus points */}
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-1">Primetime Game Bonus Points</label>
+                      <p className="text-xs text-slate-500 mb-3">Add flat bonus points on top of the base score for correct primetime picks. Set 0 to disable.</p>
+                      <div className="space-y-3">
+                        {[
+                          { label: '🌙 Thursday Night Game', value: thursdayBonus, setter: setThursdayBonus },
+                          { label: '⭐ Sunday Night Game (SNF)', value: sundayNightBonus, setter: setSundayNightBonus },
+                          { label: '🏈 Monday Night Game (MNF)', value: mondayBonus, setter: setMondayBonus },
+                        ].map(({ label, value, setter }) => (
+                          <div key={label} className="flex items-center justify-between bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2.5">
+                            <span className="text-slate-300 text-xs font-bold">{label}</span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={value}
+                                min={0}
+                                max={10}
+                                onChange={e => setter(Math.max(0, parseInt(e.target.value) || 0))}
+                                className="w-16 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                              />
+                              <span className="text-slate-500 text-xs">{value > 0 ? `+${value} bonus pts` : 'disabled'}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
@@ -626,6 +695,18 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
 
                       <span className="text-slate-500 font-bold">Lock Mode:</span>
                       <span className="text-white font-bold">{pickemLockMode}</span>
+
+                      <span className="text-slate-500 font-bold">Points Per Pick:</span>
+                      <span className="text-emerald-400 font-extrabold">{pointsPerPick} pt{pointsPerPick !== 1 ? 's' : ''}</span>
+
+                      {(thursdayBonus > 0 || sundayNightBonus > 0 || mondayBonus > 0) && (
+                        <>
+                          <span className="text-slate-500 font-bold">Primetime Bonuses:</span>
+                          <span className="text-amber-400 font-bold text-xs">
+                            {[thursdayBonus > 0 && `TNF +${thursdayBonus}`, sundayNightBonus > 0 && `SNF +${sundayNightBonus}`, mondayBonus > 0 && `MNF +${mondayBonus}`].filter(Boolean).join(' · ')}
+                          </span>
+                        </>
+                      )}
                     </>
                   )}
 

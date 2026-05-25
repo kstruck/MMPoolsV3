@@ -55,10 +55,19 @@ export interface NFLPickemPool {
     lockBufferMinutes: number; // grace period buffer (default: 5)
     payoutMode: 'SEASON' | 'WEEKLY' | 'HYBRID';
     pickMode: 'STRAIGHT' | 'ATS'; // ATS (Against the Spread) reserved for V2
+    // Custom scoring options
+    pointsPerPick?: number; // base points awarded per correct pick (default: 1)
+    primetimeBonus?: {
+      thursday?: number;    // bonus points added for correct Thursday Night Game pick
+      sundayNight?: number; // bonus points added for correct Sunday Night Game pick
+      monday?: number;      // bonus points added for correct Monday Night Game pick
+    };
   };
 
   managerName?: string;
   contactEmail?: string;
+  contactPhone?: string;
+  contactMethod?: 'email' | 'phone' | 'both' | 'none';
   venmo?: string;
   zelle?: string;
   cashapp?: string;
@@ -103,6 +112,8 @@ export interface NFLSurvivorPool {
 
   managerName?: string;
   contactEmail?: string;
+  contactPhone?: string;
+  contactMethod?: 'email' | 'phone' | 'both' | 'none';
   venmo?: string;
   zelle?: string;
   cashapp?: string;
@@ -142,6 +153,8 @@ export interface NFLMarginPool {
 
   managerName?: string;
   contactEmail?: string;
+  contactPhone?: string;
+  contactMethod?: 'email' | 'phone' | 'both' | 'none';
   venmo?: string;
   zelle?: string;
   cashapp?: string;

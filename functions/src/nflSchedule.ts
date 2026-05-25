@@ -20,7 +20,41 @@ export async function fetchNFLWeekSchedule(
   seasonType: 1 | 2 | 3
 ): Promise<NFLGame[]> {
   try {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+    let url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+
+    try {
+      // 1. Fetch calendar to extract precise date range for the specified week of 2026 season.
+      // This prevents ESPN's scoreboard API from falling back to 2025 games during the off-season.
+      const calendarUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?season=${season}`;
+      const calendarResp = await fetch(calendarUrl);
+      if (calendarResp.ok) {
+        const calendarData = await calendarResp.json();
+        const calendar = calendarData.leagues?.[0]?.calendar || [];
+        const segment = calendar.find((c: any) => String(c.value) === String(seasonType));
+        if (segment && segment.entries) {
+          // Map week index securely to segment entries
+          const entry = segment.entries[week - 1];
+          if (entry && entry.startDate && entry.endDate) {
+            const start = new Date(entry.startDate);
+            const end = new Date(entry.endDate);
+            
+            const formatDate = (d: Date) => {
+              const y = d.getUTCFullYear();
+              const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+              const day = String(d.getUTCDate()).padStart(2, '0');
+              return `${y}${m}${day}`;
+            };
+            
+            const dateQuery = `${formatDate(start)}-${formatDate(end)}`;
+            url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${dateQuery}`;
+            console.log(`[nflSchedule] Resolved Week ${week} (Type: ${seasonType}) to dates: ${dateQuery}`);
+          }
+        }
+      }
+    } catch (calErr) {
+      console.warn("[nflSchedule] Failed to resolve dates via calendar, falling back to standard week scoreboard URL:", calErr);
+    }
+
     const resp = await fetch(url);
     if (!resp.ok) {
       throw new Error(`ESPN Scoreboard API returned HTTP status ${resp.status}`);
@@ -103,6 +137,26 @@ export async function importNFLSeason(
 
   console.log(`[nflSchedule] Starting import of season ${season} (type: ${seasonType}) for weeks: ${weeks.join(', ')}`);
 
+  // Auto-cleanup any existing/legacy games for this season and seasonType to prevent orphan/mismatched data
+  try {
+    const existingSnap = await db.collection('nfl_games')
+      .where('season', '==', season)
+      .where('seasonType', '==', seasonType)
+      .get();
+    
+    if (!existingSnap.empty) {
+      console.log(`[nflSchedule] Found ${existingSnap.size} existing matching games for season ${season} (type ${seasonType}). Cleaning up...`);
+      const deleteBatch = db.batch();
+      existingSnap.docs.forEach(doc => {
+        deleteBatch.delete(doc.ref);
+      });
+      await deleteBatch.commit();
+      console.log(`[nflSchedule] Cleaned up ${existingSnap.size} legacy matching games successfully.`);
+    }
+  } catch (cleanupErr) {
+    console.warn("[nflSchedule] Failed to clean up legacy matching games in DB:", cleanupErr);
+  }
+
   for (const week of weeks) {
     const games = await fetchNFLWeekSchedule(week, season, seasonType);
     if (games.length === 0) {
@@ -112,8 +166,9 @@ export async function importNFLSeason(
 
     const batch = db.batch();
     for (const game of games) {
-      const gameRef = db.collection('nfl_games').doc(game.id);
-      batch.set(gameRef, game, { merge: true });
+      const cleanedGame = JSON.parse(JSON.stringify(game));
+      const gameRef = db.collection('nfl_games').doc(cleanedGame.id);
+      batch.set(gameRef, cleanedGame, { merge: true });
       importedCount++;
     }
     await batch.commit();
@@ -195,7 +250,8 @@ export const syncNFLScoresJob = onSchedule('*/5 * * * *', async (event) => {
         }
       }
 
-      batch.set(gameRef, freshGame, { merge: true });
+      const cleanedGame = JSON.parse(JSON.stringify(freshGame));
+      batch.set(gameRef, cleanedGame, { merge: true });
     }
     await batch.commit();
   }
@@ -225,6 +281,7 @@ export const importNFLSchedule = onCall(async (request) => {
     const res = await importNFLSeason(season, seasonType, weeks);
     return { success: true, importedCount: res.importedCount };
   } catch (err: any) {
-    throw new HttpsError('internal', err.message || 'NFL Season bulk import failed.');
+    console.error("importNFLSchedule Failure:", err);
+    throw new HttpsError('internal', `Failed to import NFL schedule: ${err.message || 'Unknown error'}`, err);
   }
 });

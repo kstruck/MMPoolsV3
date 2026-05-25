@@ -16,6 +16,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { PlayoffResultsManager } from './PlayoffPool/PlayoffResultsManager';
 import { AdminStatsDashboard } from './AdminStatsDashboard';
 import { TournamentManager } from './admin/TournamentManager';
+import { SuperAdminBentoDashboard } from './SuperAdminBentoDashboard';
 import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
 
 type SystemLog = {
@@ -34,6 +35,7 @@ export const SuperAdmin: React.FC = () => {
     const [pools, setPools] = useState<Pool[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
+    const [globalStats, setGlobalStats] = useState<any>(null);
 
     // UI State
     // UI State
@@ -95,6 +97,7 @@ export const SuperAdmin: React.FC = () => {
     useEffect(() => {
         const unsubPools = dbService.subscribeToAllPools(setPools);
         const unsubSettings = settingsService.subscribe(setSettings);
+        const unsubStats = dbService.onGlobalStatsUpdate(setGlobalStats);
         fetchUsers();
 
         // Load System Logs if on system tab
@@ -107,6 +110,7 @@ export const SuperAdmin: React.FC = () => {
         return () => {
             unsubPools();
             unsubSettings();
+            unsubStats();
         };
     }, [activeTab]);
 
@@ -826,108 +830,7 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ OVERVIEW TAB ============ */}
             {/* ============ OVERVIEW TAB ============ */}
             {activeTab === 'overview' && (
-                <div className="space-y-8">
-                    {/* STATS CARDS */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <button onClick={() => setActiveTab('pools')} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg text-left hover:border-indigo-500 transition-colors">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-indigo-500/20 rounded-lg text-indigo-400"><Shield size={24} /></div>
-                                <span className="text-xs font-bold text-slate-500 uppercase">Total Pools</span>
-                            </div>
-                            <p className="text-4xl font-black text-white mb-1">{pools.length}</p>
-                            <p className="text-sm text-slate-400">across all sports</p>
-                        </button>
-
-                        <button onClick={() => setActiveTab('users')} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg text-left hover:border-emerald-500 transition-colors">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-emerald-500/20 rounded-lg text-emerald-400"><Users size={24} /></div>
-                                <span className="text-xs font-bold text-slate-500 uppercase">Total Users</span>
-                            </div>
-                            <p className="text-4xl font-black text-white mb-1">{users.length}</p>
-                            <p className="text-sm text-slate-400">registered accounts</p>
-                        </button>
-
-                        <button onClick={() => setActiveTab('testing')} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg text-left hover:border-purple-500 transition-colors">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="p-3 bg-purple-500/20 rounded-lg">
-                                    <Bot size={24} className="text-purple-400" />
-                                </div>
-                                <div className="px-3 py-1 bg-purple-500/20 rounded-full text-xs font-bold text-purple-400">New</div>
-                            </div>
-                            <div className="text-2xl font-black text-white mb-1">AI Testing</div>
-                            <p className="text-sm text-slate-400">Generate & Validate Tests</p>
-                        </button>
-                        <button onClick={() => setActiveTab('system')} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg text-left hover:border-amber-500 transition-colors">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-amber-500/20 rounded-lg text-amber-400"><Activity size={24} /></div>
-                                <span className="text-xs font-bold text-slate-500 uppercase">System Status</span>
-                            </div>
-                            {/* Show number of active/live pools for a quick stat */}
-                            <p className="text-4xl font-black text-white mb-1">
-                                {pools.filter(p => !('isLocked' in p) ? false : !(p as GameState).isLocked && (p as GameState).scores?.gameStatus !== 'post').length}
-                            </p>
-                            <p className="text-sm text-slate-400">active pools</p>
-                        </button>
-
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <div>
-                                    <h4 className="font-bold text-white">Maintenance Mode</h4>
-                                    <p className="text-sm text-slate-400">Disable all write actions for users.</p>
-                                </div>
-                                <button
-                                    onClick={() => settingsService.update({ maintenanceMode: !settings?.maintenanceMode })}
-                                    className={`transition - colors ${settings?.maintenanceMode ? 'text-amber-400' : 'text-slate-500'} `}
-                                >
-                                    {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-amber-500/20" /> : <ToggleLeft size={40} />}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Quick Stats by Sport */}
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                        <h2 className="text-lg font-bold mb-4">Pools by Sport</h2>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {(Object.entries(poolsBySport) as [string, Pool[]][]).map(([sport, sportPools]) => (
-                                <button
-                                    key={sport}
-                                    onClick={() => { setActiveTab('pools'); setSportFilter(sport); }}
-                                    className="bg-slate-900/50 p-4 rounded-lg text-center hover:bg-slate-700 transition-colors"
-                                >
-                                    <p className="text-2xl font-bold text-white">{sportPools.length}</p>
-                                    <p className="text-xs text-slate-400 uppercase font-bold">{sport}</p>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Recent Top Referrers */}
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold">Top Referrers</h2>
-                            <button onClick={() => setActiveTab('referrals')} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold">View All</button>
-                        </div>
-                        <div className="space-y-2">
-                            {[...users]
-                                .map(u => ({ ...u, _computedCount: getComputedReferrals(u.id) }))
-                                .filter(u => u._computedCount > 0)
-                                .sort((a, b) => b._computedCount - a._computedCount)
-                                .slice(0, 5)
-                                .map((u, i) => (
-                                    <div key={u.id} className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg">
-                                        <span className={`text - lg font - bold ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-orange-500' : 'text-slate-500'} `}>#{i + 1}</span>
-                                        <button onClick={() => handleViewUser(u)} className="font-bold text-white hover:text-indigo-400">{u.name}</button>
-                                        <span className="text-slate-500 text-sm flex-1">{u.email}</span>
-                                        <span className="text-indigo-400 font-bold">{u._computedCount} referrals</span>
-                                    </div>
-                                ))}
-                            {users.every(u => getComputedReferrals(u.id) === 0) && (
-                                <p className="text-slate-500 text-center py-4">No referrals yet</p>
-                            )}
-                        </div>
-                    </div>
-                </div>
+                <SuperAdminBentoDashboard stats={globalStats} />
             )}
 
             {/* ============ TOURNAMENT TAB ============ */}

@@ -100,20 +100,56 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool }) => {
               <div className="space-y-3">
                 <p className="font-bold text-white text-sm">General Rules</p>
                 <ul className="list-disc list-inside space-y-2 leading-relaxed">
-                  <li>Pick the outright winner of every scheduled game each week.</li>
+                  <li>
+                    {settings.confidenceMode
+                      ? 'Rank each game 1 to N. Higher rank = more points on a correct pick.'
+                      : 'Pick the outright winner of every scheduled game each week.'}
+                  </li>
                   <li>Ties and incorrect picks earn 0 points.</li>
                   <li>Cancelled games are voided and earn 0 points for all participants.</li>
                 </ul>
+
+                {/* Custom scoring display */}
+                <div className="bg-slate-950/30 border border-slate-800 rounded-xl p-3 space-y-1.5 mt-2">
+                  <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Scoring Config</p>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Base Points Per Pick:</span>
+                    <span className="text-white font-extrabold font-mono">
+                      {settings.pointsPerPick ?? 1} pt{(settings.pointsPerPick ?? 1) !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {settings.primetimeBonus?.thursday && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-bold">🌙 TNF Bonus:</span>
+                      <span className="text-amber-400 font-extrabold font-mono">+{settings.primetimeBonus.thursday} pts</span>
+                    </div>
+                  )}
+                  {settings.primetimeBonus?.sundayNight && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-bold">⭐ SNF Bonus:</span>
+                      <span className="text-amber-400 font-extrabold font-mono">+{settings.primetimeBonus.sundayNight} pts</span>
+                    </div>
+                  )}
+                  {settings.primetimeBonus?.monday && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-bold">🏈 MNF Bonus:</span>
+                      <span className="text-amber-400 font-extrabold font-mono">+{settings.primetimeBonus.monday} pts</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-3 bg-slate-950/20 p-4 border border-slate-800 rounded-2xl">
-                <p className="font-bold text-indigo-400 text-sm flex items-center gap-1.5">
-                  <Zap size={14} /> Confidence Mode Enabled
+                <p className={`font-bold text-sm flex items-center gap-1.5 ${
+                  settings.confidenceMode ? 'text-indigo-400' : 'text-slate-400'
+                }`}>
+                  <Zap size={14} />
+                  {settings.confidenceMode ? 'Confidence Mode Active' : 'Standard Scoring Mode'}
                 </p>
                 <p className="leading-relaxed text-[11px] text-slate-400">
-                  {settings.confidenceMode 
-                    ? `Assign a unique confidence weight from ${17 - 16} to 16 to each game. Higher weight earns more points upon success. All games must have unique confidence ranks assigned.`
-                    : 'Confidence rankings are disabled in this pool. Standard scoring is active (1 point per correct selection).'}
+                  {settings.confidenceMode
+                    ? `Assign a unique confidence weight from 1 to N for each game. Higher weight earns more points upon success. All games must have unique confidence ranks assigned.`
+                    : `Every correct pick earns ${settings.pointsPerPick ?? 1} point${(settings.pointsPerPick ?? 1) !== 1 ? 's' : ''}. Confidence rankings are disabled in this pool.`}
                 </p>
               </div>
             </div>

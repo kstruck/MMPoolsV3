@@ -995,11 +995,18 @@ export const dbService = {
     },
 
     subscribeToNFLGames: (season: string, callback: (games: NFLGame[]) => void) => {
-        const q = query(collection(db, "nfl_games"), where("season", "==", season), orderBy("startTime", "asc"));
+        const seasonStr = String(season);
+        console.log("[dbService] subscribeToNFLGames initiated for season:", seasonStr);
+        const q = query(collection(db, "nfl_games"), where("season", "==", seasonStr));
         return onSnapshot(q, (snapshot) => {
             const games = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as NFLGame));
+            games.sort((a, b) => a.startTime - b.startTime);
+            console.log(`[dbService] subscribeToNFLGames successfully loaded ${games.length} games:`, 
+                games.map(g => ({ id: g.id, week: g.week, seasonType: g.seasonType, season: g.season }))
+            );
             callback(games);
         }, (error) => {
+            console.error("[dbService] subscribeToNFLGames subscription error:", error);
             logger.error("Error subscribing to NFL games:", error);
             callback([]);
         });

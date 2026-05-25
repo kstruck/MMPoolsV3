@@ -27,7 +27,7 @@ export function scorePickemEntry(
   const confidenceMode = pool.settings.confidenceMode;
 
   for (const game of games) {
-    if (game.status !== 'FINAL') continue;
+    if (game.status !== 'FINAL' && game.status !== 'CANCELLED') continue;
 
     const pick = entry.picks[game.id];
     if (!pick) continue; // Unpicked game
@@ -250,7 +250,7 @@ export function scoreMarginWeek(
     g => g.homeTeam.abbreviation === pick || g.awayTeam.abbreviation === pick
   );
 
-  if (!game || game.status !== 'FINAL') {
+  if (!game || (game.status !== 'FINAL' && game.status !== 'CANCELLED')) {
     return null; // Not ready or unpicked
   }
 

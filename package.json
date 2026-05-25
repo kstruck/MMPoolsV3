@@ -59,6 +59,8 @@
     },
     "minimatch": ">=10.2.4",
     "@tootallnate/once": ">=3.0.1",
-    "express-rate-limit": ">=8.2.2"
+    "express-rate-limit": ">=8.2.2",
+    "uuid": ">=11.1.1",
+    "qs": ">=6.15.2"
   }
 }

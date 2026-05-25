@@ -247,6 +247,7 @@ export interface User {
 // --- AUDIT LOG ---
 export type AuditEventType =
     | 'POOL_CREATED'
+    | 'POOL_STATUS_CHANGED'
     | 'POOL_LOCKED'
     | 'POOL_UNLOCKED'
     | 'DIGITS_GENERATED'

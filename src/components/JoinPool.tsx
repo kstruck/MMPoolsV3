@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn } from 'lucide-react';
+import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn, Mail, Phone } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { logger } from '../utils/logger';
 import { Header } from './Header';
@@ -100,8 +100,30 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
               <h2 className="text-3xl font-black text-white leading-tight mb-2">
                 {pool.name}
               </h2>
-              <p className="text-slate-400 text-sm">
-                Hosted by <span className="text-slate-300 font-bold">{pool.managerName || 'Pool Host'}</span>
+              <p className="text-slate-400 text-sm flex items-center justify-center gap-1.5 flex-wrap">
+                <span>Hosted by <span className="text-slate-300 font-bold">{pool.managerName || 'Pool Host'}</span></span>
+                {castPool.contactMethod !== 'none' && (
+                  <span className="flex items-center gap-1.5 ml-1 inline-flex">
+                    {(castPool.contactMethod === 'email' || castPool.contactMethod === 'both' || !castPool.contactMethod) && pool.contactEmail && (
+                      <a
+                        href={`mailto:${pool.contactEmail}`}
+                        className="p-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        title={`Email Host: ${pool.contactEmail}`}
+                      >
+                        <Mail size={12} />
+                      </a>
+                    )}
+                    {(castPool.contactMethod === 'phone' || castPool.contactMethod === 'both') && castPool.contactPhone && (
+                      <a
+                        href={`tel:${castPool.contactPhone}`}
+                        className="p-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        title={`Call/SMS Host: ${castPool.contactPhone}`}
+                      >
+                        <Phone size={12} />
+                      </a>
+                    )}
+                  </span>
+                )}
               </p>
             </div>
 
@@ -132,22 +154,54 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
             <div className="space-y-4 mb-8 border-b border-slate-900 pb-8">
               <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Pool Rules Configuration</h4>
               
-              {pool.type === 'NFL_PICKEM' && (
-                <ul className="text-sm text-slate-300 space-y-2.5">
-                  <li className="flex items-center gap-2">
-                    <span className="text-blue-400">✓</span> Standard Straight winner predictions
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="text-blue-400">✓</span> 
-                    {castPool?.settings?.confidenceMode 
-                      ? 'Confidence rankings enabled (points scaled 1 to N)' 
-                      : 'Standard scoring (1 point per correct pick)'}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="text-blue-400">✓</span> Kickoff Lock Mode: <strong className="text-white font-bold">{castPool?.settings?.lockMode}</strong>
-                  </li>
-                </ul>
-              )}
+              {pool.type === 'NFL_PICKEM' && (() => {
+                const s = castPool?.settings || {};
+                const isConfidence = !!s.confidenceMode;
+                const ptsPerPick = s.pointsPerPick ?? 1;
+                const primetime = s.primetimeBonus || {};
+                const lockMode = s.lockMode ?? 'PER_GAME';
+                const hasPrimetime = primetime.thursday || primetime.sundayNight || primetime.monday;
+                return (
+                  <ul className="text-sm text-slate-300 space-y-2.5">
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-400 mt-0.5">✓</span>
+                      {isConfidence
+                        ? 'Confidence ranking mode — rank each game 1 to N, higher rank earns more points on a correct pick'
+                        : 'Straight winner predictions — pick the outright winner of each game'}
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-400 mt-0.5">✓</span>
+                      {isConfidence
+                        ? 'Confidence points scale from 1 to N (number of games in week) — most confident game gets the highest rank'
+                        : `Base scoring: ${ptsPerPick} point${ptsPerPick !== 1 ? 's' : ''} per correct pick`}
+                    </li>
+                    {hasPrimetime && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-amber-400 mt-0.5">✓</span>
+                        <span>
+                          Primetime bonus points:{' '}
+                          {[
+                            primetime.thursday  && `TNF +${primetime.thursday}`,
+                            primetime.sundayNight && `SNF +${primetime.sundayNight}`,
+                            primetime.monday    && `MNF +${primetime.monday}`,
+                          ].filter(Boolean).join(' · ')}
+                        </span>
+                      </li>
+                    )}
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-400 mt-0.5">✓</span>
+                      Lock Mode:{' '}
+                      <strong className="text-white font-bold ml-1">
+                        {isConfidence
+                          ? 'Weekly (required by Confidence Mode)'
+                          : lockMode === 'PER_GAME'
+                            ? 'Per-Game (each game locks at kickoff)'
+                            : 'Weekly (all picks lock at first kickoff)'}
+                      </strong>
+                    </li>
+                  </ul>
+                );
+              })()}
 
               {pool.type === 'NFL_SURVIVOR' && (
                 <ul className="text-sm text-slate-300 space-y-2.5">

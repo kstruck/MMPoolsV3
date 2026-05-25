@@ -9,7 +9,7 @@ const https_1 = require("firebase-functions/v2/https");
 const SCORING_Multipliers = {
     CLASSIC: [10, 20, 40, 80, 160, 320], // Standard ESPN-style 10x base
     ESPN: [10, 20, 40, 80, 160, 320], // ESPN-style 10x base
-    FIBONACCI: [2, 3, 5, 8, 13, 21],
+    FIBONACCI: [10, 20, 30, 50, 80, 130],
 };
 /**
  * Returns a Set of Team IDs that have been eliminated from the tournament.

@@ -27,89 +27,95 @@ import { fetchNFLWeekSchedule } from './nflSchedule';
  * Creates an NFL pool (Pick'em, Survivor, or Margin).
  */
 export const createNFLPool = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in.');
-  }
-
-  const uid = request.auth.uid;
-  const db = admin.firestore();
-  
-  // deep clean raw data
-  const data = JSON.parse(JSON.stringify(request.data || {}));
-
-  const { type, name, season } = data;
-  if (!type || !['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(type)) {
-    throw new HttpsError('invalid-argument', 'Invalid or missing pool type.');
-  }
-  if (!name || !season) {
-    throw new HttpsError('invalid-argument', 'Missing required fields: name, season.');
-  }
-
-  const poolRef = db.collection('pools').doc();
-  const poolId = poolRef.id;
-  const now = Date.now();
-
-  const newPool: any = {
-    ...data,
-    id: poolId,
-    createdByUid: uid,
-    ownerId: uid,
-    managerUid: uid,
-    createdAt: now,
-    updatedAt: now,
-    status: 'OPEN',
-    isLocked: false,
-    participantIds: [uid]
-  };
-
-  const userRef = db.collection('users').doc(uid);
-
-  await db.runTransaction(async (transaction) => {
-    const userDoc = await transaction.get(userRef);
-    if (!userDoc.exists) {
-      throw new HttpsError('not-found', 'User profile not found.');
+  try {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'User must be logged in.');
     }
 
-    const userData = userDoc.data();
-    const currentRole = userData?.role || 'PARTICIPANT';
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    
+    // deep clean raw data
+    const data = JSON.parse(JSON.stringify(request.data || {}));
 
-    // 1. Write the pool document
-    transaction.set(poolRef, newPool);
-
-    // 2. Upgrade role to POOL_MANAGER if they are a standard participant
-    if (currentRole === 'PARTICIPANT') {
-      transaction.update(userRef, { role: 'POOL_MANAGER' });
+    const { type, name, season } = data;
+    if (!type || !['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(type)) {
+      throw new HttpsError('invalid-argument', 'Invalid or missing pool type.');
+    }
+    if (!name || !season) {
+      throw new HttpsError('invalid-argument', 'Missing required fields: name, season.');
     }
 
-    // 3. Write Manager Index mapping
-    transaction.set(userRef.collection('managedPools').doc(poolId), {
-      poolId,
+    const poolRef = db.collection('pools').doc();
+    const poolId = poolRef.id;
+    const now = Date.now();
+
+    const newPool: any = {
+      ...data,
+      id: poolId,
+      createdByUid: uid,
+      ownerId: uid,
+      managerUid: uid,
       createdAt: now,
-      name: newPool.name,
-      type: newPool.type
+      updatedAt: now,
+      status: 'OPEN',
+      isLocked: false,
+      participantIds: [uid]
+    };
+
+    const userRef = db.collection('users').doc(uid);
+
+    await db.runTransaction(async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new HttpsError('not-found', 'User profile not found.');
+      }
+
+      const userData = userDoc.data();
+      const currentRole = userData?.role || 'PARTICIPANT';
+
+      // 1. Write the pool document
+      transaction.set(poolRef, newPool);
+
+      // 2. Upgrade role to POOL_MANAGER if they are a standard participant
+      if (currentRole === 'PARTICIPANT') {
+        transaction.update(userRef, { role: 'POOL_MANAGER' });
+      }
+
+      // 3. Write Manager Index mapping
+      transaction.set(userRef.collection('managedPools').doc(poolId), {
+        poolId,
+        createdAt: now,
+        name: newPool.name,
+        type: newPool.type
+      });
+
+      // 4. Write User Participation mapping
+      transaction.set(userRef.collection('participations').doc(poolId), {
+        poolId,
+        joinedAt: now,
+        name: newPool.name,
+        type: newPool.type,
+        role: 'MANAGER'
+      });
     });
 
-    // 4. Write User Participation mapping
-    transaction.set(userRef.collection('participations').doc(poolId), {
-      poolId,
-      joinedAt: now,
-      name: newPool.name,
-      type: newPool.type,
-      role: 'MANAGER'
+    // Log creation to audit trail
+    await writeAuditEvent({
+      poolId: poolId,
+      type: 'POOL_CREATED',
+      message: `NFL Pool "${name}" (${type}) created by manager ${uid}`,
+      severity: 'INFO',
+      actor: { uid, role: 'ADMIN', label: 'Host' },
+      payload: { name, type, season }
     });
-  });
 
-  // Log creation to audit trail
-  await writeAuditEvent({
-    poolId: poolId,
-    type: 'POOL_CREATED',
-    message: `NFL Pool "${name}" (${type}) created by manager ${uid}`,
-    severity: 'INFO',
-    actor: { uid, role: 'ADMIN', label: 'Host' },
-    payload: { name, type, season }
-  });
-
-  return { success: true, poolId };
+    return { success: true, poolId };
+  } catch (error: any) {
+    console.error("createNFLPool Failure:", error);
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
+  }
 });
 
 /**

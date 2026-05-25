@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Lock, Settings, Share2, FileText } from 'lucide-react';
+import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
 
@@ -11,6 +11,7 @@ import { NFLStandings } from './NFLStandings';
 import { NFLPoolRules } from './NFLPoolRules';
 import { NFLManagerView } from './NFLManagerView';
 import { PickDistribution } from './PickDistribution';
+import { NFLUserBentoDashboard } from './NFLUserBentoDashboard';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -24,24 +25,33 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   pool,
   user,
   isManager,
+  onBack,
   onOpenAuth
 }) => {
   const castPool = pool as any;
-  const [activeTab, setActiveTab] = useState<'picks' | 'standings' | 'recaps' | 'rules' | 'manager'>('picks');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'picks' | 'standings' | 'recaps' | 'rules' | 'manager'>('dashboard');
 
   // Estimate current NFL Week based on date (standard season calculations)
   const getEstimatedNFLWeek = (): number => {
     const now = Date.now();
-    // Default start week is Week 1
-    const seasonStart = new Date('2026-09-10T00:00:00').getTime(); // Estimated kickoff of Week 1
-    if (now < seasonStart) return 1;
+    const isPre = Number(castPool.seasonType) === 1;
 
-    const diffMs = now - seasonStart;
-    const weekNum = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000));
-    return Math.min(18, Math.max(1, weekNum));
+    if (isPre) {
+      const preseasonStart = new Date('2026-08-06T00:00:00').getTime(); // HOF Weekend kickoff
+      if (now < preseasonStart) return 1;
+      const diffMs = now - preseasonStart;
+      const weekNum = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000));
+      return Math.min(4, Math.max(1, weekNum));
+    } else {
+      const seasonStart = new Date('2026-09-10T00:00:00').getTime(); // Estimated kickoff of Week 1
+      if (now < seasonStart) return 1;
+      const diffMs = now - seasonStart;
+      const weekNum = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000));
+      return Math.min(18, Math.max(1, weekNum));
+    }
   };
 
-  const currentEstWeek = useMemo(() => getEstimatedNFLWeek(), []);
+  const currentEstWeek = useMemo(() => getEstimatedNFLWeek(), [castPool.seasonType]);
   const [selectedWeek, setSelectedWeek] = useState<number>(currentEstWeek);
 
   // Subscribed States
@@ -76,10 +86,18 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return () => unsub();
   }, [pool.id]);
 
-  // Filter games for the currently selected week
+  // Filter games for the currently selected week and seasonType
   const weeklyGames = useMemo(() => {
-    return games.filter(g => g.week === selectedWeek);
-  }, [games, selectedWeek]);
+    const filtered = games.filter(g => g.week === selectedWeek && Number(g.seasonType) === Number(castPool.seasonType));
+    console.log("[NFLPoolDashboard] weeklyGames filter ran:", {
+      selectedWeek,
+      poolSeasonType: castPool.seasonType,
+      totalGamesCount: games.length,
+      filteredGamesCount: filtered.length,
+      filteredGames: filtered.map(g => ({ id: g.id, week: g.week, seasonType: g.seasonType }))
+    });
+    return filtered;
+  }, [games, selectedWeek, castPool.seasonType]);
 
   // Retrieve user's personal entry
   const myEntry = useMemo(() => {
@@ -126,8 +144,32 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               )}
               <h1 className="text-3xl font-black text-white leading-none">{pool.name}</h1>
             </div>
-            <p className="text-slate-400 text-sm font-semibold mt-1.5 flex items-center gap-2">
-              <span>Host: <strong>{pool.managerName || 'Host'}</strong></span>
+            <p className="text-slate-400 text-sm font-semibold mt-1.5 flex items-center gap-2 flex-wrap">
+              <span className="flex items-center gap-1.5 flex-wrap">
+                Host: <strong className="text-white font-black">{pool.managerName || 'Host'}</strong>
+                {castPool.contactMethod !== 'none' && (
+                  <span className="flex items-center gap-1.5 ml-1 inline-flex">
+                    {(castPool.contactMethod === 'email' || castPool.contactMethod === 'both' || !castPool.contactMethod) && pool.contactEmail && (
+                      <a
+                        href={`mailto:${pool.contactEmail}`}
+                        className="p-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        title={`Email Host: ${pool.contactEmail}`}
+                      >
+                        <Mail size={12} />
+                      </a>
+                    )}
+                    {(castPool.contactMethod === 'phone' || castPool.contactMethod === 'both') && castPool.contactPhone && (
+                      <a
+                        href={`tel:${castPool.contactPhone}`}
+                        className="p-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        title={`Call/SMS Host: ${castPool.contactPhone}`}
+                      >
+                        <Phone size={12} />
+                      </a>
+                    )}
+                  </span>
+                )}
+              </span>
               <span className="text-slate-700">•</span>
               <span className="text-blue-400 uppercase font-black text-xs">
                 {pool.type === 'NFL_PICKEM' ? 'Weekly Pick\'em' :
@@ -145,8 +187,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                 onChange={e => setSelectedWeek(parseInt(e.target.value))}
                 className="bg-transparent focus:outline-none text-sm text-white font-bold cursor-pointer"
               >
-                {Array.from({ length: 18 }, (_, i) => i + 1).map(w => (
-                  <option key={w} value={w} className="bg-slate-950">Week {w}</option>
+                {Array.from({ length: Number(castPool.seasonType) === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
+                  <option key={w} value={w} className="bg-slate-950">
+                    {Number(castPool.seasonType) === 1
+                      ? w === 1
+                        ? 'HOF Weekend'
+                        : `Preseason Week ${w - 1}`
+                      : `Week ${w}`}
+                  </option>
                 ))}
               </select>
             </div>
@@ -171,6 +219,17 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
         {/* Global tab routing headers */}
         <div className="flex border-b border-slate-800/80 mt-8 mb-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
+              activeTab === 'dashboard'
+                ? 'text-white border-blue-500 font-black'
+                : 'text-slate-500 hover:text-slate-400 border-transparent'
+            }`}
+            style={activeTab === 'dashboard' ? { borderBottomColor: accentHex } : {}}
+          >
+            Overview
+          </button>
           <button
             onClick={() => setActiveTab('picks')}
             className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
@@ -226,6 +285,25 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
             </div>
           ) : (
             <>
+              {/* TAB 0: BENTO DASHBOARD OVERVIEW */}
+              {activeTab === 'dashboard' && (
+                <NFLUserBentoDashboard
+                  pool={pool}
+                  user={user}
+                  games={games}
+                  entries={entries}
+                  recaps={recaps}
+                  selectedWeek={selectedWeek}
+                  setSelectedWeek={setSelectedWeek}
+                  isWeekLocked={isWeekLocked}
+                  earliestGame={earliestGame}
+                  onBack={onBack}
+                  onOpenAuth={onOpenAuth}
+                  isManager={isManager}
+                  onSelectTab={(tab) => setActiveTab(tab)}
+                />
+              )}
+
               {/* TAB 1: PICK ENTRY */}
               {activeTab === 'picks' && (
                 <>
@@ -327,7 +405,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                         <PickDistribution
                           pool={pool}
                           entries={entries}
-                          games={games}
+                          games={weeklyGames}
                           week={selectedWeek}
                           isWeekLocked={isWeekLocked}
                         />
@@ -416,6 +494,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   entries={entries}
                   games={games}
                   week={selectedWeek}
+                  user={user}
+                  onSelectTab={(tab) => setActiveTab(tab)}
                 />
               )}
             </>

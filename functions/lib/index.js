@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.submitPlayoffPicks = exports.onAnnouncementCreated = exports.onGameComplete = exports.importConferenceTournamentFromESPN = exports.importTournamentFromESPN = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentData = exports.markEntryPaidStatus = exports.deleteBracketEntry = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.fixParticipantIds = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.autoLockPools = exports.onWinnerComputed = exports.runReminders = exports.testSmsHttp = exports.sendSecuritySMSAlert = exports.sendAdminPasswordReset = exports.deleteUserAccount = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = exports.confirmPayment = exports.markSquaresPaid = exports.reserveSquare = exports.lockPool = void 0;
-exports.finalizeTournamentPayouts = exports.scoreBracketEntries = exports.initializeBig12TournamentHttp = exports.initializeBigEastTournamentHttp = exports.setSuperAdminClaim = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = void 0;
+exports.scoreNFLWeek = exports.executeSurvivorRebuy = exports.submitNFLPicks = exports.joinNFLPool = exports.createNFLPool = exports.importNFLSchedule = exports.syncNFLScoresJob = exports.finalizeTournamentPayouts = exports.scoreBracketEntries = exports.initializeBig12TournamentHttp = exports.initializeBigEastTournamentHttp = exports.setSuperAdminClaim = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -99,4 +99,14 @@ Object.defineProperty(exports, "initializeBig12TournamentHttp", { enumerable: tr
 var bracketScoring_1 = require("./bracketScoring");
 Object.defineProperty(exports, "scoreBracketEntries", { enumerable: true, get: function () { return bracketScoring_1.scoreBracketEntries; } });
 Object.defineProperty(exports, "finalizeTournamentPayouts", { enumerable: true, get: function () { return bracketScoring_1.finalizeTournamentPayouts; } });
+// --- NFL POOLS FUNCTIONS ---
+var nflSchedule_1 = require("./nflSchedule");
+Object.defineProperty(exports, "syncNFLScoresJob", { enumerable: true, get: function () { return nflSchedule_1.syncNFLScoresJob; } });
+Object.defineProperty(exports, "importNFLSchedule", { enumerable: true, get: function () { return nflSchedule_1.importNFLSchedule; } });
+var nflPools_1 = require("./nflPools");
+Object.defineProperty(exports, "createNFLPool", { enumerable: true, get: function () { return nflPools_1.createNFLPool; } });
+Object.defineProperty(exports, "joinNFLPool", { enumerable: true, get: function () { return nflPools_1.joinNFLPool; } });
+Object.defineProperty(exports, "submitNFLPicks", { enumerable: true, get: function () { return nflPools_1.submitNFLPicks; } });
+Object.defineProperty(exports, "executeSurvivorRebuy", { enumerable: true, get: function () { return nflPools_1.executeSurvivorRebuy; } });
+Object.defineProperty(exports, "scoreNFLWeek", { enumerable: true, get: function () { return nflPools_1.scoreNFLWeek; } });
 //# sourceMappingURL=index.js.map
