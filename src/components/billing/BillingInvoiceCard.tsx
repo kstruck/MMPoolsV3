@@ -442,8 +442,12 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                     
                     <button
                         onClick={handleCheckout}
-                        disabled={isCheckoutLoading || (total <= 0 && (!appliedCoupon || subtotal === 0))}
-                        className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold py-3.5 rounded-xl text-sm transition-all shadow-xl hover:shadow-indigo-500/20 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:hover:scale-100 hover:scale-[1.01]"
+                        disabled={isCheckoutLoading || !poolId || (total <= 0 && (!appliedCoupon || subtotal === 0))}
+                        className={`w-full font-bold py-3.5 rounded-xl text-sm transition-all shadow-xl flex items-center justify-center gap-2 group hover:scale-[1.01] ${
+                            !poolId 
+                                ? 'bg-slate-800 border border-slate-750 text-slate-400 cursor-not-allowed hover:scale-100'
+                                : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white hover:shadow-indigo-500/20'
+                        }`}
                     >
                         {isCheckoutLoading ? (
                             <>
@@ -453,8 +457,14 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         ) : (
                             <>
                                 <CreditCard size={18} />
-                                {total === 0 && appliedCoupon ? 'Activate Premium Pool (100% Off)' : 'Upgrade Pool to Premium'}
-                                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                                {!poolId ? (
+                                    'Select a Pool Above to Pay'
+                                ) : total === 0 && appliedCoupon ? (
+                                    'Activate Premium Pool (100% Off)'
+                                ) : (
+                                    'Upgrade Pool to Premium'
+                                )}
+                                {poolId && <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />}
                             </>
                         )}
                     </button>
