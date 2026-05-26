@@ -213,19 +213,20 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
         setIsCreatingCoupon(true);
         try {
-            const couponData: Omit<Coupon, 'id'> = {
+            const couponData: any = {
                 code: newCouponCode.trim().toUpperCase(),
                 discountType: newCouponType,
                 discountValue: newCouponValue,
                 isActive: true,
                 usesCount: 0,
-                maxUses: newCouponMaxUses ? parseInt(newCouponMaxUses) : undefined,
                 createdAt: Date.now(),
-                perUserLimit: newCouponPerUserLimit ? parseInt(newCouponPerUserLimit) : undefined,
-                expiresAt: newCouponExpiresAt ? new Date(newCouponExpiresAt).getTime() : undefined,
-                allowedPoolTypes: newCouponAllowedTypes.length > 0 ? newCouponAllowedTypes as any : undefined,
                 usageLog: []
             };
+
+            if (newCouponMaxUses) couponData.maxUses = parseInt(newCouponMaxUses);
+            if (newCouponPerUserLimit) couponData.perUserLimit = parseInt(newCouponPerUserLimit);
+            if (newCouponExpiresAt) couponData.expiresAt = new Date(newCouponExpiresAt).getTime();
+            if (newCouponAllowedTypes.length > 0) couponData.allowedPoolTypes = newCouponAllowedTypes;
 
             await addDoc(collection(db, 'coupons'), couponData);
             setNewCouponCode('');
