@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { 
     collection, doc, onSnapshot, setDoc, updateDoc, 
-    addDoc, deleteDoc, getDocs, query, orderBy 
+    addDoc, deleteDoc, query, orderBy 
 } from 'firebase/firestore';
 import { dbService } from '../../services/dbService';
 import type { BillingConfig, Pool, PoolBilling, Coupon, ReferralConfig, User } from '../../types';
 import { 
     Shield, Zap, Search, Save, CheckCircle, 
-    ToggleLeft, ToggleRight, Calendar, Plus, Trash2, Gift, Ticket, Award, Users, AlertCircle, Loader2
+    ToggleLeft, ToggleRight, Calendar, Plus, Trash2, Ticket, Award
 } from 'lucide-react';
 
 const DEFAULT_BILLING_CONFIG: BillingConfig = {

@@ -23,6 +23,7 @@ const SuperBowlOddsArticle = React.lazy(() => import('./components/articles/Supe
 const MarchMadnessLanding = React.lazy(() => import('./components/MarchMadnessLanding').then(m => ({ default: m.MarchMadnessLanding })));
 const NFLPlayoffsLanding = React.lazy(() => import('./components/NFLPlayoffsLanding').then(m => ({ default: m.NFLPlayoffsLanding })));
 const PricingPage = React.lazy(() => import('./components/PricingPage').then(m => ({ default: m.PricingPage })));
+const PaymentSuccess = React.lazy(() => import('./pages/PaymentSuccess').then(m => ({ default: m.PaymentSuccess })));
 const AboutPage = React.lazy(() => import('./components/AboutPage').then(m => ({ default: m.AboutPage })));
 const CharityPage = React.lazy(() => import('./components/CharityPage').then(m => ({ default: m.CharityPage })));
 const AuthActionHandler = React.lazy(() => import('./components/AuthActionHandler').then(m => ({ default: m.AuthActionHandler })));
@@ -244,6 +245,7 @@ const App: React.FC = () => {
 
           {/* Global Pages */}
           <Route path="/pricing" element={<PricingPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="/about" element={<AboutPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/charity" element={<CharityPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/auth/action" element={<AuthActionHandler user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
