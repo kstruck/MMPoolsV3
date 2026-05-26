@@ -374,6 +374,17 @@ export const dbService = {
         }
     },
 
+    syncMyClaims: async (): Promise<{ success: boolean; role: string; message: string }> => {
+        try {
+            const syncClaimsFn = httpsCallable(functions, 'syncMyClaims');
+            const result = await syncClaimsFn();
+            return result.data as { success: boolean; role: string; message: string };
+        } catch (error) {
+            console.error("Failed to sync my claims:", error);
+            throw error;
+        }
+    },
+
     recalculateGlobalStats: async (): Promise<Record<string, unknown>> => {
         try {
             const recalcFn = httpsCallable<void, Record<string, unknown>>(functions, 'recalculateGlobalStats');

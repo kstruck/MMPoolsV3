@@ -5,7 +5,7 @@
  * This is the ONLY way the isSuperAdmin() Firestore rule can be satisfied.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.setSuperAdminClaim = void 0;
+exports.syncMyClaims = exports.setSuperAdminClaim = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 /**
@@ -37,6 +37,32 @@ exports.setSuperAdminClaim = (0, https_1.onCall)(async (request) => {
     return {
         success: true,
         message: `User ${targetUid} is now ${newClaims.role}.`,
+    };
+});
+/**
+ * syncMyClaims
+ * Synchronizes the current user's Auth custom claims with their Firestore user document role.
+ * This resolves the bootstrap catch-22 where a user is set as SUPER_ADMIN in the database
+ * but lacks the custom claim on their Auth token to perform administrative writes or triggers.
+ */
+exports.syncMyClaims = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Must be logged in.");
+    }
+    const uid = request.auth.uid;
+    const userDoc = await admin.firestore().doc(`users/${uid}`).get();
+    if (!userDoc.exists) {
+        throw new https_1.HttpsError("not-found", "User document not found in Firestore.");
+    }
+    const userData = userDoc.data();
+    const role = (userData === null || userData === void 0 ? void 0 : userData.role) || "PARTICIPANT";
+    // Set custom claim to match their Firestore role
+    const claims = { role };
+    await admin.auth().setCustomUserClaims(uid, claims);
+    return {
+        success: true,
+        role,
+        message: `Auth custom claims synced with Firestore. Role is now ${role}.`
     };
 });
 //# sourceMappingURL=adminClaims.js.map

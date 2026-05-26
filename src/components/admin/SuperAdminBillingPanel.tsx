@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
+import { db, auth } from '../../firebase';
 import { 
     collection, doc, onSnapshot, setDoc, updateDoc, 
     addDoc, deleteDoc, query, orderBy 
@@ -85,6 +85,25 @@ export const SuperAdminBillingPanel: React.FC = () => {
     const [editingUserId, setEditingUserId] = useState<string>('');
     const [editReferralCredits, setEditReferralCredits] = useState<number>(0);
     const [editFreePools, setEditFreePools] = useState<number>(0);
+
+    // Sync custom claims on mount for active session to resolve catch-22 permissions issue
+    useEffect(() => {
+        const syncAdminClaims = async () => {
+            try {
+                console.log("[SuperAdminBillingPanel] Checking and syncing admin custom claims...");
+                const result = await dbService.syncMyClaims();
+                console.log("[SuperAdminBillingPanel] Sync claims result:", result);
+                if (result.success && auth.currentUser) {
+                    console.log("[SuperAdminBillingPanel] Force refreshing Auth ID token...");
+                    await auth.currentUser.getIdToken(true);
+                    console.log("[SuperAdminBillingPanel] Auth ID token refreshed successfully!");
+                }
+            } catch (err) {
+                console.error("[SuperAdminBillingPanel] Failed to sync admin custom claims:", err);
+            }
+        };
+        syncAdminClaims();
+    }, []);
 
     // 1. Subscribe to Global Billing Configuration
     useEffect(() => {

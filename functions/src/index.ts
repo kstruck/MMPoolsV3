@@ -28,7 +28,7 @@ export { onAnnouncementCreated } from "./announcements";
 export { submitPlayoffPicks, calculatePlayoffScores, updateGlobalPlayoffResults, checkPlayoffScores, onPlayoffConfigUpdate, syncPlayoffPools, managePlayoffEntry } from "./playoffPools";
 export { joinWaitlist, onSquareReleased } from "./waitlist";
 export { generateTestScenario, validateTestResults, generateTestReport } from "./aiTesting";
-export { setSuperAdminClaim } from "./adminClaims";
+export { setSuperAdminClaim, syncMyClaims } from "./adminClaims";
 export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "./conferenceTournaments";
 export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring";
 
