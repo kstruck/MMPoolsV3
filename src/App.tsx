@@ -17,14 +17,11 @@ const FeaturesPage = React.lazy(() => import('./components/FeaturesPage').then(m
 const PrivacyPage = React.lazy(() => import('./components/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
 const TermsPage = React.lazy(() => import('./components/TermsPage').then(m => ({ default: m.TermsPage })));
 const HowItWorksPage = React.lazy(() => import('./components/HowItWorksPage').then(m => ({ default: m.HowItWorksPage })));
-const SupportPage = React.lazy(() => import('./components/SupportPage').then(m => ({ default: m.SupportPage })));
 const UserProfile = React.lazy(() => import('./components/UserProfile').then(m => ({ default: m.UserProfile })));
 const Scoreboard = React.lazy(() => import('./components/Scoreboard').then(m => ({ default: m.Scoreboard })));
 const SuperBowlOddsArticle = React.lazy(() => import('./components/articles/SuperBowlOddsArticle').then(m => ({ default: m.SuperBowlOddsArticle })));
-const BracketPoolGuideArticle = React.lazy(() => import('./components/articles/BracketPoolGuideArticle').then(m => ({ default: m.BracketPoolGuideArticle })));
 const MarchMadnessLanding = React.lazy(() => import('./components/MarchMadnessLanding').then(m => ({ default: m.MarchMadnessLanding })));
 const NFLPlayoffsLanding = React.lazy(() => import('./components/NFLPlayoffsLanding').then(m => ({ default: m.NFLPlayoffsLanding })));
-const CustomSportsLanding = React.lazy(() => import('./components/CustomSportsLanding').then(m => ({ default: m.CustomSportsLanding })));
 const PricingPage = React.lazy(() => import('./components/PricingPage').then(m => ({ default: m.PricingPage })));
 const AboutPage = React.lazy(() => import('./components/AboutPage').then(m => ({ default: m.AboutPage })));
 const CharityPage = React.lazy(() => import('./components/CharityPage').then(m => ({ default: m.CharityPage })));
@@ -243,16 +240,7 @@ const App: React.FC = () => {
               onCreatePool={handleCreatePoolClick}
             />
           } />
-          <Route path="/custom-sports" element={
-            <CustomSportsLanding
-              user={user}
-              isLoggedIn={!!user}
-              onLogin={() => handleOpenAuth('login')}
-              onSignup={() => handleOpenAuth('register')}
-              onLogout={handleLogout}
-              onCreatePool={handleCreatePoolClick}
-            />
-          } />
+          <Route path="/custom-sports" element={<Navigate to="/" replace />} />
 
           {/* Global Pages */}
           <Route path="/pricing" element={<PricingPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
@@ -268,13 +256,7 @@ const App: React.FC = () => {
           <Route path="/how-it-works" element={<HowItWorksPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/privacy" element={<PrivacyPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
           <Route path="/terms" element={<TermsPage user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
-          <Route path="/support" element={
-            <>
-              <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-              <SupportPage />
-              <Footer />
-            </>
-          } />
+          <Route path="/support" element={<Navigate to="/how-it-works?view=faq" replace />} />
           <Route path="/contact" element={
             <ContactPage
               user={user}
@@ -300,13 +282,7 @@ const App: React.FC = () => {
               <Footer />
             </>
           } />
-          <Route path="/articles/bracket-pool-guide" element={
-            <>
-              <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-              <BracketPoolGuideArticle />
-              <Footer />
-            </>
-          } />
+          <Route path="/articles/bracket-pool-guide" element={<Navigate to="/how-it-works?sport=brackets&view=strategy" replace />} />
 
           {/* User Dashboard */}
           <Route path="/participant" element={

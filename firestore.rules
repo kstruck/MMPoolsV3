@@ -48,7 +48,8 @@ service cloud.firestore {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
         return !changed.hasAny([
           'managerUid', 'ownerId', 'createdAt', 'createdBy',
-          'axisNumbers', 'squares', 'participants'
+          'axisNumbers', 'squares', 'participants',
+          'billing' // Billing status managed exclusively by Cloud Functions
         ]);
       }
 
@@ -170,7 +171,9 @@ service cloud.firestore {
       allow write: if request.auth != null && (
         (request.auth.uid == userId && (
           (resource == null && request.resource.data.role == 'PARTICIPANT') ||
-          (resource != null && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+          (resource != null && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role', 'referralCredits', 'freePoolsAvailable'
+          ]))
         )) ||
         isSuperAdmin()
       );
@@ -232,6 +235,29 @@ service cloud.firestore {
     // EMAIL TRIGGERS — must go through Cloud Functions
     match /mail/{document=**} {
       allow create: if false;
+    }
+
+    // COUPONS — admin-only writes, no client reads needed (validated server-side)
+    match /coupons/{couponId} {
+      allow read: if request.auth != null;
+      allow write: if isSuperAdmin();
+    }
+
+    // REFERRALS — read-only for users (their own referrals), writes via Cloud Functions only
+    match /referrals/{referralId} {
+      allow read: if request.auth != null && (
+        resource.data.referrerId == request.auth.uid ||
+        resource.data.referredUserId == request.auth.uid ||
+        isSuperAdmin()
+      );
+      allow create: if request.auth != null;
+      allow update, delete: if false; // Only via Cloud Functions
+    }
+
+    // SETTINGS — read by anyone (for pricing page), write by admin only
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
     }
   }
 }

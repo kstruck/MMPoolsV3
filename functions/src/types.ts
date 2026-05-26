@@ -416,7 +416,7 @@ export * from './nflPoolTypes';
 
 // --- Core Pool Types
 export type PoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS' | 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
-export type Pool = GameState | BracketPool | PlayoffPool | PropsPool | NFLPickemPool | NFLSurvivorPool | NFLMarginPool;
+export type Pool = (GameState | BracketPool | PlayoffPool | PropsPool | NFLPickemPool | NFLSurvivorPool | NFLMarginPool) & { billing?: PoolBilling };
 
 // --- NFL Playoff Pool Types ---
 
@@ -647,9 +647,6 @@ export interface PayoutSettings {
     bonuses: { name: string; percentage: number }[];
 }
 
-
-
-
 export interface Team {
     id: string;
     name: string;
@@ -658,3 +655,77 @@ export interface Team {
     logoUrl?: string;
 }
 
+// --- BILLING AND MONETIZATION ---
+
+export type BillingStatus = 'free' | 'trial' | 'active' | 'grace_period' | 'locked';
+export type BillingTier = 'free_tier' | 'standard_tier' | 'premium_tier';
+export type ServerPoolType = 'SQUARES' | 'BRACKET' | 'NFL_PLAYOFFS' | 'PROPS' | 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
+
+export interface PoolBilling {
+    status: BillingStatus;
+    tier: BillingTier;
+    pricePaid: number;
+    stripeSessionId?: string;
+    trialEndsAt?: number;
+    gracePeriodEndsAt?: number;
+    maxPlayersAllowed: number;
+    featuresUnlocked: {
+        aiCommissioner: boolean;
+        smsNotifications: boolean;
+        whatIfSimulator: boolean;
+        customBranding: boolean;
+    };
+}
+
+export interface BillingTierPrice {
+    min: number;
+    max: number;
+    price: number;
+}
+
+export interface BillingConfig {
+    freePlayerThreshold: number;
+    gracePeriodDays: number;
+    pricing: {
+        season: { tier1: BillingTierPrice; tier2: BillingTierPrice; tier3: BillingTierPrice; tier4: BillingTierPrice };
+        bracket: { tier1: BillingTierPrice; tier2: BillingTierPrice; tier3: BillingTierPrice; tier4: BillingTierPrice };
+        squares: { flatPrice: number };
+        props: { flatPrice: number };
+    };
+    features: {
+        aiCommissioner: { isPremium: boolean; addonPrice: number };
+        smsNotifications: { isPremium: boolean; addonPrice: number };
+        whatIfSimulator: { isPremium: boolean; addonPrice: number };
+        customBranding: { isPremium: boolean; addonPrice: number };
+    };
+}
+
+export interface Coupon {
+    id?: string;
+    code: string;
+    discountType: 'percentage' | 'flat';
+    discountValue: number;
+    isActive: boolean;
+    maxUses?: number;
+    usesCount: number;
+    expiresAt?: number;
+    createdAt?: number;
+    perUserLimit?: number;
+    allowedPoolTypes?: ServerPoolType[];
+    usageLog?: Array<{ userId: string; poolId: string; usedAt: number }>;
+}
+
+export interface ReferralConfig {
+    creditsRequiredForFreePool: number;
+    discountPerCredit: number;
+    rewardType: 'free_pool' | 'discount';
+}
+
+export interface ReferralRecord {
+    referrerId: string;
+    referredUserId: string;
+    status: 'pending' | 'confirmed';
+    createdAt: number;
+    confirmedAt?: number;
+    creditAwarded: boolean;
+}

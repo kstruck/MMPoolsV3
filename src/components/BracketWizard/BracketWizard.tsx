@@ -326,7 +326,20 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     payouts: formData.payouts
                 },
                 lockAt: formData.lockAt,
-                charity: formData.charity
+                charity: formData.charity,
+                billing: {
+                    status: 'trial' as const,
+                    tier: 'free_tier' as const,
+                    pricePaid: 0,
+                    trialEndsAt: formData.lockAt, // Trial ends at tournament kickoff (Kickoff Lock model)
+                    maxPlayersAllowed: 10,
+                    featuresUnlocked: {
+                        aiCommissioner: false,
+                        smsNotifications: false,
+                        whatIfSimulator: false,
+                        customBranding: true
+                    }
+                }
             };
 
             const createBracketPool = httpsCallable(functions, 'createBracketPool');

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { BillingGate } from '../billing';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
@@ -130,6 +131,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const accentHex = branding.secondaryColor || '#6366f1';
 
   return (
+    <BillingGate pool={pool as any} isCommissioner={isManager}>
     <div
       className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20 relative transition-colors duration-500"
       style={{ backgroundColor: branding.bgColor || '#020617' }}
@@ -503,5 +505,6 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
         </div>
       </div>
     </div>
+    </BillingGate>
   );
 };

@@ -74,7 +74,7 @@ export const TermsPage: React.FC<Props> = (props) => {
                             <li>Pool managers are responsible for ensuring compliance with local gambling laws</li>
                             <li>We do not handle money transactions or payouts</li>
                             <li>Users must be 18 years or older to use this Service</li>
-                            <li>The Service is intended for social, entertainment purposes</li>
+                            <li>The Service is intended for social, entertainment purposes across all supported formats, including NCAA Brackets, Gameday Squares, NFL Survivor, Weekly Pick'em, NFL Margin, NFL Playoff Challenge, and Side Hustle Props</li>
                             <li>By using the Service, you acknowledge that you are responsible for understanding and complying with applicable laws in your jurisdiction</li>
                         </ul>
                     </section>

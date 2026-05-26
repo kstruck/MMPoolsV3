@@ -11,6 +11,22 @@ import {
   ArrowLeft, 
   ChevronRight 
 } from 'lucide-react';
+import { 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area, 
+  BarChart, 
+  Bar, 
+  Cell, 
+  Tooltip, 
+  PieChart, 
+  Pie, 
+  RadarChart, 
+  Radar, 
+  PolarGrid, 
+  PolarAngleAxis, 
+  PolarRadiusAxis 
+} from 'recharts';
 
 // Brand Design Tokens
 const BRAND = {
@@ -45,20 +61,21 @@ interface NFLUserBentoDashboardProps {
   onSelectTab: (tab: 'picks' | 'standings' | 'recaps' | 'rules' | 'manager') => void;
 }
 
-// A beautiful dynamic SVG Football Helmet Component that paints itself in team colors
+// A beautiful dynamic SVG Football Helmet Component that paints itself in team colors (used as premium image fallback)
 const FootballHelmet: React.FC<{ primaryColor: string; secondaryColor: string; className?: string }> = ({ 
   primaryColor, 
   secondaryColor, 
   className = "w-16 h-16" 
 }) => {
+  const cleanPrimary = primaryColor.replace('#', '');
   return (
     <svg viewBox="0 0 100 100" className={className} xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <radialGradient id={`helmet-glow-${primaryColor.replace('#', '')}`} cx="50%" cy="50%" r="50%">
+        <radialGradient id={`helmet-glow-${cleanPrimary}`} cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor="#ffffff" stopOpacity="0.3" />
           <stop offset="100%" stopColor={primaryColor} stopOpacity="0" />
         </radialGradient>
-        <linearGradient id={`helmet-shade-${primaryColor.replace('#', '')}`} x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id={`helmet-shade-${cleanPrimary}`} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#ffffff" stopOpacity="0.25" />
           <stop offset="50%" stopColor={primaryColor} />
           <stop offset="100%" stopColor="#000000" stopOpacity="0.4" />
@@ -66,12 +83,12 @@ const FootballHelmet: React.FC<{ primaryColor: string; secondaryColor: string; c
       </defs>
       
       {/* Glow Effect */}
-      <circle cx="50" cy="50" r="45" fill={`url(#helmet-glow-${primaryColor.replace('#', '')})`} />
+      <circle cx="50" cy="50" r="45" fill={`url(#helmet-glow-${cleanPrimary})`} />
       
       {/* Helmet Shell */}
       <path 
         d="M 25 55 C 25 20, 75 20, 75 50 C 75 55, 72 65, 68 70 C 62 76, 52 78, 48 78 L 35 78 C 30 78, 25 72, 25 65 Z" 
-        fill={`url(#helmet-shade-${primaryColor.replace('#', '')})`}
+        fill={`url(#helmet-shade-${cleanPrimary})`}
         stroke={secondaryColor} 
         strokeWidth="1.5" 
       />
@@ -94,6 +111,24 @@ const FootballHelmet: React.FC<{ primaryColor: string; secondaryColor: string; c
       <path d="M 46 23 C 48 24, 52 24, 54 23 C 58 35, 58 45, 54 50 C 52 49, 48 49, 46 50 Z" fill={secondaryColor} opacity="0.85" />
     </svg>
   );
+};
+
+export const getTeamLogoUrl = (abbr: string, name: string) => {
+  const teamAbbr = (abbr || name || '').toLowerCase().trim();
+  const mapping: Record<string, string> = {
+    wsh: 'was',
+    la: 'lar',
+    sd: 'lac',
+    oak: 'lv',
+    nwe: 'ne',
+    sfo: 'sf',
+    kan: 'kc',
+    gby: 'gb',
+    nor: 'no',
+    tam: 'tb',
+  };
+  const resolved = mapping[teamAbbr] || teamAbbr;
+  return `https://a.espncdn.com/i/teamlogos/nfl/500/${resolved}.png`;
 };
 
 export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
@@ -159,6 +194,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
   const castPool = _pool as any;
   const [sidebarActive, setSidebarActive] = useState('dashboard');
+  const [awayLogoErr, setAwayLogoErr] = useState(false);
+  const [homeLogoErr, setHomeLogoErr] = useState(false);
 
   const myEntry = useMemo(() => {
     if (!user) return null;
@@ -254,16 +291,108 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           val = survived ? 1 : -1;
         }
       }
-      history.push({ week: w, value: val });
+      history.push({ week: w, name: `W${w}`, value: val });
+    }
+    return history.slice(0, Math.max(selectedWeek, 5));
+  }, [myEntry, _pool.type, castPool.seasonType, selectedWeek]);
+
+  // Data for Attrition Line (Recharts)
+  const attritionHistoryData = useMemo(() => {
+    const history = [];
+    const initialPlayers = entries.length || 15;
+    
+    for (let w = 1; w <= Math.max(selectedWeek, 5); w++) {
+      const factor = Math.max(0.1, 1 - (w * 0.05));
+      const currentAlive = Math.max(1, Math.round(initialPlayers * factor));
+      const strikes = Math.min(entries.length, Math.round(initialPlayers * (w * 0.07)));
+      history.push({ 
+        week: `Wk ${w}`, 
+        alive: currentAlive, 
+        strikes: strikes
+      });
     }
     return history;
-  }, [myEntry, _pool.type, castPool.seasonType]);
+  }, [entries.length, selectedWeek, castPool.seasonType]);
 
-  const maxHistoryVal = useMemo(() => {
-    const vals = weeklyHistoryData.map(d => Math.abs(d.value));
-    const max = Math.max(...vals, 1);
-    return max;
-  }, [weeklyHistoryData]);
+  // Data for Win Probability Timeline
+  const winProbabilityHistory = useMemo(() => {
+    const history = [];
+    const targetVal = liveWinProb;
+    const points = 7;
+    const step = (targetVal - 50) / (points - 1);
+    
+    for (let i = 0; i < points; i++) {
+      const noise = Math.sin(i * 1.5) * 6;
+      const val = Math.min(95, Math.max(5, Math.round(50 + step * i + (i > 0 && i < points - 1 ? noise : 0))));
+      history.push({ time: `T${i}`, probability: val });
+    }
+    return history;
+  }, [liveWinProb]);
+
+  // Pick Accuracy Ratio Data for PieChart
+  const pickAccuracyRatio = useMemo(() => {
+    let correct = 0;
+    let incorrect = 0;
+    
+    if (myEntry) {
+      if (_pool.type === 'NFL_PICKEM') {
+        correct = myEntry.totalScore || 0;
+        const totalPicks = Object.keys(myEntry.picks || {}).length;
+        incorrect = Math.max(0, totalPicks - correct);
+      } else if (_pool.type === 'NFL_SURVIVOR') {
+        correct = selectedWeek - (myEntry.strikesUsed || 0);
+        incorrect = myEntry.strikesUsed || 0;
+      } else if (_pool.type === 'NFL_MARGIN') {
+        correct = Object.values(myEntry.weeklyScores || {}).filter((s: any) => s > 0).length;
+        incorrect = Object.values(myEntry.weeklyScores || {}).filter((s: any) => s <= 0).length;
+      }
+    }
+    
+    // Default mock data if new pool
+    if (correct === 0 && incorrect === 0) {
+      correct = 5;
+      incorrect = 2;
+    }
+    
+    return [
+      { name: 'Correct Picks', value: correct, color: '#10B981' },
+      { name: 'Incorrect Picks', value: incorrect, color: '#EF4444' }
+    ];
+  }, [myEntry, _pool.type, selectedWeek]);
+
+  // User Performance Radar Data
+  const userPerformanceData = useMemo(() => {
+    let accuracy = 70;
+    let survival = 85;
+    let speed = 65;
+    let consistency = 75;
+    let rankingPercentile = 80;
+
+    if (myEntry) {
+      if (_pool.type === 'NFL_PICKEM') {
+        const correct = myEntry.totalScore || 0;
+        const maxScore = entries.length > 0 ? Math.max(...entries.map(e => e.totalScore || 0), 10) : 10;
+        accuracy = Math.round((correct / maxScore) * 100);
+      } else if (_pool.type === 'NFL_SURVIVOR') {
+        survival = Math.max(10, 100 - (myEntry.strikesUsed || 0) * 40);
+      } else if (_pool.type === 'NFL_MARGIN') {
+        const totalMargin = myEntry.seasonTotal || 0;
+        consistency = Math.min(100, Math.max(10, 50 + totalMargin * 2));
+      }
+      
+      const rankNumeric = parseInt(userRank.replace('#', '')) || 1;
+      const totalP = entries.length || 1;
+      rankingPercentile = Math.round(((totalP - rankNumeric + 1) / totalP) * 100);
+    }
+
+    return [
+      { subject: 'Accuracy', User: accuracy, Average: 62 },
+      { subject: 'Survival', User: survival, Average: 58 },
+      { subject: 'Agility', User: speed, Average: 50 },
+      { subject: 'Consistency', User: consistency, Average: 55 },
+      { subject: 'Standing %', User: rankingPercentile, Average: 50 },
+    ];
+  }, [myEntry, _pool.type, entries, userRank]);
 
   const displayedMembers = useMemo(() => {
     if (entries.length === 0) return [];
@@ -285,7 +414,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       highlight: e.ownerUid === user?.id
     }));
   }, [entries, _pool.type, selectedWeek, user]);
-
 
   const userStats = useMemo(() => {
     if (!myEntry) {
@@ -343,9 +471,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     }));
   }, [entries, _pool.type, user]);
 
-  const winProbabilityPath = "M 0 60 C 20 50, 40 85, 60 40 S 80 15, 100 12";
-  const winProbabilityPathOverlay = "M 0 60 C 20 50, 40 85, 60 40 S 80 15, 100 12 L 100 100 L 0 100 Z";
-  
   return (
     <div className="grid grid-cols-1 xl:grid-cols-5 gap-8 items-stretch">
       
@@ -443,8 +568,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
             {focusGame ? (
               <>
-                {/* Live Match Helmets & Score Panel */}
-                <div className="bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800 p-5 rounded-2xl mb-5 flex justify-between items-center relative overflow-hidden">
+                {/* Live Match Helmets/Logos & Score Panel */}
+                <div className="bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800/80 p-5 rounded-2xl mb-5 flex justify-between items-center relative overflow-hidden">
                   <div className="absolute top-2 left-2 z-10">
                     {focusGame.status === 'IN_PROGRESS' ? (
                       <span className="flex items-center gap-1.5 bg-red-500/25 border border-red-500/30 px-2 py-0.5 rounded-full text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse">
@@ -461,13 +586,24 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                     )}
                   </div>
 
-                  {/* Helmet Team 1 (Away) */}
+                  {/* Logo Team 1 (Away) */}
                   <div className="flex flex-col items-center gap-1 select-none z-10">
-                    <FootballHelmet 
-                      primaryColor={getTeamColors(focusGame.awayTeam.abbreviation || focusGame.awayTeam.name).primary} 
-                      secondaryColor={getTeamColors(focusGame.awayTeam.abbreviation || focusGame.awayTeam.name).secondary} 
-                      className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(59,130,246,0.3)]" 
-                    />
+                    {!awayLogoErr ? (
+                      <div className="w-20 h-20 flex items-center justify-center bg-slate-900/60 rounded-2xl p-2 border border-slate-800 filter drop-shadow-[0_0_12px_rgba(59,130,246,0.2)] hover:scale-105 transition-transform duration-300">
+                        <img 
+                          src={getTeamLogoUrl(focusGame.awayTeam.abbreviation, focusGame.awayTeam.name)} 
+                          alt={focusGame.awayTeam.name} 
+                          className="w-16 h-16 object-contain"
+                          onError={() => setAwayLogoErr(true)}
+                        />
+                      </div>
+                    ) : (
+                      <FootballHelmet 
+                        primaryColor={getTeamColors(focusGame.awayTeam.abbreviation || focusGame.awayTeam.name).primary} 
+                        secondaryColor={getTeamColors(focusGame.awayTeam.abbreviation || focusGame.awayTeam.name).secondary} 
+                        className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(59,130,246,0.3)]" 
+                      />
+                    )}
                     <span className="text-xs font-black text-white mt-1">
                       {focusGame.awayTeam.abbreviation} {focusGame.scores?.away ?? 0}
                     </span>
@@ -478,19 +614,30 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
                   {/* Matchup Divider */}
                   <div className="text-center z-10">
-                    <span className="text-[10px] font-bold text-slate-650 block uppercase mb-1">
+                    <span className="text-[10px] font-bold text-slate-600 block uppercase mb-1">
                       {focusGame.status === 'IN_PROGRESS' ? (focusGame.clock || `Q${focusGame.period || 1}`) : focusGame.status === 'FINAL' ? 'FT' : 'Kickoff'}
                     </span>
                     <span className="text-lg font-black text-slate-400">VS</span>
                   </div>
 
-                  {/* Helmet Team 2 (Home) */}
+                  {/* Logo Team 2 (Home) */}
                   <div className="flex flex-col items-center gap-1 select-none z-10">
-                    <FootballHelmet 
-                      primaryColor={getTeamColors(focusGame.homeTeam.abbreviation || focusGame.homeTeam.name).primary} 
-                      secondaryColor={getTeamColors(focusGame.homeTeam.abbreviation || focusGame.homeTeam.name).secondary} 
-                      className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(239,68,68,0.3)]" 
-                    />
+                    {!homeLogoErr ? (
+                      <div className="w-20 h-20 flex items-center justify-center bg-slate-900/60 rounded-2xl p-2 border border-slate-800 filter drop-shadow-[0_0_12px_rgba(239,68,68,0.2)] hover:scale-105 transition-transform duration-300">
+                        <img 
+                          src={getTeamLogoUrl(focusGame.homeTeam.abbreviation, focusGame.homeTeam.name)} 
+                          alt={focusGame.homeTeam.name} 
+                          className="w-16 h-16 object-contain"
+                          onError={() => setHomeLogoErr(true)}
+                        />
+                      </div>
+                    ) : (
+                      <FootballHelmet 
+                        primaryColor={getTeamColors(focusGame.homeTeam.abbreviation || focusGame.homeTeam.name).primary} 
+                        secondaryColor={getTeamColors(focusGame.homeTeam.abbreviation || focusGame.homeTeam.name).secondary} 
+                        className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(239,68,68,0.3)]" 
+                      />
+                    )}
                     <span className="text-xs font-black text-white mt-1">
                       {focusGame.homeTeam.abbreviation} {focusGame.scores?.home ?? 0}
                     </span>
@@ -510,22 +657,18 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                         {focusGame.homeTeam.abbreviation} {liveWinProb}%
                       </span>
                     </div>
-                    <div className="relative h-12 w-full mt-2 overflow-hidden rounded-lg bg-slate-900 border border-slate-800">
-                      <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <path d={winProbabilityPathOverlay} fill="url(#probability-shade)" opacity="0.15" />
-                        <path d={winProbabilityPath} fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" />
-                      </svg>
-                      
-                      <div className="absolute top-[12%] right-[5%] h-2 w-2 rounded-full bg-blue-400 shadow-[0_0_10px_#3B82F6] animate-pulse"></div>
-
-                      <svg className="hidden">
-                        <defs>
-                          <linearGradient id="probability-shade" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stopColor="#3B82F6" />
-                            <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
-                          </linearGradient>
-                        </defs>
-                      </svg>
+                    <div className="relative h-12 w-full mt-2 overflow-hidden rounded-lg bg-slate-900 border border-slate-850">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={winProbabilityHistory} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                          <defs>
+                            <linearGradient id="colorProb" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.35}/>
+                              <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <Area type="monotone" dataKey="probability" stroke="#3B82F6" strokeWidth={2} fillOpacity={1} fill="url(#colorProb)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
 
@@ -562,6 +705,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             </span>
           </div>
         </div>
+
         {/* CARD B: SURVIVOR LEAGUE (Top Right) */}
         <div 
           className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
@@ -635,30 +779,39 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             </div>
 
             {/* Attrition/Survival Chart */}
-            <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl relative">
+            <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl relative">
               <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Attrition Trend Line</span>
               <div className="h-16 w-full relative">
-                {/* SVG Attrition Line Graph */}
-                <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  {/* Grid Lines */}
-                  <line x1="0" y1="25" x2="100" y2="25" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="2,2" />
-                  <line x1="0" y1="50" x2="100" y2="50" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="2,2" />
-                  <line x1="0" y1="75" x2="100" y2="75" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="2,2" />
-                  
-                  {/* Active Entries Line (Blue) */}
-                  <path d="M 0 30 Q 30 40, 50 65 T 100 80" fill="none" stroke="#3B82F6" strokeWidth="2.5" />
-                  {/* Strikes Line (Orange) */}
-                  <path d="M 0 85 Q 25 80, 60 40 T 100 20" fill="none" stroke="#FF6600" strokeWidth="2.5" />
-                </svg>
-                
-                {/* Bottom X labels */}
-                <div className="absolute bottom-0 inset-x-0 flex justify-between text-[7px] font-black text-slate-600 px-1 uppercase tracking-widest mt-1">
-                  <span>Wk 1</span>
-                  <span>Wk 4</span>
-                  <span>Wk 8</span>
-                  <span>Wk 11</span>
-                  <span>Wk 14</span>
-                </div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={attritionHistoryData} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
+                    <defs>
+                      <linearGradient id="colorAlive" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorStrikes" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#FF6600" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#FF6600" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="alive" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorAlive)" name="Players Alive" />
+                    <Area type="monotone" dataKey="strikes" stroke="#FF6600" strokeWidth={1.5} strokeDasharray="3,3" fillOpacity={1} fill="url(#colorStrikes)" name="Total Strikes" />
+                    <Tooltip 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-slate-950/90 border border-slate-800 p-2 rounded-xl text-[10px] font-black text-white shadow-xl">
+                              <p className="uppercase text-slate-400 mb-0.5">{payload[0].payload.week}</p>
+                              <p className="text-emerald-400">Alive: {payload[0].value}</p>
+                              {payload[1] && <p className="text-orange-400">Strikes: {payload[1].value}</p>}
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
@@ -711,38 +864,44 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
               ))}
             </div>
 
-            {/* Weekly Margin Bar Chart */}
-            <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl mb-5">
+            {/* Weekly Margin Bar Chart using Recharts */}
+            <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl mb-5">
               <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3">Weekly Net History</span>
-              <div className="h-16 flex items-end justify-between gap-1 px-1">
-                {weeklyHistoryData.map((d, i) => {
-                  const val = d.value;
-                  const isHighlighted = d.week === selectedWeek;
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center h-full justify-end relative group">
-                      <div 
-                        className={`w-full rounded-t-sm transition-all duration-300 group-hover:brightness-110 ${
-                          val < 0 
-                            ? 'bg-orange-500 shadow-[0_-2px_10px_rgba(255,102,0,0.3)]' 
-                            : isHighlighted 
-                              ? 'bg-gradient-to-t from-orange-500 to-indigo-600 shadow-[0_-2px_10px_rgba(255,102,0,0.4)] animate-pulse'
-                              : 'bg-blue-500 shadow-[0_-2px_10px_rgba(59,130,246,0.3)]'
-                        }`}
-                        style={{ 
-                          height: val === 0 ? '4px' : `${(Math.abs(val) / maxHistoryVal) * 80 + 10}%`,
-                          maxHeight: '100%'
-                        }}
-                      ></div>
-                      {/* Hover tooltip */}
-                      <span className="absolute -top-6 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[8px] font-black text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
-                        {_pool.type === 'NFL_MARGIN' ? (val > 0 ? `+${val}` : val) : `${val}`}
-                      </span>
-                      <span className="text-[7px] font-bold text-slate-650 mt-1 block">
-                        {d.week}
-                      </span>
-                    </div>
-                  );
-                })}
+              <div className="h-16 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={weeklyHistoryData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {weeklyHistoryData.map((d, index) => {
+                        const isSelected = d.week === selectedWeek;
+                        const isPositive = d.value >= 0;
+                        return (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={isSelected ? '#6366F1' : (isPositive ? '#10B981' : '#EF4444')} 
+                            opacity={isSelected ? 1 : 0.7}
+                          />
+                        );
+                      })}
+                    </Bar>
+                    <Tooltip 
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const val = payload[0].value as number;
+                          return (
+                            <div className="bg-slate-950/90 border border-slate-800 p-2 rounded-xl text-[10px] font-black text-white shadow-xl">
+                              <p className="uppercase text-slate-400 mb-0.5">Week {payload[0].payload.week}</p>
+                              <p className={val >= 0 ? "text-emerald-400" : "text-rose-450"}>
+                                {val >= 0 ? `+${val} Net` : `${val} Net`}
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
@@ -869,6 +1028,96 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             <span className="text-indigo-400 font-black uppercase">
               {userRank !== 'N/A' ? `You are Ranked ${userRank}` : 'Unranked (Submit Pick)'}
             </span>
+          </div>
+        </div>
+
+        {/* CARD E: MY PERFORMANCE RADAR & PICK ANALYTICS (Bottom Spanning Bento Box) */}
+        <div 
+          className="md:col-span-2 bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 grid grid-cols-1 md:grid-cols-2 gap-8"
+          style={{ boxShadow: `inset 0 0 25px rgba(99, 102, 241, 0.08), 0 10px 40px rgba(0,0,0,0.5)` }}
+        >
+          {/* Radar Chart section */}
+          <div className="flex flex-col justify-between">
+            <div>
+              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Performance Radar</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Skills comparison vs League Average</p>
+            </div>
+            
+            <div className="h-56 w-full flex items-center justify-center mt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={userPerformanceData}>
+                  <PolarGrid stroke="#1E293B" />
+                  <PolarAngleAxis dataKey="subject" stroke="#64748b" tick={{ fontSize: 9, fontWeight: 900, fill: '#94a3b8' }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#1E293B" tick={false} />
+                  <Radar name="You" dataKey="User" stroke="#FF6600" fill="#FF6600" fillOpacity={0.25} />
+                  <Radar name="League Average" dataKey="Average" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.1} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: '12px' }}
+                    itemStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                    labelStyle={{ color: '#94a3b8', fontSize: '9px', fontWeight: '900', textTransform: 'uppercase' }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div className="flex justify-center gap-6 text-[10px] font-black uppercase tracking-wider mt-4">
+              <div className="flex items-center gap-1.5 text-orange-500">
+                <span className="h-2 w-2 rounded-full bg-orange-500"></span> You
+              </div>
+              <div className="flex items-center gap-1.5 text-blue-400">
+                <span className="h-2 w-2 rounded-full bg-blue-500"></span> League Avg
+              </div>
+            </div>
+          </div>
+
+          {/* Pie Chart section */}
+          <div className="flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-800/80 pt-6 md:pt-0 md:pl-8">
+            <div>
+              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Pick Accuracy ratio</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Proportion of correct selections</p>
+            </div>
+
+            <div className="h-48 w-full relative flex items-center justify-center mt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pickAccuracyRatio}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={70}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {pickAccuracyRatio.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: '12px' }}
+                    itemStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              
+              <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
+                <span className="text-xl font-black text-white leading-none">
+                  {Math.round((pickAccuracyRatio[0].value / (pickAccuracyRatio[0].value + pickAccuracyRatio[1].value)) * 100)}%
+                </span>
+                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Accuracy</span>
+              </div>
+            </div>
+
+            <div className="flex justify-around text-[10px] font-black uppercase tracking-wider mt-4">
+              <div className="text-center">
+                <span className="text-emerald-400 block text-sm font-black">{pickAccuracyRatio[0].value}</span>
+                <span className="text-slate-500">Correct</span>
+              </div>
+              <div className="text-center">
+                <span className="text-rose-500 block text-sm font-black">{pickAccuracyRatio[1].value}</span>
+                <span className="text-slate-500">Incorrect</span>
+              </div>
+            </div>
           </div>
         </div>
 

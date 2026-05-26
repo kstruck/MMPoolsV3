@@ -9,7 +9,7 @@ import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
 import { db } from '../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 
@@ -18,6 +18,7 @@ import { AdminStatsDashboard } from './AdminStatsDashboard';
 import { TournamentManager } from './admin/TournamentManager';
 import { SuperAdminBentoDashboard } from './SuperAdminBentoDashboard';
 import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
+import { SuperAdminBillingPanel } from './admin/SuperAdminBillingPanel';
 
 type SystemLog = {
     timestamp?: { toDate?: () => Date } | number | string;
@@ -41,7 +42,7 @@ export const SuperAdmin: React.FC = () => {
     // UI State
     type NavGroup = 'Dashboard' | 'Management' | 'Game Ops' | 'Configuration';
     const [activeGroup, setActiveGroup] = useState<NavGroup>('Dashboard');
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl' | 'billing'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
@@ -87,6 +88,117 @@ export const SuperAdmin: React.FC = () => {
     const [isImportingNfl, setIsImportingNfl] = useState(false);
     const [nflImportResult, setNflImportResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+    // Admin Override States & Functions
+    const [viewingPoolEntries, setViewingPoolEntries] = useState<any[]>([]);
+    const [adminSearchEntry, setAdminSearchEntry] = useState('');
+    const [adminPoolName, setAdminPoolName] = useState('');
+    const [adminEntryFee, setAdminEntryFee] = useState(0);
+    const [adminIsPublic, setAdminIsPublic] = useState(false);
+    const [adminInstructions, setAdminInstructions] = useState('');
+    const [modalTab, setModalTab] = useState<'overview' | 'settings' | 'participants' | 'dangerous'>('overview');
+    
+    // Participant Overrides input states
+    const [entryScoreOverrides, setEntryScoreOverrides] = useState<Record<string, string>>({});
+    const [entryTiebreakerOverrides, setEntryTiebreakerOverrides] = useState<Record<string, string>>({});
+    const [entryPayoutOverrides, setEntryPayoutOverrides] = useState<Record<string, string>>({});
+    const [expandedPicksEntryId, setExpandedPicksEntryId] = useState<string | null>(null);
+
+    const handleSavePoolSettingsAdmin = async () => {
+        if (!viewingPool) return;
+        try {
+            const isMM = viewingPool.type === 'BRACKET';
+            const poolRef = doc(db, 'pools', viewingPool.id);
+            const updates: Record<string, any> = {};
+            
+            if (isMM) {
+                updates.name = adminPoolName;
+                updates['settings.entryFee'] = Number(adminEntryFee);
+                updates.isListedPublic = adminIsPublic;
+                updates['settings.paymentInstructions'] = adminInstructions;
+            } else {
+                updates.name = adminPoolName;
+                updates.costPerSquare = Number(adminEntryFee);
+                updates.isPublic = adminIsPublic;
+                updates.paymentInstructions = adminInstructions;
+            }
+            
+            await updateDoc(poolRef, updates);
+            setViewingPool(prev => prev ? { ...prev, ...updates, name: adminPoolName } : null);
+            alert('Pool settings saved successfully by Admin override!');
+        } catch (err: unknown) {
+            logger.error("Failed to save admin settings override", err);
+            alert("Failed to save pool settings: " + (err instanceof Error ? err.message : String(err)));
+        }
+    };
+
+    const handleToggleEntryPaidAdmin = async (entryId: string, currentStatus: string) => {
+        if (!viewingPool) return;
+        try {
+            const newStatus = currentStatus === 'PAID' ? 'UNPAID' : 'PAID';
+            const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
+            await updateDoc(entryRef, {
+                paidStatus: newStatus,
+                updatedAt: Date.now()
+            });
+            setViewingPoolEntries(prev => prev.map(entry => entry.id === entryId ? { ...entry, paidStatus: newStatus } : entry));
+        } catch (err: unknown) {
+            logger.error("Failed to toggle payment status", err);
+            alert("Error: " + (err instanceof Error ? err.message : String(err)));
+        }
+    };
+
+    const handleDeleteEntryAdmin = async (entryId: string, name: string) => {
+        if (!viewingPool) return;
+        if (!confirm(`Are you absolutely sure you want to delete ${name}'s entry from this pool?\n\nThis will remove their picks permanently. This action cannot be undone!`)) return;
+        try {
+            const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
+            await deleteDoc(entryRef);
+            setViewingPoolEntries(prev => prev.filter(entry => entry.id !== entryId));
+            
+            if (viewingPool.type === 'BRACKET') {
+                const poolRef = doc(db, 'pools', viewingPool.id);
+                const currentCount = (viewingPool as any).entryCount || 0;
+                const newCount = Math.max(0, currentCount - 1);
+                await updateDoc(poolRef, { entryCount: newCount });
+                setViewingPool(prev => prev ? { ...prev, entryCount: newCount } as any : null);
+            }
+            alert('Entry successfully deleted.');
+        } catch (err: unknown) {
+            logger.error("Failed to delete entry", err);
+            alert("Error deleting entry: " + (err instanceof Error ? err.message : String(err)));
+        }
+    };
+
+    const handleSaveEntryOverridesAdmin = async (entryId: string) => {
+        if (!viewingPool) return;
+        try {
+            const scoreVal = Number(entryScoreOverrides[entryId] || 0);
+            const tiebreakerVal = Number(entryTiebreakerOverrides[entryId] || 0);
+            const payoutVal = Number(entryPayoutOverrides[entryId] || 0);
+
+            const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
+            const updates: Record<string, any> = {
+                score: scoreVal,
+                payout: payoutVal,
+                updatedAt: Date.now()
+            };
+
+            if (viewingPool.type === 'BRACKET') {
+                updates.tiebreakerScore = tiebreakerVal;
+            } else {
+                updates.tiebreakerScore = tiebreakerVal;
+                updates.tieBreakerPrediction = tiebreakerVal;
+            }
+
+            await updateDoc(entryRef, updates);
+            setViewingPoolEntries(prev => prev.map(entry => entry.id === entryId ? { ...entry, ...updates } : entry));
+            alert('Participant overrides successfully saved!');
+        } catch (err: unknown) {
+            logger.error("Failed to save entry overrides", err);
+            alert("Error: " + (err instanceof Error ? err.message : String(err)));
+        }
+    };
+
     const fetchUsers = () => {
         dbService.getAllUsers()
             .then(setUsers)
@@ -113,6 +225,48 @@ export const SuperAdmin: React.FC = () => {
             unsubStats();
         };
     }, [activeTab]);
+
+    useEffect(() => {
+        if (viewingPool) {
+            setViewingPoolEntries([]);
+            setAdminSearchEntry('');
+            setAdminPoolName(viewingPool.name || '');
+            setModalTab('overview');
+            
+            const isMM = viewingPool.type === 'BRACKET';
+            const poolCost = isMM 
+                ? ((viewingPool as any).settings?.entryFee || 0) 
+                : ((viewingPool as any).costPerSquare || (viewingPool as any).settings?.entryFee || 0);
+            const poolPublic = isMM
+                ? (viewingPool as any).isListedPublic
+                : ((viewingPool as any).isPublic ?? (viewingPool as any).isListedPublic ?? false);
+            const poolInstructions = isMM
+                ? ((viewingPool as any).settings?.paymentInstructions || '')
+                : ((viewingPool as any).paymentInstructions || (viewingPool as any).settings?.paymentInstructions || '');
+
+            setAdminEntryFee(poolCost);
+            setAdminIsPublic(poolPublic);
+            setAdminInstructions(poolInstructions);
+
+            dbService.getBracketEntries(viewingPool.id)
+                .then((entries) => {
+                    setViewingPoolEntries(entries);
+                    const scores: Record<string, string> = {};
+                    const tiebreakers: Record<string, string> = {};
+                    const payouts: Record<string, string> = {};
+                    entries.forEach(e => {
+                        const entryAny = e as any;
+                        scores[entryAny.id] = String(entryAny.score ?? 0);
+                        tiebreakers[entryAny.id] = String(entryAny.tiebreakerScore ?? entryAny.tieBreakerPrediction ?? 0);
+                        payouts[entryAny.id] = String(entryAny.payout ?? 0);
+                    });
+                    setEntryScoreOverrides(scores);
+                    setEntryTiebreakerOverrides(tiebreakers);
+                    setEntryPayoutOverrides(payouts);
+                })
+                .catch(err => logger.error("Failed to load pool entries for admin override", err));
+        }
+    }, [viewingPool?.id]);
 
     // Theme & Seed Subscription
     useEffect(() => {
@@ -769,6 +923,7 @@ export const SuperAdmin: React.FC = () => {
         'Configuration': [
             { id: 'themes', label: `Themes(${themes.length})`, icon: <Palette size={16} /> },
             { id: 'testing', label: 'AI Testing', icon: <Bot size={16} /> },
+            { id: 'billing', label: 'Monetization', icon: <Shield size={16} /> },
             { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
         ]
     };
@@ -1970,6 +2125,8 @@ export const SuperAdmin: React.FC = () => {
                 </div>
             )}
 
+            {activeTab === 'billing' && <SuperAdminBillingPanel />}
+
             {activeTab === 'settings' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -2189,12 +2346,13 @@ export const SuperAdmin: React.FC = () => {
             {
                 viewingPool && (
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl flex flex-col">
-                            <div className="p-6 border-b border-slate-700 flex justify-between items-start bg-slate-950/50 rounded-t-2xl">
+                        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+                            {/* Modal Header */}
+                            <div className="p-6 border-b border-slate-700 flex justify-between items-start bg-slate-950/50">
                                 <div>
                                     <h2 className="text-2xl font-bold text-white mb-1 flex items-center gap-2">
                                         {viewingPool.name}
-                                        {viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && <Heart size={20} className="text-rose-500 fill-rose-500" />}
+                                        {viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && <Heart size={20} className="text-rose-500 fill-rose-500 animate-pulse" />}
                                     </h2>
                                     <p className="text-slate-400 text-sm">
                                         ID: <span className="font-mono text-slate-500">{viewingPool.id}</span>
@@ -2224,116 +2382,414 @@ export const SuperAdmin: React.FC = () => {
                                     )}
                                     <button onClick={() => setViewingPool(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors">
                                         <span className="sr-only">Close</span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        <X size={20} />
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="p-6 space-y-6">
-                                {/* Meta Data */}
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-                                        <h4 className="text-slate-400 text-xs font-bold uppercase mb-1">Created At</h4>
-                                        <p className="font-medium text-white">
-                                            {typeof viewingPool.createdAt === 'number'
-                                                ? new Date(viewingPool.createdAt).toLocaleString()
-                                                : (viewingPool.createdAt?.seconds
-                                                    ? new Date(viewingPool.createdAt.seconds * 1000).toLocaleString()
-                                                    : <span className="italic text-slate-500">Unknown Date</span>)}
-                                        </p>
-                                    </div>
-                                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-                                        <h4 className="text-slate-400 text-xs font-bold uppercase mb-1">Owner</h4>
-                                        <p className="font-medium text-white">
-                                            {users.find(u => u.id === (viewingPool.type === 'BRACKET' ? (viewingPool as unknown as PoolLike).managerUid as string : (viewingPool as unknown as PoolLike).ownerId as string))?.name || 'Unknown User'}
-                                        </p>
-                                        <p className="text-xs text-slate-500 font-mono mt-0.5">
-                                            {viewingPool.type === 'BRACKET' ? (viewingPool as unknown as PoolLike).managerUid as string : (viewingPool as unknown as PoolLike).ownerId as string}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Status */}
-                                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-                                    <h4 className="text-slate-400 text-xs font-bold uppercase mb-2">Pool Status</h4>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                        <div>
-                                            <div className="text-xs text-slate-500">State</div>
-                                            <div className="text-white font-bold">
-                                                {viewingPool.type === 'BRACKET'
-                                                    ? (viewingPool as unknown as PoolLike).status as string
-                                                    : ((viewingPool as GameState).isLocked ? "LOCKED" : "OPEN")}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-slate-500">Filled</div>
-                                            <div className="text-white font-bold">
-                                                {viewingPool.type === 'BRACKET'
-                                                    ? `${(viewingPool as unknown as PoolLike).entryCount as number || 0} Entries`
-                                                    : viewingPool.type === 'NFL_PLAYOFFS' || viewingPool.type === 'PROPS'
-                                                        ? `${(viewingPool as unknown as PoolLike).entries ? Object.keys((viewingPool as unknown as PoolLike).entries as PoolLike).length : 0} Entries`
-                                                        : `${(viewingPool as GameState).squares?.filter(s => s.owner).length || 0} / 100`}
-                                            </div>
-                                        </div >
-                                        <div>
-                                            <div className="text-xs text-slate-500">Price</div>
-                                            <div className="text-white font-bold">
-                                                ${viewingPool.type === 'BRACKET' ? ((viewingPool as unknown as PoolLike).settings as PoolLike)?.entryFee as number : (viewingPool as unknown as PoolLike).costPerSquare as number}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-slate-500">Total Pot</div>
-                                            <div className="text-emerald-400 font-bold font-mono">
-                                                ${viewingPool.type === 'BRACKET'
-                                                    ? ((viewingPool as unknown as PoolLike).entryCount as number || 0) * (((viewingPool as unknown as PoolLike).settings as PoolLike)?.entryFee as number || 0)
-                                                    : viewingPool.type === 'NFL_PLAYOFFS' || viewingPool.type === 'PROPS'
-                                                        ? ((viewingPool as unknown as PoolLike).entries ? Object.keys((viewingPool as unknown as PoolLike).entries as PoolLike).length : 0) * (((viewingPool as unknown as PoolLike).settings as PoolLike)?.entryFee as number || (viewingPool as unknown as PoolLike).costPerSquare as number || 0)
-                                                        : ((viewingPool as GameState).squares?.filter(s => s.owner).length || 0) * ((viewingPool as GameState).costPerSquare || 0)}
-                                            </div>
-                                        </div>
-                                    </div >
-                                </div >
-
-                                {/* Charity Info */}
-                                {
-                                    viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && (
-                                        <div className="bg-rose-900/10 p-4 rounded-xl border border-rose-500/20">
-                                            <h4 className="text-rose-400 text-xs font-bold uppercase mb-2 flex items-center gap-1"><Heart size={12} fill="currentColor" /> Fundraising for Charity</h4>
-                                            <p className="text-white font-bold">{(viewingPool as GameState).charity?.name}</p>
-                                            <a href={(viewingPool as GameState).charity?.url} target="_blank" rel="noreferrer" className="text-rose-400 text-sm hover:underline truncate block">{(viewingPool as GameState).charity?.url}</a>
-                                            <p className="text-xs text-rose-300/70 mt-2">Donating {(viewingPool as GameState).charity?.percentage}% of the pot</p>
-                                        </div>
-                                    )
-                                }
-
-                                {/* Actions */}
-                                <div className="flex gap-3 pt-4 border-t border-slate-700 flex-wrap">
-                                    <button onClick={() => window.location.href = `/admin/${viewingPool.id}`} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20">
-                                        Manage Settings
+                            {/* Modal Tabs Navigation */}
+                            <div className="flex border-b border-slate-700 bg-slate-950/20 px-6 py-2 overflow-x-auto gap-2">
+                                {[
+                                    { id: 'overview', label: 'Overview & Stats' },
+                                    { id: 'settings', label: 'Edit Settings (Override)' },
+                                    { id: 'participants', label: `Manage Participants (${viewingPoolEntries.length})` },
+                                    { id: 'dangerous', label: 'Dangerous Ops' }
+                                ].map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setModalTab(tab.id as any)}
+                                        className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                                            modalTab === tab.id
+                                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                                                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        {tab.label}
                                     </button>
-                                    <a href={`#pool/${viewingPool.id}`} target="_blank" className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-2">
-                                        View Live Grid
-                                    </a>
-                                    {viewingPool.type === 'BRACKET' && (
-                                        <button
-                                            onClick={() => handleForceReopenPool(viewingPool)}
-                                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20"
-                                        >
-                                            🔓 Force Re-Open Pool
-                                        </button>
-                                    )}
-                                    {viewingPool.type === 'BRACKET' && (
-                                        <button
-                                            onClick={() => { handleClosePool(viewingPool as unknown as Pool); setViewingPool(null); }}
-                                            className="w-full bg-rose-700 hover:bg-rose-600 text-white py-3 rounded-xl font-bold transition-all"
-                                        >
-                                            🔒 Close Pool
-                                        </button>
-                                    )}
-                                </div>
-                            </div >
-                        </div >
-                    </div >
+                                ))}
+                            </div>
+
+                            {/* Scrollable Content Area */}
+                            <div className="p-6 flex-1 overflow-y-auto space-y-6">
+                                {modalTab === 'overview' && (
+                                    <div className="space-y-6">
+                                        {/* Meta Data */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                                                <h4 className="text-slate-400 text-xs font-bold uppercase mb-1">Created At</h4>
+                                                <p className="font-medium text-white text-lg">
+                                                    {typeof viewingPool.createdAt === 'number'
+                                                        ? new Date(viewingPool.createdAt).toLocaleString()
+                                                        : (viewingPool.createdAt?.seconds
+                                                            ? new Date(viewingPool.createdAt.seconds * 1000).toLocaleString()
+                                                            : <span className="italic text-slate-500">Unknown Date</span>)}
+                                                </p>
+                                            </div>
+                                            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                                                <h4 className="text-slate-400 text-xs font-bold uppercase mb-1">Owner</h4>
+                                                <p className="font-medium text-white text-lg">
+                                                    {users.find(u => u.id === (viewingPool.type === 'BRACKET' ? (viewingPool as unknown as PoolLike).managerUid as string : (viewingPool as unknown as PoolLike).ownerId as string))?.name || 'Unknown User'}
+                                                </p>
+                                                <p className="text-xs text-slate-500 font-mono mt-1 break-all">
+                                                    UID: {viewingPool.type === 'BRACKET' ? (viewingPool as unknown as PoolLike).managerUid as string : (viewingPool as unknown as PoolLike).ownerId as string}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Status */}
+                                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50">
+                                            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Live Statistics</h3>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-80">
+                                                    <div className="text-xs text-slate-500 font-bold uppercase">State</div>
+                                                    <div className="text-2xl font-bold text-white mt-1">
+                                                        {viewingPool.type === 'BRACKET'
+                                                            ? (viewingPool as unknown as PoolLike).status as string
+                                                            : ((viewingPool as GameState).isLocked ? "LOCKED" : "OPEN")}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-80">
+                                                    <div className="text-xs text-slate-500 font-bold uppercase">Entries</div>
+                                                    <div className="text-2xl font-bold text-white mt-1">
+                                                        {viewingPoolEntries.length}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-80">
+                                                    <div className="text-xs text-slate-500 font-bold uppercase">Cost / Fee</div>
+                                                    <div className="text-2xl font-bold text-emerald-400 mt-1">
+                                                        ${adminEntryFee}
+                                                    </div>
+                                                </div>
+                                                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-80">
+                                                    <div className="text-xs text-slate-500 font-bold uppercase">Total Pot</div>
+                                                    <div className="text-2xl font-bold text-indigo-400 font-mono mt-1">
+                                                        ${viewingPoolEntries.length * adminEntryFee}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Charity Info */}
+                                        {viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && (
+                                            <div className="bg-rose-950/20 p-5 rounded-xl border border-rose-500/20 flex gap-4 items-start">
+                                                <div className="p-3 bg-rose-500/10 rounded-lg text-rose-500">
+                                                    <Heart size={24} fill="currentColor" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="text-rose-400 text-xs font-bold uppercase tracking-wider mb-1">Fundraising for Charity</h4>
+                                                    <p className="text-white font-bold text-lg">{(viewingPool as GameState).charity?.name}</p>
+                                                    <a href={(viewingPool as GameState).charity?.url} target="_blank" rel="noreferrer" className="text-rose-400 text-sm hover:underline truncate block mt-0.5">{(viewingPool as GameState).charity?.url}</a>
+                                                    <p className="text-xs text-rose-300/70 mt-2 bg-rose-500/10 px-3 py-1.5 rounded-lg w-fit">Donating {(viewingPool as GameState).charity?.percentage}% of the pot</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {modalTab === 'settings' && (
+                                    <div className="space-y-4 max-w-xl mx-auto bg-slate-800/20 p-6 rounded-xl border border-slate-700/50">
+                                        <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2 border-b border-slate-700 pb-2">
+                                            <Settings size={20} className="text-indigo-400" /> Pool Configuration Overrides
+                                        </h3>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-xs uppercase text-slate-400 font-bold mb-1.5">Pool Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={adminPoolName}
+                                                    onChange={e => setAdminPoolName(e.target.value)}
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                                                />
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-xs uppercase text-slate-400 font-bold mb-1.5">Entry Cost / Fee ($)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={adminEntryFee}
+                                                        onChange={e => setAdminEntryFee(Number(e.target.value))}
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs uppercase text-slate-400 font-bold mb-1.5">Privacy Status</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setAdminIsPublic(!adminIsPublic)}
+                                                        className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
+                                                            adminIsPublic
+                                                                ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 font-bold'
+                                                                : 'bg-slate-900 border-slate-700 text-slate-400 font-medium'
+                                                        }`}
+                                                    >
+                                                        <span>{adminIsPublic ? '🌍 Publicly Listed' : '🔒 Private (Invite Only)'}</span>
+                                                        <span className="text-xs">{adminIsPublic ? 'Public' : 'Private'}</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs uppercase text-slate-400 font-bold mb-1.5">Payment Instructions</label>
+                                                <textarea
+                                                    rows={4}
+                                                    value={adminInstructions}
+                                                    onChange={e => setAdminInstructions(e.target.value)}
+                                                    placeholder="Specify how participants should pay (e.g. Venmo, PayPal link, etc.)"
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500 transition-colors font-sans resize-none"
+                                                />
+                                            </div>
+
+                                            <div className="pt-2">
+                                                <button
+                                                    onClick={handleSavePoolSettingsAdmin}
+                                                    className="w-full bg-emerald-600 hover:bg-emerald-500 hover:shadow-emerald-600/20 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                                                >
+                                                    <CheckCircle size={18} />
+                                                    Save Settings Override
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {modalTab === 'participants' && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="relative flex-1">
+                                                <Search className="absolute left-3 top-3.5 text-slate-500" size={18} />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search participants by name, email, or entry ID..."
+                                                    value={adminSearchEntry}
+                                                    onChange={e => setAdminSearchEntry(e.target.value)}
+                                                    className="w-full bg-slate-900/60 border border-slate-700/80 rounded-xl py-3 pl-10 pr-4 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="overflow-x-auto rounded-xl border border-slate-700 bg-slate-900/40">
+                                            <table className="w-full text-left text-sm whitespace-nowrap">
+                                                <thead className="text-xs text-slate-400 uppercase bg-slate-950/80">
+                                                    <tr>
+                                                        <th className="p-4 font-bold">Player details</th>
+                                                        <th className="p-4 font-bold text-center">Score</th>
+                                                        <th className="p-4 font-bold text-center">Tiebreaker</th>
+                                                        <th className="p-4 font-bold text-center">Payout</th>
+                                                        <th className="p-4 font-bold text-center">Picks</th>
+                                                        <th className="p-4 font-bold text-center">Payment Status</th>
+                                                        <th className="p-4 font-bold text-center">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-800">
+                                                    {viewingPoolEntries
+                                                        .filter(e => {
+                                                            if (!adminSearchEntry) return true;
+                                                            const term = adminSearchEntry.toLowerCase();
+                                                            return (
+                                                                (e.name || '').toLowerCase().includes(term) ||
+                                                                (e.email || '').toLowerCase().includes(term) ||
+                                                                (e.id || '').toLowerCase().includes(term)
+                                                            );
+                                                        })
+                                                        .map(entry => {
+                                                            const isExpanded = expandedPicksEntryId === entry.id;
+                                                            return (
+                                                                <React.Fragment key={entry.id}>
+                                                                    <tr className="hover:bg-slate-800/30 transition-colors">
+                                                                        <td className="p-4">
+                                                                            <div className="font-bold text-white">{entry.name || 'Unnamed Player'}</div>
+                                                                            <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                                                                <span>{entry.email}</span>
+                                                                                <span className="text-slate-600">•</span>
+                                                                                <span className="font-mono text-slate-500">{entry.id}</span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="p-4 text-center">
+                                                                            <input
+                                                                                type="number"
+                                                                                value={entryScoreOverrides[entry.id] ?? ''}
+                                                                                onChange={e => setEntryScoreOverrides({
+                                                                                    ...entryScoreOverrides,
+                                                                                    [entry.id]: e.target.value
+                                                                                })}
+                                                                                className="w-16 bg-slate-950 border border-slate-700 rounded-lg p-1 text-center font-bold text-white focus:outline-none focus:border-indigo-500"
+                                                                            />
+                                                                        </td>
+                                                                        <td className="p-4 text-center">
+                                                                            <input
+                                                                                type="number"
+                                                                                value={entryTiebreakerOverrides[entry.id] ?? ''}
+                                                                                onChange={e => setEntryTiebreakerOverrides({
+                                                                                    ...entryTiebreakerOverrides,
+                                                                                    [entry.id]: e.target.value
+                                                                                })}
+                                                                                className="w-16 bg-slate-950 border border-slate-700 rounded-lg p-1 text-center text-white focus:outline-none focus:border-indigo-500"
+                                                                            />
+                                                                        </td>
+                                                                        <td className="p-4 text-center">
+                                                                            <input
+                                                                                type="number"
+                                                                                value={entryPayoutOverrides[entry.id] ?? ''}
+                                                                                onChange={e => setEntryPayoutOverrides({
+                                                                                    ...entryPayoutOverrides,
+                                                                                    [entry.id]: e.target.value
+                                                                                })}
+                                                                                className="w-20 bg-slate-950 border border-slate-700 rounded-lg p-1 text-center font-bold text-emerald-400 focus:outline-none focus:border-indigo-500"
+                                                                            />
+                                                                        </td>
+                                                                        <td className="p-4 text-center">
+                                                                            <button
+                                                                                onClick={() => setExpandedPicksEntryId(isExpanded ? null : entry.id)}
+                                                                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 text-xs font-bold text-slate-300 transition-colors"
+                                                                            >
+                                                                                {isExpanded ? 'Hide Picks' : `View Picks (${entry.picks ? Object.keys(entry.picks).length : 0})`}
+                                                                            </button>
+                                                                        </td>
+                                                                        <td className="p-4 text-center">
+                                                                            <button
+                                                                                onClick={() => handleToggleEntryPaidAdmin(entry.id, entry.paidStatus)}
+                                                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                                                                                    entry.paidStatus === 'PAID'
+                                                                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                                                                        : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                                                                }`}
+                                                                            >
+                                                                                {entry.paidStatus === 'PAID' ? 'PAID' : 'UNPAID'}
+                                                                            </button>
+                                                                        </td>
+                                                                        <td className="p-4 text-center">
+                                                                            <div className="flex justify-center items-center gap-2">
+                                                                                <button
+                                                                                    onClick={() => handleSaveEntryOverridesAdmin(entry.id)}
+                                                                                    title="Save Changes"
+                                                                                    className="p-2 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-lg transition-colors"
+                                                                                >
+                                                                                    <CheckCircle size={16} />
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => handleDeleteEntryAdmin(entry.id, entry.name)}
+                                                                                    title="Delete Entry"
+                                                                                    className="p-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-400 border border-rose-500/30 rounded-lg transition-colors"
+                                                                                >
+                                                                                    <Trash2 size={16} />
+                                                                                </button>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                    {isExpanded && (
+                                                                        <tr className="bg-slate-950/40">
+                                                                            <td colSpan={7} className="p-4 border-l border-r border-slate-800">
+                                                                                <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                                                                                    <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                                                                                        <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Raw Picks Sheet</span>
+                                                                                        <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded-lg text-slate-400">JSON Format</span>
+                                                                                    </div>
+                                                                                    <pre className="text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap max-h-40 leading-relaxed bg-slate-900/40 p-3 rounded-lg border border-slate-800/60">
+                                                                                        {entry.picks ? JSON.stringify(entry.picks, null, 2) : 'No picks submitted yet.'}
+                                                                                    </pre>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </React.Fragment>
+                                                            );
+                                                        })}
+                                                    {viewingPoolEntries.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan={7} className="p-8 text-center text-slate-500">
+                                                                No entries found in this pool.
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {modalTab === 'dangerous' && (
+                                    <div className="space-y-6 max-w-xl mx-auto bg-slate-800/20 p-6 rounded-xl border border-slate-700/50">
+                                        <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2 border-b border-rose-950/80 pb-2 text-rose-400">
+                                            <Shield size={20} className="text-rose-500 animate-pulse" /> Super Administrative Overrides
+                                        </h3>
+                                        <div className="space-y-4">
+                                            <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                                <div>
+                                                    <h4 className="font-bold text-white text-sm">Synchronize Scores & Sync</h4>
+                                                    <p className="text-xs text-slate-500 mt-0.5">Force recalculating entries and pull results from ESPN.</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleFixScores(viewingPool as GameState)}
+                                                    className="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
+                                                >
+                                                    <RefreshCw size={14} />
+                                                    Process ESPN Sync
+                                                </button>
+                                            </div>
+
+                                            {viewingPool.type === 'BRACKET' && (
+                                                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                                    <div>
+                                                        <h4 className="font-bold text-white text-sm">Force Re-Open Pool</h4>
+                                                        <p className="text-xs text-slate-500 mt-0.5">Change status back to OPEN to allow participants to edit picks.</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleForceReopenPool(viewingPool)}
+                                                        className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
+                                                    >
+                                                        <Lock size={14} />
+                                                        Force Re-Open
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {viewingPool.type === 'BRACKET' && (
+                                                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                                    <div>
+                                                        <h4 className="font-bold text-white text-sm">Close Pool Settings</h4>
+                                                        <p className="text-xs text-slate-500 mt-0.5">Lock pool and transition status directly to COMPLETED.</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => { handleClosePool(viewingPool as unknown as Pool); setViewingPool(null); }}
+                                                        className="w-full sm:w-auto px-4 py-2.5 bg-rose-700 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-md"
+                                                    >
+                                                        Close Pool
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                                <div>
+                                                    <h4 className="font-bold text-white text-sm">Manage Live Site Panel</h4>
+                                                    <p className="text-xs text-slate-500 mt-0.5">Open the host custom settings wizard panel directly.</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => window.location.href = `/admin/${viewingPool.id}`}
+                                                    className="w-full sm:w-auto px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-xs font-bold transition-all shadow-md text-center"
+                                                >
+                                                    Configure settings
+                                                </button>
+                                            </div>
+
+                                            <div className="p-4 bg-rose-950/15 rounded-xl border border-rose-900/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                                <div>
+                                                    <h4 className="font-bold text-rose-400 text-sm">Destroy Pool and Contents</h4>
+                                                    <p className="text-xs text-rose-300/40 mt-0.5">Permanently delete pool configuration, entries, logs, and statistics.</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => { handleDeletePool(viewingPool.id); setViewingPool(null); }}
+                                                    className="w-full sm:w-auto px-4 py-2.5 bg-rose-900/40 border border-rose-700 hover:bg-rose-900/60 text-rose-200 rounded-xl text-xs font-bold transition-all shadow-md"
+                                                >
+                                                    Super Delete Pool
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 )
             }
 

@@ -246,7 +246,20 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                 members: [user.id],
                 createdAt: Date.now(),
                 squares: Array(100).fill(null).map((_, i) => ({ id: i, owner: null })),
-                scores: { ...gameState.scores, q1: {}, half: {}, q3: {}, final: {}, current: { home: 0, away: 0 } } // Init scores
+                scores: { ...gameState.scores, q1: {}, half: {}, q3: {}, final: {}, current: { home: 0, away: 0 } }, // Init scores
+                billing: {
+                    status: 'trial',
+                    tier: 'free_tier',
+                    pricePaid: 0,
+                    maxPlayersAllowed: 10,
+                    trialEndsAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
+                    featuresUnlocked: {
+                        aiCommissioner: false,
+                        smsNotifications: false,
+                        whatIfSimulator: false,
+                        customBranding: true
+                    }
+                }
             };
 
             const poolId = await dbService.createPool(newPool as unknown as Record<string, unknown>);

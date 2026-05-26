@@ -133,6 +133,20 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                     // Shims for backend validation (it expects Squares pool fields)
                     costPerSquare: 0,
                     maxSquaresPerPlayer: 0,
+                    // Billing injection — single-event pool, 14-day trial
+                    billing: {
+                        status: 'trial',
+                        tier: 'free_tier',
+                        pricePaid: 0,
+                        trialEndsAt: Date.now() + (14 * 24 * 60 * 60 * 1000),
+                        maxPlayersAllowed: 10,
+                        featuresUnlocked: {
+                            aiCommissioner: false,
+                            smsNotifications: false,
+                            whatIfSimulator: false,
+                            customBranding: true
+                        }
+                    },
                 };
 
                 const newPoolId = await dbService.createPool(payload);

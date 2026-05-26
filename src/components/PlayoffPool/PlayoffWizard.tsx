@@ -385,7 +385,21 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                 teams: playoffTeams,
                 entries: {},
                 results: {},
-                lockDate: formData.lockAt
+                lockDate: formData.lockAt,
+                isLocked: false,
+                billing: {
+                    status: 'trial',
+                    tier: 'free_tier',
+                    pricePaid: 0,
+                    trialEndsAt: formData.lockAt, // Kickoff Lock model
+                    maxPlayersAllowed: 10,
+                    featuresUnlocked: {
+                        aiCommissioner: false,
+                        smsNotifications: false,
+                        whatIfSimulator: false,
+                        customBranding: true
+                    }
+                }
             };
 
             if (editPoolId) {

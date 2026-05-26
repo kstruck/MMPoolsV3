@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { BillingGate } from '../billing';
 import type { PlayoffPool, User } from '../../types';
 import { isPoolManager } from '../../utils/auth';
 import { dbService } from '../../services/dbService';
@@ -71,6 +72,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     };
 
     return (
+        <BillingGate pool={pool as any} isCommissioner={isManager}>
         <div className="min-h-screen text-slate-100 font-sans pb-20 duration-300" style={{ backgroundColor: pool.branding?.bgColor || '#020617' }}>
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4 md:p-6">
@@ -597,5 +599,6 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                 </div>
             )}
         </div >
+        </BillingGate>
     );
 };

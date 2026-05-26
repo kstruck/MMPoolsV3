@@ -35,7 +35,7 @@ export const PrivacyPage: React.FC<Props> = (props) => {
                         <ul className="list-disc pl-6 space-y-2 text-slate-300">
                             <li><strong>Account Information:</strong> Name, email address, profile picture</li>
                             <li><strong>Phone Number:</strong> Mobile phone number (if you opt in to SMS notifications)</li>
-                            <li><strong>Pool Information:</strong> Pool settings, participant data, payment records</li>
+                            <li><strong>Pool Information:</strong> Pool settings, participant predictions, bracket picks, grid squares selection, and payment tracking checkmarks for all supported formats including NCAA Brackets, Gameday Squares, NFL Survivor, Weekly Pick'em, NFL Margin, NFL Playoff Challenge, and Side Hustle Props.</li>
                             <li><strong>Communications:</strong> Support requests, feedback, and correspondence</li>
                         </ul>
 

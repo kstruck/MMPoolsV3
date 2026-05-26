@@ -74,8 +74,8 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     How it Works
                                 </button>
-                                <button onClick={() => navigate('/articles/bracket-pool-guide')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
-                                    Bracket Guide
+                                <button onClick={() => navigate('/how-it-works?view=strategy')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                    Pool Guides
                                 </button>
                                 <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Public Pools
@@ -92,8 +92,8 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     How it Works
                                 </button>
-                                <button onClick={() => navigate('/articles/bracket-pool-guide')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
-                                    Bracket Guide
+                                <button onClick={() => navigate('/how-it-works?view=strategy')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                    Pool Guides
                                 </button>
                                 <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     Public Pools

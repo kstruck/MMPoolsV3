@@ -177,6 +177,19 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
           bgColor: '#0b1329', // dark navy themed for NFL
           primaryColor,
           secondaryColor: accentColor
+        },
+        billing: {
+          status: 'trial',
+          tier: 'free_tier',
+          pricePaid: 0,
+          maxPlayersAllowed: 10,
+          trialEndsAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
+          featuresUnlocked: {
+            aiCommissioner: false,
+            smsNotifications: false,
+            whatIfSimulator: false,
+            customBranding: true
+          }
         }
       };
 

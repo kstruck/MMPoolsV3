@@ -13,16 +13,19 @@ export const Footer: React.FC = () => {
                             <Link to="/march-madness" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">March Madness Pools</Link>
                             <Link to="/gameday-squares" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Super Bowl Squares</Link>
                             <Link to="/nfl-playoffs" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">NFL Playoff Pools</Link>
-                            <Link to="/custom-sports" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Custom Sports Betting</Link>
+                            <Link to="/how-it-works?sport=survivor" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">NFL Survivor Pools</Link>
+                            <Link to="/how-it-works?sport=pickem" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Weekly Pick'em Pools</Link>
+                            <Link to="/how-it-works?sport=margin" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">NFL Margin Pools</Link>
+                            <Link to="/how-it-works?sport=props" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Side Hustle Props</Link>
                         </div>
                     </div>
                     <div>
                         <h4 className="text-white font-bold mb-4">Resources</h4>
                         <div className="flex flex-col gap-2">
                             <Link to="/how-it-works" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">How It Works</Link>
-                            <Link to="/pricing" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Pricing</Link>
-                            <Link to="/articles/bracket-pool-guide" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Blog & Guides</Link>
-                            <Link to="/support" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Help Center & FAQ</Link>
+                            <Link to="/pricing" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Pricing & Hosting</Link>
+                            <Link to="/how-it-works?view=strategy" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Blog & Guides</Link>
+                            <Link to="/how-it-works?view=faq" className="text-slate-400 hover:text-orange-400 transition-colors text-sm font-medium">Help Center & FAQ</Link>
                         </div>
                     </div>
                     <div>

@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { BillingGate } from './billing';
 import React, { useState, useEffect } from 'react';
 import type { GameState, Winner, PlayerDetails, User, PropCard } from '../types';
 import { Lock, UserPlus, User as UserIcon, Trophy, Ban, Check, X, ArrowDown, ArrowRight, Info, Edit2, ChevronUp, AlertCircle, Shield, Loader, LogIn, Save, Smartphone, Link as LinkIcon, Zap, Printer, ZoomIn, ZoomOut, DollarSign } from 'lucide-react';
@@ -441,6 +442,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
 
    return (
+      <BillingGate pool={gameState as any} isCommissioner={!!currentUser && (currentUser.id === (gameState as any).managerUid || currentUser.id === (gameState as any).ownerId)}>
       <div className="flex flex-col items-center w-full mx-auto">
 
          {/* --- ERROR BANNER (Always Visible) --- */}
@@ -530,7 +532,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            <div>
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Phone Number</label>
                               <input
-                                 type="tel"
+                                type="tel"
                                  value={playerInfo.details.phone}
                                  onChange={(e) => updateDetail('phone', e.target.value)}
                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-1 focus:ring-indigo-500 outline-none placeholder:text-slate-600"
@@ -1460,5 +1462,6 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
             )
          }
       </div >
+      </BillingGate>
    );
 };

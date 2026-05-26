@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BillingGate } from '../billing';
 import type { PropsPool, PropCard } from '../../types';
 import { PropCardForm } from '../Props/PropCardForm'; // Reusing this for "My Cards"
 
@@ -43,6 +44,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
     const showStats = pool.isLocked || isManager || isAdmin;
 
     return (
+        <BillingGate pool={pool as any} isCommissioner={!!isManager}>
         <div
             className="min-h-screen text-white pb-20 transition-colors duration-500"
             style={{ backgroundColor: pool.branding?.backgroundColor || '#0f172a' }}
@@ -311,5 +313,6 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                 shareUrl={`${window.location.origin}/#pool/${pool.id}`}
             />
         </div>
+        </BillingGate>
     );
 };

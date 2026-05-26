@@ -1,4 +1,5 @@
 import { logger } from '../../utils/logger';
+import { BillingGate } from '../billing';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -582,6 +583,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const isConference = pool.tournamentType === 'conference' && !isNcaaTournament;
 
     return (
+        <BillingGate pool={pool as any} isCommissioner={isManager}>
         <div className="min-h-screen bg-slate-950 pb-20">
             {/* Header */}
             <div className="bg-slate-900 border-b border-slate-800 p-4 relative">
@@ -2194,5 +2196,6 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 );
             })()}
         </div>
+        </BillingGate>
     );
 };

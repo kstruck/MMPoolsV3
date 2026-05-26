@@ -36,3 +36,12 @@ export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring
 export { syncNFLScoresJob, importNFLSchedule } from "./nflSchedule";
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
 
+// --- BILLING & MONETIZATION ---
+export { enforceBillingStatus, validateBillingAccess, redeemCoupon } from "./billing";
+
+// --- STRIPE PAYMENTS ---
+export { createCheckoutSession, handleStripeWebhook } from "./stripe";
+
+// --- REFERRAL SYSTEM ---
+export { creditReferralOnPayment } from "./referral";
+
