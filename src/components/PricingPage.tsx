@@ -13,6 +13,19 @@ import {
 } from 'lucide-react';
 import { BillingInvoiceCard } from './billing/BillingInvoiceCard';
 
+const UpgradeTooltip: React.FC<{ title: string; description: string }> = ({ title, description }) => {
+    return (
+        <span className="relative group inline-block ml-1">
+            <HelpCircle size={14} className="text-slate-500 hover:text-slate-350 cursor-help inline shrink-0 transition-colors" />
+            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-900 border border-slate-800 p-3.5 rounded-xl text-[11px] leading-relaxed text-slate-300 font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-2xl z-50 backdrop-blur-md">
+                <strong className="text-indigo-400 block mb-1 uppercase tracking-wider text-[10px]">{title}</strong>
+                {description}
+                <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+            </span>
+        </span>
+    );
+};
+
 interface PricingPageProps {
     user?: User | null;
     isManager?: boolean;
@@ -308,7 +321,13 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     <Zap size={16} />
                                                 </div>
                                                 <div>
-                                                    <span className="text-sm font-bold text-slate-200 block">AI Commissioner Newsletter</span>
+                                                    <span className="text-sm font-bold text-slate-200 block flex items-center gap-1">
+                                                        AI Commissioner Newsletter
+                                                        <UpgradeTooltip 
+                                                            title="AI commissioner" 
+                                                            description="Generates weekly recaps, round-by-round highlights, and humorous trash-talking articles automatically. Uses state-of-the-art Gemini AI tailored exactly to your pool's rules and active standings."
+                                                        />
+                                                    </span>
                                                     <span className="text-xs text-slate-500">Auto-generate trash-talk posts & round recaps (+${config.features.aiCommissioner.addonPrice})</span>
                                                 </div>
                                             </div>
@@ -319,14 +338,20 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
                                             />
                                         </label>
-
+ 
                                         <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950/80 border border-slate-850 rounded-xl hover:border-slate-700 transition-colors">
                                             <div className="flex gap-3 items-center">
                                                 <div className={`p-2 rounded-lg bg-emerald-500/10 text-emerald-400`}>
                                                     <Users size={16} />
                                                 </div>
                                                 <div>
-                                                    <span className="text-sm font-bold text-slate-200 block">Smart SMS Broadcasts</span>
+                                                    <span className="text-sm font-bold text-slate-200 block flex items-center gap-1">
+                                                        Smart SMS Broadcasts
+                                                        <UpgradeTooltip 
+                                                            title="smart sms broadcasts" 
+                                                            description="Keeps your players active and engaged! Automatically sends SMS notifications to all players when bracket locks are near, pick deadlines approach, payouts are declared, or scores change."
+                                                        />
+                                                    </span>
                                                     <span className="text-xs text-slate-500">Deliver text alert pick deadlines & payouts (+${config.features.smsNotifications.addonPrice})</span>
                                                 </div>
                                             </div>
@@ -337,14 +362,20 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
                                             />
                                         </label>
-
+ 
                                         <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950/80 border border-slate-850 rounded-xl hover:border-slate-700 transition-colors">
                                             <div className="flex gap-3 items-center">
                                                 <div className={`p-2 rounded-lg bg-fuchsia-500/10 text-fuchsia-400`}>
                                                     <CheckCircle size={16} />
                                                 </div>
                                                 <div>
-                                                    <span className="text-sm font-bold text-slate-200 block">Standings What-If Simulator</span>
+                                                    <span className="text-sm font-bold text-slate-200 block flex items-center gap-1">
+                                                        Standings What-If Simulator
+                                                        <UpgradeTooltip 
+                                                            title="what-if standings simulator" 
+                                                            description="Enables the interactive simulator dashboard for all players! Participants can model future match outcomes and instantly visualize changes in standings and potential cash payouts."
+                                                        />
+                                                    </span>
                                                     <span className="text-xs text-slate-500">Interactive live scenarios modeling standings (+${config.features.whatIfSimulator.addonPrice})</span>
                                                 </div>
                                             </div>
@@ -395,6 +426,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                             hasSmsNotifications={calcSms}
                             hasWhatIfSimulator={calcSim}
                             isWizard={false} // Renders "Complete Payment & Upgrade" button
+                            initialCouponCode={selectedPoolData?.billing?.couponCode || ''}
                         />
 
                         {/* Direct Create CTA if not paying for existing pool */}

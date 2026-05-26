@@ -23,6 +23,7 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [tosAccepted, setTosAccepted] = useState(false);
   const [couponCode, setCouponCode] = useState<string | null>(null);
+  const [estimatedPlayers, setEstimatedPlayers] = useState(40);
 
   // 1. Sensible defaults based on pool type
   const [name, setName] = useState('');
@@ -128,7 +129,8 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
         entryFee,
         paymentInstructions,
         isListedPublic,
-        payouts
+        payouts,
+        maxEntriesTotal: estimatedPlayers
       };
 
       if (poolType === 'NFL_PICKEM') {
@@ -183,9 +185,9 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
         },
         billing: {
           status: 'trial',
-          tier: 'free_tier',
+          tier: estimatedPlayers <= 10 ? 'free_tier' : 'premium_tier',
           pricePaid: 0,
-          maxPlayersAllowed: 10,
+          maxPlayersAllowed: estimatedPlayers <= 10 ? 10 : estimatedPlayers,
           trialEndsAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
           featuresUnlocked: {
             aiCommissioner: false,
@@ -589,6 +591,66 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
                 />
               </div>
 
+              {/* 🏆 Estimated Participants & Season Tiers Table */}
+              <div className="bg-slate-950/60 border border-slate-850 rounded-2xl p-5 space-y-4 shadow-inner">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      <Sparkles className="text-blue-400" size={16} /> Estimated Participants
+                    </h4>
+                    <p className="text-xs text-slate-400">Select how many players you expect to join. Base cost updates dynamically!</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={estimatedPlayers}
+                      min={1}
+                      max={9999}
+                      onChange={e => setEstimatedPlayers(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-center font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                    <span className="text-xs text-slate-500 font-bold">Players</span>
+                  </div>
+                </div>
+
+                <input
+                  type="range"
+                  min={1}
+                  max={150}
+                  value={estimatedPlayers > 150 ? 150 : estimatedPlayers}
+                  onChange={e => setEstimatedPlayers(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                />
+
+                {/* Tier Guide Table */}
+                <div className="border-t border-slate-850 pt-4 mt-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-2">
+                    Season Pricing Tiers Guide
+                  </span>
+                  <div className="grid grid-cols-5 gap-2 text-center text-[10px]">
+                    {[
+                      { range: '1–10', price: 'FREE', active: estimatedPlayers <= 10 },
+                      { range: '11–25', price: '$29', active: estimatedPlayers >= 11 && estimatedPlayers <= 25 },
+                      { range: '26–50', price: '$59', active: estimatedPlayers >= 26 && estimatedPlayers <= 50 },
+                      { range: '51–100', price: '$99', active: estimatedPlayers >= 51 && estimatedPlayers <= 100 },
+                      { range: '101+', price: '$149', active: estimatedPlayers >= 101 },
+                    ].map(t => (
+                      <div
+                        key={t.range}
+                        className={`rounded-xl p-2 border transition-all ${
+                          t.active
+                            ? 'bg-blue-500/10 border-blue-500 text-white font-extrabold shadow-[0_0_12px_rgba(59,130,246,0.15)]'
+                            : 'bg-slate-900/40 border-slate-850 text-slate-400'
+                        }`}
+                      >
+                        <div className="font-bold mb-0.5">{t.range}</div>
+                        <div className={`font-mono ${t.active ? 'text-blue-400' : 'text-slate-300'}`}>{t.price}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
                 <div>
                   <h4 className="text-sm font-bold text-white">List Pool Publicly</h4>
@@ -743,7 +805,7 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
                 <BillingInvoiceCard
                   poolName={name || 'New Pool'}
                   poolType="season"
-                  estimatedPlayers={50}
+                  estimatedPlayers={estimatedPlayers}
                   hasAiCommissioner={false}
                   hasSmsNotifications={false}
                   isWizard={true}

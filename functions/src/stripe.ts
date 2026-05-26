@@ -18,7 +18,18 @@ const stripeWebhookSecret = defineString("STRIPE_WEBHOOK_SECRET");
 let stripeInstance: Stripe | null = null;
 function getStripe() {
     if (!stripeInstance) {
-        stripeInstance = new Stripe(stripeSecretKey.value(), { apiVersion: "2024-12-18.acacia" as any });
+        let key = "";
+        try {
+            key = stripeSecretKey.value();
+        } catch (e) {
+            console.warn("[Stripe] STRIPE_SECRET_KEY is not defined in this environment.");
+        }
+
+        if (!key || key.startsWith("placeholder") || key === "") {
+            return null; // Signal mockup bypass mode
+        }
+
+        stripeInstance = new Stripe(key, { apiVersion: "2024-12-18.acacia" as any });
     }
     return stripeInstance;
 }
@@ -124,6 +135,43 @@ export const createCheckoutSession = functions.https.onCall(async (request) => {
 
     // --- Create Stripe Checkout Session ---
     const stripe = getStripe();
+
+    if (!stripe) {
+        console.log(`[Stripe Mockup] STRIPE_SECRET_KEY is missing/placeholder. Activating mock dev sandbox checkout for pool ${poolId}.`);
+        const mockUrl = `${baseUrl}?payment=success&session_id=mock_local_dev_session_${Date.now()}`;
+        
+        const poolRef = db.collection("pools").doc(poolId);
+        await poolRef.update({
+            "billing.status": "active",
+            "billing.pricePaid": price,
+            "billing.stripeSessionId": `mock_local_dev_session_${Date.now()}`,
+            "billing.tier": tier || "premium_tier",
+        });
+
+        if (couponCode) {
+            try {
+                const couponQuery = await db.collection("coupons")
+                    .where("code", "==", couponCode)
+                    .limit(1)
+                    .get();
+
+                if (!couponQuery.empty) {
+                    const couponDoc = couponQuery.docs[0];
+                    const usageEntry = { userId, poolId, usedAt: Date.now() };
+
+                    await couponDoc.ref.update({
+                        usesCount: admin.firestore.FieldValue.increment(1),
+                        usageLog: admin.firestore.FieldValue.arrayUnion(usageEntry),
+                    });
+                    console.log(`[Stripe Mockup] Coupon ${couponCode} usage simulated for user ${userId}`);
+                }
+            } catch (couponErr) {
+                console.error("[Stripe Mockup] Error simulating coupon:", couponErr);
+            }
+        }
+
+        return { sessionUrl: mockUrl };
+    }
 
     try {
         const session = await stripe.checkout.sessions.create({

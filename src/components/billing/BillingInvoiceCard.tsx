@@ -151,17 +151,16 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         }
     }, [appliedCoupon, total, onCouponAppliedChange]);
 
-    // Handle Coupon Code Verification (safe client-side read)
-    const handleApplyCoupon = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!couponInput.trim()) return;
+    // Reusable Coupon Application & Verification
+    const applyCouponCode = async (codeToApply: string) => {
+        if (!codeToApply.trim()) return;
 
         setIsValidatingCoupon(true);
         setCouponError(null);
         setCouponSuccess(null);
 
         try {
-            const code = couponInput.toUpperCase().trim();
+            const code = codeToApply.toUpperCase().trim();
             const q = query(collection(db, 'coupons'), where('code', '==', code));
             const snap = await getDocs(q);
 
@@ -212,6 +211,25 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         } finally {
             setIsValidatingCoupon(false);
         }
+    };
+
+    // Auto-apply initialCouponCode whenever it is changed or provided
+    useEffect(() => {
+        if (initialCouponCode) {
+            setCouponInput(initialCouponCode);
+            applyCouponCode(initialCouponCode);
+        } else {
+            setAppliedCoupon(null);
+            setCouponInput('');
+            setCouponSuccess(null);
+            setCouponError(null);
+        }
+    }, [initialCouponCode, poolType]);
+
+    // Handle manual form Coupon Code Verification
+    const handleApplyCoupon = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await applyCouponCode(couponInput);
     };
 
     const handleRemoveCoupon = () => {
