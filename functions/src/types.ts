@@ -587,6 +587,7 @@ export interface BracketPool {
             enabled: boolean;
             multiplier: number; // Points per seed differential (default: 5)
         };
+        lockUnpaid?: boolean; // If true, entries must be PAID to submit brackets
     };
 
     name: string;

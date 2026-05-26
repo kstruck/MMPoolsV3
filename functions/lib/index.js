@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.submitPlayoffPicks = exports.onAnnouncementCreated = exports.onGameComplete = exports.importConferenceTournamentFromESPN = exports.importTournamentFromESPN = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentData = exports.markEntryPaidStatus = exports.deleteBracketEntry = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.fixParticipantIds = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.autoLockPools = exports.onWinnerComputed = exports.runReminders = exports.testSmsHttp = exports.sendSecuritySMSAlert = exports.sendAdminPasswordReset = exports.deleteUserAccount = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = exports.confirmPayment = exports.markSquaresPaid = exports.reserveSquare = exports.lockPool = void 0;
-exports.scoreNFLWeek = exports.executeSurvivorRebuy = exports.submitNFLPicks = exports.joinNFLPool = exports.createNFLPool = exports.importNFLSchedule = exports.syncNFLScoresJob = exports.finalizeTournamentPayouts = exports.scoreBracketEntries = exports.initializeBig12TournamentHttp = exports.initializeBigEastTournamentHttp = exports.setSuperAdminClaim = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = void 0;
+exports.creditReferralOnPayment = exports.handleStripeWebhook = exports.createCheckoutSession = exports.redeemCoupon = exports.validateBillingAccess = exports.enforceBillingStatus = exports.scoreNFLWeek = exports.executeSurvivorRebuy = exports.submitNFLPicks = exports.joinNFLPool = exports.createNFLPool = exports.importNFLSchedule = exports.syncNFLScoresJob = exports.finalizeTournamentPayouts = exports.scoreBracketEntries = exports.initializeBig12TournamentHttp = exports.initializeBigEastTournamentHttp = exports.setSuperAdminClaim = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = void 0;
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -109,4 +109,16 @@ Object.defineProperty(exports, "joinNFLPool", { enumerable: true, get: function 
 Object.defineProperty(exports, "submitNFLPicks", { enumerable: true, get: function () { return nflPools_1.submitNFLPicks; } });
 Object.defineProperty(exports, "executeSurvivorRebuy", { enumerable: true, get: function () { return nflPools_1.executeSurvivorRebuy; } });
 Object.defineProperty(exports, "scoreNFLWeek", { enumerable: true, get: function () { return nflPools_1.scoreNFLWeek; } });
+// --- BILLING & MONETIZATION ---
+var billing_1 = require("./billing");
+Object.defineProperty(exports, "enforceBillingStatus", { enumerable: true, get: function () { return billing_1.enforceBillingStatus; } });
+Object.defineProperty(exports, "validateBillingAccess", { enumerable: true, get: function () { return billing_1.validateBillingAccess; } });
+Object.defineProperty(exports, "redeemCoupon", { enumerable: true, get: function () { return billing_1.redeemCoupon; } });
+// --- STRIPE PAYMENTS ---
+var stripe_1 = require("./stripe");
+Object.defineProperty(exports, "createCheckoutSession", { enumerable: true, get: function () { return stripe_1.createCheckoutSession; } });
+Object.defineProperty(exports, "handleStripeWebhook", { enumerable: true, get: function () { return stripe_1.handleStripeWebhook; } });
+// --- REFERRAL SYSTEM ---
+var referral_1 = require("./referral");
+Object.defineProperty(exports, "creditReferralOnPayment", { enumerable: true, get: function () { return referral_1.creditReferralOnPayment; } });
 //# sourceMappingURL=index.js.map

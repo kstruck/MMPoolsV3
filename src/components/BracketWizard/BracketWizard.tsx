@@ -72,6 +72,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
             multiplier: number;
         };
         lockAt: number; // Tournament start timestamp
+        lockUnpaid: boolean;
 
         // Step 3: Payouts
         payouts: {
@@ -145,6 +146,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
             multiplier: 5
         },
         lockAt: new Date('2026-03-17T12:00:00').getTime(), // March Madness 2026
+        lockUnpaid: false,
 
         // Payouts
         payouts: {
@@ -323,7 +325,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                         closestAbsolute: formData.tieBreaker === 'CLOSEST_ABSOLUTE',
                         closestUnder: formData.tieBreaker === 'CLOSEST_UNDER'
                     },
-                    payouts: formData.payouts
+                    payouts: formData.payouts,
+                    lockUnpaid: formData.lockUnpaid
                 },
                 lockAt: formData.lockAt,
                 charity: formData.charity,
@@ -786,6 +789,25 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
                             />
                             <p className="text-xs text-slate-500 mt-1">When should the pool lock? (your local time)</p>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Entry Payment Enforcement</label>
+                            <div className="flex items-center justify-between bg-slate-950 border border-slate-700 rounded-lg p-3">
+                                <div>
+                                    <h4 className="font-bold text-white text-sm">Lock Unpaid Brackets</h4>
+                                    <p className="text-xs text-slate-500">Prevent members from submitting picks until marked paid.</p>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.lockUnpaid}
+                                        onChange={(e) => update({ lockUnpaid: e.target.checked })}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600" />
+                                </label>
+                            </div>
                         </div>
 
                         <div>
@@ -1352,6 +1374,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 <div className="text-white">{formData.maxEntriesTotal === -1 ? 'Unlimited' : formData.maxEntriesTotal}</div>
                                 <div className="text-slate-400">Scoring:</div>
                                 <div className="text-white">{formData.scoringSystem}</div>
+                                <div className="text-slate-400">Lock Unpaid:</div>
+                                <div className="text-white">{formData.lockUnpaid ? 'Yes' : 'No'}</div>
                             </div>
                         </div>
 

@@ -929,7 +929,7 @@ export const SuperAdmin: React.FC = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto p-4 md:p-6 relative text-slate-100">
+        <div className="w-[80%] mx-auto py-4 md:py-6 relative text-slate-100">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold flex items-center gap-3">
                     <Shield className="text-emerald-500" /> Super Admin Dashboard
@@ -985,7 +985,9 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ OVERVIEW TAB ============ */}
             {/* ============ OVERVIEW TAB ============ */}
             {activeTab === 'overview' && (
-                <SuperAdminBentoDashboard stats={globalStats} />
+                <div className="w-full">
+                    <SuperAdminBentoDashboard stats={globalStats} />
+                </div>
             )}
 
             {/* ============ TOURNAMENT TAB ============ */}
@@ -1023,7 +1025,9 @@ export const SuperAdmin: React.FC = () => {
 
             {/* ============ STATS TAB ============ */}
             {activeTab === 'stats' && (
-                <AdminStatsDashboard pools={pools} users={users} />
+                <div className="w-full">
+                    <AdminStatsDashboard pools={pools} users={users} />
+                </div>
             )}
 
             {/* ============ POOLS TAB ============ */}
@@ -1282,8 +1286,8 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ USERS TAB ============ */}
             {
                 activeTab === 'users' && (
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
-                        <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl w-full">
+                        <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center w-full">
                             <h2 className="text-xl font-bold">Registered Users</h2>
                             <div className="flex gap-2">
                                 <button
@@ -1348,12 +1352,12 @@ export const SuperAdmin: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-slate-400">{u.email}</td>
                                             <td className="p-4">
-                                                <span className={`text - [10px] uppercase font - bold px - 2 py - 1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'POOL_MANAGER' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-700 text-slate-400 border-slate-600'} `}>
+                                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'POOL_MANAGER' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
                                                     {u.role || 'USER'}
                                                 </span>
                                             </td>
                                             <td className="p-4">
-                                                <span className={`text - [10px] uppercase font - bold px - 2 py - 1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'} `}>
+                                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
                                                     {u.registrationMethod || 'EMAIL'}
                                                 </span>
                                             </td>
@@ -1893,9 +1897,9 @@ export const SuperAdmin: React.FC = () => {
             {activeTab === 'testing' && <SimpleTestingDashboard />}
 
             {activeTab === 'system' && (
-                <div className="space-y-6">
+                <div className="space-y-6 w-full">
                     {/* SYSTEM STATS CARDS */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
                             <p className="text-xs text-slate-500 font-bold uppercase mb-1">Active Pools</p>
                             <p className="text-3xl font-black text-white">
@@ -1917,7 +1921,7 @@ export const SuperAdmin: React.FC = () => {
                     </div>
 
                     {/* EXECUTION LOGS */}
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden w-full">
                         <div className="p-4 border-b border-slate-700 bg-slate-900/40 flex flex-col gap-4">
                             <div className="flex justify-between items-center">
                                 <h3 className="font-bold text-white flex items-center gap-2">
@@ -2069,7 +2073,7 @@ export const SuperAdmin: React.FC = () => {
                                         <th className="p-3 font-bold">Time</th>
                                         <th className="p-3 font-bold">Status</th>
                                         <th className="p-3 font-bold">Tag</th>
-                                        <th className="p-3 font-bold">Details</th>
+                                        <th className="p-3 font-bold w-full">Details</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-700/50">
@@ -2087,10 +2091,10 @@ export const SuperAdmin: React.FC = () => {
                                                     })()}
                                                 </td>
                                                 <td className="p-3">
-                                                    <span className={`px - 2 py - 0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                    <span className={`px-2 py-0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
                                                         log.status === 'partial' ? 'bg-amber-500/10 text-amber-400' :
                                                             'bg-rose-500/10 text-rose-400'
-                                                        } `}>
+                                                        }`}>
                                                         {(log.status as string | undefined)?.toUpperCase() ?? 'UNKNOWN'}
                                                     </span>
                                                 </td>
@@ -2106,10 +2110,10 @@ export const SuperAdmin: React.FC = () => {
                                                         else if (type === 'POOL_SYNC_ERROR') { label = 'Pool Error'; colorClass = 'bg-amber-500/20 text-amber-300 border border-amber-500/30'; }
                                                         else if (type === 'SIMULATION') { label = 'Sim Run'; colorClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'; }
 
-                                                        return <span className={`px - 2 py - 0.5 rounded text - [10px] font - bold uppercase tracking - wider whitespace - nowrap ${colorClass} `}>{label}</span>;
+                                                        return <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${colorClass}`}>{label}</span>;
                                                     })()}
                                                 </td>
-                                                <td className="p-3 text-slate-300">
+                                                <td className="p-3 text-slate-300 w-full">
                                                     <div className="flex flex-col gap-1">
                                                         {log.message && <span className="font-bold text-white mb-1 block">{log.message}</span>}
                                                         {log.details !== undefined && <span className="font-mono text-[10px] text-slate-500">{String(log.details)}</span>}
@@ -2125,7 +2129,11 @@ export const SuperAdmin: React.FC = () => {
                 </div>
             )}
 
-            {activeTab === 'billing' && <SuperAdminBillingPanel />}
+            {activeTab === 'billing' && (
+                <div className="w-full">
+                    <SuperAdminBillingPanel />
+                </div>
+            )}
 
             {activeTab === 'settings' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -273,6 +273,50 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                 </div>
             </div>
 
+            {/* Commissioner Settings Section */}
+            <div className="bg-slate-900/40 border border-slate-800/80 backdrop-blur-md rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-indigo-500/30">
+                <div className="flex items-start gap-3">
+                    <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400 mt-0.5 animate-pulse">
+                        <AlertCircle size={22} />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-white text-base">Lock Unpaid Entries</h3>
+                        <p className="text-slate-400 text-sm max-w-xl">
+                            When enabled, members will be blocked from submitting or updating their picks until their entry is marked as <span className="text-emerald-400 font-semibold">Paid</span>.
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
+                    <span className="text-sm font-bold text-slate-400">
+                        {pool.settings?.lockUnpaid ? 'Active' : 'Disabled'}
+                    </span>
+                    <button
+                        onClick={async () => {
+                            try {
+                                const currentLock = !!pool.settings?.lockUnpaid;
+                                await dbService.updateBracketPool(pool.id, {
+                                    'settings.lockUnpaid': !currentLock
+                                });
+                                setMessage({ text: `Payment lock is now ${!currentLock ? 'enabled' : 'disabled'}.`, type: 'success' });
+                                setTimeout(() => setMessage(null), 3000);
+                            } catch (err) {
+                                setMessage({ text: 'Failed to update payment lock status.', type: 'error' });
+                                setTimeout(() => setMessage(null), 3000);
+                            }
+                        }}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none ${
+                            pool.settings?.lockUnpaid ? 'bg-indigo-600' : 'bg-slate-700'
+                        }`}
+                    >
+                        <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${
+                                pool.settings?.lockUnpaid ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                        />
+                    </button>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">

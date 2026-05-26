@@ -1049,13 +1049,7 @@ export const syncGameStatus = onSchedule({
         const allPools = [...activePoolsSnap.docs, ...completedPoolsSnap.docs];
 
         if (allPools.length === 0) {
-            await db.collection('system_logs').add({
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                type: 'SYNC_GAME_STATUS',
-                status: 'idle',
-                message: 'No active or recently completed pools found',
-                durationMs: Date.now() - startTime
-            });
+            console.log(`[Sync] No active or recently completed pools found. Skipping score sync cycle.`);
             return;
         }
 

@@ -529,6 +529,12 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             return;
         }
 
+        const activeEntry = entries.find(e => e.id === activeEntryId);
+        if (pool.settings?.lockUnpaid && activeEntry?.paidStatus !== 'PAID') {
+            setError('Your entry is unpaid. Please complete payment to submit your picks.');
+            return;
+        }
+
         if (entries.some(e => e.name.toLowerCase() === entryName.trim().toLowerCase() && e.id !== activeEntryId)) {
             setError('That bracket name is already taken. Please choose another.');
             return;
@@ -570,13 +576,15 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         } finally {
             setSubmitting(false);
         }
-    }, [pool.id, pool.tournamentType, tournament, activeEntryId, picks, tieBreakerPrediction, entryName, setIsCreating, entries]);
+    }, [pool, tournament, activeEntryId, picks, tieBreakerPrediction, entryName, setIsCreating, entries]);
 
     const pickCount = Object.keys(picks).length;
     // Exclude First Four games (round 0) — they are not shown in the bracket UI pick slots
     const requiredPicks = tournament
         ? Object.values(tournament.games).filter(g => g.round >= 1).length
         : (pool.tournamentType === 'conference' ? 10 : 63);
+    const activeEntry = entries.find(e => e.id === activeEntryId);
+    const isUnpaidLocked = pool.settings?.lockUnpaid && activeEntry?.paidStatus !== 'PAID';
     // NCAA tournaments (men's/women's) should NEVER use the conference bracket builder,
     // even if tournamentType was accidentally set to 'conference' on the pool.
     const isNcaaTournament = pool.tournamentId?.startsWith('mens-') || pool.tournamentId?.startsWith('womens-');
@@ -901,6 +909,12 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         </div>
 
                         {/* ── Error / Success strip inside portal ───────────────────────── */}
+                        {isUnpaidLocked && (
+                            <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/20 text-amber-400 text-xs font-semibold animate-in slide-in-from-top duration-350">
+                                <AlertTriangle size={14} className="animate-pulse animate-duration-1000 shrink-0" />
+                                <span>Your entry is unpaid. Please make a payment to the pool manager to enable final submission.</span>
+                            </div>
+                        )}
                         {error && (
                             <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 py-2.5 bg-red-950/80 border-b border-red-800 text-red-300 text-sm animate-in fade-in">
                                 <span>⚠️ {error}</span>

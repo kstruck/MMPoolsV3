@@ -4,6 +4,11 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/',
+  resolve: {
+    alias: {
+      'firebase-functions/v2/https': '/tests/mocks/firebase-functions-v2-https.ts',
+    }
+  },
   plugins: [react()],
   server: {
     port: 5173,

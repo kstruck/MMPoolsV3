@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteBracketEntry = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = void 0;
+exports.deleteBracketEntry = exports.submitBracketEntry = exports.submitBracketEntryInternal = exports.updateBracketEntry = exports.createBracketEntry = void 0;
 const admin = require("firebase-admin");
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-admin/firestore");
@@ -125,16 +125,12 @@ exports.updateBracketEntry = (0, https_1.onCall)(async (request) => {
 // ----------------------------------------------------------------------------
 // Submit Bracket Entry
 // ----------------------------------------------------------------------------
-exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
-    if (!request.auth) {
-        throw new https_1.HttpsError("unauthenticated", "User must be logged in.");
-    }
-    const { poolId, entryId, picks: newPicks, tieBreakerPrediction } = request.data;
-    const uid = request.auth.uid;
-    const db = admin.firestore();
+const submitBracketEntryInternal = async (uid, data, db) => {
+    const { poolId, entryId, picks: newPicks, tieBreakerPrediction } = data;
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
     const poolRef = db.collection("pools").doc(poolId);
     await db.runTransaction(async (transaction) => {
+        var _a;
         const entryDoc = await transaction.get(entryRef);
         if (!entryDoc.exists)
             throw new https_1.HttpsError("not-found", "Entry not found.");
@@ -148,6 +144,9 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
         }
         if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new https_1.HttpsError("failed-precondition", "Pool is locked.");
+        }
+        if (((_a = poolData.settings) === null || _a === void 0 ? void 0 : _a.lockUnpaid) === true && entryData.paidStatus !== 'PAID') {
+            throw new https_1.HttpsError("failed-precondition", "Your entry is currently unpaid. Please complete payment to submit picks.");
         }
         // Validate that bracket is complete:
         // NCAA = 63 picks (64-team bracket: 32+16+8+4+2+1)
@@ -177,7 +176,7 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
             tieBreakerPrediction: tieBreakerPrediction || 0,
             updatedAt: firestore_1.Timestamp.now().toMillis()
         };
-        const { name } = request.data;
+        const { name } = data;
         if (name && typeof name === 'string' && name.trim().length > 0) {
             updateData.name = name.trim();
         }
@@ -196,10 +195,10 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
     try {
         const userRec = await admin.auth().getUser(uid);
         if (userRec.email) {
-            const poolDoc = await admin.firestore().collection("pools").doc(poolId).get();
+            const poolDoc = await db.collection("pools").doc(poolId).get();
             const poolData = poolDoc.data();
             if (poolData) {
-                const finalEntryName = (request.data.name && typeof request.data.name === 'string' && request.data.name.trim().length > 0) ? request.data.name.trim() : "Your Bracket";
+                const finalEntryName = (data.name && typeof data.name === 'string' && data.name.trim().length > 0) ? data.name.trim() : "Your Bracket";
                 const emailHtml = (0, emailStyles_1.renderEmailHtml)(`
                     <p>Hi ${userRec.displayName || 'there'},</p>
                     <p>Your bracket entry <strong>${finalEntryName}</strong> for the pool <strong>${poolData.name}</strong> has been successfully submitted!</p>
@@ -221,6 +220,14 @@ exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
         console.error("Failed to send bracket submission email:", e);
     }
     return { success: true };
+};
+exports.submitBracketEntryInternal = submitBracketEntryInternal;
+exports.submitBracketEntry = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "User must be logged in.");
+    }
+    const db = admin.firestore();
+    return (0, exports.submitBracketEntryInternal)(request.auth.uid, request.data, db);
 });
 // ----------------------------------------------------------------------------
 // Delete Bracket Entry

@@ -10,27 +10,16 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [theme, setTheme] = useState<Theme>(() => {
-        const savedTheme = localStorage.getItem('theme');
-        // Default to dark mode to preserve current site aesthetics if no preference is saved
-        if (savedTheme === 'light' || savedTheme === 'dark') {
-            return savedTheme;
-        }
-        return 'dark';
-    });
+    const [theme] = useState<Theme>('dark');
 
     useEffect(() => {
-        localStorage.setItem('theme', theme);
         const root = window.document.documentElement;
-        if (theme === 'dark') {
-            root.classList.add('dark');
-        } else {
-            root.classList.remove('dark');
-        }
-    }, [theme]);
+        root.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+    }, []);
 
     const toggleTheme = () => {
-        setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+        // No-op to keep site in dark mode
     };
 
     return (

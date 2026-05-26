@@ -155,15 +155,12 @@ export const updateBracketEntry = onCall(async (request) => {
 // ----------------------------------------------------------------------------
 // Submit Bracket Entry
 // ----------------------------------------------------------------------------
-export const submitBracketEntry = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-
-    const { poolId, entryId, picks: newPicks, tieBreakerPrediction } = request.data;
-    const uid = request.auth.uid;
-
-    const db = admin.firestore();
+export const submitBracketEntryInternal = async (
+    uid: string,
+    data: { poolId: string; entryId: string; picks: Record<string, string>; tieBreakerPrediction?: number; name?: string },
+    db: admin.firestore.Firestore
+) => {
+    const { poolId, entryId, picks: newPicks, tieBreakerPrediction } = data;
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
     const poolRef = db.collection("pools").doc(poolId);
 
@@ -181,6 +178,10 @@ export const submitBracketEntry = onCall(async (request) => {
         }
         if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new HttpsError("failed-precondition", "Pool is locked.");
+        }
+
+        if (poolData.settings?.lockUnpaid === true && entryData.paidStatus !== 'PAID') {
+            throw new HttpsError("failed-precondition", "Your entry is currently unpaid. Please complete payment to submit picks.");
         }
 
         // Validate that bracket is complete:
@@ -214,7 +215,7 @@ export const submitBracketEntry = onCall(async (request) => {
             updatedAt: Timestamp.now().toMillis()
         };
 
-        const { name } = request.data;
+        const { name } = data;
         if (name && typeof name === 'string' && name.trim().length > 0) {
             updateData.name = name.trim();
         }
@@ -236,11 +237,11 @@ export const submitBracketEntry = onCall(async (request) => {
     try {
         const userRec = await admin.auth().getUser(uid);
         if (userRec.email) {
-            const poolDoc = await admin.firestore().collection("pools").doc(poolId).get();
+            const poolDoc = await db.collection("pools").doc(poolId).get();
             const poolData = poolDoc.data();
 
             if (poolData) {
-                const finalEntryName = (request.data.name && typeof request.data.name === 'string' && request.data.name.trim().length > 0) ? request.data.name.trim() : "Your Bracket";
+                const finalEntryName = (data.name && typeof data.name === 'string' && data.name.trim().length > 0) ? data.name.trim() : "Your Bracket";
 
                 const emailHtml = renderEmailHtml(`
                     <p>Hi ${userRec.displayName || 'there'},</p>
@@ -270,6 +271,14 @@ export const submitBracketEntry = onCall(async (request) => {
     }
 
     return { success: true };
+};
+
+export const submitBracketEntry = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in.");
+    }
+    const db = admin.firestore();
+    return submitBracketEntryInternal(request.auth.uid, request.data, db);
 });
 
 // ----------------------------------------------------------------------------
