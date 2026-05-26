@@ -22,6 +22,26 @@ interface ErrorLog {
     url: string;
 }
 
+/**
+ * Recursively removes any keys with undefined values from an object
+ * to satisfy Firestore's strict serialization requirements.
+ */
+function cleanUndefined(obj: any): any {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+    if (Array.isArray(obj)) {
+        return obj.map(cleanUndefined);
+    }
+    const newObj: any = {};
+    for (const key in obj) {
+        if (obj[key] !== undefined) {
+            newObj[key] = cleanUndefined(obj[key]);
+        }
+    }
+    return newObj;
+}
+
 class ErrorHandler {
     private static instance: ErrorHandler;
 
@@ -59,7 +79,7 @@ class ErrorHandler {
             message,
             code: errObj.code || 'UNKNOWN',
             stack: errObj.stack,
-            context,
+            context: cleanUndefined(context),
             severity,
             timestamp: Date.now(),
             url: window.location.href,

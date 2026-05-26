@@ -116,7 +116,7 @@ export const validateBillingAccess = functions.https.onCall(async (request) => {
 //    Atomically validates and redeems a coupon code within a Firestore transaction
 // =============================================================================
 
-export const redeemCoupon = functions.https.onCall(async (request) => {
+export const redeemCoupon = functions.https.onCall({ cors: true }, async (request) => {
     // --- Auth Check ---
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "You must be signed in to redeem a coupon.");

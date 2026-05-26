@@ -1,8 +1,12 @@
 import { vi } from 'vitest';
 
 export const https = {
-    onCall: vi.fn((handler: any) => handler),
-    onRequest: vi.fn((handler: any) => handler),
+    onCall: vi.fn((optionsOrHandler: any, handler?: any) => {
+        return typeof optionsOrHandler === 'function' ? optionsOrHandler : handler;
+    }),
+    onRequest: vi.fn((optionsOrHandler: any, handler?: any) => {
+        return typeof optionsOrHandler === 'function' ? optionsOrHandler : handler;
+    }),
 };
 
 export const scheduler = {
@@ -16,8 +20,12 @@ export const firestore = {
 };
 
 export const onSchedule = vi.fn((schedule: string, handler: any) => handler);
-export const onCall = vi.fn((handler: any) => handler);
-export const onRequest = vi.fn((handler: any) => handler);
+export const onCall = vi.fn((optionsOrHandler: any, handler?: any) => {
+    return typeof optionsOrHandler === 'function' ? optionsOrHandler : handler;
+});
+export const onRequest = vi.fn((optionsOrHandler: any, handler?: any) => {
+    return typeof optionsOrHandler === 'function' ? optionsOrHandler : handler;
+});
 export const onDocumentWritten = vi.fn((path: string, handler: any) => handler);
 export const onDocumentCreated = vi.fn((path: string, handler: any) => handler);
 export const onDocumentUpdated = vi.fn((path: string, handler: any) => handler);

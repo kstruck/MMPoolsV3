@@ -49,7 +49,7 @@ interface CheckoutSessionRequest {
     referralCredits?: number;
 }
 
-export const createCheckoutSession = functions.https.onCall(async (request) => {
+export const createCheckoutSession = functions.https.onCall({ cors: true }, async (request) => {
     // --- Auth Check ---
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "You must be signed in to create a checkout session.");
