@@ -337,7 +337,7 @@ const App: React.FC = () => {
 
           {/* Creation Wizards */}
           <Route path="/create-pool" element={
-            isAdmin ? (
+            user ? (
               <CreatePoolSelection
                 user={user}
                 isManager={false}
@@ -352,7 +352,7 @@ const App: React.FC = () => {
             ) : <Navigate to="/" replace />
           } />
           <Route path="/bracket-wizard" element={
-            isAdmin && user ? (
+            user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
@@ -361,7 +361,7 @@ const App: React.FC = () => {
             ) : <Navigate to="/" replace />
           } />
           <Route path="/playoff-wizard" element={
-            isAdmin && user ? (
+            user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
@@ -370,7 +370,7 @@ const App: React.FC = () => {
             ) : <Navigate to="/" replace />
           } />
           <Route path="/props-wizard" element={
-            isAdmin && user ? (
+            user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
@@ -380,7 +380,7 @@ const App: React.FC = () => {
           } />
 
           <Route path="/grid-wizard" element={
-            isAdmin && user ? (
+            user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
@@ -390,7 +390,7 @@ const App: React.FC = () => {
           } />
 
           <Route path="/nfl-wizard" element={
-            isAdmin && user ? (
+            user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <NFLPoolWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />

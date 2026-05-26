@@ -33,6 +33,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
     const TOTAL_STEPS = 9;
     logger.log('[SetupWizard] Initialized - Version 1.1 (9 Steps, New Defaults)');
     const [isCreating, setIsCreating] = useState(false);
+    const [tosAccepted, setTosAccepted] = useState(false);
 
     // Initial Draft State
     const [gameState, setGameState] = useState<Partial<GameState>>({
@@ -258,7 +259,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                         smsNotifications: false,
                         whatIfSimulator: false,
                         customBranding: true
-                    }
+                    },
+                    ...gameState.billing
                 }
             };
 
@@ -381,6 +383,15 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                         <WizardStepSummary
                             gameState={gameState as GameState}
                             onEditStep={(s) => setStep(s)}
+                            onTosAcceptChange={(val) => setTosAccepted(val)}
+                            onCouponAppliedChange={(couponCode) => {
+                                updateConfig({
+                                    billing: {
+                                        ...(gameState.billing || {}),
+                                        couponCode: couponCode || undefined
+                                    } as any
+                                });
+                            }}
                         />
                     )}
 
@@ -414,7 +425,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                     ) : (
                         <button
                             onClick={handleCreate}
-                            disabled={isCreating}
+                            disabled={isCreating || !tosAccepted}
                             className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100"
                         >
                             {isCreating ? 'Creating Pool...' : <>Launch Pool <Check size={20} strokeWidth={3} /></>}

@@ -7,6 +7,7 @@ import { dbService } from '../../services/dbService';
 import { Loader, ArrowLeft, Check, AlertTriangle, Mail, Lock, Users, QrCode, Plus, Trash2 } from 'lucide-react';
 import type { GameState, PropsPool } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
+import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
 
 interface PropsWizardProps {
     user: any;
@@ -42,6 +43,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showQRCode, setShowQRCode] = useState(false); // For Final Step
+    const [tosAccepted, setTosAccepted] = useState(false);
 
     // Initial State Template
     const [config, setConfig] = useState<Partial<PropsPool>>(() => {
@@ -145,7 +147,8 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                             smsNotifications: false,
                             whatIfSimulator: false,
                             customBranding: true
-                        }
+                        },
+                        couponCode: config.billing?.couponCode || undefined
                     },
                 };
 
@@ -523,12 +526,33 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                     </div>
                                 </div>
 
+                                <div className="mt-6 font-sans">
+                                    <BillingInvoiceCard
+                                        poolName={config.name || 'New Pool'}
+                                        poolType="PROPS"
+                                        estimatedPlayers={25}
+                                        hasAiCommissioner={false}
+                                        hasSmsNotifications={config.reminders?.payment?.enabled || false}
+                                        isWizard={true}
+                                        onTosAcceptChange={setTosAccepted}
+                                        onCouponAppliedChange={(couponCode) => {
+                                            updateConfig({
+                                                billing: {
+                                                    ...(config.billing || {}),
+                                                    couponCode: couponCode || undefined
+                                                } as any
+                                            });
+                                        }}
+                                        initialCouponCode={(config as any).billing?.couponCode || ''}
+                                    />
+                                </div>
+
                                 <div className="flex justify-between pt-8 border-t border-slate-800 mt-8">
                                     <button onClick={handleBack} className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:bg-slate-800 transition-colors">Back</button>
                                     <button
                                         onClick={handleSubmit}
-                                        disabled={isSubmitting}
-                                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 flex items-center gap-2"
+                                        disabled={isSubmitting || !tosAccepted}
+                                        className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 flex items-center gap-2"
                                     >
                                         {isSubmitting ? <Loader className="animate-spin" /> : <Check />}
                                         {initialData ? 'Update Pool' : 'Create Pool'}

@@ -6,6 +6,8 @@ import * as admin from "firebase-admin";
 import { defineString } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
 
+import Stripe from "stripe";
+
 const db = admin.firestore();
 
 // --- Stripe Config Params ---
@@ -13,13 +15,10 @@ const stripeSecretKey = defineString("STRIPE_SECRET_KEY");
 const stripeWebhookSecret = defineString("STRIPE_WEBHOOK_SECRET");
 
 // Stripe will be initialized at function invocation time
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let stripeInstance: any = null;
+let stripeInstance: Stripe | null = null;
 function getStripe() {
     if (!stripeInstance) {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const Stripe = require("stripe");
-        stripeInstance = new Stripe(stripeSecretKey.value(), { apiVersion: "2024-12-18.acacia" });
+        stripeInstance = new Stripe(stripeSecretKey.value(), { apiVersion: "2024-12-18.acacia" as any });
     }
     return stripeInstance;
 }
@@ -72,8 +71,56 @@ export const createCheckoutSession = functions.https.onCall(async (request) => {
     }
 
     // --- Build the base URL for redirect ---
-    // In production, this should come from an environment variable
-    const baseUrl = `https://marchmelee.com/pool/${poolId}`;
+    // Dynamically resolve based on request origin to support local dev, staging, and custom domains
+    const rawOrigin = (request.rawRequest?.headers?.origin as string) || (request.rawRequest?.headers?.referer as string) || "https://marchmelee.com";
+    const originUrl = rawOrigin.endsWith("/") ? rawOrigin.slice(0, -1) : rawOrigin;
+    
+    // If the referer/origin is a full URL path, clean it up to just be the protocol + host
+    let cleanedOrigin = originUrl;
+    try {
+        const urlObj = new URL(originUrl);
+        cleanedOrigin = `${urlObj.protocol}//${urlObj.host}`;
+    } catch {
+        // Fallback to originUrl if parsing fails
+    }
+    
+    const baseUrl = `${cleanedOrigin}/pool/${poolId}`;
+
+    // --- Secure $0 Stripe Bypass for 100% Off Coupons ---
+    if (price === 0) {
+        const poolRef = db.collection("pools").doc(poolId);
+        await poolRef.update({
+            "billing.status": "active",
+            "billing.pricePaid": 0,
+            "billing.stripeSessionId": "free_promo_bypass",
+            "billing.tier": tier || "premium_tier",
+        });
+
+        if (couponCode) {
+            try {
+                const couponQuery = await db.collection("coupons")
+                    .where("code", "==", couponCode)
+                    .limit(1)
+                    .get();
+
+                if (!couponQuery.empty) {
+                    const couponDoc = couponQuery.docs[0];
+                    const usageEntry = { userId, poolId, usedAt: Date.now() };
+
+                    await couponDoc.ref.update({
+                        usesCount: admin.firestore.FieldValue.increment(1),
+                        usageLog: admin.firestore.FieldValue.arrayUnion(usageEntry),
+                    });
+                    console.log(`[Stripe Bypass] Coupon ${couponCode} recorded for user ${userId}`);
+                }
+            } catch (couponErr) {
+                console.error("[Stripe Bypass] Error processing coupon:", couponErr);
+            }
+        }
+
+        console.log(`[Stripe Bypass] Pool ${poolId} activated for free by user ${userId}`);
+        return { sessionUrl: `${baseUrl}?payment=success` };
+    }
 
     // --- Create Stripe Checkout Session ---
     const stripe = getStripe();

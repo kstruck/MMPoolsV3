@@ -31,13 +31,20 @@ const mockAuth = {
 };
 
 vi.mock('firebase-admin', () => {
+    class MockTimestamp {
+        static now() { return { toMillis: () => Date.now() }; }
+        static fromMillis(ms: number) { return { toMillis: () => ms }; }
+        toMillis() { return Date.now(); }
+    }
     return {
         default: {
             firestore: () => mockDb,
-            auth: () => mockAuth
+            auth: () => mockAuth,
+            Timestamp: MockTimestamp
         },
         firestore: () => mockDb,
-        auth: () => mockAuth
+        auth: () => mockAuth,
+        Timestamp: MockTimestamp
     };
 });
 

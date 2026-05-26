@@ -61,6 +61,15 @@ export const purchasePropCard = onCall(async (request) => {
         throw new HttpsError('resource-exhausted', `You can only purchase ${maxCards} card(s) for this pool.`);
     }
 
+    // Enforce 10-player Free Plan participant lock
+    const billingStatus = poolData.billing?.status ?? 'free';
+    if (billingStatus === 'free') {
+        const currentEntriesCount = poolData.entryCount || 0;
+        if (currentEntriesCount >= 10) {
+            throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
+        }
+    }
+
     // Create Card with auto-generated ID (supports multiple cards)
     const card: PropCard = {
         userId,

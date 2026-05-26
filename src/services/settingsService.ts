@@ -9,7 +9,11 @@ const DEFAULT_SETTINGS: SystemSettings = {
     enableBracketPools: false, // Default to OFF
     maintenanceMode: false,
     currentSeason: 2026,
-    propCategories: ['Game', 'Player', 'Offense', 'Defense', 'Yards', 'TD', 'FG', 'Fun']
+    propCategories: ['Game', 'Player', 'Offense', 'Defense', 'Yards', 'TD', 'FG', 'Fun'],
+    loyaltyTiers: [
+        { id: 'tier_contender', name: 'Contender', minPools: 0, description: 'Accrued based on lifetime pool entries' },
+        { id: 'tier_vanguard', name: 'Vanguard Hall', minPools: 6, description: 'Accrued based on lifetime pool entries' }
+    ]
 };
 
 export const settingsService = {

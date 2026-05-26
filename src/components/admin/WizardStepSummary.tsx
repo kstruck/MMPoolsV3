@@ -4,10 +4,13 @@ import {
     CheckCircle, AlertCircle, Zap, Palette, Edit3
 } from 'lucide-react';
 import type { GameState } from '../../types';
+import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
 
 interface WizardStepSummaryProps {
     gameState: GameState;
     onEditStep: (step: number) => void;
+    onTosAcceptChange: (accepted: boolean) => void;
+    onCouponAppliedChange: (couponCode: string | null, finalPrice: number) => void;
 }
 
 const SummaryCard = ({ title, icon: Icon, children, step, color = 'indigo', onEditStep }: {
@@ -57,7 +60,12 @@ const StatusBadge = ({ active, label }: { active: boolean; label: string }) => (
  * Wizard Step 9: Pool Summary
  * Displays a comprehensive summary of all pool configuration before launch.
  */
-export const WizardStepSummary: React.FC<WizardStepSummaryProps> = ({ gameState, onEditStep }) => {
+export const WizardStepSummary: React.FC<WizardStepSummaryProps> = ({ 
+    gameState, 
+    onEditStep,
+    onTosAcceptChange,
+    onCouponAppliedChange
+}) => {
     const totalPot = gameState.costPerSquare * 100;
     const charityAmount = gameState.charity?.enabled ? totalPot * (gameState.charity.percentage / 100) : 0;
     const netPot = totalPot - charityAmount;
@@ -199,6 +207,20 @@ export const WizardStepSummary: React.FC<WizardStepSummaryProps> = ({ gameState,
                     </div>
                 </SummaryCard>
             </div>
+
+            {/* Billing invoice card */}
+            <BillingInvoiceCard
+                poolName={gameState.name || 'New Pool'}
+                poolType="SQUARES"
+                estimatedPlayers={100} // Gameday Squares is always 100 squares
+                hasAiCommissioner={gameState.billing?.featuresUnlocked?.aiCommissioner || false}
+                hasSmsNotifications={gameState.billing?.featuresUnlocked?.smsNotifications || false}
+                hasWhatIfSimulator={gameState.billing?.featuresUnlocked?.whatIfSimulator || false}
+                isWizard={true}
+                onTosAcceptChange={onTosAcceptChange}
+                onCouponAppliedChange={onCouponAppliedChange}
+                initialCouponCode={gameState.billing?.couponCode || ''}
+            />
 
             {/* Launch Checklist */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">

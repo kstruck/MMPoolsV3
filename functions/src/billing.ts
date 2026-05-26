@@ -3,6 +3,8 @@ import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { Pool, PoolBilling, Coupon, BillingConfig } from "./types";
 import { HttpsError } from "firebase-functions/v2/https";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { renderEmailHtml, BASE_URL } from "./emailStyles";
 
 const db = admin.firestore();
 
@@ -198,4 +200,109 @@ export const redeemCoupon = functions.https.onCall(async (request) => {
     });
 
     return result;
+});
+
+// =============================================================================
+// 4. onPoolParticipantChange — Firestore Trigger
+//    Sends alerts to pool managers when they hit 8 or 10 entries on the Free Plan
+// =============================================================================
+
+export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async (event) => {
+    const after = event.data?.after.data();
+    if (!after) return; // Deleted
+
+    const poolId = event.params.poolId;
+    const db = admin.firestore();
+
+    const billingStatus = after.billing?.status ?? 'free';
+    if (billingStatus !== 'free') return; // Only notify for Free Plan pools
+
+    // Count participants based on pool type
+    let count = 0;
+    if (after.type === 'NFL_PLAYOFFS' || after.type === 'playoff') {
+        count = Object.keys(after.entries || {}).length;
+    } else if (after.type === 'NFL_PICKEM' || after.type === 'NFL_SURVIVOR' || after.type === 'NFL_MARGIN') {
+        count = (after.participantIds || []).length;
+    } else {
+        count = after.entryCount || 0;
+    }
+
+    const notified8 = after.billing?.notified8 === true;
+    const notified10 = after.billing?.notified10 === true;
+
+    // Check if we should notify
+    const shouldNotify8 = count >= 8 && !notified8;
+    const shouldNotify10 = count >= 10 && !notified10;
+
+    if (!shouldNotify8 && !shouldNotify10) return;
+
+    // Find manager's email
+    let managerEmail = after.contactEmail;
+    if (!managerEmail && (after.ownerId || after.createdByUid || after.managerUid)) {
+        const managerUid = after.ownerId || after.createdByUid || after.managerUid;
+        const userDoc = await db.collection("users").doc(managerUid).get();
+        if (userDoc.exists) {
+            managerEmail = userDoc.data()?.email;
+        }
+    }
+
+    if (!managerEmail) {
+        console.warn(`[onPoolParticipantChange] Manager email not found for pool ${poolId}`);
+        return;
+    }
+
+    const updates: any = {};
+
+    if (shouldNotify10) {
+        // Send 10 players lock email
+        const subject = `🚫 Locked: Your pool "${after.name}" has reached the Free Plan limit!`;
+        const body = `
+            <p>Hi there,</p>
+            <p>Your pool <strong>${after.name}</strong> has reached the maximum limit of <strong>10 participants</strong> allowed on the Free Plan.</p>
+            
+            <div style="background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 12px; padding: 16px; margin: 20px 0; color: #991b1b; font-family: sans-serif;">
+                <p style="margin: 0; font-weight: bold; font-size: 16px;">Participant Entries Locked 🚫</p>
+                <p style="margin: 4px 0 0 0; font-size: 13px;">New participants are currently blocked from joining your pool until you upgrade to a premium plan.</p>
+            </div>
+
+            <p>To accept more players and unlock your pool instantly, please upgrade to a Premium plan.</p>
+        `;
+        const html = renderEmailHtml('Pool Entries Locked!', body, `${BASE_URL}/pricing`, 'Upgrade to Premium');
+        
+        await db.collection('mail').add({
+            to: managerEmail,
+            message: { subject, html }
+        });
+
+        updates["billing.notified10"] = true;
+        updates["billing.notified8"] = true; // Mark 8 as true too
+        console.log(`[onPoolParticipantChange] Limit reached (10/10) email queued for pool ${poolId} to manager ${managerEmail}`);
+    } else if (shouldNotify8) {
+        // Send 8 players approaching warning email
+        const subject = `⚠️ Action Required: Your pool "${after.name}" is approaching the Free Plan limit!`;
+        const body = `
+            <p>Hi there,</p>
+            <p>Your pool <strong>${after.name}</strong> currently has <strong>${count} participants</strong>, approaching the maximum limit of <strong>10 participants</strong> allowed on the Free Plan.</p>
+            
+            <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 16px; margin: 20px 0; color: #92400e; font-family: sans-serif;">
+                <p style="margin: 0; font-weight: bold; font-size: 16px;">Approaching Limit: ${count}/10 Players ⚠️</p>
+                <p style="margin: 4px 0 0 0; font-size: 13px;">Once your pool reaches 10 players, any new participants attempting to join will be blocked.</p>
+            </div>
+
+            <p>Upgrade to a Premium plan now to ensure your participants have a seamless, uninterrupted onboarding experience!</p>
+        `;
+        const html = renderEmailHtml('Approaching Free Limit!', body, `${BASE_URL}/pricing`, 'Upgrade to Premium');
+        
+        await db.collection('mail').add({
+            to: managerEmail,
+            message: { subject, html }
+        });
+
+        updates["billing.notified8"] = true;
+        console.log(`[onPoolParticipantChange] Approaching limit (8/10) email queued for pool ${poolId} to manager ${managerEmail}`);
+    }
+
+    if (Object.keys(updates).length > 0) {
+        await db.collection("pools").doc(poolId).update(updates);
+    }
 });

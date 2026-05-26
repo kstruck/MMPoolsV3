@@ -7,6 +7,13 @@ export default defineConfig({
   resolve: {
     alias: {
       'firebase-functions/v2/https': '/tests/mocks/firebase-functions-v2-https.ts',
+      'firebase-functions/v2/scheduler': '/tests/mocks/firebase-functions-v2.ts',
+      'firebase-functions/v2/firestore': '/tests/mocks/firebase-functions-v2.ts',
+      'firebase-functions/v2': '/tests/mocks/firebase-functions-v2.ts',
+      'firebase-functions/params': '/tests/mocks/firebase-functions-params.ts',
+      'firebase-admin/firestore': '/tests/mocks/firebase-admin.ts',
+      'firebase-admin': '/tests/mocks/firebase-admin.ts',
+      'stripe': '/tests/mocks/stripe.ts',
     }
   },
   plugins: [react()],

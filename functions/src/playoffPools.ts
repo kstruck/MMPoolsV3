@@ -164,6 +164,15 @@ export const submitPlayoffPicks = onCall(async (request) => {
         if (userEntries.length >= maxEntries) {
             throw new HttpsError('resource-exhausted', `Max entries reached (${maxEntries})`);
         }
+
+        // Enforce 10-player Free Plan participant lock
+        const billingStatus = pool.billing?.status ?? 'free';
+        if (billingStatus === 'free') {
+            const currentEntriesCount = Object.keys(pool.entries || {}).length;
+            if (currentEntriesCount >= 10) {
+                throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
+            }
+        }
     }
 
     // Key Logic: use entryId if provided, else generate unique key

@@ -7,6 +7,7 @@ import { db } from '../../firebase';
 import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe } from 'lucide-react';
 import { WizardStepBranding } from '../admin/WizardStepBranding';
 import { WizardStepAdvanced } from '../admin/WizardStepAdvanced';
+import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
 
 // Current 2024-25 NFL Playoff Teams
 const PLAYOFF_TEAMS_MOCK: PlayoffTeam[] = [
@@ -37,6 +38,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [tosAccepted, setTosAccepted] = useState(false);
     const [playoffTeams, setPlayoffTeams] = useState<PlayoffTeam[]>(PLAYOFF_TEAMS_MOCK);
 
     useEffect(() => {
@@ -398,7 +400,8 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                         smsNotifications: false,
                         whatIfSimulator: false,
                         customBranding: true
-                    }
+                    },
+                    couponCode: (formData as any).billing?.couponCode || undefined
                 }
             };
 
@@ -535,7 +538,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                     ) : (
                         <button
                             onClick={handleCreate}
-                            disabled={loading}
+                            disabled={loading || !tosAccepted}
                             className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
                         >
                             {loading ? 'Creating...' : (
@@ -1131,6 +1134,28 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                                 ))}
                             </div>
                         </div>
+                    </div>
+
+                    <div className="mt-6 font-sans">
+                        <BillingInvoiceCard
+                            poolName={formData.name || 'New Pool'}
+                            poolType="NFL_PLAYOFFS"
+                            estimatedPlayers={formData.maxEntriesTotal === -1 ? 50 : formData.maxEntriesTotal}
+                            hasAiCommissioner={false}
+                            hasSmsNotifications={formData.reminders.auto24h}
+                            isWizard={true}
+                            onTosAcceptChange={setTosAccepted}
+                            onCouponAppliedChange={(couponCode) => {
+                                setFormData(prev => ({
+                                    ...prev,
+                                    billing: {
+                                        ...(prev.billing || {}),
+                                        couponCode: couponCode || undefined
+                                    }
+                                } as any));
+                            }}
+                            initialCouponCode={(formData as any).billing?.couponCode || ''}
+                        />
                     </div>
                 </div>
             </div>

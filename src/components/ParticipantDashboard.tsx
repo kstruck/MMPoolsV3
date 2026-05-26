@@ -1,10 +1,11 @@
 import { logger } from '../utils/logger';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool } from '../types';
+import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings } from '../types';
 import { isSuperAdmin } from '../utils/auth';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
+import { settingsService } from '../services/settingsService';
 import { 
   LayoutGrid, 
   User as UserIcon, 
@@ -55,6 +56,23 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const [searchQuery, setSearchQuery] = useState('');
     const [poolWinners, setPoolWinners] = useState<Record<string, Winner[]>>({});
     const [bracketEntryCounts, setBracketEntryCounts] = useState<Record<string, number>>({});
+    const [settings, setSettings] = useState<SystemSettings | null>(null);
+
+    useEffect(() => {
+        return settingsService.subscribe(setSettings);
+    }, []);
+
+    const userLoyaltyTier = useMemo(() => {
+        const tiers = settings?.loyaltyTiers || [
+            { id: 'tier_contender', name: 'Contender', minPools: 0, description: 'Accrued based on lifetime pool entries' },
+            { id: 'tier_vanguard', name: 'Vanguard Hall', minPools: 6, description: 'Accrued based on lifetime pool entries' }
+        ];
+        // Sort descending by minPools so we match the highest matching tier
+        const sorted = [...tiers].sort((a, b) => b.minPools - a.minPools);
+        const count = myPools.length;
+        const matched = sorted.find(t => count >= t.minPools);
+        return matched || { name: 'Contender', description: 'Accrued based on lifetime pool entries' };
+    }, [settings?.loyaltyTiers, myPools.length]);
 
     useEffect(() => {
         setIsLoading(true);
@@ -554,7 +572,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             {[
                                 { title: 'Projected Buy-In Total', value: `$${projectedPotEarnings.cost}`, desc: 'Combined fee cost of active entries', icon: Coins, color: 'text-indigo-400' },
                                 { title: 'Dues Cleared / Paid', value: `$${projectedPotEarnings.paid}`, desc: 'Total payments marked cleared by commissioner', icon: CheckCircle, color: 'text-emerald-400' },
-                                { title: 'Platform Loyalty Tier', value: myPools.length > 5 ? 'Vanguard Hall' : 'Contender', desc: 'Accrued based on lifetime pool entries', icon: Shield, color: 'text-orange-500' }
+                                { title: 'Platform Loyalty Tier', value: userLoyaltyTier.name, desc: userLoyaltyTier.description, icon: Shield, color: 'text-orange-500' }
                             ].map((card, i) => (
                                 <div key={i} className="bg-slate-900/40 border border-slate-800 rounded-3xl p-5 flex items-start gap-4">
                                     <div className={`p-3 bg-slate-950/60 border border-slate-800 rounded-2xl ${card.color}`}>

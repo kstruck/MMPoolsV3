@@ -1043,5 +1043,47 @@ export const dbService = {
             logger.error("Error subscribing to Weekly Recaps:", error);
             callback([]);
         });
+    },
+
+    async redeemCoupon(poolId: string, couponCode: string): Promise<{
+        valid: boolean;
+        discountType?: 'percentage' | 'flat';
+        discountValue?: number;
+        message?: string;
+    }> {
+        try {
+            const fn = httpsCallable<{ poolId: string; couponCode: string }, any>(functions, 'redeemCoupon');
+            const result = await fn({ poolId, couponCode });
+            return result.data;
+        } catch (error: any) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'redeemCoupon', poolId, couponCode }
+            });
+            throw error;
+        }
+    },
+
+    async createCheckoutSession(params: {
+        poolId: string;
+        poolName: string;
+        poolType: string;
+        tier: string;
+        price: number;
+        couponCode?: string;
+        referralCredits?: number;
+    }): Promise<{ sessionUrl: string }> {
+        try {
+            const fn = httpsCallable<any, { sessionUrl: string }>(functions, 'createCheckoutSession');
+            const result = await fn(params);
+            return result.data;
+        } catch (error: any) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'createCheckoutSession', params }
+            });
+            throw error;
+        }
     }
 };
+

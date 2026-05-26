@@ -841,11 +841,19 @@ export interface PoolTheme {
 
 // --- SYSTEM TYPES ---
 
+export interface LoyaltyTier {
+  id: string;
+  name: string;
+  minPools: number;
+  description: string;
+}
+
 export interface SystemSettings {
   enableBracketPools: boolean;
   maintenanceMode: boolean;
   currentSeason: number;
   propCategories: string[]; // Dynamic categories for prop seeds
+  loyaltyTiers?: LoyaltyTier[];
 }
 
 

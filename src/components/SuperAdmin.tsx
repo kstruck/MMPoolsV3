@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam, PoolTheme } from '../types';
+import type { GameState, Pool, User, SystemSettings, PropSeed, PlayoffTeam, PoolTheme, LoyaltyTier } from '../types';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
@@ -42,7 +42,7 @@ export const SuperAdmin: React.FC = () => {
     // UI State
     type NavGroup = 'Dashboard' | 'Management' | 'Game Ops' | 'Configuration';
     const [activeGroup, setActiveGroup] = useState<NavGroup>('Dashboard');
-    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl' | 'billing'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'pools' | 'users' | 'referrals' | 'themes' | 'settings' | 'system' | 'props' | 'testing' | 'playoffs' | 'tournament' | 'stats' | 'nfl' | 'billing' | 'loyalty'>('overview');
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     const [showSimDashboard, setShowSimDashboard] = useState(false);
@@ -102,6 +102,18 @@ export const SuperAdmin: React.FC = () => {
     const [entryTiebreakerOverrides, setEntryTiebreakerOverrides] = useState<Record<string, string>>({});
     const [entryPayoutOverrides, setEntryPayoutOverrides] = useState<Record<string, string>>({});
     const [expandedPicksEntryId, setExpandedPicksEntryId] = useState<string | null>(null);
+
+    // Loyalty Tiers State
+    const [selectedMarketingTier, setSelectedMarketingTier] = useState<string>('all');
+    const [marketingSearch, setMarketingSearch] = useState<string>('');
+    const [editingTiers, setEditingTiers] = useState<LoyaltyTier[]>([]);
+    const [promoUser, setPromoUser] = useState<User | null>(null);
+    const [promoBulkTier, setPromoBulkTier] = useState<string | null>(null);
+    const [promoSubject, setPromoSubject] = useState<string>('');
+    const [promoMessage, setPromoMessage] = useState<string>('');
+    const [promoCoupon, setPromoCoupon] = useState<string>('');
+    const [promoType, setPromoType] = useState<'coupon' | 'reminder'>('coupon');
+    const [isSendingPromo, setIsSendingPromo] = useState<boolean>(false);
 
     const handleSavePoolSettingsAdmin = async () => {
         if (!viewingPool) return;
@@ -204,6 +216,82 @@ export const SuperAdmin: React.FC = () => {
             .then(setUsers)
             .catch(err => logger.error("Failed to load users", err));
     };
+
+    // Loyalty Tiers Handlers & State Sync
+    useEffect(() => {
+        if (settings?.loyaltyTiers) {
+            setEditingTiers(settings.loyaltyTiers);
+        } else {
+            setEditingTiers([
+                { id: 'tier_contender', name: 'Contender', minPools: 0, description: 'Accrued based on lifetime pool entries' },
+                { id: 'tier_vanguard', name: 'Vanguard Hall', minPools: 6, description: 'Accrued based on lifetime pool entries' }
+            ]);
+        }
+    }, [settings?.loyaltyTiers]);
+
+    const handleSaveTiers = async () => {
+        try {
+            await settingsService.update({ loyaltyTiers: editingTiers });
+            alert('Loyalty tiers configuration updated successfully!');
+        } catch (e: any) {
+            alert('Failed to save loyalty tiers: ' + e.message);
+        }
+    };
+
+    const handleAddTierLocal = () => {
+        const newId = 'tier_' + Date.now();
+        const newTier = { id: newId, name: 'New Tier', minPools: 1, description: 'Enter more pools to qualify' };
+        setEditingTiers(prev => [...prev, newTier]);
+    };
+
+    const handleRemoveTierLocal = (id: string) => {
+        setEditingTiers(prev => prev.filter((t: LoyaltyTier) => t.id !== id));
+    };
+
+    // Loyalty Tier Computations
+    const userPoolCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        users.forEach((u: User) => {
+            counts[u.id] = pools.filter(p => {
+                const isParticipant = (p.participantIds || []).includes(u.id);
+                const isOwner = p.ownerId === u.id || (p as any).managerUid === u.id;
+                return isParticipant || isOwner;
+            }).length;
+        });
+        return counts;
+    }, [users, pools]);
+
+    const activeTiers = useMemo<LoyaltyTier[]>(() => {
+        return settings?.loyaltyTiers || [
+            { id: 'tier_contender', name: 'Contender', minPools: 0, description: 'Accrued based on lifetime pool entries' },
+            { id: 'tier_vanguard', name: 'Vanguard Hall', minPools: 6, description: 'Accrued based on lifetime pool entries' }
+        ];
+    }, [settings?.loyaltyTiers]);
+
+    const userTiers = useMemo(() => {
+        const sortedTiers = [...activeTiers].sort((a, b) => b.minPools - a.minPools);
+        const mapping: Record<string, string> = {};
+        const list: Record<string, User[]> = {};
+        
+        activeTiers.forEach((t: LoyaltyTier) => {
+            list[t.id] = [];
+        });
+        list['none'] = [];
+
+        users.forEach((u: User) => {
+            const count = userPoolCounts[u.id] || 0;
+            const matched = sortedTiers.find((t: LoyaltyTier) => count >= t.minPools);
+            if (matched) {
+                mapping[u.id] = matched.name;
+                list[matched.id].push(u);
+            } else {
+                mapping[u.id] = 'None';
+                list['none'].push(u);
+            }
+        });
+
+        return { mapping, list };
+    }, [activeTiers, users, userPoolCounts]);
 
     // --- EFFECTS ---
     useEffect(() => {
@@ -912,6 +1000,7 @@ export const SuperAdmin: React.FC = () => {
         'Management': [
             { id: 'users', label: `Users(${users.length})`, icon: <Users size={16} /> },
             { id: 'referrals', label: 'Referrals', icon: <Users size={16} /> },
+            { id: 'loyalty', label: 'Loyalty Tiers', icon: <Shield size={16} /> },
         ],
         'Game Ops': [
             { id: 'pools', label: `Pools(${filteredPools.length})`, icon: <Shield size={16} /> },
@@ -1502,6 +1591,442 @@ export const SuperAdmin: React.FC = () => {
                             </table>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* ============ LOYALTY TIERS TAB ============ */}
+            {activeTab === 'loyalty' && (
+                <div className="space-y-8 animate-in fade-in duration-300">
+                    
+                    {/* TIER CONFIGURATION CONTROL CENTER */}
+                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                        <div className="lg:col-span-3 bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Shield className="text-indigo-400" /> Tiers Control Center
+                                </h3>
+                                <p className="text-slate-400 text-xs mt-1">
+                                    Define loyalty tiers based on lifetime pool entries. Changes will apply immediately across all user dashboards.
+                                </p>
+                            </div>
+                            
+                            <div className="space-y-4 mt-6">
+                                {editingTiers?.map((tier, index) => (
+                                    <div key={tier.id} className="bg-slate-850 border border-slate-700/60 rounded-2xl p-4 flex flex-col md:flex-row items-center gap-4 relative group">
+                                        <div className="flex-1 w-full space-y-3">
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <div className="col-span-2">
+                                                    <label className="text-[10px] text-slate-500 font-extrabold uppercase">Tier Name</label>
+                                                    <input
+                                                        type="text"
+                                                        value={tier.name}
+                                                        onChange={(e) => {
+                                                            const updated = [...(editingTiers || [])];
+                                                            updated[index] = { ...tier, name: e.target.value };
+                                                            setEditingTiers(updated);
+                                                        }}
+                                                        className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-bold"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] text-slate-500 font-extrabold uppercase">Min Pools</label>
+                                                    <input
+                                                        type="number"
+                                                        value={tier.minPools}
+                                                        onChange={(e) => {
+                                                            const updated = [...(editingTiers || [])];
+                                                            updated[index] = { ...tier, minPools: Math.max(0, parseInt(e.target.value) || 0) };
+                                                            setEditingTiers(updated);
+                                                        }}
+                                                        className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono font-bold"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-slate-500 font-extrabold uppercase">Description</label>
+                                                <input
+                                                    type="text"
+                                                    value={tier.description}
+                                                    onChange={(e) => {
+                                                        const updated = [...(editingTiers || [])];
+                                                        updated[index] = { ...tier, description: e.target.value };
+                                                        setEditingTiers(updated);
+                                                    }}
+                                                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 text-slate-350"
+                                                />
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => handleRemoveTierLocal(tier.id)}
+                                            className="p-2 border border-rose-500/20 text-rose-450 hover:bg-rose-500/10 rounded-xl mt-3 md:mt-0 transition-all duration-200"
+                                            title="Delete Tier"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-3 mt-6 pt-4 border-t border-slate-800">
+                                <button
+                                    onClick={handleAddTierLocal}
+                                    className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-slate-750"
+                                >
+                                    <Plus size={14} /> Add New Tier
+                                </button>
+                                <button
+                                    onClick={handleSaveTiers}
+                                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all ml-auto shadow-lg"
+                                >
+                                    Save Tier Configuration
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* TIER DISTRIBUTION GRAPH */}
+                        <div className="lg:col-span-2 bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Activity className="text-emerald-400" /> Tier Distribution
+                                </h3>
+                                <p className="text-slate-400 text-xs mt-1">
+                                    Active user split across loyalty thresholds.
+                                </p>
+                            </div>
+
+                            <div className="space-y-6 mt-8 flex-1 flex flex-col justify-center">
+                                {activeTiers.map((t: LoyaltyTier) => {
+                                    const count = userTiers.list[t.id]?.length || 0;
+                                    const pct = users.length > 0 ? (count / users.length) * 100 : 0;
+                                    return (
+                                        <div key={t.id} className="space-y-1.5">
+                                            <div className="flex justify-between text-xs font-bold">
+                                                <span className="text-white flex items-center gap-1.5">
+                                                    <span className="h-2 w-2 rounded-full bg-indigo-500"></span>
+                                                    {t.name}
+                                                </span>
+                                                <span className="text-slate-400 font-mono">{count} ({pct.toFixed(0)}%)</span>
+                                            </div>
+                                            <div className="h-3 w-full bg-slate-950/60 rounded-full border border-slate-800 overflow-hidden">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-500"
+                                                    style={{ width: `${pct}%` }}
+                                                ></div>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500">{t.description}</p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* TARGETED MARKETING HUB */}
+                    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 pb-4 border-b border-slate-800">
+                            <div>
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Users className="text-orange-500" /> Targeted Marketing Hub
+                                </h3>
+                                <p className="text-slate-400 text-xs mt-0.5">
+                                    Filter and search users by tier, copy bulk emails, export CSV data, or send mock promos.
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 shrink-0">
+                                <button
+                                    onClick={() => {
+                                        let list: User[] = [];
+                                        if (selectedMarketingTier === 'all') {
+                                            list = users;
+                                        } else {
+                                            list = userTiers.list[selectedMarketingTier] || [];
+                                        }
+                                        const emails = list.map((u: User) => u.email).join(', ');
+                                        navigator.clipboard.writeText(emails);
+                                        alert(`Copied ${list.length} emails to clipboard!`);
+                                    }}
+                                    className="text-xs bg-slate-850 hover:bg-slate-805 text-slate-300 font-bold px-4 py-2.5 rounded-xl border border-slate-700 transition-all flex items-center gap-1.5"
+                                >
+                                    <Copy size={13} /> Copy Group Emails
+                                </button>
+                                
+                                <button
+                                    onClick={() => {
+                                        let list: User[] = [];
+                                        if (selectedMarketingTier === 'all') {
+                                            list = users;
+                                        } else {
+                                            list = userTiers.list[selectedMarketingTier] || [];
+                                        }
+                                        const headers = ['UID', 'Name', 'Email', 'Phone', 'Pools Entered', 'Tier'];
+                                        const rows = list.map((u: User) => {
+                                            const count = userPoolCounts[u.id] || 0;
+                                            const tier = userTiers.mapping[u.id] || 'None';
+                                            return `"${u.id}","${u.name}","${u.email}","${u.phone || ''}",${count},"${tier}"`;
+                                        });
+                                        const csvContent = [headers.join(','), ...rows].join('\n');
+                                        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                                        const url = URL.createObjectURL(blob);
+                                        const link = document.createElement('a');
+                                        link.setAttribute('href', url);
+                                        const tierSuffix = selectedMarketingTier === 'all' ? 'all_users' : activeTiers.find((t: LoyaltyTier) => t.id === selectedMarketingTier)?.name.toLowerCase().replace(/\s+/g, '_') || 'tier';
+                                        link.setAttribute('download', `loyalty_${tierSuffix}_${new Date().toISOString().slice(0, 10)}.csv`);
+                                        link.style.visibility = 'hidden';
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                    }}
+                                    className="text-xs bg-emerald-650/10 hover:bg-emerald-650/20 text-emerald-450 font-bold px-4 py-2.5 rounded-xl border border-emerald-500/20 transition-all flex items-center gap-1.5"
+                                >
+                                    <ArrowDown size={13} /> Export CSV
+                                </button>
+
+                                <button
+                                    onClick={() => {
+                                        if (selectedMarketingTier === 'all') {
+                                            alert('Please select a specific tier from the dropdown to run bulk promo actions.');
+                                            return;
+                                        }
+                                        setPromoBulkTier(selectedMarketingTier);
+                                        setPromoSubject(`Special Offer for our ${activeTiers.find((t: LoyaltyTier) => t.id === selectedMarketingTier)?.name} Members!`);
+                                        setPromoMessage('Thank you for being such an active part of March Melee Pools!');
+                                        setPromoType('coupon');
+                                        setPromoCoupon('LOYALTY20');
+                                    }}
+                                    className="text-xs bg-orange-600 hover:bg-orange-500 text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-orange-500/10 flex items-center gap-1.5"
+                                >
+                                    <Plus size={13} /> Bulk Mock Promo
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* FILTERS TOOLBAR */}
+                        <div className="flex flex-col sm:flex-row gap-3 mb-6 items-center bg-slate-900/30 p-3 rounded-2xl border border-slate-800">
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <span className="text-[10px] text-slate-500 font-extrabold uppercase shrink-0">Filter Tier:</span>
+                                <select
+                                    value={selectedMarketingTier}
+                                    onChange={(e) => setSelectedMarketingTier(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-bold"
+                                >
+                                    <option value="all">All Tiers (Show All Users)</option>
+                                    {activeTiers.map((t: LoyaltyTier) => (
+                                        <option key={t.id} value={t.id}>{t.name} ({userTiers.list[t.id]?.length || 0} users)</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="relative w-full sm:flex-grow">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+                                <input
+                                    type="text"
+                                    placeholder="Search roster by name, email, or phone..."
+                                    value={marketingSearch}
+                                    onChange={(e) => setMarketingSearch(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 pl-9 pr-4 text-xs text-white focus:outline-none focus:border-indigo-500 font-semibold"
+                                />
+                            </div>
+                        </div>
+
+                        {/* ROSTER TABLE */}
+                        <div className="overflow-x-auto rounded-2xl border border-slate-800/80">
+                            <table className="w-full text-left text-xs">
+                                <thead className="bg-slate-900/80 text-slate-400 uppercase font-black tracking-wider text-[10px]">
+                                    <tr>
+                                        <th className="p-4">Name</th>
+                                        <th className="p-4">Email</th>
+                                        <th className="p-4">Phone</th>
+                                        <th className="p-4 text-center">Pools Entered</th>
+                                        <th className="p-4">Current Loyalty Tier</th>
+                                        <th className="p-4">Marketing Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/60 font-semibold text-slate-350 text-[11px]">
+                                    {(() => {
+                                        let list: User[] = [];
+                                        if (selectedMarketingTier === 'all') {
+                                            list = users;
+                                        } else {
+                                            list = userTiers.list[selectedMarketingTier] || [];
+                                        }
+
+                                        if (marketingSearch) {
+                                            const s = marketingSearch.toLowerCase();
+                                            list = list.filter((u: User) => 
+                                                u.name.toLowerCase().includes(s) || 
+                                                u.email.toLowerCase().includes(s) || 
+                                                (u.phone && u.phone.includes(s))
+                                            );
+                                        }
+
+                                        if (list.length === 0) {
+                                            return <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-bold uppercase tracking-wider text-[10px]">No users match this filter</td></tr>;
+                                        }
+
+                                        return list.map((u: User) => {
+                                            const count = userPoolCounts[u.id] || 0;
+                                            const tier = userTiers.mapping[u.id] || 'None';
+                                            return (
+                                                <tr key={u.id} className="hover:bg-slate-800/20 transition-colors">
+                                                    <td className="p-4 font-bold text-white">
+                                                        <button onClick={() => handleViewUser(u)} className="hover:text-indigo-400 hover:underline text-left">{u.name}</button>
+                                                    </td>
+                                                    <td className="p-4 text-slate-400">{u.email}</td>
+                                                    <td className="p-4 font-mono text-slate-400">{u.phone || '—'}</td>
+                                                    <td className="p-4 text-center font-mono text-white font-bold">{count}</td>
+                                                    <td className="p-4">
+                                                        <span className="text-[9px] uppercase font-black tracking-widest px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                                            {tier}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4 flex gap-2">
+                                                        <a
+                                                            href={`mailto:${u.email}`}
+                                                            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-750 transition-all font-bold"
+                                                        >
+                                                            Email
+                                                        </a>
+                                                        <button
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(u.email);
+                                                                alert('Email copied to clipboard!');
+                                                            }}
+                                                            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-750 transition-all"
+                                                            title="Copy Email"
+                                                        >
+                                                            <Copy size={12} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setPromoUser(u);
+                                                                setPromoSubject(`Special Direct Offer for ${u.name}!`);
+                                                                setPromoMessage(`Hi ${u.name}, we have a special offer just for you!`);
+                                                                setPromoType('coupon');
+                                                                setPromoCoupon('DIRECT15');
+                                                            }}
+                                                            className="text-xs bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-455 border border-indigo-500/20 px-2.5 py-1 rounded-lg transition-all font-black"
+                                                        >
+                                                            Direct Mock Promo
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        });
+                                    })()}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* MOCK PROMO SENDER MODAL */}
+                    {(promoUser || promoBulkTier) && (
+                        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-2xl flex flex-col justify-between relative">
+                                <button
+                                    onClick={() => { setPromoUser(null); setPromoBulkTier(null); }}
+                                    className="absolute top-4 right-4 p-1.5 border border-slate-800 text-slate-400 hover:text-white rounded-xl bg-slate-950/40"
+                                >
+                                    <X size={18} />
+                                </button>
+
+                                <div>
+                                    <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-1">
+                                        <Bot className="text-orange-550 animate-pulse" /> Mock Promo Campaign Creator
+                                    </h3>
+                                    <p className="text-slate-400 text-xs font-semibold">
+                                        {promoBulkTier 
+                                          ? `Broadcasting simulated campaign to all members of the ${activeTiers.find((t: LoyaltyTier) => t.id === promoBulkTier)?.name} loyalty tier.`
+                                          : `Configuring mock coupon code/marketing email directly to ${promoUser?.name}.`
+                                        }
+                                    </p>
+                                </div>
+
+                                <div className="space-y-4 mt-6">
+                                    <div>
+                                        <label className="text-[10px] text-slate-500 font-extrabold uppercase block mb-1">Marketing Action Type</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                onClick={() => setPromoType('coupon')}
+                                                className={`py-2 text-xs font-bold rounded-xl border transition-all ${promoType === 'coupon' ? 'bg-orange-500/10 border-orange-500/30 text-orange-500' : 'bg-slate-950 border-slate-855 text-slate-500'}`}
+                                            >
+                                                🎫 Discount Coupon
+                                            </button>
+                                            <button
+                                                onClick={() => setPromoType('reminder')}
+                                                className={`py-2 text-xs font-bold rounded-xl border transition-all ${promoType === 'reminder' ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-slate-950 border-slate-855 text-slate-500'}`}
+                                            >
+                                                📢 Text Reminder/Promo
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {promoType === 'coupon' && (
+                                        <div>
+                                            <label className="text-[10px] text-slate-500 font-extrabold uppercase block mb-1">Coupon Code</label>
+                                            <input
+                                                type="text"
+                                                value={promoCoupon}
+                                                onChange={(e) => setPromoCoupon(e.target.value.toUpperCase())}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500 font-mono font-bold"
+                                                placeholder="e.g. LOYALTY50"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="text-[10px] text-slate-500 font-extrabold uppercase block mb-1">Subject / Header</label>
+                                        <input
+                                            type="text"
+                                            value={promoSubject}
+                                            onChange={(e) => setPromoSubject(e.target.value)}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-555 font-semibold"
+                                            placeholder="Subject of marketing email"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[10px] text-slate-500 font-extrabold uppercase block mb-1">Message Content</label>
+                                        <textarea
+                                            value={promoMessage}
+                                            onChange={(e) => setPromoMessage(e.target.value)}
+                                            rows={3}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-555 font-semibold resize-none"
+                                            placeholder="Tell them about the coupon/remind them to lock in their picks..."
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 mt-6 pt-4 border-t border-slate-800">
+                                    <button
+                                        onClick={() => { setPromoUser(null); setPromoBulkTier(null); }}
+                                        className="bg-slate-800 hover:bg-slate-700 text-slate-350 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-slate-750"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={async () => {
+                                            if (!promoSubject || !promoMessage || (promoType === 'coupon' && !promoCoupon)) {
+                                                alert('Please fill out all promo fields.');
+                                                return;
+                                            }
+                                            setIsSendingPromo(true);
+                                            // Simulate API delay
+                                            await new Promise(r => setTimeout(r, 1200));
+                                            setIsSendingPromo(false);
+                                            alert(`Campaign successfully simulated!\n\nDetails:\n- Target: ${promoBulkTier ? activeTiers.find((t: LoyaltyTier) => t.id === promoBulkTier)?.name + ' Tier' : promoUser?.name}\n- Type: ${promoType.toUpperCase()}\n- Code: ${promoType === 'coupon' ? promoCoupon : 'N/A'}\n- Message: ${promoMessage}`);
+                                            setPromoUser(null);
+                                            setPromoBulkTier(null);
+                                        }}
+                                        disabled={isSendingPromo}
+                                        className="bg-orange-600 hover:bg-orange-555 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all ml-auto shadow-lg shadow-orange-500/10 disabled:opacity-50"
+                                    >
+                                        {isSendingPromo ? 'Sending Simulation...' : 'Execute Mock Campaign'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

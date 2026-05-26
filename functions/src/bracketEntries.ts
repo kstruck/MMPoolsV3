@@ -35,6 +35,14 @@ export const createBracketEntry = onCall(async (request) => {
 
         const poolData = poolDoc.data() as BracketPool;
 
+        const billingStatus = poolData.billing?.status ?? 'free';
+        if (billingStatus === 'free') {
+            const currentEntriesCount = poolData.entryCount || 0;
+            if (currentEntriesCount >= 10) {
+                throw new HttpsError("failed-precondition", "This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.");
+            }
+        }
+
         // Check lock status — only OPEN pools accept new entries
         if (poolData.status !== 'OPEN' && poolData.status !== 'DRAFT') {
             throw new HttpsError("failed-precondition", "Pool is not accepting new entries.");

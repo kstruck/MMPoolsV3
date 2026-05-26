@@ -1,11 +1,17 @@
-import React, { useState } from 'react';
-import type { User } from '../types';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import type { User, Pool, BillingConfig } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { CheckCircle, Shield, Sparkles, Star, Zap, ArrowRight, LayoutGrid, Users, AlertCircle } from 'lucide-react';
-import { logger } from '../utils/logger';
+import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import { dbService } from '../services/dbService';
+import { 
+    CheckCircle, Shield, Sparkles, Star, Zap, 
+    ArrowRight, LayoutGrid, Users, AlertCircle, HelpCircle,
+    Ticket, CreditCard, ChevronRight, HelpCircle as InfoIcon
+} from 'lucide-react';
+import { BillingInvoiceCard } from './billing/BillingInvoiceCard';
 
 interface PricingPageProps {
     user?: User | null;
@@ -17,50 +23,112 @@ interface PricingPageProps {
     isLoggedIn: boolean;
 }
 
-export const PricingPage: React.FC<PricingPageProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool }) => {
-    // Waitlist Form State
-    const [formData, setFormData] = useState({
-        name: user?.name || '',
-        email: user?.email || '',
-        poolSize: '',
-        interest: '',
-        customNote: ''
-    });
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-        setSubmitStatus('idle');
-
-        try {
-            // Write to Firestore waitlist collection
-            await addDoc(collection(db, 'waitlist_leads'), {
-                name: formData.name,
-                email: formData.email,
-                poolSize: formData.poolSize,
-                interest: formData.interest,
-                customNote: formData.customNote,
-                userId: user?.id || 'anonymous',
-                registeredAt: serverTimestamp()
-            });
-
-            setSubmitStatus('success');
-            setFormData({
-                name: user?.name || '',
-                email: user?.email || '',
-                poolSize: '',
-                interest: '',
-                customNote: ''
-            });
-        } catch (error) {
-            logger.error('Waitlist submission error:', error);
-            setSubmitStatus('error');
-        } finally {
-            setIsSubmitting(false);
+const DEFAULT_BILLING_CONFIG: BillingConfig = {
+    freePlayerThreshold: 10,
+    gracePeriodDays: 7,
+    pricing: {
+        season: {
+            tier1: { min: 11, max: 25, price: 29 },
+            tier2: { min: 26, max: 50, price: 59 },
+            tier3: { min: 51, max: 100, price: 99 },
+            tier4: { min: 101, max: 9999, price: 149 }
+        },
+        bracket: {
+            tier1: { min: 11, max: 25, price: 19 },
+            tier2: { min: 26, max: 50, price: 39 },
+            tier3: { min: 51, max: 100, price: 69 },
+            tier4: { min: 101, max: 9999, price: 99 }
+        },
+        squares: {
+            flatPrice: 9.99
+        },
+        props: {
+            flatPrice: 9.99
         }
-    };
+    },
+    features: {
+        aiCommissioner: { isPremium: true, addonPrice: 15 },
+        smsNotifications: { isPremium: true, addonPrice: 15 },
+        whatIfSimulator: { isPremium: true, addonPrice: 15 },
+        customBranding: { isPremium: false, addonPrice: 0 }
+    }
+};
+
+export const PricingPage: React.FC<PricingPageProps> = ({ 
+    user, 
+    isManager = false, 
+    onLogin, 
+    onSignup,
+    onLogout, 
+    onCreatePool 
+}) => {
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const targetPoolId = searchParams.get('poolId');
+
+    // State Variables
+    const [config, setConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
+    const [userPools, setUserPools] = useState<Pool[]>([]);
+    const [selectedPoolId, setSelectedPoolId] = useState<string | null>(targetPoolId);
+    const [selectedPoolData, setSelectedPoolData] = useState<Pool | null>(null);
+
+    // Calculator Inputs State
+    const [calcPoolType, setCalcPoolType] = useState<string>('BRACKET');
+    const [calcPlayers, setCalcPlayers] = useState<number>(30);
+    const [calcAi, setCalcAi] = useState<boolean>(false);
+    const [calcSms, setCalcSms] = useState<boolean>(false);
+    const [calcSim, setCalcSim] = useState<boolean>(false);
+
+    // Fetch monetization configuration
+    useEffect(() => {
+        const docRef = doc(db, 'settings', 'billing_config');
+        const unsubscribe = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setConfig(docSnap.data() as BillingConfig);
+            }
+        }, (err) => {
+            console.warn('[PricingPage] Using default pricing config:', err);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // Fetch user pools in trial / grace period if logged in
+    useEffect(() => {
+        if (!user?.id) return;
+        const unsubscribe = dbService.subscribeToPools((poolsList) => {
+            const trialsOnly = poolsList.filter(p => 
+                p.billing?.status === 'trial' || p.billing?.status === 'grace_period'
+            );
+            setUserPools(trialsOnly);
+        }, (err) => {
+            console.error('[PricingPage] Failed subscribing to user pools:', err);
+        }, user.id);
+        return () => unsubscribe();
+    }, [user?.id]);
+
+    // Handle Selected Pool monitoring
+    useEffect(() => {
+        const poolIdToLoad = selectedPoolId || targetPoolId;
+        if (!poolIdToLoad) {
+            setSelectedPoolData(null);
+            return;
+        }
+
+        const unsubscribe = dbService.subscribeToPool(poolIdToLoad, (pool) => {
+            if (pool) {
+                setSelectedPoolData(pool);
+                // Synchronize calculator inputs to match selected pool for convenience
+                setCalcPoolType(pool.type);
+                setCalcPlayers(pool.settings?.maxEntriesTotal === -1 ? 40 : (pool.settings?.maxEntriesTotal || 40));
+                setCalcAi(pool.billing?.featuresUnlocked?.aiCommissioner || false);
+                setCalcSms(pool.billing?.featuresUnlocked?.smsNotifications || false);
+                setCalcSim(pool.billing?.featuresUnlocked?.whatIfSimulator || false);
+            }
+        }, (err) => {
+            console.error('[PricingPage] Error fetching pool details:', err);
+        });
+        return () => unsubscribe();
+    }, [selectedPoolId, targetPoolId]);
 
     return (
         <div className="min-h-screen text-slate-100 font-sans selection:bg-orange-500 selection:text-white bg-slate-950 flex flex-col">
@@ -72,220 +140,279 @@ export const PricingPage: React.FC<PricingPageProps> = ({ user, isManager = fals
                 onCreatePool={onCreatePool}
             />
 
-            {/* Hero Header */}
-            <section className="relative overflow-hidden pt-16 pb-12 border-b border-slate-900">
+            {/* Hero Header Section */}
+            <section className="relative overflow-hidden pt-20 pb-16 border-b border-slate-900 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900/60">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none">
-                    <div className="absolute top-10 right-0 w-[400px] h-[400px] rounded-full blur-[120px] bg-indigo-500/10"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full blur-[120px] bg-orange-500/5"></div>
+                    <div className="absolute top-10 right-0 w-[450px] h-[450px] rounded-full blur-[140px] bg-indigo-500/10" />
+                    <div className="absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full blur-[140px] bg-orange-500/5" />
                 </div>
 
-                <div className="max-w-4xl mx-auto px-6 relative z-10 text-center">
-                    <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 mb-6 shadow-sm bg-orange-500/15 border border-orange-500/20">
-                        <Sparkles size={14} className="text-orange-400 animate-pulse" />
-                        <span className="text-xs font-bold uppercase tracking-wider text-orange-400">Commissioner Hub</span>
+                <div className="max-w-4xl mx-auto px-6 relative z-10 text-center space-y-6">
+                    <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 shadow-sm bg-indigo-500/10 border border-indigo-500/20">
+                        <Sparkles size={14} className="text-indigo-400" />
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">Monetization Dashboard V3</span>
                     </div>
 
-                    <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight mb-6 leading-tight">
-                        Host Your Own Pools <br />
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-indigo-400">Coming Soon!</span>
+                    <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight">
+                        Flexible Pricing for <br />
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-indigo-400">Pool Commissioners</span>
                     </h1>
                     
-                    <p className="text-base md:text-lg max-w-2xl mx-auto mb-6 text-slate-400 leading-relaxed">
-                        We are building the ultimate automated platform for pool commissioners. Set up private bracket pools, survivor grids, squares, and weekly confidence challenges in seconds.
+                    <p className="text-base md:text-lg max-w-2xl mx-auto text-slate-400 leading-relaxed">
+                        Start every pool with a <strong>14-day free trial</strong>. Upgrade anytime to unlock premium tools, live scoring syncs, AI updates, and SMS alerts.
                     </p>
                 </div>
             </section>
 
-            {/* Content & Bento Grid */}
-            <section className="py-16 max-w-7xl mx-auto px-6 w-full flex-grow">
+            {/* Main Interactive Bento Layout */}
+            <main className="flex-grow max-w-7xl mx-auto px-4 md:px-8 py-16 w-full">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                     
-                    {/* Left Side: Bento Feature Showcases */}
-                    <div className="lg:col-span-7 space-y-6">
-                        <h2 className="text-2xl font-black text-white mb-2 flex items-center gap-2">
-                            <Star className="text-amber-400" size={24} /> Premium Commissioner Features Included
-                        </h2>
-                        <p className="text-slate-400 text-sm mb-6">Our upcoming self-hosting subscription will equip you with standard-setting league operator tools:</p>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            
-                            {/* Feature 1 */}
-                            <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-900 hover:border-slate-800 transition-colors space-y-3">
-                                <div className="p-3 bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-xl w-fit">
-                                    <LayoutGrid size={20} />
+                    {/* LEFT COLUMN: Pricing Calculator Settings & User Pools */}
+                    <div className="lg:col-span-7 space-y-8">
+                        
+                        {/* Pool Upgrade Select (If Logged In & Has Trial Pools) */}
+                        {user && userPools.length > 0 && (
+                            <div className="bg-slate-900/40 border border-indigo-500/20 rounded-3xl p-6 space-y-4 shadow-xl">
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Sparkles className="text-amber-400" size={20} />
+                                    Your Trial Pools Awaiting Activation
+                                </h3>
+                                <p className="text-xs text-slate-400">
+                                    Select one of your trial pools below to complete standard hosting payment and activate permanently.
+                                </p>
+                                <div className="grid grid-cols-1 gap-2.5">
+                                    {userPools.map((pool) => (
+                                        <button
+                                            key={pool.id}
+                                            onClick={() => setSelectedPoolId(pool.id)}
+                                            className={`w-full flex items-center justify-between p-4 rounded-xl border text-left transition-all ${
+                                                selectedPoolId === pool.id 
+                                                    ? 'bg-indigo-600/10 border-indigo-500 shadow-lg' 
+                                                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                                            }`}
+                                        >
+                                            <div className="space-y-1">
+                                                <span className="text-sm font-bold text-white block">{pool.name}</span>
+                                                <span className="text-xs text-slate-500 font-mono capitalize">
+                                                    Format: {pool.type.toLowerCase().replace('_', ' ')}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+                                                    Trial State
+                                                </span>
+                                                <ChevronRight size={16} className="text-slate-400" />
+                                            </div>
+                                        </button>
+                                    ))}
                                 </div>
-                                <h3 className="font-bold text-white">Custom Branding</h3>
-                                <p className="text-xs text-slate-400 leading-relaxed">Customize your pool landing pages with your league's logo, cover image, and dedicated commission welcome boards.</p>
+                                {selectedPoolId && (
+                                    <button 
+                                        onClick={() => setSelectedPoolId(null)}
+                                        className="text-xs text-slate-500 hover:text-white transition-colors"
+                                    >
+                                        ✕ Clear selection and show calculator
+                                    </button>
+                                )}
                             </div>
+                        )}
 
-                            {/* Feature 2 */}
-                            <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-900 hover:border-slate-800 transition-colors space-y-3">
-                                <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-xl w-fit">
-                                    <CheckCircle size={20} />
-                                </div>
-                                <h3 className="font-bold text-white">Payment Tracking</h3>
-                                <p className="text-xs text-slate-400 leading-relaxed">Mark users as paid with one checkmark. Automatically lock out unpaid brackets or squares before kickoff dates.</p>
-                            </div>
-
-                            {/* Feature 3 */}
-                            <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-900 hover:border-slate-800 transition-colors space-y-3">
-                                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl w-fit">
-                                    <Zap size={20} />
-                                </div>
-                                <h3 className="font-bold text-white">Automated SMS Reminders</h3>
-                                <p className="text-xs text-slate-400 leading-relaxed">Integrate Twilio and Courier alerts. Automatically text players who haven't completed picks as deadlines lock.</p>
-                            </div>
-
-                            {/* Feature 4 */}
-                            <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-900 hover:border-slate-800 transition-colors space-y-3">
-                                <div className="p-3 bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-400 rounded-xl w-fit">
-                                    <Users size={20} />
-                                </div>
-                                <h3 className="font-bold text-white">AI Commissioner Recaps</h3>
-                                <p className="text-xs text-slate-400 leading-relaxed">Let our AI analyze weekly margins, upsets, and scores to auto-generate trash-talk posts and league newsletters.</p>
-                            </div>
-                        </div>
-
-                        {/* Social proof or charity callout */}
-                        <div className="p-6 rounded-2xl bg-gradient-to-r from-orange-950/20 to-indigo-950/20 border border-indigo-500/10 flex items-start gap-4">
-                            <Shield className="text-indigo-400 shrink-0 mt-0.5" size={24} />
-                            <div>
-                                <h4 className="font-bold text-white text-sm">Charity-Friendly Platforms</h4>
-                                <p className="text-xs text-slate-400 leading-relaxed mt-1">
-                                    Running a charity pool? We waive creation fees entirely for designated charity campaigns. Collect donations and track total contributions with custom dashboards.
+                        {/* Interactive Billing Calculator Panel */}
+                        <div className="bg-slate-900/30 border border-slate-850 p-6 md:p-8 rounded-3xl space-y-6 shadow-lg backdrop-blur-sm">
+                            <div className="space-y-2">
+                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <LayoutGrid size={22} className="text-indigo-400" />
+                                    Interactive Price Estimator
+                                </h3>
+                                <p className="text-xs text-slate-400">
+                                    Estimate your custom hosting plan based on format, estimated participant size, and premium additions.
                                 </p>
                             </div>
-                        </div>
-                    </div>
 
-                    {/* Right Side: Waitlist Sign-up Portal */}
-                    <div className="lg:col-span-5 bg-slate-900 border border-slate-850 p-6 md:p-8 rounded-3xl space-y-6">
-                        <div className="space-y-2">
-                            <h2 className="text-xl font-black text-white flex items-center gap-2">
-                                <Users className="text-orange-400" size={22} /> VIP Host Waitlist
-                            </h2>
-                            <p className="text-xs text-slate-400">Join the list of pool operators getting priority early access and exclusive discounted pricing when our Host Plan launches.</p>
-                        </div>
-
-                        {/* Success State */}
-                        {submitStatus === 'success' ? (
-                            <div className="bg-emerald-950/20 border border-emerald-500/30 p-6 rounded-2xl text-center space-y-4 animate-in fade-in duration-500">
-                                <div className="w-16 h-16 rounded-full bg-emerald-900/30 border border-emerald-500/20 flex items-center justify-center mx-auto text-emerald-400">
-                                    <CheckCircle size={32} />
-                                </div>
+                            <div className="space-y-6">
+                                {/* 1. Format Select */}
                                 <div>
-                                    <h3 className="font-bold text-emerald-100 text-lg">You're on the list!</h3>
-                                    <p className="text-slate-400 text-xs mt-2 leading-relaxed">
-                                        Thank you for signing up for the VIP Commissioner early-access waitlist. We will notify you at your registered email address as soon as private hosting launches.
-                                    </p>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                        Select Pool Format
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { k: 'BRACKET', label: 'Bracket Tree' },
+                                            { k: 'SQUARES', label: 'Gameday Grid' },
+                                            { k: 'PROPS', label: 'Props Sheet' },
+                                            { k: 'NFL_PICKEM', label: 'Pick\'em' },
+                                            { k: 'NFL_SURVIVOR', label: 'Survivor' },
+                                            { k: 'NFL_MARGIN', label: 'Margin' }
+                                        ].map(f => (
+                                            <button
+                                                key={f.k}
+                                                onClick={() => {
+                                                    setCalcPoolType(f.k);
+                                                    if (f.k === 'SQUARES') setCalcPlayers(100);
+                                                }}
+                                                className={`py-3 px-2 rounded-xl text-xs font-bold transition-all border ${
+                                                    calcPoolType === f.k 
+                                                        ? 'bg-indigo-600/10 text-white border-indigo-500' 
+                                                        : 'bg-slate-950/80 text-slate-400 border-slate-800 hover:border-slate-700'
+                                                }`}
+                                            >
+                                                {f.label}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                {submitStatus === 'error' && (
-                                    <div className="p-4 bg-red-950/20 border border-red-500/30 rounded-xl flex gap-2 text-xs text-red-400">
-                                        <AlertCircle size={16} />
-                                        <span>Error registering. Please check details and try again.</span>
+
+                                {/* 2. Player Input Slider (if not Squares which is locked at 100) */}
+                                {calcPoolType !== 'SQUARES' && (
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-center text-xs font-bold text-slate-500">
+                                            <span className="uppercase tracking-wider">Estimated Participants</span>
+                                            <span className="text-indigo-400 text-sm font-mono font-black">{calcPlayers} Players</span>
+                                        </div>
+                                        <div className="flex gap-4 items-center">
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="150"
+                                                value={calcPlayers}
+                                                onChange={(e) => setCalcPlayers(Number(e.target.value))}
+                                                className="flex-grow accent-indigo-500"
+                                            />
+                                            <input
+                                                type="number"
+                                                value={calcPlayers}
+                                                min={1}
+                                                onChange={(e) => setCalcPlayers(Math.max(1, Number(e.target.value) || 1))}
+                                                className="w-16 bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-center text-white font-bold outline-none font-mono"
+                                            />
+                                        </div>
+                                        {calcPlayers <= config.freePlayerThreshold && (
+                                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl flex items-center gap-2">
+                                                <Sparkles size={14} />
+                                                <span>Under {config.freePlayerThreshold} players? This pool qualifies for the <strong>Free Tier</strong>!</span>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
-                                {/* Name */}
+                                {/* 3. Feature Add-ons selection */}
                                 <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Your Name</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={formData.name}
-                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-orange-500/50"
-                                        placeholder="Kevin H."
-                                    />
-                                </div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                        Premium Upgrades (Optional)
+                                    </label>
+                                    <div className="space-y-2">
+                                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950/80 border border-slate-850 rounded-xl hover:border-slate-700 transition-colors">
+                                            <div className="flex gap-3 items-center">
+                                                <div className={`p-2 rounded-lg bg-orange-500/10 text-orange-400`}>
+                                                    <Zap size={16} />
+                                                </div>
+                                                <div>
+                                                    <span className="text-sm font-bold text-slate-200 block">AI Commissioner Newsletter</span>
+                                                    <span className="text-xs text-slate-500">Auto-generate trash-talk posts & round recaps (+${config.features.aiCommissioner.addonPrice})</span>
+                                                </div>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                checked={calcAi}
+                                                onChange={(e) => setCalcAi(e.target.checked)}
+                                                className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                            />
+                                        </label>
 
-                                {/* Email */}
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Email Address</label>
-                                    <input
-                                        type="email"
-                                        required
-                                        value={formData.email}
-                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-orange-500/50"
-                                        placeholder="kevin@example.com"
-                                    />
-                                </div>
+                                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950/80 border border-slate-850 rounded-xl hover:border-slate-700 transition-colors">
+                                            <div className="flex gap-3 items-center">
+                                                <div className={`p-2 rounded-lg bg-emerald-500/10 text-emerald-400`}>
+                                                    <Users size={16} />
+                                                </div>
+                                                <div>
+                                                    <span className="text-sm font-bold text-slate-200 block">Smart SMS Broadcasts</span>
+                                                    <span className="text-xs text-slate-500">Deliver text alert pick deadlines & payouts (+${config.features.smsNotifications.addonPrice})</span>
+                                                </div>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                checked={calcSms}
+                                                onChange={(e) => setCalcSms(e.target.checked)}
+                                                className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                            />
+                                        </label>
 
-                                {/* Expected Pool Size */}
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Expected League/Pool Size</label>
-                                    <select
-                                        required
-                                        value={formData.poolSize}
-                                        onChange={(e) => setFormData({ ...formData, poolSize: e.target.value })}
-                                        className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 text-sm outline-none focus:ring-2 focus:ring-orange-500/50"
-                                    >
-                                        <option value="">Choose size...</option>
-                                        <option value="Small (<20 players)">Small (&lt;20 players)</option>
-                                        <option value="Medium (20-100 players)">Medium (20-100 players)</option>
-                                        <option value="Large (100-500 players)">Large (100-500 players)</option>
-                                        <option value="Enterprise (500+ players)">Enterprise (500+ players)</option>
-                                    </select>
+                                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950/80 border border-slate-850 rounded-xl hover:border-slate-700 transition-colors">
+                                            <div className="flex gap-3 items-center">
+                                                <div className={`p-2 rounded-lg bg-fuchsia-500/10 text-fuchsia-400`}>
+                                                    <CheckCircle size={16} />
+                                                </div>
+                                                <div>
+                                                    <span className="text-sm font-bold text-slate-200 block">Standings What-If Simulator</span>
+                                                    <span className="text-xs text-slate-500">Interactive live scenarios modeling standings (+${config.features.whatIfSimulator.addonPrice})</span>
+                                                </div>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                checked={calcSim}
+                                                onChange={(e) => setCalcSim(e.target.checked)}
+                                                className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
 
-                                {/* Interest Option */}
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Primary Pool Type of Interest</label>
-                                    <select
-                                        required
-                                        value={formData.interest}
-                                        onChange={(e) => setFormData({ ...formData, interest: e.target.value })}
-                                        className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 text-sm outline-none focus:ring-2 focus:ring-orange-500/50"
-                                    >
-                                        <option value="">Select pool type...</option>
-                                        <option value="Bracket Pools">Bracket Pools</option>
-                                        <option value="Super Bowl / MNF Squares">Super Bowl / MNF Squares</option>
-                                        <option value="NFL Survivor Pools">NFL Survivor Pools</option>
-                                        <option value="Weekly Pick'em Pools">Weekly Pick'em Pools</option>
-                                        <option value="NFL Margin Pools">NFL Margin Pools</option>
-                                        <option value="Custom Props Sheets">Custom Props Sheets</option>
-                                        <option value="Multiple Formats">Multiple Formats</option>
-                                    </select>
+                    {/* RIGHT COLUMN: Real-Time Quote & Invoice checkout */}
+                    <div className="lg:col-span-5 space-y-6">
+                        
+                        {/* Title Context depending on selected / calculator mode */}
+                        {selectedPoolData ? (
+                            <div className="bg-gradient-to-r from-emerald-600/10 to-indigo-600/10 border border-emerald-500/20 p-5 rounded-2xl space-y-2">
+                                <h4 className="text-sm font-black text-white uppercase flex items-center gap-1.5">
+                                    <Sparkles size={16} className="text-amber-400" /> Pay For Selected Pool
+                                </h4>
+                                <div className="text-xs text-slate-400 leading-relaxed">
+                                    You are preparing checkout for: <strong className="text-white font-mono">{selectedPoolData.name}</strong>.
+                                    Applying a validated coupon below updates your Stripe session total immediately!
                                 </div>
+                            </div>
+                        ) : (
+                            <div className="bg-slate-900 border border-slate-850 p-5 rounded-2xl space-y-2">
+                                <h4 className="text-xs font-black text-slate-500 uppercase flex items-center gap-1.5">
+                                    <InfoIcon size={14} className="text-indigo-400" /> Interactive Quote Mode
+                                </h4>
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                    This quote reflects estimated hosting plans. To complete actual payment, select one of your trial pools above or launch a new pool!
+                                </p>
+                            </div>
+                        )}
 
-                                {/* Custom Note */}
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">League Name / Notes (Optional)</label>
-                                    <textarea
-                                        rows={2}
-                                        value={formData.customNote}
-                                        onChange={(e) => setFormData({ ...formData, customNote: e.target.value })}
-                                        className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
-                                        placeholder="Office Football League..."
-                                    />
-                                </div>
+                        <BillingInvoiceCard
+                            poolId={selectedPoolId || undefined}
+                            poolName={selectedPoolData?.name || `${calcPoolType.toLowerCase()} pool`}
+                            poolType={calcPoolType}
+                            estimatedPlayers={calcPlayers}
+                            hasAiCommissioner={calcAi}
+                            hasSmsNotifications={calcSms}
+                            hasWhatIfSimulator={calcSim}
+                            isWizard={false} // Renders "Complete Payment & Upgrade" button
+                        />
 
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="w-full bg-gradient-to-r from-orange-500 to-indigo-600 hover:from-orange-600 hover:to-indigo-750 text-white font-bold py-3.5 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                            Submitting...
-                                        </>
-                                    ) : (
-                                        <>
-                                            Join VIP Waitlist
-                                            <ArrowRight size={14} />
-                                        </>
-                                    )}
-                                </button>
-                            </form>
+                        {/* Direct Create CTA if not paying for existing pool */}
+                        {!selectedPoolId && (
+                            <button
+                                onClick={() => {
+                                    if (user) navigate('/create-pool');
+                                    else onLogin();
+                                }}
+                                className="w-full bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 hover:border-slate-700 py-4 px-6 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 group hover:scale-[1.01]"
+                            >
+                                Launch a New Pool Instead
+                                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                            </button>
                         )}
                     </div>
                 </div>
-            </section>
+            </main>
 
             <Footer />
         </div>

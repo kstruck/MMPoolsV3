@@ -154,6 +154,11 @@ export const joinNFLPool = onCall(async (request) => {
       return; // Already joined
     }
 
+    const billingStatus = poolData.billing?.status ?? 'free';
+    if (billingStatus === 'free' && participantIds.length >= 10) {
+      throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
+    }
+
     // 1. Add participant to pool collection
     transaction.update(poolRef, {
       participantIds: admin.firestore.FieldValue.arrayUnion(uid)

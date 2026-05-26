@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ChevronRight, ChevronLeft, ShieldAlert, Sparkles, Coi
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { User } from '../../types';
+import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
 
 interface NFLPoolWizardProps {
   user: User;
@@ -20,6 +21,8 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
   const TOTAL_STEPS = 5;
   const [isCreating, setIsCreating] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [tosAccepted, setTosAccepted] = useState(false);
+  const [couponCode, setCouponCode] = useState<string | null>(null);
 
   // 1. Sensible defaults based on pool type
   const [name, setName] = useState('');
@@ -189,7 +192,8 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
             smsNotifications: false,
             whatIfSimulator: false,
             customBranding: true
-          }
+          },
+          couponCode: couponCode || undefined
         }
       };
 
@@ -735,6 +739,20 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
                 </div>
               </div>
 
+              <div className="mt-6 font-sans text-left">
+                <BillingInvoiceCard
+                  poolName={name || 'New Pool'}
+                  poolType="season"
+                  estimatedPlayers={50}
+                  hasAiCommissioner={false}
+                  hasSmsNotifications={false}
+                  isWizard={true}
+                  onTosAcceptChange={setTosAccepted}
+                  onCouponAppliedChange={(couponCode) => setCouponCode(couponCode)}
+                  initialCouponCode={couponCode || ''}
+                />
+              </div>
+
               <p className="text-xs text-slate-500 text-center leading-relaxed">
                 By launching, this pool will immediately be initialized. A shareable invite link will be generated for your participants.
               </p>
@@ -764,8 +782,8 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
           ) : (
             <button
               onClick={handleLaunch}
-              disabled={isCreating}
-              className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100 animate-pulse"
+              disabled={isCreating || !tosAccepted}
+              className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100"
             >
               {isCreating ? 'Launching Pool...' : (
                 <>

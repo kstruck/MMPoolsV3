@@ -43,9 +43,166 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     [billing?.gracePeriodEndsAt]
   );
 
-  // ─── FREE / ACTIVE — render children with zero overhead ───
-  if (status === 'free' || status === 'active') {
+  // ─── UNDEFINED BILLING OR ACTIVE — render children with zero overhead ───
+  if (!billing || status === 'active') {
     return <>{children}</>;
+  }
+
+  // ─── FREE PLAN PARTICIPANT LIMIT BANNER ───────────────────
+  if (status === 'free') {
+    let count = 0;
+    const poolType = (pool.type || '').toUpperCase();
+    if (poolType === 'NFL_PLAYOFFS' || poolType === 'PLAYOFF') {
+      count = Object.keys(pool.entries || {}).length;
+    } else if (
+      poolType === 'NFL_PICKEM' || 
+      poolType === 'NFL_SURVIVOR' || 
+      poolType === 'NFL_MARGIN' || 
+      poolType === 'SEASON' || 
+      pool.participantIds
+    ) {
+      count = (pool.participantIds || []).length;
+    } else {
+      count = pool.entryCount || 0;
+    }
+
+    const isLocked = count >= 10;
+    const isApproaching = count >= 8 && count < 10;
+
+    let bannerBg = 'linear-gradient(135deg, rgba(30,41,59,0.4) 0%, rgba(15,23,42,0.5) 100%)';
+    let bannerBorder = '1px solid rgba(51,65,85,0.3)';
+    let badgeBg = 'rgba(51,65,85,0.15)';
+    let badgeBorder = '1px solid rgba(51,65,85,0.25)';
+    let textColor = '#cbd5e1';
+    let titleColor = '#94a3b8';
+    let titleText = `Participants: ${count}/10 (Free Plan)`;
+    let descText = 'Upgrade to Premium to allow more than 10 participants.';
+
+    if (isLocked) {
+      bannerBg = 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(220,38,38,0.15) 100%)';
+      bannerBorder = '1px solid rgba(239,68,68,0.4)';
+      badgeBg = 'rgba(239,68,68,0.18)';
+      badgeBorder = '1px solid rgba(239,68,68,0.35)';
+      textColor = '#fca5a5';
+      titleColor = '#f87171';
+      titleText = 'Participant entries locked! (10/10 reached)';
+      descText = 'Upgrade to Premium now to unlock the pool and allow new entries to join.';
+    } else if (isApproaching) {
+      bannerBg = 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(217,119,6,0.14) 100%)';
+      bannerBorder = '1px solid rgba(245,158,11,0.4)';
+      badgeBg = 'rgba(245,158,11,0.18)';
+      badgeBorder = '1px solid rgba(245,158,11,0.35)';
+      textColor = '#fde68a';
+      titleColor = '#fbbf24';
+      titleText = `Participants: ${count}/10 (Free Plan Limit Approaching)`;
+      descText = 'Upgrade to Premium to avoid locking entries once the 10-player limit is hit.';
+    }
+
+    return (
+      <>
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          style={{
+            background: bannerBg,
+            border: bannerBorder,
+            borderRadius: '16px',
+            padding: '14px 20px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap' as const,
+            boxShadow: isLocked ? '0 4px 20px rgba(239,68,68,0.12)' : isApproaching ? '0 4px 20px rgba(245,158,11,0.12)' : 'none',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                padding: '8px',
+                background: badgeBg,
+                border: badgeBorder,
+                borderRadius: '12px',
+                color: isLocked ? '#f87171' : isApproaching ? '#fbbf24' : '#94a3b8',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isLocked ? <Lock size={18} /> : <AlertTriangle size={18} />}
+            </div>
+            <div>
+              <p
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 900,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: titleColor,
+                  margin: 0,
+                  lineHeight: 1.2,
+                }}
+              >
+                {titleText}
+              </p>
+              <p
+                style={{
+                  fontSize: '10px',
+                  color: textColor,
+                  margin: '2px 0 0',
+                  fontWeight: 700,
+                }}
+              >
+                {descText}
+              </p>
+            </div>
+          </div>
+
+          {isCommissioner && (
+            <a
+              href="/pricing"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 20px',
+                background: isLocked 
+                  ? 'linear-gradient(135deg, #ef4444, #dc2626)' 
+                  : isApproaching 
+                    ? 'linear-gradient(135deg, #f59e0b, #d97706)' 
+                    : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                color: isApproaching && !isLocked ? '#0f172a' : '#fff',
+                borderRadius: '12px',
+                fontSize: '10px',
+                fontWeight: 900,
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                textDecoration: 'none',
+                transition: 'transform 0.15s, box-shadow 0.15s',
+                boxShadow: isLocked 
+                  ? '0 4px 14px rgba(239,68,68,0.25)' 
+                  : isApproaching 
+                    ? '0 4px 14px rgba(245,158,11,0.25)' 
+                    : '0 4px 14px rgba(99,102,241,0.25)',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'scale(1.04)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.transform = 'scale(1)';
+              }}
+            >
+              <CreditCard size={12} />
+              Upgrade to Premium
+            </a>
+          )}
+        </motion.div>
+
+        {children}
+      </>
+    );
   }
 
   // ─── TRIAL BANNER ─────────────────────────────────────────
