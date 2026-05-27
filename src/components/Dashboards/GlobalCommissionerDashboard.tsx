@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Crown, DollarSign, Users, Activity, Settings, ArrowRight } from 'lucide-react';
-import type { User, Pool, PoolType } from '../../types';
+import type { User, Pool } from '../../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface GlobalCommissionerDashboardProps {
@@ -19,7 +19,7 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
     totalParticipants: 0,
   };
 
-  const activePools = managedPools.filter(p => p.status !== 'COMPLETED' && (p as any).status !== 'archived');
+  const activePools = managedPools.filter(p => (p as any).status !== 'COMPLETED' && (p as any).status !== 'archived');
 
   const poolRevenueData = useMemo(() => {
     return managedPools.slice(0, 5).map(p => {
@@ -126,10 +126,10 @@ export const GlobalCommissionerDashboard: React.FC<GlobalCommissionerDashboardPr
                   cursor={{fill: 'rgba(255,255,255,0.05)'}} 
                   contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold' }}
                   itemStyle={{ color: '#34d399' }}
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                  formatter={(value: any) => [`$${Number(value).toLocaleString()}`, 'Revenue']}
                 />
                 <Bar dataKey="revenue" radius={[0, 4, 4, 0]} barSize={20}>
-                  {poolRevenueData.map((entry, index) => (
+                  {poolRevenueData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#3b82f6'} opacity={0.8} />
                   ))}
                 </Bar>

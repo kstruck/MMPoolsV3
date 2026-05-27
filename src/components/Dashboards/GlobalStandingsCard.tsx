@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trophy, TrendingUp, Users, Activity, Crown } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { User, PoolType } from '../../types';

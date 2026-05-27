@@ -46,6 +46,14 @@ export const dbService = {
         return poolRepository.getBySlug(slug);
     },
 
+    async getPoolsByType(type: string): Promise<Pool[]> {
+        const q = query(collection(db, 'pools'), where('type', '==', type));
+        const snap = await getDocs(q);
+        const pools: Pool[] = [];
+        snap.forEach(doc => pools.push({ id: doc.id, ...doc.data() } as Pool));
+        return pools;
+    },
+
     onGlobalStatsUpdate: (callback: (stats: GlobalStats | null) => void, onError?: (error: Error) => void) => {
         return onSnapshot(doc(db, 'stats', 'global'), (doc) => {
             callback(doc.exists() ? doc.data() as GlobalStats : null);

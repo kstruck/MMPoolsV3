@@ -416,12 +416,9 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                       >
                         <option value="0">0 Mins (Exactly at kickoff)</option>
-                        <option value="5">5 Mins Grace (Recommended)</option>
                         <option value="10">10 Mins Grace</option>
                       </select>
                     </div>
-                  </div>
-
                   </div>
 
                   {/* ─── Scoring Configuration ─── */}

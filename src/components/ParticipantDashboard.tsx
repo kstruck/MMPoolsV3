@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings } from '../types';
+import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings, PoolType } from '../types';
 import { isSuperAdmin } from '../utils/auth';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';

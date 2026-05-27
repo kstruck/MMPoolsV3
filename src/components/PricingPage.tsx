@@ -502,7 +502,6 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                         {Array.isArray(config.packagesList) && config.packagesList.filter(b => b.isActive).length > 0 ? (
                             config.packagesList.filter(b => b.isActive).map((b) => {
                                 const isUnlimited = b.poolsIncluded >= 9999;
-                                const isSquares = b.poolType === 'SQUARES';
 
                                 const badgeLabel = isUnlimited ? 'Unlimited Pass' : b.poolType === 'ALL' ? 'Universal Pack' : `${b.poolType} Pack`;
                                 const pricePerPoolLabel = isUnlimited 
