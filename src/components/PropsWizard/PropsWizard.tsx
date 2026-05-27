@@ -4,7 +4,7 @@ import { WizardStepBranding } from '../WizardStepBranding';
 import { WizardStepReminders } from '../WizardStepReminders';
 import { PropsManager } from '../Props/PropsManager';
 import { dbService } from '../../services/dbService';
-import { Loader, ArrowLeft, Check, AlertTriangle, Mail, Lock, Users, QrCode, Plus, Trash2 } from 'lucide-react';
+import { Loader, ArrowLeft, Check, AlertTriangle, Mail, Lock, Users, QrCode, Plus, Trash2, Sparkles, ShieldCheck } from 'lucide-react';
 import type { GameState, PropsPool } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
@@ -44,6 +44,10 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
     const [error, setError] = useState<string | null>(null);
     const [showQRCode, setShowQRCode] = useState(false); // For Final Step
     const [tosAccepted, setTosAccepted] = useState(false);
+
+    // Premium Features States
+    const [hasCustomBranding, setHasCustomBranding] = useState(true);
+    const [hasAiCommissioner, setHasAiCommissioner] = useState(false);
 
     // Initial State Template
     const [config, setConfig] = useState<Partial<PropsPool>>(() => {
@@ -143,12 +147,11 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                         trialEndsAt: Date.now() + (14 * 24 * 60 * 60 * 1000),
                         maxPlayersAllowed: 10,
                         featuresUnlocked: {
-                            aiCommissioner: false,
-                            smsNotifications: false,
                             whatIfSimulator: false,
-                            customBranding: true
+                            customBranding: hasCustomBranding,
+                            aiCommissioner: hasAiCommissioner
                         },
-                        couponCode: config.billing?.couponCode || undefined
+                        couponCode: (config as any).billing?.couponCode || undefined
                     },
                 };
 
@@ -352,6 +355,14 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                     </div>
                                 </div>
 
+                                <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
+                                    <Sparkles size={16} className="text-indigo-400 shrink-0 mt-0.5" />
+                                    <div>
+                                        <strong className="text-white block mb-0.5">💡 Start Small, Upgrade Later!</strong>
+                                        Not sure how many players will join? Choose a lower estimate to minimize upfront costs. You can instantly upgrade with one click later for only the pro-rated difference!
+                                    </div>
+                                </div>
+
                                 {/* Payout Structure */}
                                 <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
                                     <h4 className="font-bold text-white mb-4 flex items-center justify-between">
@@ -531,20 +542,32 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                         poolName={config.name || 'New Pool'}
                                         poolType="PROPS"
                                         estimatedPlayers={25}
-                                        hasAiCommissioner={false}
-                                        hasSmsNotifications={config.reminders?.payment?.enabled || false}
+                                        hasCustomBranding={hasCustomBranding}
+                                        hasAiCommissioner={hasAiCommissioner}
                                         isWizard={true}
                                         onTosAcceptChange={setTosAccepted}
                                         onCouponAppliedChange={(couponCode) => {
                                             updateConfig({
                                                 billing: {
-                                                    ...(config.billing || {}),
+                                                    ...((config as any).billing || {}),
                                                     couponCode: couponCode || undefined
                                                 } as any
                                             });
                                         }}
                                         initialCouponCode={(config as any).billing?.couponCode || ''}
+                                        onFeatureToggle={(featureKey, enabled) => {
+                                            if (featureKey === 'customBranding') setHasCustomBranding(enabled);
+                                            if (featureKey === 'aiCommissioner') setHasAiCommissioner(enabled);
+                                        }}
                                     />
+
+                                    <div className="mt-4 p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-slate-400 text-xs">
+                                        <ShieldCheck className="text-indigo-400 shrink-0 mt-0.5" size={20} />
+                                        <div>
+                                            <strong className="text-white block mb-0.5">🚀 100% Free Trial Setup</strong>
+                                            Set up rules, invite participants, and run your pool completely free for 14 days! Pay only when you are ready to upgrade.
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="flex justify-between pt-8 border-t border-slate-800 mt-8">

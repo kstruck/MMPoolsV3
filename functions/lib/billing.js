@@ -1,9 +1,44 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.redeemCoupon = exports.validateBillingAccess = exports.enforceBillingStatus = void 0;
-const functions = require("firebase-functions/v2");
-const admin = require("firebase-admin");
+exports.onPoolParticipantChange = exports.redeemCoupon = exports.validateBillingAccess = exports.enforceBillingStatus = void 0;
+const functions = __importStar(require("firebase-functions/v2"));
+const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
+const firestore_1 = require("firebase-functions/v2/firestore");
+const emailStyles_1 = require("./emailStyles");
 const db = admin.firestore();
 // =============================================================================
 // 1. enforceBillingStatus — Daily Scheduled Job
@@ -97,7 +132,7 @@ exports.validateBillingAccess = functions.https.onCall(async (request) => {
 // 3. redeemCoupon — Callable Function
 //    Atomically validates and redeems a coupon code within a Firestore transaction
 // =============================================================================
-exports.redeemCoupon = functions.https.onCall(async (request) => {
+exports.redeemCoupon = functions.https.onCall({ cors: true }, async (request) => {
     // --- Auth Check ---
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in to redeem a coupon.");
@@ -163,5 +198,100 @@ exports.redeemCoupon = functions.https.onCall(async (request) => {
         };
     });
     return result;
+});
+// =============================================================================
+// 4. onPoolParticipantChange — Firestore Trigger
+//    Sends alerts to pool managers when they hit 8 or 10 entries on the Free Plan
+// =============================================================================
+exports.onPoolParticipantChange = (0, firestore_1.onDocumentWritten)("pools/{poolId}", async (event) => {
+    var _a, _b, _c, _d, _e, _f;
+    const after = (_a = event.data) === null || _a === void 0 ? void 0 : _a.after.data();
+    if (!after)
+        return; // Deleted
+    const poolId = event.params.poolId;
+    const db = admin.firestore();
+    const billingStatus = (_c = (_b = after.billing) === null || _b === void 0 ? void 0 : _b.status) !== null && _c !== void 0 ? _c : 'free';
+    if (billingStatus !== 'free')
+        return; // Only notify for Free Plan pools
+    // Count participants based on pool type
+    let count = 0;
+    if (after.type === 'NFL_PLAYOFFS' || after.type === 'playoff') {
+        count = Object.keys(after.entries || {}).length;
+    }
+    else if (after.type === 'NFL_PICKEM' || after.type === 'NFL_SURVIVOR' || after.type === 'NFL_MARGIN') {
+        count = (after.participantIds || []).length;
+    }
+    else {
+        count = after.entryCount || 0;
+    }
+    const notified8 = ((_d = after.billing) === null || _d === void 0 ? void 0 : _d.notified8) === true;
+    const notified10 = ((_e = after.billing) === null || _e === void 0 ? void 0 : _e.notified10) === true;
+    // Check if we should notify
+    const shouldNotify8 = count >= 8 && !notified8;
+    const shouldNotify10 = count >= 10 && !notified10;
+    if (!shouldNotify8 && !shouldNotify10)
+        return;
+    // Find manager's email
+    let managerEmail = after.contactEmail;
+    if (!managerEmail && (after.ownerId || after.createdByUid || after.managerUid)) {
+        const managerUid = after.ownerId || after.createdByUid || after.managerUid;
+        const userDoc = await db.collection("users").doc(managerUid).get();
+        if (userDoc.exists) {
+            managerEmail = (_f = userDoc.data()) === null || _f === void 0 ? void 0 : _f.email;
+        }
+    }
+    if (!managerEmail) {
+        console.warn(`[onPoolParticipantChange] Manager email not found for pool ${poolId}`);
+        return;
+    }
+    const updates = {};
+    if (shouldNotify10) {
+        // Send 10 players lock email
+        const subject = `🚫 Locked: Your pool "${after.name}" has reached the Free Plan limit!`;
+        const body = `
+            <p>Hi there,</p>
+            <p>Your pool <strong>${after.name}</strong> has reached the maximum limit of <strong>10 participants</strong> allowed on the Free Plan.</p>
+            
+            <div style="background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 12px; padding: 16px; margin: 20px 0; color: #991b1b; font-family: sans-serif;">
+                <p style="margin: 0; font-weight: bold; font-size: 16px;">Participant Entries Locked 🚫</p>
+                <p style="margin: 4px 0 0 0; font-size: 13px;">New participants are currently blocked from joining your pool until you upgrade to a premium plan.</p>
+            </div>
+
+            <p>To accept more players and unlock your pool instantly, please upgrade to a Premium plan.</p>
+        `;
+        const html = (0, emailStyles_1.renderEmailHtml)('Pool Entries Locked!', body, `${emailStyles_1.BASE_URL}/pricing`, 'Upgrade to Premium');
+        await db.collection('mail').add({
+            to: managerEmail,
+            message: { subject, html }
+        });
+        updates["billing.notified10"] = true;
+        updates["billing.notified8"] = true; // Mark 8 as true too
+        console.log(`[onPoolParticipantChange] Limit reached (10/10) email queued for pool ${poolId} to manager ${managerEmail}`);
+    }
+    else if (shouldNotify8) {
+        // Send 8 players approaching warning email
+        const subject = `⚠️ Action Required: Your pool "${after.name}" is approaching the Free Plan limit!`;
+        const body = `
+            <p>Hi there,</p>
+            <p>Your pool <strong>${after.name}</strong> currently has <strong>${count} participants</strong>, approaching the maximum limit of <strong>10 participants</strong> allowed on the Free Plan.</p>
+            
+            <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 16px; margin: 20px 0; color: #92400e; font-family: sans-serif;">
+                <p style="margin: 0; font-weight: bold; font-size: 16px;">Approaching Limit: ${count}/10 Players ⚠️</p>
+                <p style="margin: 4px 0 0 0; font-size: 13px;">Once your pool reaches 10 players, any new participants attempting to join will be blocked.</p>
+            </div>
+
+            <p>Upgrade to a Premium plan now to ensure your participants have a seamless, uninterrupted onboarding experience!</p>
+        `;
+        const html = (0, emailStyles_1.renderEmailHtml)('Approaching Free Limit!', body, `${emailStyles_1.BASE_URL}/pricing`, 'Upgrade to Premium');
+        await db.collection('mail').add({
+            to: managerEmail,
+            message: { subject, html }
+        });
+        updates["billing.notified8"] = true;
+        console.log(`[onPoolParticipantChange] Approaching limit (8/10) email queued for pool ${poolId} to manager ${managerEmail}`);
+    }
+    if (Object.keys(updates).length > 0) {
+        await db.collection("pools").doc(poolId).update(updates);
+    }
 });
 //# sourceMappingURL=billing.js.map

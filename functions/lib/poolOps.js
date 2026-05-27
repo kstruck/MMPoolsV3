@@ -1,7 +1,40 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fixParticipantIds = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.assertPoolOwnerOrSuperAdmin = void 0;
-const admin = require("firebase-admin");
+const admin = __importStar(require("firebase-admin"));
 const audit_1 = require("./audit");
 const https_1 = require("firebase-functions/v2/https");
 // Helper to determine if user can manage pool
@@ -157,7 +190,6 @@ exports.recalculatePoolWinners = (0, https_1.onCall)(async (request) => {
 });
 // ============ TOGGLE WINNER PAID STATUS ============
 exports.toggleWinnerPaid = (0, https_1.onCall)(async (request) => {
-    var _a;
     const db = admin.firestore();
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Must be logged in.');
@@ -176,24 +208,8 @@ exports.toggleWinnerPaid = (0, https_1.onCall)(async (request) => {
     // The helper is defined above: assertPoolOwnerOrSuperAdmin(pool: any, uid: string, userRole?: string)
     // We can fetch user role optionally or assume owner check is enough for most.
     // Fetch user role if we want to support SuperAdmin override properly
-    let userRole = 'USER';
-    if (request.auth.token.role)
-        userRole = request.auth.token.role; // Custom claim if set
-    // Or fetch doc if claims not trusted/set
-    // For MVP, just try/catch the helper
-    try {
-        (0, exports.assertPoolOwnerOrSuperAdmin)(pool, uid, userRole);
-    }
-    catch (_b) {
-        // Fallback: fetch user doc to check real role if claim missing
-        const userDoc = await db.collection('users').doc(uid).get();
-        if (userDoc.exists && ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) === 'SUPER_ADMIN') {
-            // Allowed
-        }
-        else {
-            throw new https_1.HttpsError('permission-denied', 'Only the pool owner can manage payouts.');
-        }
-    }
+    const userRole = request.auth.token.role || 'USER';
+    (0, exports.assertPoolOwnerOrSuperAdmin)(pool, uid, userRole);
     const winnerRef = poolRef.collection('winners').doc(winnerId);
     const winnerSnap = await winnerRef.get();
     if (!winnerSnap.exists)

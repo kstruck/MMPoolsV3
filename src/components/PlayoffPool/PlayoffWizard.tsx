@@ -4,7 +4,7 @@ import type { User, PlayoffTeam, PayoutSettings } from '../../types';
 import { dbService } from '../../services/dbService';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe, Sparkles, ShieldCheck } from 'lucide-react';
 import { WizardStepBranding } from '../admin/WizardStepBranding';
 import { WizardStepAdvanced } from '../admin/WizardStepAdvanced';
 import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
@@ -39,6 +39,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [tosAccepted, setTosAccepted] = useState(false);
+    const [hasAiCommissioner, setHasAiCommissioner] = useState(false);
     const [playoffTeams, setPlayoffTeams] = useState<PlayoffTeam[]>(PLAYOFF_TEAMS_MOCK);
 
     useEffect(() => {
@@ -360,7 +361,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                 cashapp: formData.cashapp,
                 paypal: formData.paypal,
                 branding: {
-                    logo: formData.branding.logoUrl,
+                    logoUrl: formData.branding.logoUrl,
                     bgColor: formData.branding.backgroundColor
                 },
                 reminders: formData.reminders,
@@ -396,8 +397,7 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                     trialEndsAt: formData.lockAt, // Kickoff Lock model
                     maxPlayersAllowed: 10,
                     featuresUnlocked: {
-                        aiCommissioner: false,
-                        smsNotifications: false,
+                        aiCommissioner: hasAiCommissioner,
                         whatIfSimulator: false,
                         customBranding: true
                     },
@@ -736,6 +736,14 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                                 <option value="100">100 Entries</option>
                             </select>
                             <p className="text-xs text-slate-500 mt-2">The total number of entries allowed for the entire pool.</p>
+                            
+                            <div className="mt-3.5 p-3.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
+                                <Sparkles size={16} className="text-indigo-400 shrink-0 mt-0.5" />
+                                <div>
+                                    <strong className="text-white block mb-0.5">💡 Start Small, Upgrade Later!</strong>
+                                    Not sure how many players will join? Choose a lower estimate to minimize upfront costs. You can instantly upgrade with one click later for only the pro-rated difference!
+                                </div>
+                            </div>
                         </div>
 
                         <div>
@@ -1141,21 +1149,31 @@ export const PlayoffWizard: React.FC<PlayoffWizardProps> = ({ user, onCancel, on
                             poolName={formData.name || 'New Pool'}
                             poolType="NFL_PLAYOFFS"
                             estimatedPlayers={formData.maxEntriesTotal === -1 ? 50 : formData.maxEntriesTotal}
-                            hasAiCommissioner={false}
-                            hasSmsNotifications={formData.reminders.auto24h}
+                            hasAiCommissioner={hasAiCommissioner}
                             isWizard={true}
                             onTosAcceptChange={setTosAccepted}
                             onCouponAppliedChange={(couponCode) => {
                                 setFormData(prev => ({
                                     ...prev,
                                     billing: {
-                                        ...(prev.billing || {}),
+                                        ...((prev as any).billing || {}),
                                         couponCode: couponCode || undefined
                                     }
                                 } as any));
                             }}
                             initialCouponCode={(formData as any).billing?.couponCode || ''}
+                            onFeatureToggle={(featureKey, enabled) => {
+                                if (featureKey === 'aiCommissioner') setHasAiCommissioner(enabled);
+                            }}
                         />
+
+                        <div className="mt-4 p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-slate-400 text-xs">
+                            <ShieldCheck className="text-indigo-400 shrink-0 mt-0.5" size={20} />
+                            <div>
+                                <strong className="text-white block mb-0.5">🚀 100% Free Trial Setup</strong>
+                                Set up rules, invite participants, and run your pool completely free for 14 days! Pay only when you are ready to upgrade.
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

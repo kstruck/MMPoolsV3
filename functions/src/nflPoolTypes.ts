@@ -30,6 +30,10 @@ export interface NFLGame {
   clock?: string;
   period?: number;
   isMonday?: boolean;
+  spread?: {
+    value: number; // Relative to home team. Negative means home is favored.
+    locked: boolean;
+  };
 }
 
 export interface NFLPickemPool {

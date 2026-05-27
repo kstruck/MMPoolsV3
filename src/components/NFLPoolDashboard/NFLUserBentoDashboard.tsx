@@ -485,8 +485,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
               </div>
               <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-slate-900 animate-pulse"></span>
             </div>
-            <div>
-              <h4 className="font-extrabold text-white text-sm tracking-wide leading-tight uppercase truncate max-w-[120px]" title={user?.name || 'Guest Participant'}>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-extrabold text-white text-sm tracking-wide leading-tight uppercase break-words" title={user?.name || 'Guest Participant'}>
                 {user?.name || 'Guest'}
               </h4>
               <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mt-0.5">

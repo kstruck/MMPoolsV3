@@ -8,11 +8,13 @@ import { Bot, Gavel, HelpCircle, CheckCircle, ChevronDown, ChevronUp, Loader } f
 interface AICommissionerProps {
     poolId: string;
     userId?: string;
+    userName?: string;
     poolType?: string;
 }
 
-export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, poolType }) => {
-    const [activeTab, setActiveTab] = useState<'UPDATES' | 'DISPUTE' | 'DETAILS' | 'INSIGHTS'>(poolType === 'BRACKET' ? 'INSIGHTS' : 'UPDATES');
+export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, userName, poolType }) => {
+    const defaultTab = poolType === 'PROPS' || poolType === 'BRACKET' || poolType?.startsWith('NFL_') ? 'INSIGHTS' : 'UPDATES';
+    const [activeTab, setActiveTab] = useState<'UPDATES' | 'DISPUTE' | 'DETAILS' | 'INSIGHTS'>(defaultTab);
     const [artifacts, setArtifacts] = useState<AIArtifact[]>([]);
     const [question, setQuestion] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -126,12 +128,12 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
                 >
                     Dispute Helper
                 </button>
-                {poolType === 'BRACKET' && (
+                {(poolType === 'BRACKET' || poolType === 'PROPS' || poolType?.startsWith('NFL_')) && (
                     <button
                         onClick={() => setActiveTab('INSIGHTS')}
                         className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'INSIGHTS' ? 'text-white border-b-2 border-indigo-500 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200'}`}
                     >
-                        Bracket Insights
+                        {poolType === 'BRACKET' ? 'Bracket Insights' : poolType === 'PROPS' ? 'Prop Insights' : 'Weekly Analysis'}
                     </button>
                 )}
             </div>
@@ -149,7 +151,7 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
                             </div>
                         ) : (
                             artifacts.filter(a => a.type !== 'DISPUTE_RESPONSE').map(artifact => (
-                                <ArtifactCard key={artifact.id} artifact={artifact} />
+                                <ArtifactCard key={artifact.id} artifact={artifact} poolId={poolId} userId={userId} userName={userName} />
                             ))
                         )}
                     </div>
@@ -234,48 +236,49 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
                     <div className="space-y-6 animate-in fade-in">
                         <div className="bg-indigo-900/20 p-4 rounded-lg border border-indigo-500/30">
                             <h3 className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-2">
-                                <Bot size={16} /> AI Bracket Analysis
+                                <Bot size={16} /> AI {poolType === 'BRACKET' ? 'Bracket' : poolType === 'PROPS' ? 'Props' : 'Weekly'} Analysis
                             </h3>
                             <p className="text-xs text-slate-300 mb-4 leading-relaxed">
-                                Get personalized insights about your bracket strategy. The AI Commissioner will analyze your picks against the rest of the pool and historical data.
+                                {poolType === 'BRACKET' ? 'Get personalized insights about your bracket strategy. The AI Commissioner will analyze your picks against the rest of the pool and historical data.' :
+                                 poolType === 'PROPS' ? 'Get strategic insights on your prop bets. The AI Commissioner will analyze line values, correlations, and compare your picks to the field.' :
+                                 'Get a breakdown of your weekly NFL strategy. The AI Commissioner will review your matchups, point allocations, and risk profile.'}
                             </p>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <button
-                                    onClick={() => submitInsight("Analyze my bracket strategy. What is my chalk vs upset balance?")}
-                                    disabled={isSubmitting}
-                                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50"
-                                >
-                                    <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Strategy Analysis</div>
-                                    <div className="text-xs text-slate-500">Chalk vs upset balance & risk profile</div>
-                                </button>
-
-                                <button
-                                    onClick={() => submitInsight("How do my picks compare to the rest of the pool?")}
-                                    disabled={isSubmitting}
-                                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50"
-                                >
-                                    <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Pool Consensus</div>
-                                    <div className="text-xs text-slate-500">How do I compare to the field?</div>
-                                </button>
-
-                                <button
-                                    onClick={() => submitInsight("What scenarios need to happen for me to win the pool?")}
-                                    disabled={isSubmitting}
-                                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50"
-                                >
-                                    <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Path to Victory</div>
-                                    <div className="text-xs text-slate-500">What do I need to win?</div>
-                                </button>
-
-                                <button
-                                    onClick={() => submitInsight("Who is my biggest threat in this pool and where do our brackets differ most?")}
-                                    disabled={isSubmitting}
-                                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50"
-                                >
-                                    <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Biggest Threat</div>
-                                    <div className="text-xs text-slate-500">Who is my main competition?</div>
-                                </button>
+                                {poolType === 'BRACKET' ? (
+                                    <>
+                                        <button onClick={() => submitInsight("Analyze my bracket strategy. What is my chalk vs upset balance?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
+                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Strategy Analysis</div>
+                                            <div className="text-xs text-slate-500">Chalk vs upset balance & risk profile</div>
+                                        </button>
+                                        <button onClick={() => submitInsight("Who is my biggest threat in the standings based on our different picks?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
+                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Competitor Threat</div>
+                                            <div className="text-xs text-slate-500">Identify who can pass you</div>
+                                        </button>
+                                    </>
+                                ) : poolType === 'PROPS' ? (
+                                    <>
+                                        <button onClick={() => submitInsight("Analyze my prop card strategy. Did I take too many favorites or longshots?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
+                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Card Analysis</div>
+                                            <div className="text-xs text-slate-500">Risk vs Reward breakdown</div>
+                                        </button>
+                                        <button onClick={() => submitInsight("Compare my props to the pool average. How contrarian am I?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
+                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Contrarian Check</div>
+                                            <div className="text-xs text-slate-500">See how you differ from the field</div>
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button onClick={() => submitInsight("Review my picks for this week. Where is my biggest risk?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
+                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Weekly Risk</div>
+                                            <div className="text-xs text-slate-500">Analyze current week's exposures</div>
+                                        </button>
+                                        <button onClick={() => submitInsight("How does my strategy compare to the current pool leader?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
+                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Leaderboard Comparison</div>
+                                            <div className="text-xs text-slate-500">Compare against the top spot</div>
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -285,7 +288,7 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
     );
 };
 
-const ArtifactCard: React.FC<{ artifact: AIArtifact }> = ({ artifact }) => {
+const ArtifactCard: React.FC<{ artifact: AIArtifact, poolId: string, userId?: string, userName?: string }> = ({ artifact, poolId, userId, userName }) => {
     const [expanded, setExpanded] = useState(false);
     const isExplanation = artifact.type === 'WINNER_EXPLANATION';
 
@@ -337,7 +340,88 @@ const ArtifactCard: React.FC<{ artifact: AIArtifact }> = ({ artifact }) => {
                         )}
                     </div>
                 )}
+                
+                {/* Comments / Message Board Section */}
+                <ArtifactComments poolId={poolId} artifactId={artifact.id} userId={userId} userName={userName} />
             </div>
+        </div>
+    );
+};
+
+const ArtifactComments: React.FC<{ poolId: string, artifactId: string, userId?: string, userName?: string }> = ({ poolId, artifactId, userId, userName }) => {
+    const [comments, setComments] = useState<any[]>([]);
+    const [newComment, setNewComment] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        const q = query(
+            collection(db, `pools/${poolId}/ai_artifacts/${artifactId}/comments`),
+            orderBy('timestamp', 'asc')
+        );
+        return onSnapshot(q, (snap) => {
+            setComments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+        });
+    }, [poolId, artifactId]);
+
+    const submitComment = async () => {
+        if (!newComment.trim() || !userId) return;
+        setIsSubmitting(true);
+        try {
+            await addDoc(collection(db, `pools/${poolId}/ai_artifacts/${artifactId}/comments`), {
+                userId,
+                userName: userName || 'Participant',
+                text: newComment.trim(),
+                timestamp: Date.now()
+            });
+            setNewComment('');
+        } catch (e) {
+            logger.error("Error submitting comment", e);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="mt-4 pt-4 border-t border-slate-800">
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                Participant Discussion ({comments.length})
+            </h4>
+            
+            {comments.length > 0 && (
+                <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                    {comments.map(c => (
+                        <div key={c.id} className="bg-slate-950/50 rounded p-2.5 border border-slate-800/50 text-sm">
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-indigo-400 text-xs">{c.userName}</span>
+                                <span className="text-[10px] text-slate-600">{new Date(c.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'})}</span>
+                            </div>
+                            <p className="text-slate-300">{c.text}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {userId ? (
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={newComment}
+                        onChange={e => setNewComment(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && submitComment()}
+                        placeholder="Reply to this update..."
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                        onClick={submitComment}
+                        disabled={isSubmitting || !newComment.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 transition-colors"
+                    >
+                        Post
+                    </button>
+                </div>
+            ) : (
+                <p className="text-xs text-slate-500 italic">Sign in to join the discussion.</p>
+            )}
         </div>
     );
 };

@@ -1,8 +1,41 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.confirmPayment = void 0;
 const https_1 = require("firebase-functions/v2/https");
-const admin = require("firebase-admin");
+const admin = __importStar(require("firebase-admin"));
 const emailStyles_1 = require("./emailStyles");
 const audit_1 = require("./audit");
 /**
@@ -11,16 +44,17 @@ const audit_1 = require("./audit");
  * Sends an email to the pool owner with payment details.
  */
 exports.confirmPayment = (0, https_1.onCall)(async (request) => {
-    var _a, _b, _c;
     const db = admin.firestore();
     const { poolId, squareIds } = request.data;
     if (!poolId || !squareIds || !Array.isArray(squareIds) || squareIds.length === 0) {
         throw new https_1.HttpsError("invalid-argument", "Pool ID and square IDs are required.");
     }
     // Get caller identity
-    const isAuthenticated = !!request.auth;
-    const userId = ((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) || "anonymous";
-    const userEmail = ((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email) || "";
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "User must be logged in to confirm payment.");
+    }
+    const userId = request.auth.uid;
+    const userEmail = request.auth.token.email || "";
     const poolRef = db.collection("pools").doc(poolId);
     // Transaction to update squares and send notification
     const result = await db.runTransaction(async (transaction) => {
@@ -126,7 +160,7 @@ exports.confirmPayment = (0, https_1.onCall)(async (request) => {
         type: "PAYMENT_CONFIRMED",
         message: `${result.playerName} confirmed payment for squares: ${result.squareIds.join(", ")}`,
         severity: "INFO",
-        actor: { uid: userId, role: isAuthenticated ? "USER" : "GUEST", label: result.playerName },
+        actor: { uid: userId, role: "USER", label: result.playerName },
         payload: { squareIds: result.squareIds, totalAmount: result.totalAmount }
     });
     return { success: true, squaresConfirmed: result.squareIds.length };

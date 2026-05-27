@@ -20,7 +20,8 @@ import {
   Activity,
   AlertTriangle,
   Coins,
-  CheckCircle
+  CheckCircle,
+  Crown
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -35,6 +36,8 @@ import {
 } from 'recharts';
 import { Header } from './Header';
 import { Footer } from './Footer';
+import { GlobalStandingsCard } from './Dashboards/GlobalStandingsCard';
+import { GlobalCommissionerDashboard } from './Dashboards/GlobalCommissionerDashboard';
 
 const BRAND = {
   emeraldGlow: 'rgba(16, 185, 129, 0.15)',
@@ -52,7 +55,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const navigate = useNavigate();
     const [myPools, setMyPools] = useState<Pool[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'insights' | 'all' | 'open' | 'live' | 'completed'>('insights');
+    const [activeTab, setActiveTab] = useState<'insights' | 'all' | 'open' | 'live' | 'completed' | 'commissioner'>('insights');
     const [searchQuery, setSearchQuery] = useState('');
     const [poolWinners, setPoolWinners] = useState<Record<string, Winner[]>>({});
     const [bracketEntryCounts, setBracketEntryCounts] = useState<Record<string, number>>({});
@@ -430,6 +433,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 <div className="flex items-center gap-2 mb-6 border-b border-slate-800 overflow-x-auto">
                     {[
                         { id: 'insights', label: 'Empire Overview', icon: Activity },
+                        ...(myPools.filter(p => p.ownerId === user.id || p.managerUid === user.id).length > 0 ? [{ id: 'commissioner', label: 'Commissioner Hub', icon: Crown }] : []),
                         { id: 'live', label: 'Live Pools', count: counts.live },
                         { id: 'open', label: 'Open', count: counts.open },
                         { id: 'completed', label: 'Completed', count: counts.completed },
@@ -460,6 +464,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         <Loader className="animate-spin text-orange-500 mb-4" size={32} />
                         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Loading active roster...</p>
                     </div>
+                ) : activeTab === 'commissioner' ? (
+                    <GlobalCommissionerDashboard user={user} managedPools={myPools.filter(p => p.ownerId === user.id || p.managerUid === user.id)} />
                 ) : activeTab === 'insights' ? (
                     /* INSIGHTS TAB - PREMIUM RECHARTS DASHBOARD */
                     <div className="space-y-8 animate-in fade-in duration-300">
@@ -488,6 +494,18 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             </button>
                           </div>
                         )}
+
+                        {/* Global Standings Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {Array.from(new Set(myPools.filter(p => p.type !== 'SQUARES' && p.type !== 'PROPS').map(p => p.type))).map(type => (
+                                <GlobalStandingsCard 
+                                    key={type} 
+                                    user={user} 
+                                    poolType={type as PoolType} 
+                                    poolTypeName={type.replace('NFL_', '').replace('_', ' ')} 
+                                />
+                            ))}
+                        </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                             

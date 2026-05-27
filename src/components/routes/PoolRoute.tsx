@@ -745,7 +745,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
             {/* AI Commissioner */}
             <div className="max-w-[1600px] mx-auto px-4 mb-20">
-                <AICommissioner poolId={squaresPool.id} userId={user?.id} />
+                <AICommissioner poolId={squaresPool.id} userId={user?.id} userName={user?.name} />
                 <div className="flex justify-center mt-8">
                     <p className="text-slate-600 text-xs italic">All pool activities are automated and verified.</p>
                 </div>

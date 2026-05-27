@@ -19,6 +19,7 @@ import { TournamentManager } from './admin/TournamentManager';
 import { SuperAdminBentoDashboard } from './SuperAdminBentoDashboard';
 import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
 import { SuperAdminBillingPanel } from './admin/SuperAdminBillingPanel';
+import { SuperAdminNFLSpreads } from './admin/SuperAdminNFLSpreads';
 
 type SystemLog = {
     timestamp?: { toDate?: () => Date } | number | string;
@@ -3928,6 +3929,9 @@ export const SuperAdmin: React.FC = () => {
                             </button>
                         </div>
                     </div>
+
+                    {/* NFL Spread Override */}
+                    <SuperAdminNFLSpreads />
                 </div>
             )}
 

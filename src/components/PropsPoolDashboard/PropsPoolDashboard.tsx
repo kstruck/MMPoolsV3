@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BillingGate } from '../billing';
 import type { PropsPool, PropCard } from '../../types';
 import { PropCardForm } from '../Props/PropCardForm'; // Reusing this for "My Cards"
+import { AICommissioner } from '../AICommissioner';
 
 import { PropGradingDashboard } from '../Props/PropGradingDashboard';
 import { PropLeaderboard } from '../Props/PropLeaderboard';
@@ -10,7 +11,7 @@ import { GameScoreboard } from '../GameScoreboard';
 import { StatusCard } from '../StatusCard';
 import { PayoutSummaryCard } from '../PayoutSummaryCard';
 
-import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check, Lock } from 'lucide-react';
+import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check, Lock, Bot } from 'lucide-react';
 import { PropsWizard as PropWizard } from '../PropsWizard/PropsWizard';
 import { dbService } from '../../services/dbService';
 import { ShareModal } from '../modals/ShareModal';
@@ -21,12 +22,12 @@ interface PropsPoolDashboardProps {
     isManager?: boolean;
     isAdmin?: boolean;
     onBack: () => void;
-    initialTab?: 'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading';
+    initialTab?: 'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading' | 'ai';
     onOpenAuth?: () => void;
 }
 
 export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack, initialTab = 'cards', onOpenAuth }) => {
-    const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading'>(initialTab);
+    const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading' | 'ai'>(initialTab);
     const [allCards, setAllCards] = useState<PropCard[]>([]);
     const [showShareModal, setShowShareModal] = useState(false);
 
@@ -103,6 +104,15 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                     >
                         <Trophy size={16} /> Leaderboard
                     </button>
+
+                    {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
+                        <button
+                            onClick={() => setActiveTab('ai')}
+                            className={`pb-3 border-b-2 font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'ai' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}
+                        >
+                            <Bot size={16} /> AI Insights
+                        </button>
+                    )}
 
                     {showStats && (
                         <button
@@ -184,7 +194,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                             </div>
 
                             {/* Leaderboard Condensed */}
-                            <div className="order-1 lg:order-2">
+                            <div className="order-1 lg:order-2 space-y-8">
                                 <PropLeaderboard
                                     gameState={pool as any}
                                     currentUser={user}
@@ -192,6 +202,9 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                                     isManager={false} // Read only view here
                                     isAdmin={false} // Read only view here
                                 />
+                                {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
+                                    <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
+                                )}
                             </div>
                         </div>
                     </div>
@@ -206,6 +219,12 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                             isManager={isManager}
                             isAdmin={isAdmin}
                         />
+                    </div>
+                )}
+
+                {activeTab === 'ai' && (
+                    <div className="max-w-4xl mx-auto">
+                        <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
                     </div>
                 )}
 

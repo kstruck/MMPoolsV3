@@ -18,9 +18,11 @@ export const confirmPayment = onCall(async (request) => {
     }
 
     // Get caller identity
-    const isAuthenticated = !!request.auth;
-    const userId = request.auth?.uid || "anonymous";
-    const userEmail = request.auth?.token?.email || "";
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in to confirm payment.");
+    }
+    const userId = request.auth.uid;
+    const userEmail = request.auth.token.email || "";
 
     const poolRef = db.collection("pools").doc(poolId);
 
@@ -152,7 +154,7 @@ export const confirmPayment = onCall(async (request) => {
         type: "PAYMENT_CONFIRMED",
         message: `${result.playerName} confirmed payment for squares: ${result.squareIds.join(", ")}`,
         severity: "INFO",
-        actor: { uid: userId, role: isAuthenticated ? "USER" : "GUEST", label: result.playerName },
+        actor: { uid: userId, role: "USER", label: result.playerName },
         payload: { squareIds: result.squareIds, totalAmount: result.totalAmount }
     });
 

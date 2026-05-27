@@ -805,6 +805,12 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
                                 </div>
 
+                                {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
+                                    <div className="mt-8 pt-8 border-t border-slate-800">
+                                        <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType="BRACKET" />
+                                    </div>
+                                )}
+
                                 {/* User's existing entries */}
                                 {userEntries.length > 0 && (
                                     <div className="space-y-3">
@@ -1250,7 +1256,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         {/* AI Insights */}
                         {bracketSubTab === 'insights' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4">
-                                <AICommissioner poolId={pool.id} userId={user?.id} poolType="BRACKET" />
+                                <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType="BRACKET" />
                             </div>
                         )}
                     </div>
@@ -1608,7 +1614,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             <div className="p-4 bg-slate-950 space-y-3">
                                                 <div>
                                                     <label className="text-xs text-slate-500 block mb-1">Logo URL</label>
-                                                    <input value={editBranding.logo || ''} onChange={e => setEditBranding({ ...editBranding, logo: e.target.value })}
+                                                    <input value={editBranding.logoUrl || ''} onChange={e => setEditBranding({ ...editBranding, logoUrl: e.target.value })}
                                                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" placeholder="https://..." />
                                                 </div>
                                                 <div>
@@ -1622,10 +1628,10 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                             className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm font-mono" />
                                                     </div>
                                                 </div>
-                                                {editBranding.logo && (
+                                                {editBranding.logoUrl && (
                                                     <div className="mt-2">
                                                         <p className="text-xs text-slate-500 mb-1">Preview</p>
-                                                        <img src={editBranding.logo} alt="Pool logo" className="h-12 rounded" onError={e => (e.currentTarget.style.display = 'none')} />
+                                                        <img src={editBranding.logoUrl} alt="Pool logo" className="h-12 rounded" onError={e => (e.currentTarget.style.display = 'none')} />
                                                     </div>
                                                 )}
                                             </div>

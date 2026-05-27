@@ -704,6 +704,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <WizardStepSummary
                 gameState={gameState}
                 onEditStep={(step) => setWizardStep(step)}
+                updateConfig={updateConfig as any}
               />
             )}
             {wizardStep === 9 && (

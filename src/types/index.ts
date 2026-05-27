@@ -90,7 +90,7 @@ export interface PlayoffPool {
 
   // NEW: Branding Customization
   branding?: {
-    logo?: string; // Firebase Storage URL
+    logoUrl?: string; // Firebase Storage URL
     bgColor?: string;
     primaryColor?: string;
     secondaryColor?: string;
@@ -126,6 +126,8 @@ export interface PlayoffPool {
 
   isLocked: boolean;
   lockDate?: number;
+  billing?: PoolBilling;
+  entryCount?: number;
 }
 
 export interface PropsPool {
@@ -192,6 +194,7 @@ export interface PropsPool {
   emailConfirmation?: string;
   notifyAdminFull?: boolean;
   gridPassword?: string;
+  billing?: PoolBilling;
 }
 
 export interface Player {
@@ -434,6 +437,8 @@ export interface GameState {
   waitlist?: WaitlistEntry[]; // Users waiting for squares to open up
   postGameEmailSent?: boolean; // Track if post-game summary email was sent
   themeId?: string; // Reference to custom theme from themes collection
+  billing?: PoolBilling;
+  entryCount?: number;
 }
 
 export interface WaitlistEntry {
@@ -463,6 +468,43 @@ export interface ReminderSettings {
     includeCharityImpact: boolean;
   };
   smsEnabled?: boolean; // Enable Courier SMS notifications
+}
+
+export interface UserHistoricalStats {
+  totalPoints: number;
+  totalWinnings: number;
+  totalLosses: number; // Entry fees lost
+  poolsEntered: number;
+  poolsWon: number;
+  correctPicks: number;
+  incorrectPicks: number;
+  marginDifferential: number; // Cumulative margin
+}
+
+export interface ManagerHistoricalStats {
+  poolsManaged: number;
+  totalRevenue: number; // Total entry fees collected
+  totalPayouts: number; // Total prizes distributed
+  totalParticipants: number;
+}
+
+// --- HISTORICAL STATS ---
+export interface UserHistoricalStats {
+  totalPoints: number;
+  totalWinnings: number;
+  totalLosses: number;
+  poolsEntered: number;
+  poolsWon: number;
+  correctPicks: number;
+  incorrectPicks: number;
+  marginDifferential: number; // Positive if better, negative if worse
+}
+
+export interface ManagerHistoricalStats {
+  poolsManaged: number;
+  totalRevenue: number;
+  totalPayouts: number;
+  totalParticipants: number;
 }
 
 export interface User {
@@ -497,6 +539,11 @@ export interface User {
   lastLogin?: number | { seconds: number; nanoseconds: number }; // Last login timestamp
   referralCredits?: number; // Successful paying pool manager recruits
   freePoolsAvailable?: number; // Unused free pool tokens awarded
+  activeBundleType?: 'buy_3' | 'unlimited_1yr';
+  bundleExpiresAt?: number;
+  poolCredits?: UserPoolCredit[];
+  historicalStats?: UserHistoricalStats;
+  managerStats?: ManagerHistoricalStats;
 }
 
 export interface Winner {
@@ -584,6 +631,14 @@ export interface AIArtifact {
   createdAt: number;
 }
 
+export interface AIComment {
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  timestamp: number;
+}
+
 export interface AIRequest {
   id: string;
   userId: string;
@@ -648,7 +703,7 @@ export interface BracketPool {
 
   // NEW: Branding Customization
   branding?: {
-    logo?: string; // Firebase Storage URL
+    logoUrl?: string; // Firebase Storage URL
     bgColor?: string;
     primaryColor?: string;
     secondaryColor?: string;
@@ -689,6 +744,7 @@ export interface BracketPool {
 
   createdAt: number;
   updatedAt?: number;
+  billing?: PoolBilling;
 }
 
 export type BracketRegion = 'East' | 'West' | 'South' | 'Midwest';
@@ -883,11 +939,12 @@ export interface PoolBilling {
   trialEndsAt?: number; // timestamp
   gracePeriodEndsAt?: number; // timestamp
   maxPlayersAllowed: number;
+  couponCode?: string;
   featuresUnlocked: {
     aiCommissioner: boolean;
-    smsNotifications: boolean;
     whatIfSimulator: boolean;
     customBranding: boolean;
+    smsNotifications?: boolean;
   };
 }
 
@@ -901,31 +958,44 @@ export interface BillingConfig {
   freePlayerThreshold: number;
   gracePeriodDays: number;
   pricing: {
-    season: {
-      tier1: BillingTierPrice;
-      tier2: BillingTierPrice;
-      tier3: BillingTierPrice;
-      tier4: BillingTierPrice;
-    };
-    bracket: {
-      tier1: BillingTierPrice;
-      tier2: BillingTierPrice;
-      tier3: BillingTierPrice;
-      tier4: BillingTierPrice;
-    };
-    squares: {
-      flatPrice: number;
-    };
-    props: {
-      flatPrice: number;
-    };
+    season: BillingTierPrice[];
+    bracket: BillingTierPrice[];
+    squares: BillingTierPrice[];
+    props: BillingTierPrice[];
   };
   features: {
     aiCommissioner: { isPremium: boolean; addonPrice: number };
-    smsNotifications: { isPremium: boolean; addonPrice: number };
     whatIfSimulator: { isPremium: boolean; addonPrice: number };
     customBranding: { isPremium: boolean; addonPrice: number };
+    smsNotifications?: { isPremium: boolean; addonPrice: number };
   };
+  packages?: {
+    buy_3: number;
+    unlimited_1yr: number;
+  };
+  packagesList?: BillingBundle[];
+}
+
+export interface BillingBundle {
+  id: string;
+  name: string;
+  description: string;
+  poolType: 'ALL' | PoolType;
+  maxPlayersPerPool: number; // e.g. 25, 50, 100, 9999 for unlimited
+  poolsIncluded: number; // e.g. 3, or 9999 for unlimited
+  durationDays: number; // e.g. 365, or 0 for never expires
+  price: number;
+  isActive: boolean;
+}
+
+export interface UserPoolCredit {
+  id: string; // unique credit token ID
+  bundleId: string; // reference to the source BillingBundle
+  poolType: 'ALL' | PoolType;
+  maxPlayersPerPool: number;
+  expiresAt: number; // timestamp, 0 if never expires
+  isUsed: boolean;
+  usedForPoolId?: string;
 }
 
 export interface Coupon {

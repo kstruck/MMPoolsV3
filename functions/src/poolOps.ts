@@ -209,22 +209,8 @@ export const toggleWinnerPaid = onCall(async (request) => {
     // We can fetch user role optionally or assume owner check is enough for most.
 
     // Fetch user role if we want to support SuperAdmin override properly
-    let userRole = 'USER';
-    if (request.auth.token.role) userRole = request.auth.token.role; // Custom claim if set
-
-    // Or fetch doc if claims not trusted/set
-    // For MVP, just try/catch the helper
-    try {
-        assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
-    } catch {
-        // Fallback: fetch user doc to check real role if claim missing
-        const userDoc = await db.collection('users').doc(uid).get();
-        if (userDoc.exists && userDoc.data()?.role === 'SUPER_ADMIN') {
-            // Allowed
-        } else {
-            throw new HttpsError('permission-denied', 'Only the pool owner can manage payouts.');
-        }
-    }
+    const userRole = request.auth.token.role || 'USER';
+    assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
 
     const winnerRef = poolRef.collection('winners').doc(winnerId);
     const winnerSnap = await winnerRef.get();

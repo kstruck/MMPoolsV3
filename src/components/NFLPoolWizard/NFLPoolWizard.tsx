@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronRight, ChevronLeft, ShieldAlert, Sparkles, Coins, Palette } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, ChevronLeft, ShieldAlert, Sparkles, Coins, Palette, ShieldCheck } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
-import type { User } from '../../types';
+import type { User, BillingConfig } from '../../types';
 import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
+import { db } from '../../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 interface NFLPoolWizardProps {
   user: User;
@@ -16,6 +18,20 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const poolType = (searchParams.get('type') || 'NFL_PICKEM') as 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
+
+  const [billingConfig, setBillingConfig] = useState<BillingConfig | null>(null);
+
+  useEffect(() => {
+    const docRef = doc(db, 'settings', 'billing_config');
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setBillingConfig(docSnap.data() as BillingConfig);
+      }
+    }, (err) => {
+      console.warn('[NFLPoolWizard] Failed to fetch billing config:', err);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const [step, setStep] = useState(1);
   const TOTAL_STEPS = 5;
@@ -38,6 +54,7 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
   const [pickemLockMode, setPickemLockMode] = useState<'PER_GAME' | 'WEEKLY'>('PER_GAME');
   const [lockBufferMinutes, setLockBufferMinutes] = useState(5);
   const [pickemPayoutMode, setPickemPayoutMode] = useState<'SEASON' | 'WEEKLY' | 'HYBRID'>('SEASON');
+  const [pickMode, setPickMode] = useState<'STRAIGHT' | 'ATS'>('STRAIGHT');
 
   // Scoring options (Pick'em)
   const [pointsPerPick, setPointsPerPick] = useState(1);
@@ -59,6 +76,10 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
   // Branding Customization
   const [primaryColor, setPrimaryColor] = useState('#0f172a'); // default dark slate
   const [accentColor, setAccentColor] = useState('#6366f1'); // default indigo
+
+  // Premium Features States
+  const [hasCustomBranding, setHasCustomBranding] = useState(true);
+  const [hasAiCommissioner, setHasAiCommissioner] = useState(false);
 
   // Force Weekly Lock if Confidence Mode is enabled
   useEffect(() => {
@@ -145,7 +166,7 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
           lockMode: pickemLockMode,
           lockBufferMinutes,
           payoutMode: pickemPayoutMode,
-          pickMode: 'STRAIGHT',
+          pickMode,
           pointsPerPick,
           ...(Object.keys(primetimeBonus).length > 0 ? { primetimeBonus } : {})
         };
@@ -185,15 +206,14 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
         },
         billing: {
           status: 'trial',
-          tier: estimatedPlayers <= 10 ? 'free_tier' : 'premium_tier',
+          tier: estimatedPlayers <= (billingConfig?.freePlayerThreshold ?? 10) ? 'free_tier' : 'premium_tier',
           pricePaid: 0,
-          maxPlayersAllowed: estimatedPlayers <= 10 ? 10 : estimatedPlayers,
+          maxPlayersAllowed: estimatedPlayers <= (billingConfig?.freePlayerThreshold ?? 10) ? (billingConfig?.freePlayerThreshold ?? 10) : estimatedPlayers,
           trialEndsAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
           featuresUnlocked: {
-            aiCommissioner: false,
-            smsNotifications: false,
             whatIfSimulator: false,
-            customBranding: true
+            customBranding: hasCustomBranding,
+            aiCommissioner: hasAiCommissioner
           },
           couponCode: couponCode || undefined
         }
@@ -342,6 +362,33 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">Pick Mode</label>
+                      <select
+                        value={pickMode}
+                        onChange={e => setPickMode(e.target.value as 'STRAIGHT' | 'ATS')}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      >
+                        <option value="STRAIGHT">Straight Up</option>
+                        <option value="ATS">Against the Spread (ATS)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">Payout Method</label>
+                      <select
+                        value={pickemPayoutMode}
+                        onChange={e => setPickemPayoutMode(e.target.value as 'SEASON' | 'WEEKLY' | 'HYBRID')}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      >
+                        <option value="SEASON">Season-End Standings Only</option>
+                        <option value="WEEKLY">Weekly Winner Only</option>
+                        <option value="HYBRID">Hybrid (Season-End + Weekly Prizes)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
                       <label className="block text-sm font-bold text-slate-300 mb-2">Lock Mode</label>
                       <select
                         value={pickemLockMode}
@@ -375,17 +422,6 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-bold text-slate-300 mb-2">Payout Method</label>
-                    <select
-                      value={pickemPayoutMode}
-                      onChange={e => setPickemPayoutMode(e.target.value as 'SEASON' | 'WEEKLY' | 'HYBRID')}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                    >
-                      <option value="SEASON">Season-End Standings Only</option>
-                      <option value="WEEKLY">Weekly Winner Only</option>
-                      <option value="HYBRID">Hybrid (Season-End + Weekly Prizes)</option>
-                    </select>
                   </div>
 
                   {/* ─── Scoring Configuration ─── */}
@@ -570,6 +606,16 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
           {/* STEP 3: PAYMENTS */}
           {step === 3 && (
             <div className="space-y-6">
+              <div className="p-4 bg-gradient-to-r from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 rounded-2xl flex gap-3 items-start shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                <div className="text-xl">🚀</div>
+                <div>
+                  <strong className="text-white block mb-1 text-sm">100% Free Trial Setup</strong>
+                  <p className="text-emerald-200/80 text-xs leading-relaxed">
+                    Set up rules, invite participants, and run your pool completely free for 14 days! Pay only when you are ready to upgrade.
+                  </p>
+                </div>
+              </div>
+
               <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex gap-4 items-center">
                 <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400">
                   <Coins size={28} />
@@ -627,27 +673,51 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-2">
                     Season Pricing Tiers Guide
                   </span>
-                  <div className="grid grid-cols-5 gap-2 text-center text-[10px]">
-                    {[
-                      { range: '1–10', price: 'FREE', active: estimatedPlayers <= 10 },
-                      { range: '11–25', price: '$29', active: estimatedPlayers >= 11 && estimatedPlayers <= 25 },
-                      { range: '26–50', price: '$59', active: estimatedPlayers >= 26 && estimatedPlayers <= 50 },
-                      { range: '51–100', price: '$99', active: estimatedPlayers >= 51 && estimatedPlayers <= 100 },
-                      { range: '101+', price: '$149', active: estimatedPlayers >= 101 },
-                    ].map(t => (
-                      <div
-                        key={t.range}
-                        className={`rounded-xl p-2 border transition-all ${
-                          t.active
-                            ? 'bg-blue-500/10 border-blue-500 text-white font-extrabold shadow-[0_0_12px_rgba(59,130,246,0.15)]'
-                            : 'bg-slate-900/40 border-slate-850 text-slate-400'
-                        }`}
-                      >
-                        <div className="font-bold mb-0.5">{t.range}</div>
-                        <div className={`font-mono ${t.active ? 'text-blue-400' : 'text-slate-300'}`}>{t.price}</div>
-                      </div>
-                    ))}
+                  <div className="flex flex-wrap gap-2 text-center text-[10px] justify-center">
+                    {/* Free Tier */}
+                    <div
+                      className={`rounded-xl p-2.5 border transition-all flex-1 min-w-[70px] ${
+                        estimatedPlayers <= (billingConfig?.freePlayerThreshold ?? 10)
+                          ? 'bg-blue-500/10 border-blue-500 text-white font-extrabold shadow-[0_0_12px_rgba(59,130,246,0.15)]'
+                          : 'bg-slate-900/40 border-slate-850 text-slate-400'
+                      }`}
+                    >
+                      <div className="font-bold mb-0.5">1–{billingConfig?.freePlayerThreshold ?? 10}</div>
+                      <div className={`font-mono ${estimatedPlayers <= (billingConfig?.freePlayerThreshold ?? 10) ? 'text-blue-400' : 'text-slate-300'}`}>FREE</div>
+                    </div>
+
+                    {/* Dynamic Pricing Tiers */}
+                    {(billingConfig?.pricing?.season || [
+                      { min: 11, max: 25, price: 29 },
+                      { min: 26, max: 50, price: 59 },
+                      { min: 51, max: 100, price: 99 },
+                      { min: 101, max: 9999, price: 149 }
+                    ]).map((t, idx) => {
+                      const isActive = estimatedPlayers >= t.min && estimatedPlayers <= t.max;
+                      const rangeLabel = t.max >= 9999 ? `${t.min}+` : `${t.min}–${t.max}`;
+                      return (
+                        <div
+                          key={idx}
+                          className={`rounded-xl p-2.5 border transition-all flex-1 min-w-[70px] ${
+                            isActive
+                              ? 'bg-blue-500/10 border-blue-500 text-white font-extrabold shadow-[0_0_12px_rgba(59,130,246,0.15)]'
+                              : 'bg-slate-900/40 border-slate-850 text-slate-400'
+                          }`}
+                        >
+                          <div className="font-bold mb-0.5">{rangeLabel}</div>
+                          <div className={`font-mono ${isActive ? 'text-blue-400' : 'text-slate-300'}`}>${t.price}</div>
+                        </div>
+                      );
+                    })}
                   </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
+                <Sparkles size={16} className="text-indigo-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-white block mb-0.5">💡 Start Small, Upgrade Later!</strong>
+                  Not sure how many players will join? Choose a lower estimate to minimize upfront costs. You can instantly upgrade with one click later for only the pro-rated difference!
                 </div>
               </div>
 
@@ -806,13 +876,25 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
                   poolName={name || 'New Pool'}
                   poolType="season"
                   estimatedPlayers={estimatedPlayers}
-                  hasAiCommissioner={false}
-                  hasSmsNotifications={false}
+                  hasCustomBranding={hasCustomBranding}
+                  hasAiCommissioner={hasAiCommissioner}
                   isWizard={true}
                   onTosAcceptChange={setTosAccepted}
                   onCouponAppliedChange={(couponCode) => setCouponCode(couponCode)}
                   initialCouponCode={couponCode || ''}
+                  onFeatureToggle={(featureKey, enabled) => {
+                    if (featureKey === 'customBranding') setHasCustomBranding(enabled);
+                    if (featureKey === 'aiCommissioner') setHasAiCommissioner(enabled);
+                  }}
                 />
+
+                <div className="mt-4 p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-slate-400 text-xs">
+                  <ShieldCheck className="text-indigo-400 shrink-0 mt-0.5" size={20} />
+                  <div>
+                    <strong className="text-white block mb-0.5">🚀 100% Free Trial Setup</strong>
+                    Set up rules, invite participants, and run your pool completely free for 14 days! Pay only when you are ready to upgrade.
+                  </div>
+                </div>
               </div>
 
               <p className="text-xs text-slate-500 text-center leading-relaxed">

@@ -87,6 +87,33 @@ export async function fetchNFLWeekSchedule(
       const startDateObj = new Date(startTime);
       const isMonday = startDateObj.getDay() === 1; // 1 = Monday
 
+      let spreadValue = 0;
+      let spreadFound = false;
+      if (competition.odds && competition.odds[0]) {
+        const odds = competition.odds[0];
+        if (odds.details && odds.details !== 'EVEN') {
+          // e.g. "BAL -3.5" or "KC -10"
+          const parts = odds.details.split(' ');
+          if (parts.length >= 2) {
+            const favAbbr = parts[0];
+            const spreadPoints = parseFloat(parts[1]);
+            if (!isNaN(spreadPoints)) {
+              spreadFound = true;
+              // If favored team is HOME, spread relative to home is negative (e.g. -3.5).
+              // If favored team is AWAY, spread relative to home is positive (e.g. +3.5).
+              if (homeComp.team?.abbreviation === favAbbr) {
+                spreadValue = spreadPoints; // e.g. -3.5
+              } else {
+                spreadValue = -spreadPoints; // e.g. +3.5
+              }
+            }
+          }
+        } else if (odds.details === 'EVEN') {
+          spreadFound = true;
+          spreadValue = 0;
+        }
+      }
+
       games.push({
         id: gameId,
         espnGameId: event.id,
@@ -113,7 +140,8 @@ export async function fetchNFLWeekSchedule(
         status: status,
         clock: event.status?.displayClock || '0:00',
         period: safeInt(event.status?.period),
-        isMonday: isMonday
+        isMonday: isMonday,
+        ...(spreadFound ? { spread: { value: spreadValue, locked: false } } : {})
       });
     }
 
@@ -248,6 +276,13 @@ export const syncNFLScoresJob = onSchedule('*/5 * * * *', async (event) => {
             payload: { gameId: freshGame.id, oldTime: existingData.startTime, newTime: freshGame.startTime }
           });
         }
+        if (existingData.spread?.locked && freshGame.spread) {
+          // Retain the locked spread value and state
+          freshGame.spread = {
+            value: existingData.spread.value,
+            locked: true
+          };
+        }
       }
 
       const cleanedGame = JSON.parse(JSON.stringify(freshGame));
@@ -258,6 +293,47 @@ export const syncNFLScoresJob = onSchedule('*/5 * * * *', async (event) => {
 });
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+
+/**
+ * Scheduled job to lock NFL spreads every Tuesday at 9:00 AM EST.
+ * Scans upcoming games, and if spread is available, marks it as locked.
+ */
+export const lockNFLSpreadsJob = onSchedule({
+  schedule: '0 9 * * 2', // 9:00 AM every Tuesday
+  timeZone: 'America/New_York'
+}, async () => {
+  const db = admin.firestore();
+  const now = Date.now();
+  
+  // Find games starting in the next 7 days that are not finalized
+  const upcomingSnap = await db.collection('nfl_games')
+    .where('startTime', '>', now)
+    .where('startTime', '<=', now + 7 * 24 * 60 * 60 * 1000)
+    .get();
+
+  if (upcomingSnap.empty) return;
+
+  const batch = db.batch();
+  let lockedCount = 0;
+
+  upcomingSnap.forEach(doc => {
+    const data = doc.data() as NFLGame;
+    // Lock spread if it's available and not already locked
+    if (data.spread && !data.spread.locked) {
+      if (data.spread.value !== undefined) {
+        batch.update(doc.ref, {
+          'spread.locked': true
+        });
+        lockedCount++;
+      }
+    }
+  });
+
+  if (lockedCount > 0) {
+    await batch.commit();
+    console.log(`[lockNFLSpreadsJob] Locked spreads for ${lockedCount} upcoming games.`);
+  }
+});
 
 /**
  * SuperAdmin-only HTTPS callable to trigger manual NFL schedule imports.

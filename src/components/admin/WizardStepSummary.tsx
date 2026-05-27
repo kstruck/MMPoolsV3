@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     Trophy, Users, DollarSign, Calendar, Shield, Bell,
-    CheckCircle, AlertCircle, Zap, Palette, Edit3
+    CheckCircle, AlertCircle, Zap, Palette, Edit3, ShieldCheck
 } from 'lucide-react';
 import type { GameState } from '../../types';
 import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
@@ -9,8 +9,9 @@ import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
 interface WizardStepSummaryProps {
     gameState: GameState;
     onEditStep: (step: number) => void;
-    onTosAcceptChange: (accepted: boolean) => void;
-    onCouponAppliedChange: (couponCode: string | null, finalPrice: number) => void;
+    onTosAcceptChange?: (accepted: boolean) => void;
+    onCouponAppliedChange?: (couponCode: string | null, finalPrice: number) => void;
+    updateConfig: (updates: Partial<GameState>) => void;
 }
 
 const SummaryCard = ({ title, icon: Icon, children, step, color = 'indigo', onEditStep }: {
@@ -64,7 +65,8 @@ export const WizardStepSummary: React.FC<WizardStepSummaryProps> = ({
     gameState, 
     onEditStep,
     onTosAcceptChange,
-    onCouponAppliedChange
+    onCouponAppliedChange,
+    updateConfig
 }) => {
     const totalPot = gameState.costPerSquare * 100;
     const charityAmount = gameState.charity?.enabled ? totalPot * (gameState.charity.percentage / 100) : 0;
@@ -214,13 +216,33 @@ export const WizardStepSummary: React.FC<WizardStepSummaryProps> = ({
                 poolType="SQUARES"
                 estimatedPlayers={100} // Gameday Squares is always 100 squares
                 hasAiCommissioner={gameState.billing?.featuresUnlocked?.aiCommissioner || false}
-                hasSmsNotifications={gameState.billing?.featuresUnlocked?.smsNotifications || false}
-                hasWhatIfSimulator={gameState.billing?.featuresUnlocked?.whatIfSimulator || false}
+                hasCustomBranding={gameState.billing?.featuresUnlocked?.customBranding ?? true}
                 isWizard={true}
                 onTosAcceptChange={onTosAcceptChange}
                 onCouponAppliedChange={onCouponAppliedChange}
                 initialCouponCode={gameState.billing?.couponCode || ''}
+                onFeatureToggle={(featureKey, enabled) => {
+                    const currentBilling: any = gameState.billing || {};
+                    const currentFeatures = currentBilling.featuresUnlocked || {};
+                    updateConfig({
+                        billing: {
+                            ...currentBilling,
+                            featuresUnlocked: {
+                                ...currentFeatures,
+                                [featureKey]: enabled
+                            }
+                        } as any
+                    });
+                }}
             />
+
+            <div className="mt-4 p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-slate-400 text-xs text-left">
+                <ShieldCheck className="text-indigo-400 shrink-0 mt-0.5" size={20} />
+                <div>
+                    <strong className="text-white block mb-0.5">🚀 100% Free Trial Setup</strong>
+                    Set up rules, invite participants, and run your pool completely free for 14 days! Pay only when you are ready to upgrade.
+                </div>
+            </div>
 
             {/* Launch Checklist */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">

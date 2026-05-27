@@ -1,7 +1,40 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteBracketEntry = exports.submitBracketEntry = exports.submitBracketEntryInternal = exports.updateBracketEntry = exports.createBracketEntry = void 0;
-const admin = require("firebase-admin");
+const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-admin/firestore");
 const reminders_1 = require("./reminders");
@@ -22,11 +55,19 @@ exports.createBracketEntry = (0, https_1.onCall)(async (request) => {
     const poolRef = db.collection("pools").doc(poolId);
     // Check constraints in Transaction
     const entryId = await db.runTransaction(async (transaction) => {
+        var _a, _b;
         const poolDoc = await transaction.get(poolRef);
         if (!poolDoc.exists) {
             throw new https_1.HttpsError("not-found", "Pool not found.");
         }
         const poolData = poolDoc.data();
+        const billingStatus = (_b = (_a = poolData.billing) === null || _a === void 0 ? void 0 : _a.status) !== null && _b !== void 0 ? _b : 'free';
+        if (billingStatus === 'free') {
+            const currentEntriesCount = poolData.entryCount || 0;
+            if (currentEntriesCount >= 10) {
+                throw new https_1.HttpsError("failed-precondition", "This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.");
+            }
+        }
         // Check lock status — only OPEN pools accept new entries
         if (poolData.status !== 'OPEN' && poolData.status !== 'DRAFT') {
             throw new https_1.HttpsError("failed-precondition", "Pool is not accepting new entries.");

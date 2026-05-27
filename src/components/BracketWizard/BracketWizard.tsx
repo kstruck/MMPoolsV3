@@ -1,7 +1,7 @@
 import { logger } from '../../utils/logger';
 import React, { useState } from 'react';
 import type { User } from '../../types';
-import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe, Share2, Copy, ExternalLink, AlertTriangle, Mail, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, Trophy, DollarSign, Calendar, Users, Globe, Share2, Copy, ExternalLink, AlertTriangle, Mail, Sparkles, ShieldCheck } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../firebase';
 import { WizardStepBranding } from '../admin/WizardStepBranding';
@@ -692,6 +692,14 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 <option value="100">100 Brackets</option>
                             </select>
                             <p className="text-xs text-slate-500 mt-2">The total number of brackets allowed for the entire pool.</p>
+                            
+                            <div className="mt-3.5 p-3.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
+                                <Sparkles size={16} className="text-indigo-400 shrink-0 mt-0.5" />
+                                <div>
+                                    <strong className="text-white block mb-0.5">💡 Start Small, Upgrade Later!</strong>
+                                    Not sure how many players will join? Choose a lower estimate to minimize upfront costs. You can instantly upgrade with one click later for only the pro-rated difference!
+                                </div>
+                            </div>
                         </div>
 
                         <div>
@@ -1420,13 +1428,21 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 setFormData(prev => ({
                                     ...prev,
                                     billing: {
-                                        ...(prev.billing || {}),
+                                        ...((prev as any).billing || {}),
                                         couponCode: couponCode || undefined
                                     }
                                 } as any));
                             }}
                             initialCouponCode={(formData as any).billing?.couponCode || ''}
                         />
+                        
+                        <div className="mt-4 p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-slate-400 text-xs">
+                            <ShieldCheck className="text-indigo-400 shrink-0 mt-0.5" size={20} />
+                            <div>
+                                <strong className="text-white block mb-0.5">🚀 100% Free Trial Setup</strong>
+                                Set up rules, invite participants, and run your pool completely free for 14 days! Pay only when you are ready to upgrade.
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

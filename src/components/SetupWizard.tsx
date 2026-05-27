@@ -260,7 +260,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                         whatIfSimulator: false,
                         customBranding: true
                     },
-                    ...gameState.billing
+                    ...(gameState as any).billing
                 }
             };
 
@@ -387,11 +387,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                             onCouponAppliedChange={(couponCode) => {
                                 updateConfig({
                                     billing: {
-                                        ...(gameState.billing || {}),
+                                        ...((gameState as any).billing || {}),
                                         couponCode: couponCode || undefined
                                     } as any
                                 });
                             }}
+                            updateConfig={updateConfig as any}
                         />
                     )}
 

@@ -379,7 +379,8 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
                     tier: 'premium_tier',
                     poolType: 'BRACKET',
                     couponCode: 'HELLO',
-                    referralCredits: '0'
+                    referralCredits: '0',
+                    maxPlayersAllowed: '10'
                 }
             }));
         });

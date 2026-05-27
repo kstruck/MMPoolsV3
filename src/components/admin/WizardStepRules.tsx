@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, Shield } from 'lucide-react';
+import { DollarSign, Shield, Sparkles } from 'lucide-react';
 import type { GameState } from '../../types';
 
 interface WizardStepRulesProps {
@@ -63,6 +63,14 @@ export const WizardStepRules: React.FC<WizardStepRulesProps> = ({ gameState, upd
                             <option>Yes</option>
                             <option>No</option>
                         </select>
+                    </div>
+                </div>
+
+                <div className="mt-6 p-3.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
+                    <Sparkles size={16} className="text-indigo-400 shrink-0 mt-0.5" />
+                    <div>
+                        <strong className="text-white block mb-0.5">💡 Start Small, Upgrade Later!</strong>
+                        Not sure how many players will join? Choose a lower estimate to minimize upfront costs. You can instantly upgrade with one click later for only the pro-rated difference!
                     </div>
                 </div>
             </div>

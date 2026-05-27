@@ -1,10 +1,43 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = exports.managePlayoffEntry = exports.submitPlayoffPicks = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
-const logger = require("firebase-functions/logger");
-const admin = require("firebase-admin");
+const logger = __importStar(require("firebase-functions/logger"));
+const admin = __importStar(require("firebase-admin"));
 const emailStyles_1 = require("./emailStyles");
 // Helper: Normalize team ID or Name for matching
 const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -122,7 +155,7 @@ const saveAndPropagateResults = async (results) => {
     return uniqueDocs.size;
 };
 exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
-    var _a;
+    var _a, _b, _c;
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Login required');
     const { poolId, rankings, tiebreaker, entryId, entryName } = request.data;
@@ -152,6 +185,14 @@ exports.submitPlayoffPicks = (0, https_1.onCall)(async (request) => {
         const maxEntries = ((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.maxEntriesPerUser) || 50; // Default to 50 to prevent blocking if setting is missing
         if (userEntries.length >= maxEntries) {
             throw new https_1.HttpsError('resource-exhausted', `Max entries reached (${maxEntries})`);
+        }
+        // Enforce 10-player Free Plan participant lock
+        const billingStatus = (_c = (_b = pool.billing) === null || _b === void 0 ? void 0 : _b.status) !== null && _c !== void 0 ? _c : 'free';
+        if (billingStatus === 'free') {
+            const currentEntriesCount = Object.keys(pool.entries || {}).length;
+            if (currentEntriesCount >= 10) {
+                throw new https_1.HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
+            }
         }
     }
     // Key Logic: use entryId if provided, else generate unique key

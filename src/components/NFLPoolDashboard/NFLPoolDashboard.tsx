@@ -13,6 +13,7 @@ import { NFLPoolRules } from './NFLPoolRules';
 import { NFLManagerView } from './NFLManagerView';
 import { PickDistribution } from './PickDistribution';
 import { NFLUserBentoDashboard } from './NFLUserBentoDashboard';
+import { AICommissioner } from '../AICommissioner';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -141,8 +142,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/40 p-6 border border-slate-800 rounded-3xl backdrop-blur-sm">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              {branding.logo && (
-                <img src={branding.logo} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
+              {branding.logoUrl && (
+                <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
               )}
               <h1 className="text-3xl font-black text-white leading-none">{pool.name}</h1>
             </div>
@@ -289,21 +290,28 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
             <>
               {/* TAB 0: BENTO DASHBOARD OVERVIEW */}
               {activeTab === 'dashboard' && (
-                <NFLUserBentoDashboard
-                  pool={pool}
-                  user={user}
-                  games={games}
-                  entries={entries}
-                  recaps={recaps}
-                  selectedWeek={selectedWeek}
-                  setSelectedWeek={setSelectedWeek}
-                  isWeekLocked={isWeekLocked}
-                  earliestGame={earliestGame}
-                  onBack={onBack}
-                  onOpenAuth={onOpenAuth}
-                  isManager={isManager}
-                  onSelectTab={(tab) => setActiveTab(tab)}
-                />
+                <>
+                  <NFLUserBentoDashboard
+                    pool={pool}
+                    user={user}
+                    games={games}
+                    entries={entries}
+                    recaps={recaps}
+                    selectedWeek={selectedWeek}
+                    setSelectedWeek={setSelectedWeek}
+                    isWeekLocked={isWeekLocked}
+                    earliestGame={earliestGame}
+                    onBack={onBack}
+                    onOpenAuth={onOpenAuth}
+                    isManager={isManager}
+                    onSelectTab={(tab) => setActiveTab(tab)}
+                  />
+                  {castPool.billing?.featuresUnlocked?.aiCommissioner && (
+                    <div className="max-w-4xl mx-auto mt-6">
+                      <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
+                    </div>
+                  )}
+                </>
               )}
 
               {/* TAB 1: PICK ENTRY */}
@@ -430,6 +438,9 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               {/* TAB 3: RECAPS */}
               {activeTab === 'recaps' && (
                 <div className="max-w-xl mx-auto space-y-6">
+                  {castPool.billing?.featuresUnlocked?.aiCommissioner && (
+                    <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
+                  )}
                   {recaps.length === 0 ? (
                     <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-8 text-center backdrop-blur-sm">
                       <FileText size={40} className="text-slate-600 mx-auto mb-3" />

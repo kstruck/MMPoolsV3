@@ -10,7 +10,7 @@ export { reserveSquare, markSquaresPaid } from './squares';
 export { confirmPayment } from './confirmPayment';
 export { purchasePropCard, gradeProp, updatePropCard } from './propBets';
 export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdates";
-export { onWinnerUpdate, onAIRequest } from "./aiCommissioner";
+export { onWinnerUpdate, onAIRequest, onWeeklyRecapCreated } from "./aiCommissioner";
 export { onUserCreated, syncAllUsers } from "./userSync";
 export { deleteUserAccount, sendAdminPasswordReset, sendSecuritySMSAlert, testSmsHttp } from "./userManagement";
 export { runReminders, onWinnerComputed } from "./reminders";

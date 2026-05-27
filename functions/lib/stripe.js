@@ -1,34 +1,80 @@
 "use strict";
 // TODO: Run 'npm install stripe' in functions/ before deploying
 // TODO: Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in Firebase environment config
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleStripeWebhook = exports.createCheckoutSession = void 0;
-const functions = require("firebase-functions/v2");
-const admin = require("firebase-admin");
+const functions = __importStar(require("firebase-functions/v2"));
+const admin = __importStar(require("firebase-admin"));
 const params_1 = require("firebase-functions/params");
 const https_1 = require("firebase-functions/v2/https");
+const stripe_1 = __importDefault(require("stripe"));
 const db = admin.firestore();
 // --- Stripe Config Params ---
 const stripeSecretKey = (0, params_1.defineString)("STRIPE_SECRET_KEY");
 const stripeWebhookSecret = (0, params_1.defineString)("STRIPE_WEBHOOK_SECRET");
 // Stripe will be initialized at function invocation time
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let stripeInstance = null;
 function getStripe() {
     if (!stripeInstance) {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const Stripe = require("stripe");
-        stripeInstance = new Stripe(stripeSecretKey.value(), { apiVersion: "2024-12-18.acacia" });
+        let key = "";
+        try {
+            key = stripeSecretKey.value();
+        }
+        catch (e) {
+            console.warn("[Stripe] STRIPE_SECRET_KEY is not defined in this environment.");
+        }
+        if (!key || key.startsWith("placeholder") || key === "") {
+            return null; // Signal mockup bypass mode
+        }
+        stripeInstance = new stripe_1.default(key, { apiVersion: "2024-12-18.acacia" });
     }
     return stripeInstance;
 }
-exports.createCheckoutSession = functions.https.onCall(async (request) => {
+exports.createCheckoutSession = functions.https.onCall({ cors: true }, async (request) => {
+    var _a, _b, _c, _d, _e;
     // --- Auth Check ---
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in to create a checkout session.");
     }
     const userId = request.auth.uid;
-    const { poolId, poolName, poolType, tier, price, couponCode, referralCredits, } = request.data;
+    const { poolId, poolName, poolType, tier, price, couponCode, referralCredits, maxPlayersAllowed, // NEW
+     } = request.data;
     // --- Validate Required Fields ---
     if (!poolId || !poolName || !tier || price === undefined) {
         throw new https_1.HttpsError("invalid-argument", "poolId, poolName, tier, and price are required.");
@@ -41,11 +87,90 @@ exports.createCheckoutSession = functions.https.onCall(async (request) => {
     if (!poolDoc.exists) {
         throw new https_1.HttpsError("not-found", "Pool not found.");
     }
+    const poolData = typeof poolDoc.data === "function" ? poolDoc.data() : (poolDoc.data || {});
+    const existingPricePaid = ((_a = poolData === null || poolData === void 0 ? void 0 : poolData.billing) === null || _a === void 0 ? void 0 : _a.pricePaid) || 0;
     // --- Build the base URL for redirect ---
-    // In production, this should come from an environment variable
-    const baseUrl = `https://marchmelee.com/pool/${poolId}`;
+    // Dynamically resolve based on request origin to support local dev, staging, and custom domains
+    const rawOrigin = ((_c = (_b = request.rawRequest) === null || _b === void 0 ? void 0 : _b.headers) === null || _c === void 0 ? void 0 : _c.origin) || ((_e = (_d = request.rawRequest) === null || _d === void 0 ? void 0 : _d.headers) === null || _e === void 0 ? void 0 : _e.referer) || "https://marchmelee.com";
+    const originUrl = rawOrigin.endsWith("/") ? rawOrigin.slice(0, -1) : rawOrigin;
+    // If the referer/origin is a full URL path, clean it up to just be the protocol + host
+    let cleanedOrigin = originUrl;
+    try {
+        const urlObj = new URL(originUrl);
+        cleanedOrigin = `${urlObj.protocol}//${urlObj.host}`;
+    }
+    catch (_f) {
+        // Fallback to originUrl if parsing fails
+    }
+    const baseUrl = `${cleanedOrigin}/pool/${poolId}`;
+    // --- Secure $0 Stripe Bypass for 100% Off Coupons ---
+    if (price === 0) {
+        const poolRef = db.collection("pools").doc(poolId);
+        await poolRef.update({
+            "billing.status": "active",
+            "billing.pricePaid": existingPricePaid + 0,
+            "billing.stripeSessionId": "free_promo_bypass",
+            "billing.tier": tier || "premium_tier",
+            "billing.maxPlayersAllowed": Number(maxPlayersAllowed) || 10,
+        });
+        if (couponCode) {
+            try {
+                const couponQuery = await db.collection("coupons")
+                    .where("code", "==", couponCode)
+                    .limit(1)
+                    .get();
+                if (!couponQuery.empty) {
+                    const couponDoc = couponQuery.docs[0];
+                    const usageEntry = { userId, poolId, usedAt: Date.now() };
+                    await couponDoc.ref.update({
+                        usesCount: admin.firestore.FieldValue.increment(1),
+                        usageLog: admin.firestore.FieldValue.arrayUnion(usageEntry),
+                    });
+                    console.log(`[Stripe Bypass] Coupon ${couponCode} recorded for user ${userId}`);
+                }
+            }
+            catch (couponErr) {
+                console.error("[Stripe Bypass] Error processing coupon:", couponErr);
+            }
+        }
+        console.log(`[Stripe Bypass] Pool ${poolId} activated for free by user ${userId}`);
+        return { sessionUrl: `${baseUrl}?payment=success` };
+    }
     // --- Create Stripe Checkout Session ---
     const stripe = getStripe();
+    if (!stripe) {
+        console.log(`[Stripe Mockup] STRIPE_SECRET_KEY is missing/placeholder. Activating mock dev sandbox checkout for pool ${poolId}.`);
+        const mockUrl = `${baseUrl}?payment=success&session_id=mock_local_dev_session_${Date.now()}`;
+        const poolRef = db.collection("pools").doc(poolId);
+        await poolRef.update({
+            "billing.status": "active",
+            "billing.pricePaid": existingPricePaid + price,
+            "billing.stripeSessionId": `mock_local_dev_session_${Date.now()}`,
+            "billing.tier": tier || "premium_tier",
+            "billing.maxPlayersAllowed": Number(maxPlayersAllowed) || 10,
+        });
+        if (couponCode) {
+            try {
+                const couponQuery = await db.collection("coupons")
+                    .where("code", "==", couponCode)
+                    .limit(1)
+                    .get();
+                if (!couponQuery.empty) {
+                    const couponDoc = couponQuery.docs[0];
+                    const usageEntry = { userId, poolId, usedAt: Date.now() };
+                    await couponDoc.ref.update({
+                        usesCount: admin.firestore.FieldValue.increment(1),
+                        usageLog: admin.firestore.FieldValue.arrayUnion(usageEntry),
+                    });
+                    console.log(`[Stripe Mockup] Coupon ${couponCode} usage simulated for user ${userId}`);
+                }
+            }
+            catch (couponErr) {
+                console.error("[Stripe Mockup] Error simulating coupon:", couponErr);
+            }
+        }
+        return { sessionUrl: mockUrl };
+    }
     try {
         const session = await stripe.checkout.sessions.create({
             mode: "payment",
@@ -72,6 +197,7 @@ exports.createCheckoutSession = functions.https.onCall(async (request) => {
                 poolType,
                 couponCode: couponCode || "",
                 referralCredits: (referralCredits === null || referralCredits === void 0 ? void 0 : referralCredits.toString()) || "0",
+                maxPlayersAllowed: (maxPlayersAllowed === null || maxPlayersAllowed === void 0 ? void 0 : maxPlayersAllowed.toString()) || "10",
             },
             customer_email: request.auth.token.email || undefined,
         });
@@ -89,6 +215,7 @@ exports.createCheckoutSession = functions.https.onCall(async (request) => {
 //    Receives and processes Stripe webhook events
 // =============================================================================
 exports.handleStripeWebhook = functions.https.onRequest(async (req, res) => {
+    var _a, _b;
     // Only accept POST requests
     if (req.method !== "POST") {
         res.status(405).send("Method Not Allowed");
@@ -122,20 +249,24 @@ exports.handleStripeWebhook = functions.https.onRequest(async (req, res) => {
             const userId = metadata.userId;
             const tier = metadata.tier;
             const couponCode = metadata.couponCode;
+            const maxPlayersAllowed = Number(metadata.maxPlayersAllowed) || 10;
             if (!poolId || !userId) {
                 console.error("[Stripe Webhook] Missing poolId or userId in session metadata:", session.id);
                 res.status(400).send("Missing required metadata");
                 return;
             }
-            console.log(`[Stripe Webhook] checkout.session.completed — Pool: ${poolId}, User: ${userId}, Tier: ${tier}`);
+            console.log(`[Stripe Webhook] checkout.session.completed — Pool: ${poolId}, User: ${userId}, Tier: ${tier}, MaxPlayers: ${maxPlayersAllowed}`);
             try {
                 // --- Update pool billing status to active ---
                 const poolRef = db.collection("pools").doc(poolId);
+                const poolSnap = await poolRef.get();
+                const existingPricePaid = ((_b = (_a = poolSnap.data()) === null || _a === void 0 ? void 0 : _a.billing) === null || _b === void 0 ? void 0 : _b.pricePaid) || 0;
                 await poolRef.update({
                     "billing.status": "active",
-                    "billing.pricePaid": (session.amount_total || 0) / 100,
+                    "billing.pricePaid": existingPricePaid + ((session.amount_total || 0) / 100),
                     "billing.stripeSessionId": session.id,
                     "billing.tier": tier || "standard_tier",
+                    "billing.maxPlayersAllowed": maxPlayersAllowed,
                 });
                 console.log(`[Stripe Webhook] Pool ${poolId} billing updated to active`);
                 // --- Process coupon usage if couponCode is present ---

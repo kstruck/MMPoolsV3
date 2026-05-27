@@ -3,11 +3,12 @@ import { BillingGate } from '../billing';
 import type { PlayoffPool, User } from '../../types';
 import { isPoolManager } from '../../utils/auth';
 import { dbService } from '../../services/dbService';
-import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2, Share2, ExternalLink, Check, Copy } from 'lucide-react';
+import { Trophy, ListOrdered, FileText, Settings, Plus, Edit2, Eye, X, Trash2, Share2, ExternalLink, Check, Copy, Bot } from 'lucide-react';
 import { RankingForm } from './RankingForm';
 import type { PlayoffEntry } from '../../types';
 import { PlayoffPayoutCard } from './PlayoffPayoutCard'; // [NEW]
 import { AnnouncementManager } from '../AnnouncementManager'; // [NEW]
+import { AICommissioner } from '../AICommissioner';
 
 interface PlayoffDashboardProps {
     pool: PlayoffPool;
@@ -16,7 +17,7 @@ interface PlayoffDashboardProps {
 }
 
 export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack }) => {
-    const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules' | 'commissioner'>('picks'); // [MODIFIED] Added 'commissioner'
+    const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules' | 'commissioner' | 'ai'>('picks'); // [MODIFIED] Added 'commissioner'
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
@@ -79,10 +80,11 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                 {/* Pool Header */}
                 <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                     <div className="flex items-center gap-4">
-                        {pool.branding?.logo && (
-                            <img src={pool.branding.logo} alt="Pool Logo" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg" />
-                        )}
-                        <div>
+                        {pool.branding?.logoUrl && (
+                        <div className="flex-shrink-0">
+                            <img src={pool.branding.logoUrl} alt="Pool Logo" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg" />
+                        </div>
+                    )}    <div>
                             <h1 className="text-3xl font-black text-white mb-2">{pool.name}</h1>
                             <div className="flex items-center gap-3 text-slate-400 text-sm">
                                 <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded text-xs font-bold uppercase border border-emerald-500/20">
@@ -139,6 +141,14 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     >
                         <FileText size={16} /> Rules & Payment Info
                     </button>
+                    {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
+                        <button
+                            onClick={() => setActiveTab('ai')}
+                            className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'ai' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                        >
+                            <Bot size={16} /> AI Insights
+                        </button>
+                    )}
                     {isManager && (
                         <button
                             onClick={() => setActiveTab('commissioner')}
@@ -261,6 +271,12 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+                            
+                            {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
+                                <div className="mt-8 pt-8 border-t border-slate-800">
+                                    <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
                                 </div>
                             )}
                         </div>
@@ -483,6 +499,11 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                     </div>
                                 </>
                             )}
+                        </div>
+                    )}
+                    {activeTab === 'ai' && (
+                        <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 space-y-6">
+                            <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
                         </div>
                     )}
                     {/* [NEW] Commissioner Tab */}

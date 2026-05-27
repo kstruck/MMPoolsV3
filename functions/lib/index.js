@@ -1,8 +1,41 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.submitPlayoffPicks = exports.onAnnouncementCreated = exports.onGameComplete = exports.importConferenceTournamentFromESPN = exports.importTournamentFromESPN = exports.scheduledBracketSync = exports.syncBracketTournament = exports.adminInitTournament = exports.updateTournamentData = exports.markEntryPaidStatus = exports.deleteBracketEntry = exports.submitBracketEntry = exports.updateBracketEntry = exports.createBracketEntry = exports.joinBracketPool = exports.publishBracketPool = exports.createBracketPool = exports.backfillPools = exports.fixParticipantIds = exports.toggleWinnerPaid = exports.recalculatePoolWinners = exports.createPool = exports.syncParticipantIndices = exports.claimByCode = exports.claimMySquares = exports.createClaimCode = exports.createParticipantProfile = exports.recalculateGlobalStats = exports.onPoolLocked = exports.autoLockPools = exports.onWinnerComputed = exports.runReminders = exports.testSmsHttp = exports.sendSecuritySMSAlert = exports.sendAdminPasswordReset = exports.deleteUserAccount = exports.syncAllUsers = exports.onUserCreated = exports.onAIRequest = exports.onWinnerUpdate = exports.simulateGameUpdate = exports.fixPoolScores = exports.syncGameStatus = exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = exports.confirmPayment = exports.markSquaresPaid = exports.reserveSquare = exports.lockPool = void 0;
-exports.creditReferralOnPayment = exports.handleStripeWebhook = exports.createCheckoutSession = exports.redeemCoupon = exports.validateBillingAccess = exports.enforceBillingStatus = exports.scoreNFLWeek = exports.executeSurvivorRebuy = exports.submitNFLPicks = exports.joinNFLPool = exports.createNFLPool = exports.importNFLSchedule = exports.syncNFLScoresJob = exports.finalizeTournamentPayouts = exports.scoreBracketEntries = exports.initializeBig12TournamentHttp = exports.initializeBigEastTournamentHttp = exports.syncMyClaims = exports.setSuperAdminClaim = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = void 0;
-const admin = require("firebase-admin");
+exports.creditReferralOnPayment = exports.handleStripeWebhook = exports.createCheckoutSession = exports.onPoolParticipantChange = exports.redeemCoupon = exports.validateBillingAccess = exports.enforceBillingStatus = exports.scoreNFLWeek = exports.executeSurvivorRebuy = exports.submitNFLPicks = exports.joinNFLPool = exports.createNFLPool = exports.importNFLSchedule = exports.syncNFLScoresJob = exports.finalizeTournamentPayouts = exports.scoreBracketEntries = exports.initializeBig12TournamentHttp = exports.initializeBigEastTournamentHttp = exports.syncMyClaims = exports.setSuperAdminClaim = exports.generateTestReport = exports.validateTestResults = exports.generateTestScenario = exports.onSquareReleased = exports.joinWaitlist = exports.managePlayoffEntry = exports.syncPlayoffPools = exports.onPlayoffConfigUpdate = exports.checkPlayoffScores = exports.updateGlobalPlayoffResults = exports.calculatePlayoffScores = void 0;
+const admin = __importStar(require("firebase-admin"));
 if (!admin.apps.length) {
     admin.initializeApp();
 }
@@ -115,6 +148,7 @@ var billing_1 = require("./billing");
 Object.defineProperty(exports, "enforceBillingStatus", { enumerable: true, get: function () { return billing_1.enforceBillingStatus; } });
 Object.defineProperty(exports, "validateBillingAccess", { enumerable: true, get: function () { return billing_1.validateBillingAccess; } });
 Object.defineProperty(exports, "redeemCoupon", { enumerable: true, get: function () { return billing_1.redeemCoupon; } });
+Object.defineProperty(exports, "onPoolParticipantChange", { enumerable: true, get: function () { return billing_1.onPoolParticipantChange; } });
 // --- STRIPE PAYMENTS ---
 var stripe_1 = require("./stripe");
 Object.defineProperty(exports, "createCheckoutSession", { enumerable: true, get: function () { return stripe_1.createCheckoutSession; } });

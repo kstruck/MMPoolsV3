@@ -142,6 +142,21 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     return games.some(g => g.isMonday);
   }, [games]);
 
+  // Check if spreads are fully incorporated for all active games
+  const allSpreadsLocked = useMemo(() => {
+    return games.filter(g => g.status !== 'CANCELLED').every(g => g.spread?.locked);
+  }, [games]);
+
+  if (!allSpreadsLocked) {
+    return (
+      <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-8 rounded-3xl text-center">
+        <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
+        <h3 className="font-black text-xl mb-2">Spreads Not Yet Finalized</h3>
+        <p className="font-bold text-sm">Pick sheets for this week are locked until all spreads have been fully incorporated. Please check back later.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {validationError && (
@@ -232,6 +247,13 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                       </div>
                     ) : (
                       <div className="text-slate-500 text-xs font-black font-mono">VS</div>
+                    )}
+                    {castPool.settings?.pickMode === 'ATS' && game.spread && (
+                      <div className="text-center mt-2">
+                        <span className="bg-slate-800 text-slate-300 text-[10px] px-2 py-1 rounded-full font-bold uppercase">
+                          Spread: {game.spread.value > 0 ? `+${game.spread.value}` : game.spread.value === 0 ? 'EVEN' : game.spread.value}
+                        </span>
+                      </div>
                     )}
                   </div>
 

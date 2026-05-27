@@ -5,7 +5,7 @@ import {
     addDoc, deleteDoc, query, orderBy 
 } from 'firebase/firestore';
 import { dbService } from '../../services/dbService';
-import type { BillingConfig, Pool, PoolBilling, Coupon, ReferralConfig, User } from '../../types';
+import type { BillingConfig, Pool, PoolBilling, Coupon, ReferralConfig, User, BillingBundle } from '../../types';
 import { 
     Shield, Zap, Search, Save, CheckCircle, 
     ToggleLeft, ToggleRight, Calendar, Plus, Trash2, Ticket, Award
@@ -15,30 +15,39 @@ const DEFAULT_BILLING_CONFIG: BillingConfig = {
     freePlayerThreshold: 10,
     gracePeriodDays: 7,
     pricing: {
-        season: {
-            tier1: { min: 11, max: 25, price: 29 },
-            tier2: { min: 26, max: 50, price: 59 },
-            tier3: { min: 51, max: 100, price: 99 },
-            tier4: { min: 101, max: 9999, price: 149 }
-        },
-        bracket: {
-            tier1: { min: 11, max: 25, price: 19 },
-            tier2: { min: 26, max: 50, price: 39 },
-            tier3: { min: 51, max: 100, price: 69 },
-            tier4: { min: 101, max: 9999, price: 99 }
-        },
-        squares: {
-            flatPrice: 9.99
-        },
-        props: {
-            flatPrice: 9.99
-        }
+        season: [
+            { min: 11, max: 25, price: 29 },
+            { min: 26, max: 50, price: 59 },
+            { min: 51, max: 100, price: 99 },
+            { min: 101, max: 9999, price: 149 }
+        ],
+        bracket: [
+            { min: 11, max: 25, price: 19 },
+            { min: 26, max: 50, price: 39 },
+            { min: 51, max: 100, price: 69 },
+            { min: 101, max: 9999, price: 99 }
+        ],
+        squares: [
+            { min: 11, max: 25, price: 9 },
+            { min: 26, max: 50, price: 19 },
+            { min: 51, max: 100, price: 29 },
+            { min: 101, max: 9999, price: 39 }
+        ],
+        props: [
+            { min: 11, max: 25, price: 9 },
+            { min: 26, max: 50, price: 19 },
+            { min: 51, max: 100, price: 29 },
+            { min: 101, max: 9999, price: 39 }
+        ]
     },
     features: {
-        aiCommissioner: { isPremium: true, addonPrice: 15 },
-        smsNotifications: { isPremium: true, addonPrice: 15 },
-        whatIfSimulator: { isPremium: true, addonPrice: 15 },
-        customBranding: { isPremium: false, addonPrice: 0 }
+        aiCommissioner: { isPremium: true, addonPrice: 19 },
+        whatIfSimulator: { isPremium: true, addonPrice: 9 },
+        customBranding: { isPremium: true, addonPrice: 29 }
+    },
+    packages: {
+        buy_3: 49.00,
+        unlimited_1yr: 129.00
     }
 };
 
@@ -48,7 +57,7 @@ const DEFAULT_REFERRAL_CONFIG: ReferralConfig = {
     rewardType: 'free_pool'
 };
 
-type AdminSubTab = 'tiers' | 'features' | 'coupons' | 'referrals' | 'pools';
+type AdminSubTab = 'tiers' | 'features' | 'packages' | 'coupons' | 'referrals' | 'pools';
 
 export const SuperAdminBillingPanel: React.FC = () => {
     const [config, setConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
@@ -85,6 +94,15 @@ export const SuperAdminBillingPanel: React.FC = () => {
     const [editingUserId, setEditingUserId] = useState<string>('');
     const [editReferralCredits, setEditReferralCredits] = useState<number>(0);
     const [editFreePools, setEditFreePools] = useState<number>(0);
+
+    // New Dynamic Bundle Form State
+    const [newBundleName, setNewBundleName] = useState<string>('');
+    const [newBundleDesc, setNewBundleDesc] = useState<string>('');
+    const [newBundlePrice, setNewBundlePrice] = useState<number>(39);
+    const [newBundlePoolType, setNewBundlePoolType] = useState<string>('ALL');
+    const [newBundleMaxPlayers, setNewBundleMaxPlayers] = useState<number>(50);
+    const [newBundlePoolsIncluded, setNewBundlePoolsIncluded] = useState<number>(3);
+    const [newBundleDuration, setNewBundleDuration] = useState<number>(0);
 
     // Sync custom claims on mount for active session to resolve catch-22 permissions issue
     useEffect(() => {
@@ -171,6 +189,58 @@ export const SuperAdminBillingPanel: React.FC = () => {
         };
         loadUsers();
     }, [subTab]);
+
+    // 5.5. Dynamic Bundle Helpers
+    const handleAddBundle = () => {
+        if (!newBundleName.trim() || !newBundleDesc.trim()) {
+            alert("Name and description are required.");
+            return;
+        }
+
+        const newBundle: BillingBundle = {
+            id: `bundle_${Date.now()}`,
+            name: newBundleName.trim(),
+            description: newBundleDesc.trim(),
+            price: newBundlePrice,
+            poolType: newBundlePoolType as any,
+            maxPlayersPerPool: newBundleMaxPlayers,
+            poolsIncluded: newBundlePoolsIncluded,
+            durationDays: newBundleDuration,
+            isActive: true
+        };
+
+        const currentList = Array.isArray(config.packagesList) ? config.packagesList : [];
+        setConfig({
+            ...config,
+            packagesList: [...currentList, newBundle]
+        });
+
+        // Reset Form
+        setNewBundleName('');
+        setNewBundleDesc('');
+        setNewBundlePrice(39);
+        setNewBundlePoolType('ALL');
+        setNewBundleMaxPlayers(50);
+        setNewBundlePoolsIncluded(3);
+        setNewBundleDuration(0);
+    };
+
+    const handleDeleteBundle = (bundleId: string) => {
+        if (!window.confirm("Are you sure you want to delete this custom bundle?")) return;
+        const currentList = Array.isArray(config.packagesList) ? config.packagesList : [];
+        setConfig({
+            ...config,
+            packagesList: currentList.filter(b => b.id !== bundleId)
+        });
+    };
+
+    const handleToggleBundleActive = (bundleId: string) => {
+        const currentList = Array.isArray(config.packagesList) ? config.packagesList : [];
+        setConfig({
+            ...config,
+            packagesList: currentList.map(b => b.id === bundleId ? { ...b, isActive: !b.isActive } : b)
+        });
+    };
 
     // 6. Save Pricing / Feature Config Tiers
     const handleSaveConfig = async () => {
@@ -386,6 +456,14 @@ export const SuperAdminBillingPanel: React.FC = () => {
                         🎫 Coupon Codes
                     </button>
                     <button
+                        onClick={() => setSubTab('packages')}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                            subTab === 'packages' ? 'bg-orange-500 text-white' : 'text-slate-400 hover:text-white'
+                        }`}
+                    >
+                        🎁 Packages
+                    </button>
+                    <button
                         onClick={() => setSubTab('referrals')}
                         className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                             subTab === 'referrals' ? 'bg-orange-500 text-white' : 'text-slate-400 hover:text-white'
@@ -437,83 +515,91 @@ export const SuperAdminBillingPanel: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Flat Pricing */}
-                        <div className="p-5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-4">
+                        {/* Explanatory Note */}
+                        <div className="p-5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-4 flex flex-col justify-center">
                             <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5 text-indigo-400">
-                                <Zap size={16} /> Flat rate configurations
+                                <Zap size={16} /> Tiered pricing policy
                             </h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Squares Grid Price ($)</label>
-                                    <input 
-                                        type="number"
-                                        step="0.01"
-                                        value={config.pricing.squares.flatPrice}
-                                        onChange={(e) => setConfig({
-                                            ...config,
-                                            pricing: {
-                                                ...config.pricing,
-                                                squares: { flatPrice: Math.max(0, parseFloat(e.target.value) || 0) }
-                                            }
-                                        })}
-                                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-bold"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Prop Bet Sheets Price ($)</label>
-                                    <input 
-                                        type="number"
-                                        step="0.01"
-                                        value={config.pricing.props.flatPrice}
-                                        onChange={(e) => setConfig({
-                                            ...config,
-                                            pricing: {
-                                                ...config.pricing,
-                                                props: { flatPrice: Math.max(0, parseFloat(e.target.value) || 0) }
-                                            }
-                                        })}
-                                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-bold"
-                                    />
-                                </div>
-                            </div>
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                                Pricing tiers are now dynamically applied to all formats (Season-long, NCAA Bracket, Gameday Squares Grid, and Custom Prop sheets) based on player count. Update the prices for each tier below.
+                            </p>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* 🏈 NFL SEASON TIERS */}
                         <div className="p-5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-4">
-                            <h3 className="text-sm font-bold text-white uppercase tracking-wider text-orange-400 flex items-center gap-1.5">
-                                🏈 NFL Season Pools Pricing Tiers
-                            </h3>
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-sm font-bold text-white uppercase tracking-wider text-orange-400 flex items-center gap-1.5 font-sans">
+                                    🏈 NFL Season Pools Pricing Tiers
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        const currentTiers = Array.isArray(config.pricing.season) ? config.pricing.season : [];
+                                        const newTier = { min: 101, max: 9999, price: 149 };
+                                        setConfig({
+                                            ...config,
+                                            pricing: {
+                                                ...config.pricing,
+                                                season: [...currentTiers, newTier]
+                                            }
+                                        });
+                                    }}
+                                    className="px-2 py-1 rounded bg-orange-500/10 hover:bg-orange-500/25 border border-orange-500/20 text-orange-300 font-bold text-[10px] uppercase flex items-center gap-1 transition-all"
+                                >
+                                    <Plus size={10} /> Add Tier
+                                </button>
+                            </div>
                             <div className="space-y-3">
-                                {[
-                                    { key: 'tier1', label: '11 - 25 Players' },
-                                    { key: 'tier2', label: '26 - 50 Players' },
-                                    { key: 'tier3', label: '51 - 100 Players' },
-                                    { key: 'tier4', label: '100+ Players' },
-                                ].map(({ key, label }) => (
-                                    <div key={key} className="flex justify-between items-center bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-850">
-                                        <span className="text-xs font-bold text-slate-300">{label}</span>
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-slate-500 font-bold text-xs">$</span>
+                                {(Array.isArray(config.pricing.season) ? config.pricing.season : []).map((tier, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-850 gap-2">
+                                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
                                             <input 
                                                 type="number"
-                                                value={(config.pricing.season as any)[key].price}
+                                                value={tier.min}
                                                 onChange={(e) => {
-                                                    const price = Math.max(0, parseInt(e.target.value) || 0);
-                                                    setConfig({
-                                                        ...config,
-                                                        pricing: {
-                                                            ...config.pricing,
-                                                            season: {
-                                                                ...config.pricing.season,
-                                                                [key]: { ...(config.pricing.season as any)[key], price }
-                                                            }
-                                                        }
-                                                    });
+                                                    const tiers = [...config.pricing.season];
+                                                    tiers[idx].min = Math.max(0, parseInt(e.target.value) || 0);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, season: tiers } });
                                                 }}
-                                                className="w-20 bg-slate-950 border border-slate-800 text-center font-bold rounded px-2 py-1 text-xs text-white"
+                                                className="w-16 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
                                             />
+                                            <span>to</span>
+                                            <input 
+                                                type="number"
+                                                value={tier.max}
+                                                onChange={(e) => {
+                                                    const tiers = [...config.pricing.season];
+                                                    tiers[idx].max = Math.max(0, parseInt(e.target.value) || 0);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, season: tiers } });
+                                                }}
+                                                className="w-20 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                            />
+                                            <span>Players</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-0.5">
+                                                <span className="text-slate-500 font-bold text-[10px]">$</span>
+                                                <input 
+                                                    type="number"
+                                                    value={tier.price}
+                                                    onChange={(e) => {
+                                                        const tiers = [...config.pricing.season];
+                                                        tiers[idx].price = Math.max(0, parseInt(e.target.value) || 0);
+                                                        setConfig({ ...config, pricing: { ...config.pricing, season: tiers } });
+                                                    }}
+                                                    className="w-14 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    const tiers = config.pricing.season.filter((_, i) => i !== idx);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, season: tiers } });
+                                                }}
+                                                className="text-slate-500 hover:text-rose-450 p-0.5 rounded transition-colors"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -522,38 +608,235 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
                         {/* 🏀 BRACKET POOLS TIERS */}
                         <div className="p-5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-4">
-                            <h3 className="text-sm font-bold text-white uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
-                                🏀 NCAA Bracket Pools Pricing Tiers
-                            </h3>
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-sm font-bold text-white uppercase tracking-wider text-indigo-400 flex items-center gap-1.5 font-sans">
+                                    🏀 NCAA Bracket Pools Pricing Tiers
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        const currentTiers = Array.isArray(config.pricing.bracket) ? config.pricing.bracket : [];
+                                        const newTier = { min: 101, max: 9999, price: 99 };
+                                        setConfig({
+                                            ...config,
+                                            pricing: {
+                                                ...config.pricing,
+                                                bracket: [...currentTiers, newTier]
+                                            }
+                                        });
+                                    }}
+                                    className="px-2 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/20 text-indigo-300 font-bold text-[10px] uppercase flex items-center gap-1 transition-all"
+                                >
+                                    <Plus size={10} /> Add Tier
+                                </button>
+                            </div>
                             <div className="space-y-3">
-                                {[
-                                    { key: 'tier1', label: '11 - 25 Players' },
-                                    { key: 'tier2', label: '26 - 50 Players' },
-                                    { key: 'tier3', label: '51 - 100 Players' },
-                                    { key: 'tier4', label: '100+ Players' },
-                                ].map(({ key, label }) => (
-                                    <div key={key} className="flex justify-between items-center bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-850">
-                                        <span className="text-xs font-bold text-slate-300">{label}</span>
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-slate-500 font-bold text-xs">$</span>
+                                {(Array.isArray(config.pricing.bracket) ? config.pricing.bracket : []).map((tier, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-850 gap-2">
+                                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
                                             <input 
                                                 type="number"
-                                                value={(config.pricing.bracket as any)[key].price}
+                                                value={tier.min}
                                                 onChange={(e) => {
-                                                    const price = Math.max(0, parseInt(e.target.value) || 0);
-                                                    setConfig({
-                                                        ...config,
-                                                        pricing: {
-                                                            ...config.pricing,
-                                                            bracket: {
-                                                                ...config.pricing.bracket,
-                                                                [key]: { ...(config.pricing.bracket as any)[key], price }
-                                                            }
-                                                        }
-                                                    });
+                                                    const tiers = [...config.pricing.bracket];
+                                                    tiers[idx].min = Math.max(0, parseInt(e.target.value) || 0);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, bracket: tiers } });
                                                 }}
-                                                className="w-20 bg-slate-950 border border-slate-800 text-center font-bold rounded px-2 py-1 text-xs text-white"
+                                                className="w-16 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
                                             />
+                                            <span>to</span>
+                                            <input 
+                                                type="number"
+                                                value={tier.max}
+                                                onChange={(e) => {
+                                                    const tiers = [...config.pricing.bracket];
+                                                    tiers[idx].max = Math.max(0, parseInt(e.target.value) || 0);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, bracket: tiers } });
+                                                }}
+                                                className="w-20 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                            />
+                                            <span>Players</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-0.5">
+                                                <span className="text-slate-500 font-bold text-[10px]">$</span>
+                                                <input 
+                                                    type="number"
+                                                    value={tier.price}
+                                                    onChange={(e) => {
+                                                        const tiers = [...config.pricing.bracket];
+                                                        tiers[idx].price = Math.max(0, parseInt(e.target.value) || 0);
+                                                        setConfig({ ...config, pricing: { ...config.pricing, bracket: tiers } });
+                                                    }}
+                                                    className="w-14 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    const tiers = config.pricing.bracket.filter((_, i) => i !== idx);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, bracket: tiers } });
+                                                }}
+                                                className="text-slate-500 hover:text-rose-450 p-0.5 rounded transition-colors"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 🟩 GAMEDAY SQUARES TIERS */}
+                        <div className="p-5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-sm font-bold text-white uppercase tracking-wider text-emerald-400 flex items-center gap-1.5 font-sans">
+                                    🟩 Gameday Squares Pricing Tiers
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        const currentTiers = Array.isArray(config.pricing.squares) ? config.pricing.squares : [];
+                                        const newTier = { min: 101, max: 9999, price: 39 };
+                                        setConfig({
+                                            ...config,
+                                            pricing: {
+                                                ...config.pricing,
+                                                squares: [...currentTiers, newTier]
+                                            }
+                                        });
+                                    }}
+                                    className="px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-300 font-bold text-[10px] uppercase flex items-center gap-1 transition-all"
+                                >
+                                    <Plus size={10} /> Add Tier
+                                </button>
+                            </div>
+                            <div className="space-y-3">
+                                {(Array.isArray(config.pricing.squares) ? config.pricing.squares : []).map((tier, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-850 gap-2">
+                                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
+                                            <input 
+                                                type="number"
+                                                value={tier.min}
+                                                onChange={(e) => {
+                                                    const tiers = [...config.pricing.squares];
+                                                    tiers[idx].min = Math.max(0, parseInt(e.target.value) || 0);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, squares: tiers } });
+                                                }}
+                                                className="w-16 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                            />
+                                            <span>to</span>
+                                            <input 
+                                                type="number"
+                                                value={tier.max}
+                                                onChange={(e) => {
+                                                    const tiers = [...config.pricing.squares];
+                                                    tiers[idx].max = Math.max(0, parseInt(e.target.value) || 0);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, squares: tiers } });
+                                                }}
+                                                className="w-20 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                            />
+                                            <span>Players</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-0.5">
+                                                <span className="text-slate-500 font-bold text-[10px]">$</span>
+                                                <input 
+                                                    type="number"
+                                                    value={tier.price}
+                                                    onChange={(e) => {
+                                                        const tiers = [...config.pricing.squares];
+                                                        tiers[idx].price = Math.max(0, parseInt(e.target.value) || 0);
+                                                        setConfig({ ...config, pricing: { ...config.pricing, squares: tiers } });
+                                                    }}
+                                                    className="w-14 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    const tiers = config.pricing.squares.filter((_, i) => i !== idx);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, squares: tiers } });
+                                                }}
+                                                className="text-slate-500 hover:text-rose-450 p-0.5 rounded transition-colors"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 📝 PROP BETS TIERS */}
+                        <div className="p-5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-sm font-bold text-white uppercase tracking-wider text-rose-400 flex items-center gap-1.5 font-sans">
+                                    📝 Prop Sheets Pricing Tiers
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        const currentTiers = Array.isArray(config.pricing.props) ? config.pricing.props : [];
+                                        const newTier = { min: 101, max: 9999, price: 39 };
+                                        setConfig({
+                                            ...config,
+                                            pricing: {
+                                                ...config.pricing,
+                                                props: [...currentTiers, newTier]
+                                            }
+                                        });
+                                    }}
+                                    className="px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/20 text-rose-300 font-bold text-[10px] uppercase flex items-center gap-1 transition-all"
+                                >
+                                    <Plus size={10} /> Add Tier
+                                </button>
+                            </div>
+                            <div className="space-y-3">
+                                {(Array.isArray(config.pricing.props) ? config.pricing.props : []).map((tier, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-850 gap-2">
+                                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
+                                            <input 
+                                                type="number"
+                                                value={tier.min}
+                                                onChange={(e) => {
+                                                    const tiers = [...config.pricing.props];
+                                                    tiers[idx].min = Math.max(0, parseInt(e.target.value) || 0);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, props: tiers } });
+                                                }}
+                                                className="w-16 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                            />
+                                            <span>to</span>
+                                            <input 
+                                                type="number"
+                                                value={tier.max}
+                                                onChange={(e) => {
+                                                    const tiers = [...config.pricing.props];
+                                                    tiers[idx].max = Math.max(0, parseInt(e.target.value) || 0);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, props: tiers } });
+                                                }}
+                                                className="w-20 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                            />
+                                            <span>Players</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-0.5">
+                                                <span className="text-slate-500 font-bold text-[10px]">$</span>
+                                                <input 
+                                                    type="number"
+                                                    value={tier.price}
+                                                    onChange={(e) => {
+                                                        const tiers = [...config.pricing.props];
+                                                        tiers[idx].price = Math.max(0, parseInt(e.target.value) || 0);
+                                                        setConfig({ ...config, pricing: { ...config.pricing, props: tiers } });
+                                                    }}
+                                                    className="w-14 bg-slate-950 border border-slate-800 text-center font-bold rounded px-1 py-0.5 text-xs text-white"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    const tiers = config.pricing.props.filter((_, i) => i !== idx);
+                                                    setConfig({ ...config, pricing: { ...config.pricing, props: tiers } });
+                                                }}
+                                                className="text-slate-500 hover:text-rose-450 p-0.5 rounded transition-colors"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -574,10 +857,9 @@ export const SuperAdminBillingPanel: React.FC = () => {
                         
                         <div className="space-y-4 pt-2">
                             {[
-                                { key: 'aiCommissioner', label: '🤖 AI Dispute Commissioner (Gemini)' },
-                                { key: 'smsNotifications', label: '📱 Twilio SMS Notification Integration' },
-                                { key: 'whatIfSimulator', label: '📊 What-If Standings Simulator' },
-                                { key: 'customBranding', label: '🎨 Custom Cover & Branding Customization' },
+                                { key: 'aiCommissioner', label: '🤖 AI Dispute Commissioner (Gemini) [ALL POOLS]' },
+                                { key: 'whatIfSimulator', label: '📊 What-If Standings Simulator [BRACKET]' },
+                                { key: 'customBranding', label: '🎨 Custom Cover & Branding Customization [ALL POOLS]' },
                             ].map(({ key, label }) => {
                                 const feat = (config.features as any)[key];
                                 return (
@@ -847,6 +1129,186 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                             <tr>
                                                 <td colSpan={6} className="p-8 text-center text-slate-500">
                                                     No active campaigns created yet.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* TAB 3.5: BUNDLES & PACKAGES CONFIG */}
+            {subTab === 'packages' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                        {/* Left: Bundle Creator Form */}
+                        <div className="lg:col-span-5 bg-slate-950/40 p-6 border border-slate-800 rounded-2xl space-y-4">
+                            <h3 className="font-bold text-white flex items-center gap-1.5 border-b border-slate-850 pb-2 text-sm uppercase text-orange-400">
+                                🎁 Spawn Custom Credit Bundle
+                            </h3>
+                            
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Bundle Name</label>
+                                <input 
+                                    type="text"
+                                    required
+                                    value={newBundleName}
+                                    onChange={(e) => setNewBundleName(e.target.value)}
+                                    placeholder="e.g. 3-Pool Squares Pack (Up to 50 Players)"
+                                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-bold text-xs outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Description</label>
+                                <textarea 
+                                    required
+                                    value={newBundleDesc}
+                                    onChange={(e) => setNewBundleDesc(e.target.value)}
+                                    placeholder="e.g. Host 3 Gameday Squares pools with up to 50 players each."
+                                    rows={2}
+                                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white text-xs outline-none resize-none"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Price ($)</label>
+                                    <input 
+                                        type="number"
+                                        step="0.01"
+                                        required
+                                        value={newBundlePrice}
+                                        onChange={(e) => setNewBundlePrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-bold text-xs"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Pool Type Restrict</label>
+                                    <select 
+                                        value={newBundlePoolType}
+                                        onChange={(e) => setNewBundlePoolType(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-bold text-xs"
+                                    >
+                                        <option value="ALL">All Pools (Universal)</option>
+                                        <option value="SQUARES">SQUARES (Gameday Grid)</option>
+                                        <option value="BRACKET">BRACKET (NCAA March Madness)</option>
+                                        <option value="PROPS">PROPS (Custom Sheets)</option>
+                                        <option value="NFL_PLAYOFFS">NFL_PLAYOFFS (Bracket)</option>
+                                        <option value="NFL_PICKEM">NFL_PICKEM (Weekly)</option>
+                                        <option value="NFL_SURVIVOR">NFL_SURVIVOR (Survivor)</option>
+                                        <option value="NFL_MARGIN">NFL_MARGIN (Margin)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5" title="Maximum players allowed per pool inside the bundle">Max Players</label>
+                                    <input 
+                                        type="number"
+                                        required
+                                        value={newBundleMaxPlayers}
+                                        onChange={(e) => setNewBundleMaxPlayers(Math.max(1, parseInt(e.target.value) || 1))}
+                                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-bold text-xs text-center"
+                                    />
+                                    <span className="text-[8px] text-slate-500 mt-0.5 block text-center">9999 = Unlimited</span>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5" title="Number of pool credits included in this package">Pools Included</label>
+                                    <input 
+                                        type="number"
+                                        required
+                                        value={newBundlePoolsIncluded}
+                                        onChange={(e) => setNewBundlePoolsIncluded(Math.max(1, parseInt(e.target.value) || 1))}
+                                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-bold text-xs text-center"
+                                    />
+                                    <span className="text-[8px] text-slate-500 mt-0.5 block text-center">9999 = Unlimited</span>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5" title="Period of validity for the credits in days. 0 = never expires">Duration (Days)</label>
+                                    <input 
+                                        type="number"
+                                        required
+                                        value={newBundleDuration}
+                                        onChange={(e) => setNewBundleDuration(Math.max(0, parseInt(e.target.value) || 0))}
+                                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-bold text-xs text-center"
+                                    />
+                                    <span className="text-[8px] text-slate-500 mt-0.5 block text-center">0 = No Expiration</span>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleAddBundle}
+                                className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-indigo-650 hover:from-orange-600 hover:to-indigo-750 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"
+                            >
+                                <Plus size={14} /> Add Bundle to Ledger
+                            </button>
+                        </div>
+
+                        {/* Right: Created Dynamic Bundles list */}
+                        <div className="lg:col-span-7 bg-slate-950/20 border border-slate-850 p-6 rounded-2xl space-y-4">
+                            <h3 className="font-bold text-white text-sm uppercase tracking-wider text-slate-300">Custom Dynamic Bundles Ledger</h3>
+                            
+                            <div className="overflow-x-auto border border-slate-850 rounded-xl">
+                                <table className="w-full text-left text-xs whitespace-nowrap">
+                                    <thead>
+                                        <tr className="bg-slate-950 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                                            <th className="p-3">Bundle Specification</th>
+                                            <th className="p-3 text-center">Constraints</th>
+                                            <th className="p-3 text-center">Price</th>
+                                            <th className="p-3 text-center">Status</th>
+                                            <th className="p-3 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(Array.isArray(config.packagesList) ? config.packagesList : []).map((b) => (
+                                            <tr key={b.id} className="border-b border-slate-850 hover:bg-slate-950/20">
+                                                <td className="p-3 max-w-[200px] truncate">
+                                                    <div className="font-bold text-white text-xs">{b.name}</div>
+                                                    <div className="text-[9px] text-slate-500 mt-0.5 leading-normal whitespace-normal">{b.description}</div>
+                                                </td>
+                                                <td className="p-3 text-[10px] text-slate-400 font-medium">
+                                                    <div className="flex flex-col gap-0.5 font-mono">
+                                                        <span>Pool: <strong className="text-indigo-400">{b.poolType}</strong></span>
+                                                        <span>Max Size: <strong className="text-indigo-400">{b.maxPlayersPerPool === 9999 ? '∞' : `${b.maxPlayersPerPool} players`}</strong></span>
+                                                        <span>Count: <strong className="text-indigo-400">{b.poolsIncluded === 9999 ? '∞' : `${b.poolsIncluded} pools`}</strong></span>
+                                                        <span>Valid: <strong className="text-indigo-400">{b.durationDays === 0 ? 'Never Exp' : `${b.durationDays} days`}</strong></span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-3 text-center font-bold text-emerald-400 font-mono text-xs">
+                                                    ${Number(b.price).toFixed(2)}
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <button 
+                                                        onClick={() => handleToggleBundleActive(b.id)}
+                                                        className={`px-2 py-0.5 rounded-full font-black text-[9px] uppercase border transition-all ${
+                                                            b.isActive 
+                                                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                                                                : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                                                        }`}
+                                                    >
+                                                        {b.isActive ? 'Active' : 'Paused'}
+                                                    </button>
+                                                </td>
+                                                <td className="p-3 text-right">
+                                                    <button 
+                                                        onClick={() => handleDeleteBundle(b.id)}
+                                                        className="p-1.5 hover:bg-rose-500/10 text-rose-450 hover:text-rose-400 rounded transition-colors"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {(!config.packagesList || config.packagesList.length === 0) && (
+                                            <tr>
+                                                <td colSpan={5} className="p-8 text-center text-slate-500 font-bold">
+                                                    No customized credit bundles constructed yet.
                                                 </td>
                                             </tr>
                                         )}
@@ -1130,12 +1592,11 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                                                     tier: 'free_tier',
                                                                     pricePaid: 0,
                                                                     maxPlayersAllowed: 10,
-                                                                    featuresUnlocked: {
-                                                                        aiCommissioner: false,
-                                                                        smsNotifications: false,
-                                                                        whatIfSimulator: false,
-                                                                        customBranding: true
-                                                                    }
+                                                                        featuresUnlocked: {
+                                                                            aiCommissioner: false,
+                                                                            whatIfSimulator: false,
+                                                                            customBranding: true
+                                                                        }
                                                                 });
                                                             }}
                                                             className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-white rounded transition-colors"
@@ -1171,7 +1632,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
             )}
 
             {/* SAVE BUTTON FOR CONFIG TABS */}
-            {(subTab === 'tiers' || subTab === 'features') && (
+            {(subTab === 'tiers' || subTab === 'features' || subTab === 'packages') && (
                 <div className="flex justify-end pt-4 border-t border-slate-800">
                     <button
                         onClick={handleSaveConfig}

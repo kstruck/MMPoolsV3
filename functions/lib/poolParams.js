@@ -1,11 +1,43 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.lockPool = void 0;
 const https_1 = require("firebase-functions/v2/https");
-const admin = require("firebase-admin");
+const admin = __importStar(require("firebase-admin"));
 const poolOps_1 = require("./poolOps");
 exports.lockPool = (0, https_1.onCall)(async (request) => {
-    var _a;
     // 0. Ensure Admin Init (Lazy)
     const db = admin.firestore();
     // 1. Auth Check - Must be logged in
@@ -23,16 +55,7 @@ exports.lockPool = (0, https_1.onCall)(async (request) => {
     }
     const poolData = poolSnap.data();
     // 2. Permission Check - Owner or Super Admin
-    try {
-        (0, poolOps_1.assertPoolOwnerOrSuperAdmin)(poolData, request.auth.uid, request.auth.token.role);
-    }
-    catch (e) {
-        // Fallback for Super Admin check if token claim is missing
-        const userDoc = await db.collection("users").doc(request.auth.uid).get();
-        if (((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) !== 'SUPER_ADMIN') {
-            throw e; // Re-throw original permission-denied error
-        }
-    }
+    (0, poolOps_1.assertPoolOwnerOrSuperAdmin)(poolData, request.auth.uid, request.auth.token.role);
     // 3. Generate Digits (Random or Fixed for Testing) - ONLY FOR SQUARES
     let axisNumbers;
     const type = poolData.type || 'SQUARES';
@@ -80,7 +103,7 @@ exports.lockPool = (0, https_1.onCall)(async (request) => {
     // PROPS and PLAYOFFS just use isLocked: true
     await poolRef.update(updates);
     // --- AUDIT LOGGING ---
-    const { writeAuditEvent, computeDigitsHash } = await Promise.resolve().then(() => require("./audit"));
+    const { writeAuditEvent, computeDigitsHash } = await Promise.resolve().then(() => __importStar(require("./audit")));
     // 1. Log Lock
     await writeAuditEvent({
         poolId,

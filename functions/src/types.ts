@@ -202,6 +202,8 @@ export interface GameState {
         payouts?: number[]; // Percentage split [1st, 2nd, 3rd...]
         questions: PropQuestion[];
     };
+    billing?: PoolBilling;
+    entryCount?: number;
 }
 
 export interface WaitlistEntry {
@@ -516,6 +518,8 @@ export interface PlayoffPool {
 
     isLocked: boolean;
     lockDate?: number;
+    billing?: PoolBilling;
+    entryCount?: number;
 }
 
 export interface PropsPool {
@@ -641,6 +645,7 @@ export interface BracketPool {
 
     createdAt: number;
     updatedAt?: number;
+    billing?: PoolBilling;
 }
 
 export interface PayoutSettings {
@@ -670,6 +675,7 @@ export interface PoolBilling {
     trialEndsAt?: number;
     gracePeriodEndsAt?: number;
     maxPlayersAllowed: number;
+    couponCode?: string;
     featuresUnlocked: {
         aiCommissioner: boolean;
         smsNotifications: boolean;
