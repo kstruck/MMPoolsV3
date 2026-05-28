@@ -57,7 +57,9 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
         maxPlayersAllowed,
         bundleType, // buy_3 or unlimited_1yr
         usedCredit, // boolean indicating if they are applying a pool credit
-        customCreditId, // dynamic dynamic credit ID
+        customCreditId, // dynamic credit ID
+        successUrl, // Optional custom success redirect URL
+        cancelUrl, // Optional custom cancel redirect URL
     } = request.data as any;
 
     const isBundlePurchase = !!bundleType;
@@ -90,12 +92,12 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
 
     // --- Bundle Purchase Path ---
     if (isBundlePurchase) {
-        const baseUrl = `${cleanedOrigin}/pricing`;
+        const baseUrl = successUrl || `${cleanedOrigin}/pricing`;
         const stripe = getStripe();
 
         if (!stripe) {
             console.log(`[Stripe Mockup] STRIPE_SECRET_KEY is missing/placeholder. Activating mock dev sandbox bundle checkout for ${bundleType}.`);
-            const mockUrl = `${baseUrl}?payment=success&session_id=mock_bundle_session_${Date.now()}`;
+            const mockUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}payment=success&session_id=mock_bundle_session_${Date.now()}`;
             
             const userRef = db.collection("users").doc(userId);
             if (bundleType === "buy_3") {
@@ -164,8 +166,8 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
                         quantity: 1,
                     },
                 ],
-                success_url: `${baseUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-                cancel_url: `${baseUrl}?payment=cancelled`,
+                success_url: successUrl ? `${successUrl}${successUrl.includes('?') ? '&' : '?'}payment=success&session_id={CHECKOUT_SESSION_ID}` : `${baseUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: cancelUrl ? `${cancelUrl}${cancelUrl.includes('?') ? '&' : '?'}payment=cancelled` : `${baseUrl}?payment=cancelled`,
                 metadata: {
                     userId,
                     bundleType,
@@ -190,7 +192,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
 
     const poolData = typeof poolDoc.data === "function" ? poolDoc.data() : ((poolDoc as any).data || {});
     const existingPricePaid = poolData?.billing?.pricePaid || 0;
-    const baseUrl = `${cleanedOrigin}/pool/${poolId}`;
+    const baseUrl = successUrl || `${cleanedOrigin}/pool/${poolId}`;
 
     // --- Enforce 1 Free Pool limit ---
     if (tier === "free_tier") {
@@ -278,7 +280,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
         }
 
         console.log(`[Stripe Bypass] Pool ${poolId} activated for free by user ${userId}`);
-        return { sessionUrl: `${baseUrl}?payment=success` };
+        return { sessionUrl: `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}payment=success` };
     }
 
     // --- Create Stripe Checkout Session ---
@@ -286,7 +288,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
 
     if (!stripe) {
         console.log(`[Stripe Mockup] STRIPE_SECRET_KEY is missing/placeholder. Activating mock dev sandbox checkout for pool ${poolId}.`);
-        const mockUrl = `${baseUrl}?payment=success&session_id=mock_local_dev_session_${Date.now()}`;
+        const mockUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}payment=success&session_id=mock_local_dev_session_${Date.now()}`;
         
         const poolRef = db.collection("pools").doc(poolId);
         await poolRef.update({
@@ -339,8 +341,8 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
                     quantity: 1,
                 },
             ],
-            success_url: `${baseUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${baseUrl}?payment=cancelled`,
+            success_url: successUrl ? `${successUrl}${successUrl.includes('?') ? '&' : '?'}payment=success&session_id={CHECKOUT_SESSION_ID}` : `${baseUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: cancelUrl ? `${cancelUrl}${cancelUrl.includes('?') ? '&' : '?'}payment=cancelled` : `${baseUrl}?payment=cancelled`,
             metadata: {
                 poolId,
                 userId,

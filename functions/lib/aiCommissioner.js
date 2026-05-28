@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onAIRequest = exports.onWinnerUpdate = void 0;
+exports.onWeeklyRecapCreated = exports.onAIRequest = exports.onWinnerUpdate = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const crypto = __importStar(require("crypto"));
@@ -268,6 +268,45 @@ exports.onAIRequest = (0, firestore_1.onDocumentCreated)({
             } : null,
         };
     }
+    else if (poolType.startsWith('NFL_')) {
+        // ── NFL POOLS: Context ────────────────────────────────────
+        const entriesSnap = await poolRef.collection('entries').limit(60).get();
+        const allEntries = entriesSnap.docs.map(d => d.data());
+        const gamesSnap = await db.collection('nfl_games')
+            .where('season', '==', poolRaw.season)
+            .where('seasonType', '==', Number(poolRaw.seasonType || 2))
+            .limit(32)
+            .get();
+        const recentGames = gamesSnap.docs.map(d => d.data());
+        facts = {
+            context: "NFL_POOL_INSIGHT",
+            userQuestion: requestData.question,
+            poolConfig: {
+                type: poolType,
+                name: poolRaw.name,
+                season: poolRaw.season,
+                settings: poolRaw.settings
+            },
+            standings: allEntries.slice(0, 20),
+            userEntries: allEntries.filter(e => e.ownerUid === requestData.userId),
+            recentGames
+        };
+    }
+    else if (poolType === 'PROPS') {
+        // ── PROPS POOL: Context ────────────────────────────────────
+        const cardsSnap = await poolRef.collection('propCards').get();
+        const allCards = cardsSnap.docs.map(d => d.data());
+        facts = {
+            context: "PROPS_INSIGHT",
+            userQuestion: requestData.question,
+            poolConfig: {
+                name: poolRaw.name,
+                props: poolRaw.props
+            },
+            standings: allCards.sort((a, b) => b.score - a.score).slice(0, 20),
+            userCards: allCards.filter(c => c.userId === requestData.userId)
+        };
+    }
     else {
         // ── SQUARES POOL: Original context ────────────────────────────────────
         const pool = poolRaw;
@@ -333,6 +372,66 @@ exports.onAIRequest = (0, firestore_1.onDocumentCreated)({
     catch (e) {
         console.error("AI Request Resolution Failed", e);
         await snapshot.ref.update({ status: 'ERROR' });
+    }
+});
+// --- PROACTIVE WEEKLY RECAP / TRASH TALK TRIGGER ---
+exports.onWeeklyRecapCreated = (0, firestore_1.onDocumentCreated)({
+    document: "pools/{poolId}/weekly_recaps/{recapId}",
+    secrets: [gemini_1.geminiApiKey]
+}, async (event) => {
+    var _a, _b;
+    const poolId = event.params.poolId;
+    const recapSnap = event.data;
+    if (!recapSnap)
+        return;
+    const recapData = recapSnap.data();
+    const poolRef = db.collection("pools").doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists)
+        return;
+    const poolRaw = poolSnap.data();
+    // Ensure AI Commissioner is active for this pool
+    if (!((_b = (_a = poolRaw.billing) === null || _a === void 0 ? void 0 : _a.featuresUnlocked) === null || _b === void 0 ? void 0 : _b.aiCommissioner))
+        return;
+    const facts = {
+        context: "WEEKLY_RECAP_TRASH_TALK",
+        poolConfig: {
+            name: poolRaw.name,
+            type: poolRaw.type,
+            season: poolRaw.season
+        },
+        recapData
+    };
+    const factsHash = computeFactsHash(facts);
+    const artifactsRef = poolRef.collection("ai_artifacts");
+    const existingSnap = await artifactsRef
+        .where("factsHash", "==", factsHash)
+        .limit(1)
+        .get();
+    if (!existingSnap.empty)
+        return;
+    try {
+        const aiContent = await (0, gemini_1.generateAIResponse)(gemini_1.COMMISSIONER_SYSTEM_PROMPT, facts);
+        const artifact = {
+            id: `recap-${recapData.week}-${factsHash.substring(0, 8)}`,
+            type: "WEEKLY_RECAP",
+            targetId: recapSnap.id,
+            content: aiContent,
+            factsHash,
+            createdAt: Date.now()
+        };
+        await artifactsRef.doc(artifact.id).set(artifact);
+        await (0, audit_1.writeAuditEvent)({
+            poolId,
+            type: "AI_ARTIFACT_CREATED",
+            message: `AI Commissioner published weekly recap trash talk for week ${recapData.week}`,
+            severity: "INFO",
+            actor: { uid: "ai-commissioner", role: "SYSTEM", label: "Gemini" },
+            payload: { artifactId: artifact.id, factsHash }
+        });
+    }
+    catch (e) {
+        console.error("Weekly Recap AI Generation Failed", e);
     }
 });
 //# sourceMappingURL=aiCommissioner.js.map

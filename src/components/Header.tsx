@@ -80,6 +80,9 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
                                     Public Pools
                                 </button>
+                                <button onClick={() => navigate('/pricing')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                    Pricing
+                                </button>
                                 <button onClick={() => navigate('/scoreboard')} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors mr-2">
                                     <Trophy size={14} /> Live Scores
                                 </button>
@@ -97,6 +100,9 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 </button>
                                 <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
                                     Public Pools
+                                </button>
+                                <button onClick={() => navigate('/pricing')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                    Pricing
                                 </button>
                                 <button onClick={() => navigate('/scoreboard')} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors">
                                     <Trophy size={14} /> Live Scores

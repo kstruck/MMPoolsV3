@@ -173,35 +173,38 @@ export const PricingPage: React.FC<PricingPageProps> = ({
             />
 
             {/* Hero Header Section */}
-            <section className="relative overflow-hidden pt-20 pb-16 border-b border-slate-900 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900/60">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none">
-                    <div className="absolute top-10 right-0 w-[450px] h-[450px] rounded-full blur-[140px] bg-indigo-500/10" />
-                    <div className="absolute bottom-0 left-0 w-[450px] h-[450px] rounded-full blur-[140px] bg-orange-500/5" />
+            <section className="relative overflow-hidden pt-24 pb-20 border-b border-slate-900 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900">
+                <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute top-10 right-0 w-[550px] h-[550px] rounded-full blur-[140px] bg-indigo-500/10 opacity-70" />
+                    <div className="absolute bottom-0 left-0 w-[550px] h-[550px] rounded-full blur-[140px] bg-orange-500/5 opacity-50" />
                 </div>
 
-                <div className="max-w-4xl mx-auto px-6 relative z-10 text-center space-y-6">
-                    <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 shadow-sm bg-indigo-500/10 border border-indigo-500/20">
-                        <Sparkles size={14} className="text-indigo-400" />
-                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">Monetization Dashboard V3</span>
+                <div className="max-w-5xl mx-auto px-6 relative z-10 text-center space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                    <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 shadow-md bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 backdrop-blur-md">
+                        <Sparkles size={14} className="text-indigo-400 animate-spin-slow" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Monetization Dashboard V3</span>
                     </div>
 
-                    <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight">
+                    <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>
                         Flexible Pricing for <br />
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-indigo-400">Pool Commissioners</span>
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-400 to-indigo-400">Pool Commissioners</span>
                     </h1>
                     
-                    <p className="text-base md:text-lg max-w-2xl mx-auto text-slate-400 leading-relaxed">
-                        Start every pool with a <strong>14-day free trial</strong>. Upgrade anytime to unlock premium tools, live scoring syncs, AI updates, and SMS alerts.
+                    <p className="text-base md:text-lg max-w-2xl mx-auto text-slate-400 leading-relaxed font-medium">
+                        Start every pool with a <strong className="text-white">14-day free trial</strong>. Upgrade anytime to unlock premium tools, live scoring syncs, AI updates, and SMS alerts.
                     </p>
 
                     {ACTIVE_PROMO.endsAt > Date.now() && (
-                        <div className="mt-4 inline-flex flex-col sm:flex-row items-center gap-3 px-5 py-3 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 shadow-lg shadow-amber-500/5">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-[10px] font-black uppercase tracking-wider text-amber-300">
-                                <Sparkles size={12} /> {ACTIVE_PROMO.label}
+                        <div className="mt-6 inline-flex flex-col sm:flex-row items-center gap-3.5 px-6 py-4 rounded-3xl border border-amber-500/25 bg-slate-900/60 backdrop-blur-md shadow-2xl relative overflow-hidden group max-w-3xl mx-auto">
+                            {/* Inner soft glow */}
+                            <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-amber-500/5 opacity-50 pointer-events-none" />
+                            
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-400/35 text-[10px] font-black uppercase tracking-wider text-amber-300 shadow-sm shrink-0">
+                                <Sparkles size={12} className="animate-pulse" /> {ACTIVE_PROMO.label}
                             </span>
-                            <span className="text-sm text-slate-200 font-medium">
+                            <span className="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed text-left">
                                 {ACTIVE_PROMO.blurb} Use code{' '}
-                                <code className="px-2 py-0.5 rounded-md bg-slate-900 border border-amber-400/40 text-amber-300 font-mono font-bold text-xs">
+                                <code className="px-2 py-0.5 rounded-md bg-slate-950 border border-amber-400/40 text-amber-300 font-mono font-black text-xs shadow-inner">
                                     {ACTIVE_PROMO.code}
                                 </code>{' '}
                                 at checkout — save {ACTIVE_PROMO.discount}%.
@@ -266,24 +269,27 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                         )}
 
                         {/* Interactive Billing Calculator Panel */}
-                        <div className="bg-slate-900/30 border border-slate-850 p-6 md:p-8 rounded-3xl space-y-6 shadow-lg backdrop-blur-sm">
-                            <div className="space-y-2">
-                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <div className="bg-slate-900/40 border border-slate-800/80 p-6 md:p-8 rounded-3xl space-y-6 shadow-2xl backdrop-blur-md hover:border-slate-700/60 transition-all duration-300 relative overflow-hidden group">
+                            {/* Inner background blob */}
+                            <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-indigo-500/5 blur-2xl pointer-events-none" />
+                            
+                            <div className="space-y-2 relative z-10">
+                                <h3 className="text-xl font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Montserrat', sans-serif" }}>
                                     <LayoutGrid size={22} className="text-indigo-400" />
                                     Interactive Price Estimator
                                 </h3>
-                                <p className="text-xs text-slate-400">
+                                <p className="text-xs text-slate-400 leading-relaxed font-medium">
                                     Estimate your custom hosting plan based on format, estimated participant size, and premium additions.
                                 </p>
                             </div>
 
-                            <div className="space-y-6">
+                            <div className="space-y-6 relative z-10">
                                 {/* 1. Format Select */}
                                 <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">
                                         Select Pool Format
                                     </label>
-                                    <div className="grid grid-cols-3 gap-2">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                                         {[
                                             { k: 'BRACKET', label: 'Bracket Tree' },
                                             { k: 'SQUARES', label: 'Gameday Grid' },
@@ -298,10 +304,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     setCalcPoolType(f.k);
                                                     if (f.k === 'SQUARES') setCalcPlayers(100);
                                                 }}
-                                                className={`py-3 px-2 rounded-xl text-xs font-bold transition-all border ${
+                                                className={`py-3.5 px-3 rounded-2xl text-xs font-bold transition-all border ${
                                                     calcPoolType === f.k 
-                                                        ? 'bg-indigo-600/10 text-white border-indigo-500' 
-                                                        : 'bg-slate-950/80 text-slate-400 border-slate-800 hover:border-slate-700'
+                                                        ? 'bg-gradient-to-r from-indigo-500/15 to-purple-500/10 text-white border-indigo-500 shadow-lg shadow-indigo-500/10' 
+                                                        : 'bg-slate-950/90 text-slate-400 border-slate-850 hover:border-indigo-500/30 hover:text-slate-200'
                                                 }`}
                                             >
                                                 {f.label}
@@ -312,10 +318,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
 
                                 {/* 2. Player Input Slider (if not Squares which is locked at 100) */}
                                 {calcPoolType !== 'SQUARES' && (
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between items-center text-xs font-bold text-slate-500">
-                                            <span className="uppercase tracking-wider">Estimated Participants</span>
-                                            <span className="text-indigo-400 text-sm font-mono font-black">{calcPlayers} Players</span>
+                                    <div className="space-y-4 bg-slate-950/40 p-5 rounded-2xl border border-slate-850">
+                                        <div className="flex justify-between items-center text-xs font-bold text-slate-400">
+                                            <span className="uppercase tracking-widest text-[10px]">Estimated Participants</span>
+                                            <span className="text-indigo-400 text-sm font-mono font-black bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">{calcPlayers} Players</span>
                                         </div>
                                         <div className="flex gap-4 items-center">
                                             <input
@@ -324,35 +330,37 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 max="150"
                                                 value={calcPlayers}
                                                 onChange={(e) => setCalcPlayers(Number(e.target.value))}
-                                                className="flex-grow accent-indigo-500"
+                                                className="flex-grow h-2 rounded-lg appearance-none cursor-pointer bg-slate-800 accent-indigo-500 focus:outline-none"
                                             />
                                             <input
                                                 type="number"
                                                 value={calcPlayers}
                                                 min={1}
                                                 onChange={(e) => setCalcPlayers(Math.max(1, Number(e.target.value) || 1))}
-                                                className="w-16 bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-center text-white font-bold outline-none font-mono"
+                                                className="w-16 bg-slate-950 border border-slate-800 rounded-xl px-2 py-2 text-center text-white font-bold outline-none font-mono focus:border-indigo-500/50 transition-colors"
                                             />
                                         </div>
                                         {calcPlayers <= config.freePlayerThreshold && (
-                                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl flex items-center gap-2">
-                                                <Sparkles size={14} />
-                                                <span>Under {config.freePlayerThreshold} players? This pool qualifies for the <strong>Free Tier</strong>!</span>
+                                            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl flex items-center gap-2.5 animate-in fade-in duration-300">
+                                                <Sparkles size={14} className="animate-pulse" />
+                                                <span>Under {config.freePlayerThreshold} players? This pool qualifies for the <strong className="text-white">Free Tier</strong>!</span>
                                             </div>
                                         )}
                                     </div>
                                 )}
 
                                 {/* 3. Feature Add-ons selection */}
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">
                                         Premium Upgrades (Optional)
                                     </label>
-                                    <div className="space-y-2">
+                                    <div className="space-y-2.5">
                                         {config.features.aiCommissioner.isPremium && (
-                                            <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950/80 border border-slate-850 rounded-xl hover:border-slate-700 transition-colors animate-in fade-in duration-205">
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-slate-950/80 border rounded-2xl hover:border-indigo-500/20 hover:bg-slate-950 transition-all duration-300 ${
+                                                calcAi ? 'border-indigo-500 bg-gradient-to-r from-indigo-500/5 to-transparent' : 'border-slate-850'
+                                            }`}>
                                                 <div className="flex gap-3 items-center">
-                                                    <div className={`p-2 rounded-lg bg-orange-500/10 text-orange-400`}>
+                                                    <div className={`p-2.5 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20`}>
                                                         <Zap size={16} />
                                                     </div>
                                                     <div>
@@ -376,9 +384,11 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         )}
  
                                         {config.features.smsNotifications?.isPremium && (
-                                            <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950/80 border border-slate-850 rounded-xl hover:border-slate-700 transition-colors animate-in fade-in duration-205">
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-slate-950/80 border rounded-2xl hover:border-indigo-500/20 hover:bg-slate-950 transition-all duration-300 ${
+                                                calcSms ? 'border-indigo-500 bg-gradient-to-r from-indigo-500/5 to-transparent' : 'border-slate-850'
+                                            }`}>
                                                 <div className="flex gap-3 items-center">
-                                                    <div className={`p-2 rounded-lg bg-emerald-500/10 text-emerald-400`}>
+                                                    <div className={`p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20`}>
                                                         <Users size={16} />
                                                     </div>
                                                     <div>
@@ -402,9 +412,11 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         )}
  
                                         {config.features.whatIfSimulator.isPremium && (
-                                            <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950/80 border border-slate-850 rounded-xl hover:border-slate-700 transition-colors animate-in fade-in duration-205">
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-slate-950/80 border rounded-2xl hover:border-indigo-500/20 hover:bg-slate-950 transition-all duration-300 ${
+                                                calcSim ? 'border-indigo-500 bg-gradient-to-r from-indigo-500/5 to-transparent' : 'border-slate-850'
+                                            }`}>
                                                 <div className="flex gap-3 items-center">
-                                                    <div className={`p-2 rounded-lg bg-fuchsia-500/10 text-fuchsia-400`}>
+                                                    <div className={`p-2.5 rounded-xl bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20`}>
                                                         <CheckCircle size={16} />
                                                     </div>
                                                     <div>
@@ -487,12 +499,16 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                 </div>
 
                 {/* Packages & Bundles Section */}
-                <div className="mt-16 border-t border-slate-900 pt-16 space-y-8 animate-in fade-in duration-300">
+                <div className="mt-20 border-t border-slate-900 pt-16 space-y-10 animate-in fade-in duration-300">
                     <div className="text-center max-w-2xl mx-auto space-y-3">
-                        <h2 className="text-3xl font-black text-white">
-                            🎁 Multi-Pool Bundles & Commissioner Packages
+                        <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 shadow-sm bg-amber-500/10 border border-amber-500/20">
+                            <Sparkles size={14} className="text-amber-400" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">Commissioner Packages</span>
+                        </div>
+                        <h2 className="text-3xl font-black text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                            Multi-Pool Bundles & Commissioner Packages
                         </h2>
-                        <p className="text-sm text-slate-400 leading-relaxed">
+                        <p className="text-sm text-slate-400 leading-relaxed font-medium">
                             Are you a professional pool manager? Save big by purchasing reusable pool credits upfront or unlocking unlimited annual hosting for all your pool formats.
                         </p>
                     </div>
@@ -509,7 +525,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                     : `$${(b.price / b.poolsIncluded).toFixed(2)} / pool`;
 
                                 return (
-                                    <div key={b.id} className="bg-slate-900/40 border border-slate-800 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-sm flex flex-col justify-between hover:border-indigo-500/40 transition-all shadow-xl group">
+                                    <div key={b.id} className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 md:p-8 relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-indigo-500/40 transition-all duration-300 shadow-xl group hover:scale-[1.02] hover:-translate-y-1">
                                         <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-indigo-500/5 blur-2xl pointer-events-none" />
                                         <div className="space-y-4">
                                             <span className="bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full inline-block">
@@ -521,15 +537,15 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                             </p>
                                             
                                             {/* Constraints Info */}
-                                            <div className="bg-slate-950/40 p-3 rounded-2xl border border-slate-850/50 space-y-1.5 text-[10px] font-mono text-slate-400">
-                                                <div>Format: <strong className="text-white">{b.poolType}</strong></div>
-                                                <div>Max size per pool: <strong className="text-white">{b.maxPlayersPerPool === 9999 ? 'Unlimited' : `${b.maxPlayersPerPool} players`}</strong></div>
-                                                <div>Validity: <strong className="text-white">{b.durationDays === 0 ? 'No expiration' : `${b.durationDays} days`}</strong></div>
+                                            <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-850 space-y-2 text-[10px] font-mono text-slate-400">
+                                                <div className="flex justify-between">Format: <strong className="text-white">{b.poolType}</strong></div>
+                                                <div className="flex justify-between">Max size per pool: <strong className="text-white">{b.maxPlayersPerPool === 9999 ? 'Unlimited' : `${b.maxPlayersPerPool} players`}</strong></div>
+                                                <div className="flex justify-between">Validity: <strong className="text-white">{b.durationDays === 0 ? 'No expiration' : `${b.durationDays} days`}</strong></div>
                                             </div>
 
-                                            <div className="pt-2 flex items-baseline gap-1">
+                                            <div className="pt-2 flex items-baseline gap-1.5">
                                                 <span className="text-3xl font-black text-white">${Number(b.price).toFixed(2)}</span>
-                                                <span className="text-[10px] text-slate-500 font-medium">
+                                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
                                                     ({pricePerPoolLabel})
                                                 </span>
                                             </div>
@@ -548,7 +564,9 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                             poolId: `bundle_${b.id}`,
                                                             poolName: b.name,
                                                             poolType: 'BUNDLE',
-                                                            tier: 'bundle'
+                                                            tier: 'bundle',
+                                                            successUrl: `${window.location.origin}/payment-success?poolId=bundle_${b.id}`,
+                                                            cancelUrl: window.location.href
                                                         } as any);
                                                         if (response?.sessionUrl) {
                                                             window.location.href = response.sessionUrl;
@@ -557,10 +575,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                         console.error("Bundle purchase failed:", err);
                                                     }
                                                 }}
-                                                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+                                                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-1.5 group/btn"
                                             >
                                                 Purchase {b.name}
-                                                <ArrowRight size={12} />
+                                                <ArrowRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
                                             </button>
                                         </div>
                                     </div>
@@ -569,19 +587,26 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                         ) : (
                             <>
                                 {/* Package 1: 3-Pool Bundle */}
-                                <div className="bg-slate-900/40 border border-indigo-500/15 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-sm flex flex-col justify-between hover:border-indigo-500/40 transition-all shadow-xl group">
+                                <div className="bg-slate-900/40 border border-indigo-500/15 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-indigo-500/40 transition-all duration-300 shadow-xl group hover:scale-[1.02] hover:-translate-y-1">
                                     <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-indigo-500/5 blur-2xl pointer-events-none" />
                                     <div className="space-y-4">
                                         <span className="bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full inline-block">
                                             Most Popular Bundle
                                         </span>
                                         <h3 className="text-xl font-bold text-white">3-Pool Credits Package</h3>
-                                        <p className="text-xs text-slate-400 leading-relaxed">
+                                        <p className="text-xs text-slate-400 leading-relaxed font-medium">
                                             Purchase 3 premium pool hosting credits upfront. Use them anytime to instantly upgrade any format (Season, Bracket, Squares, Props) to Premium. Credits never expire!
                                         </p>
-                                        <div className="pt-2 flex items-baseline gap-1">
+                                        
+                                        <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-850 space-y-2 text-[10px] font-mono text-slate-400">
+                                            <div className="flex justify-between">Credits: <strong className="text-white">3 Pools Included</strong></div>
+                                            <div className="flex justify-between">Validity: <strong className="text-white">Never Expires</strong></div>
+                                            <div className="flex justify-between">Pool Formats: <strong className="text-white">Universal</strong></div>
+                                        </div>
+
+                                        <div className="pt-2 flex items-baseline gap-1.5">
                                             <span className="text-3xl font-black text-white">${(config.packages?.buy_3 ?? 49.00).toFixed(2)}</span>
-                                            <span className="text-xs text-slate-500 font-medium">one-time payment (${((config.packages?.buy_3 ?? 49.00) / 3).toFixed(2)} / pool)</span>
+                                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">one-time (${((config.packages?.buy_3 ?? 49.00) / 3).toFixed(2)} / pool)</span>
                                         </div>
                                     </div>
                                     <div className="pt-6">
@@ -598,7 +623,9 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                         poolId: 'bundle_buy_3',
                                                         poolName: '3-Pool Bundle Package',
                                                         poolType: 'BUNDLE',
-                                                        tier: 'bundle'
+                                                        tier: 'bundle',
+                                                        successUrl: `${window.location.origin}/payment-success?poolId=bundle_buy_3`,
+                                                        cancelUrl: window.location.href
                                                     } as any);
                                                     if (response?.sessionUrl) {
                                                         window.location.href = response.sessionUrl;
@@ -607,28 +634,35 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     console.error("Bundle purchase failed:", err);
                                                 }
                                             }}
-                                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+                                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-1.5 group/btn"
                                         >
                                             Purchase 3-Pool Credits Bundle
-                                            <ArrowRight size={12} />
+                                            <ArrowRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
                                         </button>
                                     </div>
                                 </div>
 
                                 {/* Package 2: Unlimited Annual Pass */}
-                                <div className="bg-slate-900/40 border border-amber-500/15 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-sm flex flex-col justify-between hover:border-amber-500/40 transition-all shadow-xl group">
+                                <div className="bg-slate-900/40 border border-amber-500/15 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-amber-500/40 transition-all duration-300 shadow-xl group hover:scale-[1.02] hover:-translate-y-1">
                                     <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-amber-500/5 blur-2xl pointer-events-none" />
                                     <div className="space-y-4">
                                         <span className="bg-amber-500/10 border border-amber-500/25 text-amber-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full inline-block">
                                             Unlimited Access
                                         </span>
                                         <h3 className="text-xl font-bold text-white">1-Year Unlimited Pool Pass</h3>
-                                        <p className="text-xs text-slate-400 leading-relaxed">
+                                        <p className="text-xs text-slate-400 leading-relaxed font-medium">
                                             Unlock absolute freedom! Create and host unlimited pools of any format with unlimited participants for a full 365 days. Perfect for corporate leagues and multi-format clubs.
                                         </p>
-                                        <div className="pt-2 flex items-baseline gap-1">
+
+                                        <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-850 space-y-2 text-[10px] font-mono text-slate-400">
+                                            <div className="flex justify-between">Pool Limit: <strong className="text-white">Unlimited pools</strong></div>
+                                            <div className="flex justify-between">Duration: <strong className="text-white">365 Days</strong></div>
+                                            <div className="flex justify-between">Size Limit: <strong className="text-white">Unlimited players</strong></div>
+                                        </div>
+
+                                        <div className="pt-2 flex items-baseline gap-1.5">
                                             <span className="text-3xl font-black text-white">${(config.packages?.unlimited_1yr ?? 129.00).toFixed(2)}</span>
-                                            <span className="text-xs text-slate-500 font-medium">billed annually</span>
+                                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">billed annually</span>
                                         </div>
                                     </div>
                                     <div className="pt-6">
@@ -645,7 +679,9 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                         poolId: 'bundle_unlimited_1yr',
                                                         poolName: '1-Year Unlimited Pool Pass',
                                                         poolType: 'BUNDLE',
-                                                        tier: 'bundle'
+                                                        tier: 'bundle',
+                                                        successUrl: `${window.location.origin}/payment-success?poolId=bundle_unlimited_1yr`,
+                                                        cancelUrl: window.location.href
                                                     } as any);
                                                     if (response?.sessionUrl) {
                                                         window.location.href = response.sessionUrl;
@@ -654,10 +690,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     console.error("Bundle purchase failed:", err);
                                                 }
                                             }}
-                                            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold py-3.5 px-6 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+                                            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition-all shadow-md shadow-amber-500/10 flex items-center justify-center gap-1.5 group/btn"
                                         >
                                             Unlock 1-Year Unlimited Pass
-                                            <ArrowRight size={12} />
+                                            <ArrowRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
                                         </button>
                                     </div>
                                 </div>

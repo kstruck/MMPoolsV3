@@ -301,7 +301,7 @@ export interface NotificationLog {
 
 export interface AIArtifact {
     id: string;
-    type: 'WINNER_EXPLANATION' | 'PERIOD_RECAP' | 'DISPUTE_RESPONSE' | 'POOL_SUMMARY';
+    type: 'WINNER_EXPLANATION' | 'PERIOD_RECAP' | 'DISPUTE_RESPONSE' | 'POOL_SUMMARY' | 'WEEKLY_RECAP';
     period?: 'q1' | 'half' | 'q3' | 'final';
     targetId?: string; // winnerId or requestId
     content: {

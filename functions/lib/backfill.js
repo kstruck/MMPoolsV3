@@ -37,7 +37,6 @@ exports.backfillPools = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 exports.backfillPools = (0, https_1.onCall)(async (request) => {
-    // 1. Auth Check (Super Admin Only)
     if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError('permission-denied', 'Only Super Admin can run migration.');
     }
@@ -46,7 +45,8 @@ exports.backfillPools = (0, https_1.onCall)(async (request) => {
     const usersRef = db.collection('users');
     const poolsSnap = await poolsRef.get();
     let updatedCount = 0;
-    const batch = db.batch();
+    let batch = db.batch();
+    let batchCount = 0;
     for (const poolDoc of poolsSnap.docs) {
         const pool = poolDoc.data();
         const ownerId = pool.ownerId;
@@ -57,30 +57,58 @@ exports.backfillPools = (0, https_1.onCall)(async (request) => {
         if (!pool.createdByUid) {
             batch.update(poolDoc.ref, {
                 createdByUid: ownerId,
-                status: pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT') // Best guess
+                status: pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT')
             });
-            updatedCount++;
+            batchCount++;
         }
         // 2. Create Managed Pool Index
         const indexRef = usersRef.doc(ownerId).collection('managedPools').doc(poolId);
         batch.set(indexRef, {
             poolId,
             createdAt: pool.createdAt || admin.firestore.Timestamp.now(),
-            name: pool.name
+            name: pool.name,
+            type: pool.type
         }, { merge: true });
-        // 3. Upgrade User Role if needed
-        // We can't read every user in this loop easily without N reads. 
-        // For backfill, we might just assume they should be upgraded.
-        // But let's check one by one or trust they are already managers?
-        // Let's blindly set role to POOL_MANAGER if it's currently PARTICIPANT? 
-        // No, that overwrites SUPER_ADMIN.
-        // Let's skip role upgrade in this bulk script to avoid complexity, or do safe update.
-        // "role" update is better done individually or we risk overwriting.
-        // Actually, let's update role only if it doesn't exist?
-        // Firestore update with condition is hard in batch.
-        // Let's just do indices and pool fields.
+        batchCount++;
+        // 3. Historical Data Migration (For COMPLETED pools)
+        if (pool.status === 'COMPLETED' || pool.status === 'ARCHIVED') {
+            const entriesSnap = await poolDoc.ref.collection('entries').get();
+            for (const entryDoc of entriesSnap.docs) {
+                const entry = entryDoc.data();
+                if (!entry.ownerUid)
+                    continue;
+                const userRef = usersRef.doc(entry.ownerUid);
+                // Aggregate basic stats
+                const isWinner = entry.rank === 1;
+                const pointsEarned = entry.totalScore || entry.seasonTotal || entry.totalPoints || 0;
+                const payoutEarned = entry.payoutAmount || 0;
+                // Update user's historical stats safely using FieldValue increments
+                batch.set(userRef, {
+                    historicalStats: {
+                        poolsEntered: admin.firestore.FieldValue.increment(1),
+                        poolsWon: admin.firestore.FieldValue.increment(isWinner ? 1 : 0),
+                        totalPoints: admin.firestore.FieldValue.increment(pointsEarned),
+                        totalEarnings: admin.firestore.FieldValue.increment(payoutEarned)
+                    }
+                }, { merge: true });
+                batchCount++;
+                if (batchCount >= 400) {
+                    await batch.commit();
+                    batch = db.batch();
+                    batchCount = 0;
+                }
+            }
+        }
+        updatedCount++;
+        if (batchCount >= 400) {
+            await batch.commit();
+            batch = db.batch();
+            batchCount = 0;
+        }
     }
-    await batch.commit();
+    if (batchCount > 0) {
+        await batch.commit();
+    }
     return { success: true, updatedCount };
 });
 //# sourceMappingURL=backfill.js.map

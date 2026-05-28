@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { User } from '../types';
 import { Trophy, LayoutGrid, CheckCircle2, Heart, Users, Shield, Zap, Percent } from 'lucide-react';
 import { Header } from './Header';
@@ -86,6 +87,7 @@ const landingPageSchemas = [
 ];
 
 export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0, isLoggedIn }) => {
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
@@ -287,6 +289,159 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
               </ul>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Dynamic Pricing Bento Section */}
+      <section className="py-24 border-t border-slate-800 relative overflow-hidden bg-gradient-to-b from-[#0A192F] via-[#0D1F3D] to-[#0A192F]">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-7xl h-full pointer-events-none">
+          <div className="absolute top-1/3 left-10 w-[300px] h-[300px] rounded-full blur-[120px] bg-orange-500/10 pointer-events-none" />
+          <div className="absolute bottom-1/3 right-10 w-[300px] h-[300px] rounded-full blur-[120px] bg-indigo-500/10 pointer-events-none" />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+          <div className="text-center mb-16 space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 shadow-sm bg-orange-500/10 border border-orange-500/20">
+              <Zap size={14} className="text-orange-500 animate-pulse" />
+              <span className="text-xs font-bold tracking-wide uppercase text-orange-400">Pricing & Packages</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-black text-white leading-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+              Sleek Plans Built for <br className="hidden sm:inline" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-400 to-indigo-400">Every Commissioner</span>
+            </h2>
+            <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+              Start hosting your pools with a 14-day free trial. Scale seamlessly from friendly circles to massive leagues.
+            </p>
+          </div>
+
+          {/* Bento Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch mb-16">
+            
+            {/* Card 1: Free Sandbox Tier (4 cols) */}
+            <div className="lg:col-span-4 bg-slate-900/40 border border-slate-800 rounded-3xl p-8 hover:border-emerald-500/40 transition-all duration-300 flex flex-col justify-between shadow-2xl relative group hover:scale-[1.01]">
+              <div className="space-y-6">
+                <div className="flex justify-between items-start">
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:scale-110 transition-transform duration-300">
+                    <Users size={24} />
+                  </div>
+                  <span className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full">
+                    Free Sandbox
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-bold text-white">Casual Friends Tier</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">
+                    Completely free for small groups. Get the full premium engine experience without any setup fees or host charges.
+                  </p>
+                </div>
+                <ul className="space-y-3 text-xs text-slate-300 pt-2">
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-emerald-500 shrink-0" /> 1 to 10 Participants</li>
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-emerald-500 shrink-0" /> Real-time ESPN Scoring Sync</li>
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-emerald-500 shrink-0" /> Standard Rules Customization</li>
+                </ul>
+              </div>
+              <div className="pt-8">
+                <div className="text-3xl font-black text-white mb-4">$0 <span className="text-xs text-slate-500 font-medium">/ forever</span></div>
+                <button
+                  onClick={() => navigate('/create-pool')}
+                  className="w-full bg-slate-800/80 hover:bg-slate-750 text-slate-200 border border-slate-700/60 hover:border-slate-600 py-3 px-6 rounded-2xl text-xs font-bold transition-all"
+                >
+                  Launch Free Pool
+                </button>
+              </div>
+            </div>
+
+            {/* Card 2: Dynamic Pool Tier - Featured (5 cols) */}
+            <div className="lg:col-span-5 bg-gradient-to-b from-indigo-950/20 via-slate-900/40 to-slate-900/40 border border-indigo-500/20 rounded-3xl p-8 hover:border-indigo-500/50 transition-all duration-300 flex flex-col justify-between shadow-2xl relative group hover:scale-[1.01] overflow-hidden">
+              {/* Top ambient glow */}
+              <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-indigo-500/10 blur-2xl pointer-events-none" />
+              
+              <div className="space-y-6">
+                <div className="flex justify-between items-start">
+                  <div className="p-3.5 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 group-hover:scale-110 transition-transform duration-300">
+                    <Trophy size={24} />
+                  </div>
+                  <span className="bg-indigo-500/20 border border-indigo-500/35 text-indigo-300 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                    <Zap size={10} className="fill-current text-indigo-300" /> Featured Plan
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-bold text-white">Dynamic Premium Pool</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">
+                    Designed for medium to massive sports pools. Flexible scale-with-size tiers ensure you only pay for your active players.
+                  </p>
+                </div>
+                <ul className="space-y-3 text-xs text-slate-300 pt-2">
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-indigo-400 shrink-0" /> Tiers based on active entries</li>
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-indigo-400 shrink-0" /> What-If Simulator & AI Commissioner</li>
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-indigo-400 shrink-0" /> Custom branding, logo and cover uploads</li>
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-indigo-400 shrink-0" /> Smart SMS Deadlines & Broadcasts</li>
+                </ul>
+              </div>
+              <div className="pt-8">
+                <div className="text-3xl font-black text-white mb-4">Starts at $9 <span className="text-xs text-slate-500 font-medium">/ pool</span></div>
+                <button
+                  onClick={() => navigate('/pricing')}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-1.5 group/btn"
+                >
+                  Estimate Pool Price
+                  <Zap size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
+                </button>
+              </div>
+            </div>
+
+            {/* Card 3: Commissioner Packs (3 cols) */}
+            <div className="lg:col-span-3 bg-slate-900/40 border border-slate-800 rounded-3xl p-8 hover:border-amber-500/40 transition-all duration-300 flex flex-col justify-between shadow-2xl relative group hover:scale-[1.01]">
+              <div className="space-y-6">
+                <div className="flex justify-between items-start">
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:scale-110 transition-transform duration-300">
+                    <Shield size={24} />
+                  </div>
+                  <span className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full">
+                    Best Value
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-bold text-white">Universal Packs</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">
+                    Host multiple pools? Buy upfront pool credits or unlock unlimited sports hosting for the entire season.
+                  </p>
+                </div>
+                <ul className="space-y-3 text-xs text-slate-300 pt-2">
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-amber-400 shrink-0" /> Credits never expire</li>
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-amber-400 shrink-0" /> Unlimited Season Pass</li>
+                  <li className="flex items-center gap-2.5"><CheckCircle2 size={16} className="text-amber-400 shrink-0" /> Save up to 50%</li>
+                </ul>
+              </div>
+              <div className="pt-8">
+                <div className="text-3xl font-black text-white mb-4">$49 <span className="text-xs text-slate-500 font-medium">/ 3-pool bundle</span></div>
+                <button
+                  onClick={() => navigate('/pricing')}
+                  className="w-full bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700/60 hover:border-slate-600 py-3 px-6 rounded-2xl text-xs font-bold transition-all"
+                >
+                  View Bundle Packages
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Bottom Interactive Promotion Indicator */}
+          <div className="bg-slate-900/20 border border-slate-850 p-6 rounded-2xl text-center max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 backdrop-blur-sm shadow-xl">
+            <div className="text-left space-y-1">
+              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Interactive Estimator</span>
+              <p className="text-sm text-slate-300 font-medium">
+                Want to calculate exact pricing? Try our interactive price estimator calculator.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/pricing')}
+              className="bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 px-5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap"
+            >
+              Open Pricing Calculator →
+            </button>
+          </div>
+
         </div>
       </section>
 

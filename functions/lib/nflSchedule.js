@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.importNFLSchedule = exports.syncNFLScoresJob = void 0;
+exports.importNFLSchedule = exports.lockNFLSpreadsJob = exports.syncNFLScoresJob = void 0;
 exports.fetchNFLWeekSchedule = fetchNFLWeekSchedule;
 exports.importNFLSeason = importNFLSeason;
 const admin = __importStar(require("firebase-admin"));
@@ -51,7 +51,7 @@ const safeInt = (val) => {
  * seasonType: 1 = Preseason, 2 = Regular Season, 3 = Postseason
  */
 async function fetchNFLWeekSchedule(week, season, seasonType) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
     try {
         let url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
         try {
@@ -110,34 +110,48 @@ async function fetchNFLWeekSchedule(week, season, seasonType) {
             // Check if this is a Monday Night Football game (MNF) - usually Monday in US, which starts after UTC Monday night or Tuesday early
             const startDateObj = new Date(startTime);
             const isMonday = startDateObj.getDay() === 1; // 1 = Monday
-            games.push({
-                id: gameId,
-                espnGameId: event.id,
-                week: week,
-                season: season,
-                seasonType: seasonType,
-                homeTeam: {
-                    id: ((_f = homeComp.team) === null || _f === void 0 ? void 0 : _f.id) || '',
-                    name: ((_g = homeComp.team) === null || _g === void 0 ? void 0 : _g.name) || ((_h = homeComp.team) === null || _h === void 0 ? void 0 : _h.displayName) || 'Home Team',
-                    abbreviation: ((_j = homeComp.team) === null || _j === void 0 ? void 0 : _j.abbreviation) || 'HOME',
-                    logoUrl: ((_k = homeComp.team) === null || _k === void 0 ? void 0 : _k.logo) || ''
-                },
-                awayTeam: {
-                    id: ((_l = awayComp.team) === null || _l === void 0 ? void 0 : _l.id) || '',
-                    name: ((_m = awayComp.team) === null || _m === void 0 ? void 0 : _m.name) || ((_o = awayComp.team) === null || _o === void 0 ? void 0 : _o.displayName) || 'Away Team',
-                    abbreviation: ((_p = awayComp.team) === null || _p === void 0 ? void 0 : _p.abbreviation) || 'AWAY',
-                    logoUrl: ((_q = awayComp.team) === null || _q === void 0 ? void 0 : _q.logo) || ''
-                },
-                scores: status !== 'SCHEDULED' ? {
+            let spreadValue = 0;
+            let spreadFound = false;
+            if (competition.odds && competition.odds[0]) {
+                const odds = competition.odds[0];
+                if (odds.details && odds.details !== 'EVEN') {
+                    // e.g. "BAL -3.5" or "KC -10"
+                    const parts = odds.details.split(' ');
+                    if (parts.length >= 2) {
+                        const favAbbr = parts[0];
+                        const spreadPoints = parseFloat(parts[1]);
+                        if (!isNaN(spreadPoints)) {
+                            spreadFound = true;
+                            // If favored team is HOME, spread relative to home is negative (e.g. -3.5).
+                            // If favored team is AWAY, spread relative to home is positive (e.g. +3.5).
+                            if (((_f = homeComp.team) === null || _f === void 0 ? void 0 : _f.abbreviation) === favAbbr) {
+                                spreadValue = spreadPoints; // e.g. -3.5
+                            }
+                            else {
+                                spreadValue = -spreadPoints; // e.g. +3.5
+                            }
+                        }
+                    }
+                }
+                else if (odds.details === 'EVEN') {
+                    spreadFound = true;
+                    spreadValue = 0;
+                }
+            }
+            games.push(Object.assign({ id: gameId, espnGameId: event.id, week: week, season: season, seasonType: seasonType, homeTeam: {
+                    id: ((_g = homeComp.team) === null || _g === void 0 ? void 0 : _g.id) || '',
+                    name: ((_h = homeComp.team) === null || _h === void 0 ? void 0 : _h.name) || ((_j = homeComp.team) === null || _j === void 0 ? void 0 : _j.displayName) || 'Home Team',
+                    abbreviation: ((_k = homeComp.team) === null || _k === void 0 ? void 0 : _k.abbreviation) || 'HOME',
+                    logoUrl: ((_l = homeComp.team) === null || _l === void 0 ? void 0 : _l.logo) || ''
+                }, awayTeam: {
+                    id: ((_m = awayComp.team) === null || _m === void 0 ? void 0 : _m.id) || '',
+                    name: ((_o = awayComp.team) === null || _o === void 0 ? void 0 : _o.name) || ((_p = awayComp.team) === null || _p === void 0 ? void 0 : _p.displayName) || 'Away Team',
+                    abbreviation: ((_q = awayComp.team) === null || _q === void 0 ? void 0 : _q.abbreviation) || 'AWAY',
+                    logoUrl: ((_r = awayComp.team) === null || _r === void 0 ? void 0 : _r.logo) || ''
+                }, scores: status !== 'SCHEDULED' ? {
                     home: safeInt(homeComp.score),
                     away: safeInt(awayComp.score)
-                } : undefined,
-                startTime: startTime,
-                status: status,
-                clock: ((_r = event.status) === null || _r === void 0 ? void 0 : _r.displayClock) || '0:00',
-                period: safeInt((_s = event.status) === null || _s === void 0 ? void 0 : _s.period),
-                isMonday: isMonday
-            });
+                } : undefined, startTime: startTime, status: status, clock: ((_s = event.status) === null || _s === void 0 ? void 0 : _s.displayClock) || '0:00', period: safeInt((_t = event.status) === null || _t === void 0 ? void 0 : _t.period), isMonday: isMonday }, (spreadFound ? { spread: { value: spreadValue, locked: false } } : {})));
         }
         return games;
     }
@@ -202,6 +216,7 @@ async function importNFLSeason(season, seasonType, weeks = Array.from({ length: 
  * updates game statuses in Firestore, and updates kickoff times (schedule flexing).
  */
 exports.syncNFLScoresJob = (0, scheduler_1.onSchedule)('*/5 * * * *', async (event) => {
+    var _a;
     const db = admin.firestore();
     const now = Date.now();
     // Find games that are either in progress, final but not synced/completed in scoring,
@@ -250,6 +265,13 @@ exports.syncNFLScoresJob = (0, scheduler_1.onSchedule)('*/5 * * * *', async (eve
                         payload: { gameId: freshGame.id, oldTime: existingData.startTime, newTime: freshGame.startTime }
                     });
                 }
+                if (((_a = existingData.spread) === null || _a === void 0 ? void 0 : _a.locked) && freshGame.spread) {
+                    // Retain the locked spread value and state
+                    freshGame.spread = {
+                        value: existingData.spread.value,
+                        locked: true
+                    };
+                }
             }
             const cleanedGame = JSON.parse(JSON.stringify(freshGame));
             batch.set(gameRef, cleanedGame, { merge: true });
@@ -258,6 +280,42 @@ exports.syncNFLScoresJob = (0, scheduler_1.onSchedule)('*/5 * * * *', async (eve
     }
 });
 const https_1 = require("firebase-functions/v2/https");
+/**
+ * Scheduled job to lock NFL spreads every Tuesday at 9:00 AM EST.
+ * Scans upcoming games, and if spread is available, marks it as locked.
+ */
+exports.lockNFLSpreadsJob = (0, scheduler_1.onSchedule)({
+    schedule: '0 9 * * 2', // 9:00 AM every Tuesday
+    timeZone: 'America/New_York'
+}, async () => {
+    const db = admin.firestore();
+    const now = Date.now();
+    // Find games starting in the next 7 days that are not finalized
+    const upcomingSnap = await db.collection('nfl_games')
+        .where('startTime', '>', now)
+        .where('startTime', '<=', now + 7 * 24 * 60 * 60 * 1000)
+        .get();
+    if (upcomingSnap.empty)
+        return;
+    const batch = db.batch();
+    let lockedCount = 0;
+    upcomingSnap.forEach(doc => {
+        const data = doc.data();
+        // Lock spread if it's available and not already locked
+        if (data.spread && !data.spread.locked) {
+            if (data.spread.value !== undefined) {
+                batch.update(doc.ref, {
+                    'spread.locked': true
+                });
+                lockedCount++;
+            }
+        }
+    });
+    if (lockedCount > 0) {
+        await batch.commit();
+        console.log(`[lockNFLSpreadsJob] Locked spreads for ${lockedCount} upcoming games.`);
+    }
+});
 /**
  * SuperAdmin-only HTTPS callable to trigger manual NFL schedule imports.
  */

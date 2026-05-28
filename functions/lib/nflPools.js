@@ -200,6 +200,12 @@ exports.submitNFLPicks = (0, https_1.onCall)(async (request) => {
     if (games.length === 0) {
         throw new https_1.HttpsError('not-found', `No NFL games found for week ${week}.`);
     }
+    // 1.5 Global Spread Validation
+    // Ensure that all games for the current week have their spreads locked before accepting any picks.
+    const allSpreadsLocked = games.every(g => { var _a; return ((_a = g.spread) === null || _a === void 0 ? void 0 : _a.locked) === true; });
+    if (!allSpreadsLocked) {
+        throw new https_1.HttpsError('failed-precondition', 'SPREADS_NOT_LOCKED: Picks cannot be submitted until all game spreads for the week are finalized and locked.');
+    }
     // 2. Determine lock context
     const lockBufferMs = ((_b = (_a = pool.settings) === null || _a === void 0 ? void 0 : _a.lockBufferMinutes) !== null && _b !== void 0 ? _b : 5) * 60 * 1000;
     // Check if first game of the week has kicked off
