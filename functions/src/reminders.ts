@@ -4,7 +4,7 @@ import * as admin from "firebase-admin";
 // Fixed imports
 import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry, BracketPool, User, BracketEntry } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
-import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { sendCourierSMS } from "./notifications/smsService";
 
 
@@ -171,16 +171,16 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
         for (const recipient of emailsToSend) {
             const subject = `Action Required: Payment Due for ${pool.name}`;
             const body = `
-                <p>Hi ${recipient.name},</p>
-                <p>The pool <strong>${pool.name}</strong> locks in less than 2 hours!</p>
-                <p>Your entry "<strong>${recipient.entryName}</strong>" is currently marked as <strong>Unpaid</strong>.</p>
+                <p>Hi ${escapeHtml(recipient.name)},</p>
+                <p>The pool <strong>${escapeHtml(pool.name)}</strong> locks in less than 2 hours!</p>
+                <p>Your entry "<strong>${escapeHtml(recipient.entryName)}</strong>" is currently marked as <strong>Unpaid</strong>.</p>
                 
                 <div style="background-color: #fff1f2; border: 1px solid #e11d48; border-radius: 8px; padding: 15px; margin: 20px 0; color: #9f1239;">
                     <p style="margin: 0; font-weight: bold;">⚠️ Payment Needed</p>
                     <p style="margin: 5px 0 0 0;">Please pay the pool manager to secure your spot.</p>
                 </div>
 
-                ${pool.settings?.paymentInstructions ? `<p><strong>Instructions:</strong> ${pool.settings.paymentInstructions}</p>` : ''}
+                ${pool.settings?.paymentInstructions ? `<p><strong>Instructions:</strong> ${escapeHtml(pool.settings.paymentInstructions)}</p>` : ''}
             `;
             const html = renderEmailHtml('Payment Reminder', body, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
 
@@ -232,7 +232,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
 
     if (hostSent) {
         const emailBody = `
-            <p>Hi ${pool.managerName},</p>
+            <p>Hi ${escapeHtml(pool.managerName)},</p>
             <p>You have ${unpaidSquares.length} squares that are reserved but unpaid.</p>
         `;
         const html = renderEmailHtml(`Action Needed: Unpaid Squares`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
@@ -264,8 +264,8 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
             if (userSent) {
                 if (userSent) {
                     const emailBody = `
-                    <p>You have ${squares.length} squares pending payment in <strong>${pool.name}</strong>.</p>
-                    <p>Please pay the host: ${pool.paymentInstructions || 'See pool details'}</p>
+                    <p>You have ${squares.length} squares pending payment in <strong>${escapeHtml(pool.name)}</strong>.</p>
+                    <p>Please pay the host: ${escapeHtml(pool.paymentInstructions || 'See pool details')}</p>
                 `;
                     const html = renderEmailHtml(`Payment Reminder`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
                     await sendEmail(db, email, `Reminder: ${squares.length} Squares Pending Payment`, html);
@@ -329,7 +329,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
 
                 // Notify host
                 const emailBody = `
-                    <p>Hi ${pool.managerName},</p>
+                    <p>Hi ${escapeHtml(pool.managerName)},</p>
                     <p><strong>${squaresToRelease.length} squares</strong> have been automatically released due to non-payment after ${settings.autoReleaseHours} hours.</p>
                     <p>Released squares: ${squaresToRelease.map(s => `#${s.id}`).join(', ')}</p>
                 `;
@@ -350,7 +350,7 @@ export async function notifyWaitlist(db: admin.firestore.Firestore, pool: GameSt
 
     const emailSubject = `Squares Available: ${pool.name}`;
     const emailBody = `
-        <p>Good news! <strong>${releasedCount} squares</strong> have just become available in ${pool.name}.</p>
+        <p>Good news! <strong>${releasedCount} squares</strong> have just become available in ${escapeHtml(pool.name)}.</p>
         <p>First come, first served! Click below to claim your squares now.</p>
     `;
     const html = renderEmailHtml(`Squares Available!`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'Claim Squares Now');
@@ -415,7 +415,7 @@ async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState
                 // Email Host
                 const contactEmail = pool.contactEmail;
                 if (contactEmail) {
-                    const hostBody = `<p>Your pool <strong>${pool.name}</strong> locks soon.</p>`;
+                    const hostBody = `<p>Your pool <strong>${escapeHtml(pool.name)}</strong> locks soon.</p>`;
                     const hostHtml = renderEmailHtml(`Pool Locking Soon`, hostBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
                     await sendEmail(db, contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
                 }
@@ -479,7 +479,7 @@ export const onWinnerComputed = functions.firestore.onDocumentCreated("pools/{po
 
         // Construct body content (no H2 needed, title handled by wrapper)
         const bodyContent = `
-                <p><strong>${period.toUpperCase()} Winner:</strong> ${winnerData.owner}</p>
+                <p><strong>${period.toUpperCase()} Winner:</strong> ${escapeHtml(winnerData.owner)}</p>
                 <p><strong>Square:</strong> ${Math.floor(winnerData.squareId / 10)} - ${winnerData.squareId % 10}</p>
                 <p><strong>Amount:</strong> $${winnerData.amount}</p>
                 ${settings.includeDigits ? `<p><strong>Winning Digits:</strong> Home ${winnerData.homeDigit} - Away ${winnerData.awayDigit}</p>` : ''}
@@ -588,17 +588,17 @@ async function checkBracketReminders(db: admin.firestore.Firestore, pool: Bracke
     if (is24h && pool.reminders?.auto24h) {
         trigger = '24h';
         emailSubject = `24 Hours to Lock: ${pool.name}`;
-        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> locks in exactly 24 hours. Make sure your entries are filled out and paid.</p>`;
+        emailBody = `<p>Your bracket pool <strong>${escapeHtml(pool.name)}</strong> locks in exactly 24 hours. Make sure your entries are filled out and paid.</p>`;
         smsBody = `Pool ${pool.name} locks in 24 hours! Get your bracket in.`;
     } else if (is1h && pool.reminders?.auto1h) {
         trigger = '1h';
         emailSubject = `1 Hour WARNING: ${pool.name}`;
-        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> is locking in 1 HOUR! Finalize your entries now.</p>`;
+        emailBody = `<p>Your bracket pool <strong>${escapeHtml(pool.name)}</strong> is locking in 1 HOUR! Finalize your entries now.</p>`;
         smsBody = `1 HOUR WARNING! Pool ${pool.name} locks soon.`;
     } else if (isLockMsg) {
         trigger = 'locked';
         emailSubject = `Pool Locked: ${pool.name}`;
-        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> is now locked. Good luck!</p>`;
+        emailBody = `<p>Your bracket pool <strong>${escapeHtml(pool.name)}</strong> is now locked. Good luck!</p>`;
         smsBody = `Pool ${pool.name} is now locked! Good luck.`;
     } else {
         return;

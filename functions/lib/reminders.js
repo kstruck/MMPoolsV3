@@ -189,16 +189,16 @@ async function checkPlayoffReminders(db, pool, now) {
         for (const recipient of emailsToSend) {
             const subject = `Action Required: Payment Due for ${pool.name}`;
             const body = `
-                <p>Hi ${recipient.name},</p>
-                <p>The pool <strong>${pool.name}</strong> locks in less than 2 hours!</p>
-                <p>Your entry "<strong>${recipient.entryName}</strong>" is currently marked as <strong>Unpaid</strong>.</p>
+                <p>Hi ${(0, emailStyles_1.escapeHtml)(recipient.name)},</p>
+                <p>The pool <strong>${(0, emailStyles_1.escapeHtml)(pool.name)}</strong> locks in less than 2 hours!</p>
+                <p>Your entry "<strong>${(0, emailStyles_1.escapeHtml)(recipient.entryName)}</strong>" is currently marked as <strong>Unpaid</strong>.</p>
                 
                 <div style="background-color: #fff1f2; border: 1px solid #e11d48; border-radius: 8px; padding: 15px; margin: 20px 0; color: #9f1239;">
                     <p style="margin: 0; font-weight: bold;">⚠️ Payment Needed</p>
                     <p style="margin: 5px 0 0 0;">Please pay the pool manager to secure your spot.</p>
                 </div>
 
-                ${((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.paymentInstructions) ? `<p><strong>Instructions:</strong> ${pool.settings.paymentInstructions}</p>` : ''}
+                ${((_a = pool.settings) === null || _a === void 0 ? void 0 : _a.paymentInstructions) ? `<p><strong>Instructions:</strong> ${(0, emailStyles_1.escapeHtml)(pool.settings.paymentInstructions)}</p>` : ''}
             `;
             const html = (0, emailStyles_1.renderEmailHtml)('Payment Reminder', body, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'View Pool');
             // Queue Email
@@ -243,7 +243,7 @@ async function checkPaymentReminders(db, pool, now) {
     });
     if (hostSent) {
         const emailBody = `
-            <p>Hi ${pool.managerName},</p>
+            <p>Hi ${(0, emailStyles_1.escapeHtml)(pool.managerName)},</p>
             <p>You have ${unpaidSquares.length} squares that are reserved but unpaid.</p>
         `;
         const html = (0, emailStyles_1.renderEmailHtml)(`Action Needed: Unpaid Squares`, emailBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Manage Pool');
@@ -274,8 +274,8 @@ async function checkPaymentReminders(db, pool, now) {
             if (userSent) {
                 if (userSent) {
                     const emailBody = `
-                    <p>You have ${squares.length} squares pending payment in <strong>${pool.name}</strong>.</p>
-                    <p>Please pay the host: ${pool.paymentInstructions || 'See pool details'}</p>
+                    <p>You have ${squares.length} squares pending payment in <strong>${(0, emailStyles_1.escapeHtml)(pool.name)}</strong>.</p>
+                    <p>Please pay the host: ${(0, emailStyles_1.escapeHtml)(pool.paymentInstructions || 'See pool details')}</p>
                 `;
                     const html = (0, emailStyles_1.renderEmailHtml)(`Payment Reminder`, emailBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'View Pool');
                     await sendEmail(db, email, `Reminder: ${squares.length} Squares Pending Payment`, html);
@@ -325,7 +325,7 @@ async function checkPaymentReminders(db, pool, now) {
                 }
                 // Notify host
                 const emailBody = `
-                    <p>Hi ${pool.managerName},</p>
+                    <p>Hi ${(0, emailStyles_1.escapeHtml)(pool.managerName)},</p>
                     <p><strong>${squaresToRelease.length} squares</strong> have been automatically released due to non-payment after ${settings.autoReleaseHours} hours.</p>
                     <p>Released squares: ${squaresToRelease.map(s => `#${s.id}`).join(', ')}</p>
                 `;
@@ -345,7 +345,7 @@ async function notifyWaitlist(db, pool, releasedCount) {
         return;
     const emailSubject = `Squares Available: ${pool.name}`;
     const emailBody = `
-        <p>Good news! <strong>${releasedCount} squares</strong> have just become available in ${pool.name}.</p>
+        <p>Good news! <strong>${releasedCount} squares</strong> have just become available in ${(0, emailStyles_1.escapeHtml)(pool.name)}.</p>
         <p>First come, first served! Click below to claim your squares now.</p>
     `;
     const html = (0, emailStyles_1.renderEmailHtml)(`Squares Available!`, emailBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Claim Squares Now');
@@ -403,7 +403,7 @@ async function checkLockReminders(db, pool, now) {
                 // Email Host
                 const contactEmail = pool.contactEmail;
                 if (contactEmail) {
-                    const hostBody = `<p>Your pool <strong>${pool.name}</strong> locks soon.</p>`;
+                    const hostBody = `<p>Your pool <strong>${(0, emailStyles_1.escapeHtml)(pool.name)}</strong> locks soon.</p>`;
                     const hostHtml = (0, emailStyles_1.renderEmailHtml)(`Pool Locking Soon`, hostBody, `${emailStyles_1.BASE_URL}/pool/${pool.id}`, 'Manage Pool');
                     await sendEmail(db, contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
                 }
@@ -457,7 +457,7 @@ exports.onWinnerComputed = functions.firestore.onDocumentCreated("pools/{poolId}
         const subject = `Winner Alert: ${period.toUpperCase()} - ${winnerData.owner}`;
         // Construct body content (no H2 needed, title handled by wrapper)
         const bodyContent = `
-                <p><strong>${period.toUpperCase()} Winner:</strong> ${winnerData.owner}</p>
+                <p><strong>${period.toUpperCase()} Winner:</strong> ${(0, emailStyles_1.escapeHtml)(winnerData.owner)}</p>
                 <p><strong>Square:</strong> ${Math.floor(winnerData.squareId / 10)} - ${winnerData.squareId % 10}</p>
                 <p><strong>Amount:</strong> $${winnerData.amount}</p>
                 ${settings.includeDigits ? `<p><strong>Winning Digits:</strong> Home ${winnerData.homeDigit} - Away ${winnerData.awayDigit}</p>` : ''}
@@ -550,19 +550,19 @@ async function checkBracketReminders(db, pool, now) {
     if (is24h && ((_a = pool.reminders) === null || _a === void 0 ? void 0 : _a.auto24h)) {
         trigger = '24h';
         emailSubject = `24 Hours to Lock: ${pool.name}`;
-        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> locks in exactly 24 hours. Make sure your entries are filled out and paid.</p>`;
+        emailBody = `<p>Your bracket pool <strong>${(0, emailStyles_1.escapeHtml)(pool.name)}</strong> locks in exactly 24 hours. Make sure your entries are filled out and paid.</p>`;
         smsBody = `Pool ${pool.name} locks in 24 hours! Get your bracket in.`;
     }
     else if (is1h && ((_b = pool.reminders) === null || _b === void 0 ? void 0 : _b.auto1h)) {
         trigger = '1h';
         emailSubject = `1 Hour WARNING: ${pool.name}`;
-        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> is locking in 1 HOUR! Finalize your entries now.</p>`;
+        emailBody = `<p>Your bracket pool <strong>${(0, emailStyles_1.escapeHtml)(pool.name)}</strong> is locking in 1 HOUR! Finalize your entries now.</p>`;
         smsBody = `1 HOUR WARNING! Pool ${pool.name} locks soon.`;
     }
     else if (isLockMsg) {
         trigger = 'locked';
         emailSubject = `Pool Locked: ${pool.name}`;
-        emailBody = `<p>Your bracket pool <strong>${pool.name}</strong> is now locked. Good luck!</p>`;
+        emailBody = `<p>Your bracket pool <strong>${(0, emailStyles_1.escapeHtml)(pool.name)}</strong> is now locked. Good luck!</p>`;
         smsBody = `Pool ${pool.name} is now locked! Good luck.`;
     }
     else {

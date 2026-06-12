@@ -307,10 +307,6 @@ export const submitNFLPicks = onCall(async (request) => {
       transaction.set(entryRef, pickemEntry, { merge: true });
 
     } else if (type === 'NFL_SURVIVOR') {
-      if (weekLocked) {
-        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Survivor pools lock at the kickoff of the first game.');
-      }
-
       const survivorEntry = (existingEntry as SurvivorEntry) || {
         id: uid,
         poolId,
@@ -341,9 +337,20 @@ export const submitNFLPicks = onCall(async (request) => {
       }
 
       // Validate team is playing and not on bye
-      const teamIsPlaying = games.some(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
-      if (!teamIsPlaying) {
+      const game = games.find(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
+      if (!game) {
         throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
+      }
+
+      const isWeeklyLock = pool.settings?.lockMode === 'WEEKLY';
+      if (isWeeklyLock && weekLocked) {
+        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Survivor pools lock at the kickoff of the first game.');
+      }
+
+      const isGameLocked = now >= (game.startTime - lockBufferMs);
+      const oldPick = survivorEntry.picks?.[week];
+      if (!isWeeklyLock && isGameLocked && oldPick !== teamPicked) {
+        throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
       }
 
       // Update used teams and selections
@@ -355,10 +362,6 @@ export const submitNFLPicks = onCall(async (request) => {
       transaction.set(entryRef, survivorEntry, { merge: true });
 
     } else if (type === 'NFL_MARGIN') {
-      if (weekLocked) {
-        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Margin pools lock at the kickoff of the first game.');
-      }
-
       const marginEntry = (existingEntry as MarginEntry) || {
         id: uid,
         poolId,
@@ -380,15 +383,26 @@ export const submitNFLPicks = onCall(async (request) => {
         throw new HttpsError('invalid-argument', 'Missing Margin team selection.');
       }
 
-      // Validate reuse
+      // Check single-pick reuse
       if (marginEntry.usedTeams.includes(teamPicked)) {
         throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
       }
 
       // Validate team playing
-      const teamIsPlaying = games.some(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
-      if (!teamIsPlaying) {
+      const game = games.find(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
+      if (!game) {
         throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
+      }
+
+      const isWeeklyLock = pool.settings?.lockMode === 'WEEKLY';
+      if (isWeeklyLock && weekLocked) {
+        throw new HttpsError('failed-precondition', 'WEEK_LOCKED: Margin pools lock at the kickoff of the first game.');
+      }
+
+      const isGameLocked = now >= (game.startTime - lockBufferMs);
+      const oldPick = marginEntry.picks?.[week];
+      if (!isWeeklyLock && isGameLocked && oldPick !== teamPicked) {
+        throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
       }
 
       const oldUsed = marginEntry.usedTeams.filter(t => t !== marginEntry.picks[week]);

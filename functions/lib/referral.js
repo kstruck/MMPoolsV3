@@ -64,6 +64,10 @@ exports.creditReferralOnPayment = (0, firestore_1.onDocumentUpdated)('pools/{poo
         return;
     const referralDoc = referralsSnap.docs[0];
     const referrerId = referralDoc.data().referrerId;
+    if (referrerId === ownerId) {
+        console.warn(`Blocked self-referral credit attempt by ${ownerId}`);
+        return;
+    }
     // Load referral config
     const configSnap = await db.doc('settings/referral_config').get();
     const config = configSnap.data() || { creditsRequiredForFreePool: 5, discountPerCredit: 5 };
@@ -113,6 +117,10 @@ exports.resolveReferralToken = (0, https_1.onCall)(async (request) => {
     if (!tokenDoc.exists) {
         throw new https_1.HttpsError('not-found', 'Invalid referral token.');
     }
-    return { uid: (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.uid };
+    const referrerUid = (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.uid;
+    if (request.auth && request.auth.uid === referrerUid) {
+        throw new https_1.HttpsError('invalid-argument', 'Self-referral is not permitted.');
+    }
+    return { uid: referrerUid };
 });
 //# sourceMappingURL=referral.js.map

@@ -248,7 +248,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
     }
 
     // --- Determine Authoritative Server Price ---
-    let serverPrice = price; // Fallback
+    let serverPrice: number | undefined;
     try {
         const billingConfigDoc = await db.collection("settings").doc("billing_config").get();
         const configData = billingConfigDoc.data();
@@ -267,7 +267,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
                 if (tier === "free_tier") {
                     serverPrice = 0;
                 } else {
-                    let pricingArray = [];
+                    let pricingArray: any[] = [];
                     if (poolType === "NFL_SEASON" || poolType === "NFL_PICKEM" || poolType === "NFL_SURVIVOR" || poolType === "NFL_MARGIN") {
                         pricingArray = configData.pricing?.season || [];
                     } else if (poolType === "BRACKET" || poolType === "NFL_PLAYOFFS") {
@@ -287,7 +287,11 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
             }
         }
     } catch (e) {
-        console.error("Failed to fetch authoritative price, falling back to client price", e);
+        console.error("Failed to fetch authoritative price", e);
+    }
+
+    if (serverPrice === undefined) {
+        throw new HttpsError("internal", "Unable to resolve authoritative server price for this pool type/tier.");
     }
 
     // --- Secure $0 Stripe Bypass for 100% Off Coupons, Credit usage, or Unlimited Pass ---
@@ -467,16 +471,19 @@ export const handleStripeWebhook = functions.https.onRequest(async (req, res) =>
 
     switch (event.type) {
         case "checkout.session.completed": {
-            // Idempotency check
+            // Idempotency check: atomically create a processing marker.
+            // If this fails, another instance is already processing or has processed this event.
             const evtRef = db.collection('stripeWebhookEvents').doc(event.id);
-            const seen = await evtRef.get();
-            if (seen.exists) {
-                console.log(`[Stripe Webhook] Duplicate event ignored: ${event.id}`);
-                res.status(200).send('duplicate');
-                return;
+            try {
+                await evtRef.create({ type: event.type, status: 'processing', startedAt: Date.now() });
+            } catch (err: any) {
+                if (err.code === 6) { // ALREADY_EXISTS in Firebase Admin
+                    console.log(`[Stripe Webhook] Duplicate or concurrent event ignored: ${event.id}`);
+                    res.status(200).send('duplicate');
+                    return;
+                }
+                throw err;
             }
-            // Mark as processed
-            await evtRef.set({ type: event.type, processedAt: Date.now() });
 
             const session = event.data.object;
             const metadata = session.metadata || {};
@@ -537,9 +544,11 @@ export const handleStripeWebhook = functions.https.onRequest(async (req, res) =>
                     console.log(`[Stripe Webhook] User ${userId} bundle ${bundleType} successfully activated`);
                 } catch (err) {
                     console.error("[Stripe Webhook] Error updating user bundle:", err);
+                    await evtRef.delete();
                     res.status(500).send("Internal error processing bundle payment");
                     return;
                 }
+                await evtRef.update({ status: 'completed', processedAt: Date.now() });
                 break;
             }
 
@@ -596,10 +605,12 @@ export const handleStripeWebhook = functions.https.onRequest(async (req, res) =>
                 }
             } catch (err) {
                 console.error("[Stripe Webhook] Error updating pool billing:", err);
+                await evtRef.delete();
                 res.status(500).send("Internal error processing payment");
                 return;
             }
 
+            await evtRef.update({ status: 'completed', processedAt: Date.now() });
             break;
         }
 

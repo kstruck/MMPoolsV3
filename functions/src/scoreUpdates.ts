@@ -955,7 +955,12 @@ const processGameUpdate = async (
     // If the game just went final, we need to calculate the actual $ amount for each event based on the total pot logic
     if (isGameFinal && freshPool.ruleVariations?.scoreChangePayout && preReadEventWinners) {
         const allWinners = [...preReadEventWinners, ...newEventWinners];
-        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, allWinners);
+        const uniqueWinnersMap = new Map();
+        for (const w of allWinners) {
+            uniqueWinnersMap.set(w.ref.path, w);
+        }
+        const uniqueWinners = Array.from(uniqueWinnersMap.values());
+        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, uniqueWinners);
     }
 
     return { updated: shouldUpdate };

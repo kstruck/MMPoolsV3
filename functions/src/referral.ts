@@ -31,6 +31,11 @@ export const creditReferralOnPayment = onDocumentUpdated('pools/{poolId}', async
   const referralDoc = referralsSnap.docs[0];
   const referrerId = referralDoc.data().referrerId;
 
+  if (referrerId === ownerId) {
+    console.warn(`Blocked self-referral credit attempt by ${ownerId}`);
+    return;
+  }
+
   // Load referral config
   const configSnap = await db.doc('settings/referral_config').get();
   const config = configSnap.data() || { creditsRequiredForFreePool: 5, discountPerCredit: 5 };
@@ -90,5 +95,10 @@ export const resolveReferralToken = onCall(async (request) => {
         throw new HttpsError('not-found', 'Invalid referral token.');
     }
 
-    return { uid: tokenDoc.data()?.uid };
+    const referrerUid = tokenDoc.data()?.uid;
+    if (request.auth && request.auth.uid === referrerUid) {
+        throw new HttpsError('invalid-argument', 'Self-referral is not permitted.');
+    }
+
+    return { uid: referrerUid };
 });

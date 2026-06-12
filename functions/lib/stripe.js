@@ -256,7 +256,7 @@ exports.createCheckoutSession = functions.https.onCall({ cors: true }, async (re
         }
     }
     // --- Determine Authoritative Server Price ---
-    let serverPrice = price; // Fallback
+    let serverPrice;
     try {
         const billingConfigDoc = await db.collection("settings").doc("billing_config").get();
         const configData = billingConfigDoc.data();
@@ -302,7 +302,10 @@ exports.createCheckoutSession = functions.https.onCall({ cors: true }, async (re
         }
     }
     catch (e) {
-        console.error("Failed to fetch authoritative price, falling back to client price", e);
+        console.error("Failed to fetch authoritative price", e);
+    }
+    if (serverPrice === undefined) {
+        throw new https_1.HttpsError("internal", "Unable to resolve authoritative server price for this pool type/tier.");
     }
     // --- Secure $0 Stripe Bypass for 100% Off Coupons, Credit usage, or Unlimited Pass ---
     if (serverPrice === 0) {
@@ -461,16 +464,20 @@ exports.handleStripeWebhook = functions.https.onRequest(async (req, res) => {
     }
     switch (event.type) {
         case "checkout.session.completed": {
-            // Idempotency check
+            // Idempotency check: atomically create a processing marker.
+            // If this fails, another instance is already processing or has processed this event.
             const evtRef = db.collection('stripeWebhookEvents').doc(event.id);
-            const seen = await evtRef.get();
-            if (seen.exists) {
-                console.log(`[Stripe Webhook] Duplicate event ignored: ${event.id}`);
-                res.status(200).send('duplicate');
-                return;
+            try {
+                await evtRef.create({ type: event.type, status: 'processing', startedAt: Date.now() });
             }
-            // Mark as processed
-            await evtRef.set({ type: event.type, processedAt: Date.now() });
+            catch (err) {
+                if (err.code === 6) { // ALREADY_EXISTS in Firebase Admin
+                    console.log(`[Stripe Webhook] Duplicate or concurrent event ignored: ${event.id}`);
+                    res.status(200).send('duplicate');
+                    return;
+                }
+                throw err;
+            }
             const session = event.data.object;
             const metadata = session.metadata || {};
             const userId = metadata.userId;
@@ -529,9 +536,11 @@ exports.handleStripeWebhook = functions.https.onRequest(async (req, res) => {
                 }
                 catch (err) {
                     console.error("[Stripe Webhook] Error updating user bundle:", err);
+                    await evtRef.delete();
                     res.status(500).send("Internal error processing bundle payment");
                     return;
                 }
+                await evtRef.update({ status: 'completed', processedAt: Date.now() });
                 break;
             }
             // --- Handle Standard Pool Purchase ---
@@ -580,9 +589,11 @@ exports.handleStripeWebhook = functions.https.onRequest(async (req, res) => {
             }
             catch (err) {
                 console.error("[Stripe Webhook] Error updating pool billing:", err);
+                await evtRef.delete();
                 res.status(500).send("Internal error processing payment");
                 return;
             }
+            await evtRef.update({ status: 'completed', processedAt: Date.now() });
             break;
         }
         default:
