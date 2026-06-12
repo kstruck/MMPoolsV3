@@ -294,6 +294,44 @@ export const SuperAdmin: React.FC = () => {
         return { mapping, list };
     }, [activeTiers, users, userPoolCounts]);
 
+    // Compute real-time live stats directly from loaded data as fallback
+    const liveStats = useMemo(() => {
+        let totalSquaresSold = 0;
+        let totalRevenue = 0;
+        let totalDonated = 0;
+
+        pools.forEach((pool: any) => {
+            if (pool.type === 'SQUARES') {
+                const sold = pool.squares ? pool.squares.filter((s: any) => s.owner).length : 0;
+                totalSquaresSold += sold;
+                totalRevenue += (pool.costPerSquare || 0) * sold;
+                if (pool.charity?.enabled) {
+                    totalDonated += ((pool.costPerSquare || 0) * sold) * ((pool.charity.percentage || 0) / 100);
+                }
+            } else if (pool.type === 'BRACKET' || pool.type === 'NFL_PLAYOFFS' || pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
+                const count = pool.entryCount || pool.participantCount || (pool.participantIds ? pool.participantIds.length : 0);
+                totalSquaresSold += count;
+                totalRevenue += (pool.settings?.entryFee || 0) * count;
+                if (pool.settings?.charity?.enabled) {
+                    totalDonated += ((pool.settings.entryFee || 0) * count) * ((pool.settings.charity.percentage || 0) / 100);
+                }
+            } else if (pool.type === 'PROPS') {
+                const count = pool.entryCount || pool.participantCount || (pool.participantIds ? pool.participantIds.length : 0);
+                totalSquaresSold += count;
+                totalRevenue += (pool.props?.cost || 0) * count;
+            }
+        });
+
+        return {
+            totalPools: pools.length,
+            totalUsers: users.length,
+            totalSquaresSold,
+            totalRevenue,
+            totalDonated,
+            lastUpdated: Date.now()
+        };
+    }, [pools, users]);
+
     // --- EFFECTS ---
     useEffect(() => {
         const unsubPools = dbService.subscribeToAllPools(setPools);
@@ -1076,7 +1114,7 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ OVERVIEW TAB ============ */}
             {activeTab === 'overview' && (
                 <div className="w-full">
-                    <SuperAdminBentoDashboard stats={globalStats} />
+                    <SuperAdminBentoDashboard stats={liveStats} />
                 </div>
             )}
 

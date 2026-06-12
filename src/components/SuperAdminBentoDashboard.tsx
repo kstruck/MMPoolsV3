@@ -111,7 +111,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                 Active Pools
               </span>
               <span className="text-2xl font-black text-white font-mono leading-none">
-                {stats?.totalPools || 48}
+                {stats?.totalPools || 0}
               </span>
             </div>
 
@@ -124,7 +124,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                 Total Users
               </span>
               <span className="text-2xl font-black text-white font-mono leading-none">
-                {stats?.totalUsers || 2840}
+                {stats?.totalUsers || 0}
               </span>
             </div>
 
@@ -137,7 +137,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                 Squares Sold
               </span>
               <span className="text-2xl font-black text-white font-mono leading-none">
-                {stats?.totalSquaresSold || 12400}
+                {stats?.totalSquaresSold || 0}
               </span>
             </div>
 
@@ -150,7 +150,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                 Total Revenue
               </span>
               <span className="text-2xl font-black text-white font-mono leading-none">
-                ${(stats?.totalRevenue || 24800).toLocaleString()}
+                ${(stats?.totalRevenue || 0).toLocaleString()}
               </span>
             </div>
 
@@ -165,7 +165,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
               </div>
               <div>
                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Charity Funds Raised</span>
-                <span className="text-xl font-black text-emerald-400 font-mono">${(stats?.totalDonated || 14850).toLocaleString()}</span>
+                <span className="text-xl font-black text-emerald-400 font-mono">${(stats?.totalDonated || 0).toLocaleString()}</span>
               </div>
             </div>
             <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full uppercase tracking-wider">
