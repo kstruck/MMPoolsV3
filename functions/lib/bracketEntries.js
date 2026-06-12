@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteBracketEntry = exports.submitBracketEntry = exports.submitBracketEntryInternal = exports.updateBracketEntry = exports.createBracketEntry = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
+const billing_1 = require("./billing");
 const firestore_1 = require("firebase-admin/firestore");
 const reminders_1 = require("./reminders");
 const emailStyles_1 = require("./emailStyles");
@@ -134,6 +135,7 @@ exports.updateBracketEntry = (0, https_1.onCall)(async (request) => {
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
     const poolRef = db.collection("pools").doc(poolId);
     await db.runTransaction(async (transaction) => {
+        var _a, _b, _c;
         const entryDoc = await transaction.get(entryRef);
         if (!entryDoc.exists) {
             throw new https_1.HttpsError("not-found", "Entry not found.");
@@ -145,11 +147,33 @@ exports.updateBracketEntry = (0, https_1.onCall)(async (request) => {
         // Check pool lock — only OPEN pools allow edits
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data();
+        const billingCheck = (0, billing_1.checkBillingAccess)(poolData.billing);
+        if (!billingCheck.allowed) {
+            throw new https_1.HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
+        }
         if (poolData.status === 'LOCKED' || poolData.status === 'LIVE' || poolData.status === 'COMPLETED') {
             throw new https_1.HttpsError("failed-precondition", "Pool is locked. No edits allowed.");
         }
         if (poolData.lockAt > 0 && Date.now() > poolData.lockAt) {
             throw new https_1.HttpsError("failed-precondition", "Pool is locked.");
+        }
+        // Per-game lock check
+        const tournamentRef = db.collection('tournaments').doc(poolData.tournamentId);
+        const tournamentDoc = await transaction.get(tournamentRef);
+        if (tournamentDoc.exists) {
+            const tournament = tournamentDoc.data();
+            for (const [slotId, teamId] of Object.entries(picks)) {
+                if (((_a = entryData.picks) === null || _a === void 0 ? void 0 : _a[slotId]) !== teamId) {
+                    const slot = (_b = tournament === null || tournament === void 0 ? void 0 : tournament.slots) === null || _b === void 0 ? void 0 : _b[slotId];
+                    const game = slot ? (_c = tournament === null || tournament === void 0 ? void 0 : tournament.games) === null || _c === void 0 ? void 0 : _c[slot.gameId] : null;
+                    if (game && game.startTime) {
+                        const gameTime = new Date(game.startTime).getTime();
+                        if (Date.now() >= gameTime) {
+                            throw new https_1.HttpsError('failed-precondition', `Game for slot ${slotId} has already started.`);
+                        }
+                    }
+                }
+            }
         }
         const updateData = {
             picks,
@@ -171,7 +195,7 @@ const submitBracketEntryInternal = async (uid, data, db) => {
     const entryRef = db.collection("pools").doc(poolId).collection("entries").doc(entryId);
     const poolRef = db.collection("pools").doc(poolId);
     await db.runTransaction(async (transaction) => {
-        var _a;
+        var _a, _b, _c, _d;
         const entryDoc = await transaction.get(entryRef);
         if (!entryDoc.exists)
             throw new https_1.HttpsError("not-found", "Entry not found.");
@@ -180,6 +204,10 @@ const submitBracketEntryInternal = async (uid, data, db) => {
             throw new https_1.HttpsError("permission-denied", "Not your entry.");
         const poolDoc = await transaction.get(poolRef);
         const poolData = poolDoc.data();
+        const billingCheck = (0, billing_1.checkBillingAccess)(poolData.billing);
+        if (!billingCheck.allowed) {
+            throw new https_1.HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
+        }
         if (poolData.status === 'LOCKED' || poolData.status === 'LIVE' || poolData.status === 'COMPLETED') {
             throw new https_1.HttpsError("failed-precondition", "Pool is locked. Submissions are closed.");
         }
@@ -189,17 +217,34 @@ const submitBracketEntryInternal = async (uid, data, db) => {
         if (((_a = poolData.settings) === null || _a === void 0 ? void 0 : _a.lockUnpaid) === true && entryData.paidStatus !== 'PAID') {
             throw new https_1.HttpsError("failed-precondition", "Your entry is currently unpaid. Please complete payment to submit picks.");
         }
+        // Per-game lock check
+        const finalPicks = newPicks || entryData.picks || {};
+        const tournamentRef = db.collection('tournaments').doc(poolData.tournamentId);
+        const tournamentDoc = await transaction.get(tournamentRef);
+        if (tournamentDoc.exists) {
+            const tournament = tournamentDoc.data();
+            for (const [slotId, teamId] of Object.entries(finalPicks)) {
+                if (((_b = entryData.picks) === null || _b === void 0 ? void 0 : _b[slotId]) !== teamId) {
+                    const slot = (_c = tournament === null || tournament === void 0 ? void 0 : tournament.slots) === null || _c === void 0 ? void 0 : _c[slotId];
+                    const game = slot ? (_d = tournament === null || tournament === void 0 ? void 0 : tournament.games) === null || _d === void 0 ? void 0 : _d[slot.gameId] : null;
+                    if (game && game.startTime) {
+                        const gameTime = new Date(game.startTime).getTime();
+                        if (Date.now() >= gameTime) {
+                            throw new https_1.HttpsError('failed-precondition', `Game for slot ${slotId} has already started.`);
+                        }
+                    }
+                }
+            }
+        }
         // Validate that bracket is complete:
         // NCAA = 63 picks (64-team bracket: 32+16+8+4+2+1)
         // Conference = total games in tournament (10 for Big East)
-        const finalPicks = newPicks || entryData.picks || {};
         const pickCount = Object.keys(finalPicks).length;
         const isConference = poolData.tournamentType === 'conference';
         let requiredPicks = 63; // Default for NCAA
         if (isConference) {
             // Look up the tournament to get actual game count
             const tournamentRef = db.collection('tournaments').doc(poolData.tournamentId);
-            const tournamentDoc = await transaction.get(tournamentRef);
             if (tournamentDoc.exists) {
                 const tData = tournamentDoc.data();
                 requiredPicks = Object.keys((tData === null || tData === void 0 ? void 0 : tData.games) || {}).length;

@@ -220,6 +220,40 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                     </div>
                 </div>
 
+                {/* Admin Claims Sync helper */}
+                {user.role === 'SUPER_ADMIN' && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6 relative overflow-hidden">
+                        <h3 className="text-amber-400 font-bold text-sm uppercase mb-2 flex items-center gap-2">
+                            🛡️ Admin Claims Sync Required
+                        </h3>
+                        <p className="text-slate-300 mb-4 text-sm">
+                            Your database profile has the <strong>SUPER_ADMIN</strong> role, but your browser Auth session claims need to be synchronized. Click the button below to sync claims and update your permission token.
+                        </p>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    const res = await dbService.syncMyClaims();
+                                    if (res.success) {
+                                        if (auth.currentUser) {
+                                            await auth.currentUser.getIdToken(true);
+                                        }
+                                        alert(`Success: Admin claims synced! Your role is verified as ${res.role}.`);
+                                        window.location.reload();
+                                    } else {
+                                        alert(`Sync failed: ${res.message}`);
+                                    }
+                                } catch (err: any) {
+                                    alert(`Error syncing claims: ${err.message}`);
+                                }
+                            }}
+                            className="bg-amber-600 hover:bg-amber-505 bg-amber-500 text-black font-extrabold px-5 py-2.5 rounded-lg text-sm transition-colors shadow-lg shadow-amber-500/20"
+                        >
+                            Sync Admin Token Claims
+                        </button>
+                    </div>
+                )}
+
+
                 {/* My Entries Quick Link */}
                 <div className="bg-slate-800/50 rounded-xl p-6 flex justify-between items-center border border-slate-700">
                     <div>

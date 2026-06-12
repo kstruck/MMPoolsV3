@@ -73,21 +73,10 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
 //    Checks if a pool is accessible and optionally if a premium feature is unlocked
 // =============================================================================
 
-export const validateBillingAccess = functions.https.onCall(async (request) => {
-    const { poolId, feature } = request.data as { poolId: string; feature?: string };
-
-    if (!poolId) {
-        throw new HttpsError("invalid-argument", "poolId is required.");
-    }
-
-    const poolDoc = await db.collection("pools").doc(poolId).get();
-    if (!poolDoc.exists) {
-        throw new HttpsError("not-found", "Pool not found.");
-    }
-
-    const pool = poolDoc.data() as Pool;
-    const billing = pool.billing;
-
+export function checkBillingAccess(
+    billing: PoolBilling | undefined,
+    feature?: string
+): { allowed: boolean; reason?: string } {
     // No billing record = free pool, always allowed
     if (!billing) {
         return { allowed: true };
@@ -106,6 +95,29 @@ export const validateBillingAccess = functions.https.onCall(async (request) => {
                 return { allowed: false, reason: "Feature requires premium upgrade." };
             }
         }
+    }
+
+    return { allowed: true };
+}
+
+export const validateBillingAccess = functions.https.onCall(async (request) => {
+    const { poolId, feature } = request.data as { poolId: string; feature?: string };
+
+    if (!poolId) {
+        throw new HttpsError("invalid-argument", "poolId is required.");
+    }
+
+    const poolDoc = await db.collection("pools").doc(poolId).get();
+    if (!poolDoc.exists) {
+        throw new HttpsError("not-found", "Pool not found.");
+    }
+
+    const pool = poolDoc.data() as Pool;
+    const result = checkBillingAccess(pool.billing, feature);
+
+    if (!result.allowed) {
+        // validateBillingAccess is traditionally expected to return { allowed: false, reason } rather than throw
+        return result;
     }
 
     return { allowed: true };
@@ -135,6 +147,10 @@ export const redeemCoupon = functions.https.onCall({ cors: true }, async (reques
         throw new HttpsError("not-found", "Pool not found.");
     }
     const pool = poolDoc.data() as Pool;
+
+    if (pool.ownerId !== userId) {
+        throw new HttpsError("permission-denied", "You must be the pool owner to redeem a coupon.");
+    }
 
     // --- Transaction: Validate & Redeem ---
     const result = await db.runTransaction(async (transaction) => {

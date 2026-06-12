@@ -340,6 +340,7 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     // PRE-READ: For "Every Score Wins" pools going final, we need to read winners BEFORE any writes
     // This prevents read-after-write transaction errors
     let preReadEventWinners = null;
+    const newEventWinners = [];
     if (isGameFinal && ((_a = freshPool.ruleVariations) === null || _a === void 0 ? void 0 : _a.scoreChangePayout)) {
         const winnersRef = db.collection('pools').doc(doc.id).collection('winners');
         const winnersSnap = await transaction.get(winnersRef);
@@ -661,7 +662,9 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
                                 isReverse: false,
                                 description: `${step.desc} (${step.home}-${step.away})`
                             };
-                            transaction.set(db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`), winnerDoc, { merge: true });
+                            const winnerRef = db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`);
+                            transaction.set(winnerRef, winnerDoc, { merge: true });
+                            newEventWinners.push({ ref: winnerRef, data: () => winnerDoc });
                         }
                     }
                     // ALWAYS write the winner doc even if audit was deduped
@@ -743,7 +746,9 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
                                     isReverse: true,
                                     description: `${step.desc} Reverse (${step.home}-${step.away})`
                                 };
-                                transaction.set(db.collection('pools').doc(doc.id).collection('winners').doc(`event_rev_${step.home}_${step.away}`), rWinnerDoc, { merge: true });
+                                const rWinnerRef = db.collection('pools').doc(doc.id).collection('winners').doc(`event_rev_${step.home}_${step.away}`);
+                                transaction.set(rWinnerRef, rWinnerDoc, { merge: true });
+                                newEventWinners.push({ ref: rWinnerRef, data: () => rWinnerDoc });
                             }
                         }
                     }
@@ -861,7 +866,8 @@ const processGameUpdate = async (transaction, doc, espnScores, actor, overrides)
     // --- EVERY SCORE PAYS FINALIZATION ---
     // If the game just went final, we need to calculate the actual $ amount for each event based on the total pot logic
     if (isGameFinal && ((_z = freshPool.ruleVariations) === null || _z === void 0 ? void 0 : _z.scoreChangePayout) && preReadEventWinners) {
-        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, preReadEventWinners);
+        const allWinners = [...preReadEventWinners, ...newEventWinners];
+        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, allWinners);
     }
     return { updated: shouldUpdate };
 };

@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from 'firebase-admin';
 import { PropCard, GameState } from './types';
 import { writeAuditEvent } from './audit';
+import { checkBillingAccess } from './billing';
 
 // 1. Purchase Prop Card (Supports multiple cards per user)
 // 1. Purchase Prop Card (Supports multiple cards per user)
@@ -59,6 +60,11 @@ export const purchasePropCard = onCall(async (request) => {
 
     if (existingCards.size >= maxCards) {
         throw new HttpsError('resource-exhausted', `You can only purchase ${maxCards} card(s) for this pool.`);
+    }
+
+    const billingCheck = checkBillingAccess(poolData.billing);
+    if (!billingCheck.allowed) {
+        throw new HttpsError('failed-precondition', billingCheck.reason || 'Pool is locked due to billing.');
     }
 
     // Enforce 10-player Free Plan participant lock
@@ -211,6 +217,11 @@ export const updatePropCard = onCall(async (request) => {
 
     if (poolData.isLocked) {
         throw new HttpsError('failed-precondition', 'Pool is locked. Cannot edit answers.');
+    }
+
+    const billingCheck = checkBillingAccess(poolData.billing);
+    if (!billingCheck.allowed) {
+        throw new HttpsError('failed-precondition', billingCheck.reason || 'Pool is locked due to billing.');
     }
 
     // Verify card ownership

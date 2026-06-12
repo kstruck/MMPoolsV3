@@ -109,6 +109,20 @@ Full-control dashboards for site administrators.
 
 ---
 
+## 💸 Pricing & Plans
+
+Flexible plans that scale with your pool size. Every plan starts with a **14-day free trial**, and an interactive **price estimator** calculates exact cost based on active entries.
+
+| Plan | Price | Best For |
+| --- | --- | --- |
+| **Free Sandbox** (Casual Friends) | `$0` / forever | Small groups — full premium engine, no setup or host fees. |
+| **Dynamic Premium Pool** ⭐ *Featured* | Starts at `$9` / pool | Medium-to-massive pools. Scale-with-size tiers based on active entries — pay only for active players. |
+| **3-Pool Bundle** | `$49` / bundle | Hosts running multiple pools across a season. |
+
+> Setting up a pool, configuring rules, and registering members is always free. Premium tiers unlock massive leagues and branded layouts.
+
+---
+
 ## 🛠️ Tech Stack
 
 * **Frontend:** React 19, TypeScript, Vite

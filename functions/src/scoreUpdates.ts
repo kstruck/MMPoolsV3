@@ -360,6 +360,7 @@ const processGameUpdate = async (
     // PRE-READ: For "Every Score Wins" pools going final, we need to read winners BEFORE any writes
     // This prevents read-after-write transaction errors
     let preReadEventWinners: admin.firestore.QueryDocumentSnapshot[] | null = null;
+    const newEventWinners: { ref: admin.firestore.DocumentReference, data: () => any }[] = [];
     if (isGameFinal && freshPool.ruleVariations?.scoreChangePayout) {
         const winnersRef = db.collection('pools').doc(doc.id).collection('winners');
         const winnersSnap = await transaction.get(winnersRef);
@@ -723,11 +724,13 @@ const processGameUpdate = async (
                                 isReverse: false,
                                 description: `${step.desc} (${step.home}-${step.away})`
                             };
+                            const winnerRef = db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`);
                             transaction.set(
-                                db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`),
+                                winnerRef,
                                 winnerDoc,
                                 { merge: true }
                             );
+                            newEventWinners.push({ ref: winnerRef, data: () => winnerDoc });
                         }
                     }
                     // ALWAYS write the winner doc even if audit was deduped
@@ -820,11 +823,13 @@ const processGameUpdate = async (
                                     description: `${step.desc} Reverse (${step.home}-${step.away})`
                                 };
 
+                                const rWinnerRef = db.collection('pools').doc(doc.id).collection('winners').doc(`event_rev_${step.home}_${step.away}`);
                                 transaction.set(
-                                    db.collection('pools').doc(doc.id).collection('winners').doc(`event_rev_${step.home}_${step.away}`),
+                                    rWinnerRef,
                                     rWinnerDoc,
                                     { merge: true }
                                 );
+                                newEventWinners.push({ ref: rWinnerRef, data: () => rWinnerDoc });
                             }
                         }
                     } else if (axis) {
@@ -949,7 +954,8 @@ const processGameUpdate = async (
     // --- EVERY SCORE PAYS FINALIZATION ---
     // If the game just went final, we need to calculate the actual $ amount for each event based on the total pot logic
     if (isGameFinal && freshPool.ruleVariations?.scoreChangePayout && preReadEventWinners) {
-        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, preReadEventWinners);
+        const allWinners = [...preReadEventWinners, ...newEventWinners];
+        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, allWinners);
     }
 
     return { updated: shouldUpdate };
@@ -963,7 +969,7 @@ async function finalizeEventPayouts(
     poolId: string,
     pool: GameState,
     actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string },
-    eventWinners: admin.firestore.QueryDocumentSnapshot[]
+    eventWinners: (admin.firestore.QueryDocumentSnapshot | { ref: admin.firestore.DocumentReference, data: () => any })[]
 ) {
     // 1. Calculate Pot Logic
     const soldSquares = pool.squares ? pool.squares.filter((s: any) => s.owner).length : 0;

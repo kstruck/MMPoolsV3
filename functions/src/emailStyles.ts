@@ -5,6 +5,16 @@
 export const BASE_URL = "https://www.marchmeleepools.com";
 export const LOGO_URL = `${BASE_URL}/email-logo.png`;
 
+export const escapeHtml = (unsafe: string): string => {
+    if (!unsafe) return "";
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+};
+
 export const STYLES = {
     container: "font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #334155; line-height: 1.6;",
     header: "text-align: center; margin-bottom: 30px; padding: 20px; background-color: #0f172a; border-radius: 0 0 12px 12px;",

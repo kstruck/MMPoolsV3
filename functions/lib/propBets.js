@@ -37,6 +37,7 @@ exports.updatePropCard = exports.gradeProp = exports.purchasePropCard = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const audit_1 = require("./audit");
+const billing_1 = require("./billing");
 // 1. Purchase Prop Card (Supports multiple cards per user)
 // 1. Purchase Prop Card (Supports multiple cards per user)
 exports.purchasePropCard = (0, https_1.onCall)(async (request) => {
@@ -85,6 +86,10 @@ exports.purchasePropCard = (0, https_1.onCall)(async (request) => {
         .get();
     if (existingCards.size >= maxCards) {
         throw new https_1.HttpsError('resource-exhausted', `You can only purchase ${maxCards} card(s) for this pool.`);
+    }
+    const billingCheck = (0, billing_1.checkBillingAccess)(poolData.billing);
+    if (!billingCheck.allowed) {
+        throw new https_1.HttpsError('failed-precondition', billingCheck.reason || 'Pool is locked due to billing.');
     }
     // Enforce 10-player Free Plan participant lock
     const billingStatus = (_c = (_b = poolData.billing) === null || _b === void 0 ? void 0 : _b.status) !== null && _c !== void 0 ? _c : 'free';
@@ -207,6 +212,10 @@ exports.updatePropCard = (0, https_1.onCall)(async (request) => {
     const poolData = poolSnap.data();
     if (poolData.isLocked) {
         throw new https_1.HttpsError('failed-precondition', 'Pool is locked. Cannot edit answers.');
+    }
+    const billingCheck = (0, billing_1.checkBillingAccess)(poolData.billing);
+    if (!billingCheck.allowed) {
+        throw new https_1.HttpsError('failed-precondition', billingCheck.reason || 'Pool is locked due to billing.');
     }
     // Verify card ownership
     const cardRef = poolRef.collection('propCards').doc(cardId);

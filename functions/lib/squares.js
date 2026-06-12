@@ -39,6 +39,7 @@ const admin = __importStar(require("firebase-admin"));
 const audit_1 = require("./audit");
 const reminders_1 = require("./reminders");
 const emailStyles_1 = require("./emailStyles");
+const billing_1 = require("./billing");
 exports.reserveSquare = (0, https_1.onCall)(async (request) => {
     var _a;
     // 0. Ensure Admin Init (Lazy)
@@ -73,6 +74,10 @@ exports.reserveSquare = (0, https_1.onCall)(async (request) => {
             throw new https_1.HttpsError("not-found", "Pool not found.");
         }
         const pool = poolDoc.data();
+        const billingCheck = (0, billing_1.checkBillingAccess)(pool.billing);
+        if (!billingCheck.allowed) {
+            throw new https_1.HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
+        }
         // Check if Pool is open explicitly?
         // Usually squares can be bought unless isLocked, BUT admin might reserve even if locked (Manual).
         // Let's enforce: If locked, ONLY owner can edit.

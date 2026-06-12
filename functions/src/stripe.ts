@@ -209,6 +209,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
     }
 
     // --- Verify and deduct credits if used ---
+    let validatedFreeReason = false;
     if (usedCredit) {
         const userDoc = await db.collection("users").doc(userId).get();
         const userData = userDoc.data();
@@ -224,10 +225,76 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
                 throw new HttpsError("failed-precondition", "No universal pool credits available.");
             }
         }
+        validatedFreeReason = true;
+    }
+
+    if (couponCode) {
+        const couponQuery = await db.collection("coupons")
+            .where("code", "==", couponCode)
+            .limit(1)
+            .get();
+
+        if (!couponQuery.empty) {
+            const couponData = couponQuery.docs[0].data();
+            const now = Date.now();
+            if (couponData.isActive && (!couponData.expiresAt || couponData.expiresAt > now)) {
+                if (couponData.maxUses === undefined || (couponData.usesCount || 0) < couponData.maxUses) {
+                    if (couponData.discountType === "percentage" && couponData.discountValue === 100) {
+                        validatedFreeReason = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Determine Authoritative Server Price ---
+    let serverPrice = price; // Fallback
+    try {
+        const billingConfigDoc = await db.collection("settings").doc("billing_config").get();
+        const configData = billingConfigDoc.data();
+        if (configData) {
+            if (isBundlePurchase) {
+                const packagesList = configData.packagesList || [];
+                const dynamicBundle = packagesList.find((b: any) => b.id === bundleType);
+                if (dynamicBundle) {
+                    serverPrice = dynamicBundle.price;
+                } else if (bundleType === "buy_3" && configData.packages?.buy_3) {
+                    serverPrice = configData.packages.buy_3;
+                } else if (bundleType === "unlimited_1yr" && configData.packages?.unlimited_1yr) {
+                    serverPrice = configData.packages.unlimited_1yr;
+                }
+            } else {
+                if (tier === "free_tier") {
+                    serverPrice = 0;
+                } else {
+                    let pricingArray = [];
+                    if (poolType === "NFL_SEASON" || poolType === "NFL_PICKEM" || poolType === "NFL_SURVIVOR" || poolType === "NFL_MARGIN") {
+                        pricingArray = configData.pricing?.season || [];
+                    } else if (poolType === "BRACKET" || poolType === "NFL_PLAYOFFS") {
+                        pricingArray = configData.pricing?.bracket || [];
+                    } else if (poolType === "SQUARES") {
+                        pricingArray = configData.pricing?.squares || [];
+                    } else if (poolType === "PROPS") {
+                        pricingArray = configData.pricing?.props || [];
+                    }
+                    
+                    const players = Number(maxPlayersAllowed) || 10;
+                    const applicableTier = pricingArray.find((t: any) => players >= t.min && players <= t.max);
+                    if (applicableTier) {
+                        serverPrice = applicableTier.price;
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch authoritative price, falling back to client price", e);
     }
 
     // --- Secure $0 Stripe Bypass for 100% Off Coupons, Credit usage, or Unlimited Pass ---
-    if (price === 0) {
+    if (serverPrice === 0) {
+        if (!validatedFreeReason && tier !== "free_tier") {
+            throw new HttpsError("failed-precondition", "No valid free-activation reason provided.");
+        }
         const poolRef = db.collection("pools").doc(poolId);
         await poolRef.update({
             "billing.status": "active",
@@ -293,7 +360,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
         const poolRef = db.collection("pools").doc(poolId);
         await poolRef.update({
             "billing.status": "active",
-            "billing.pricePaid": existingPricePaid + price,
+            "billing.pricePaid": existingPricePaid + serverPrice,
             "billing.stripeSessionId": `mock_local_dev_session_${Date.now()}`,
             "billing.tier": tier || "premium_tier",
             "billing.maxPlayersAllowed": Number(maxPlayersAllowed) || 10,
@@ -336,7 +403,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
                             name: `${poolName} — ${tier === "premium_tier" ? "Premium" : "Standard"} Hosting`,
                             description: `One-time hosting fee for your ${poolType} pool`,
                         },
-                        unit_amount: Math.round(price * 100),
+                        unit_amount: Math.round(serverPrice * 100),
                     },
                     quantity: 1,
                 },
@@ -400,6 +467,17 @@ export const handleStripeWebhook = functions.https.onRequest(async (req, res) =>
 
     switch (event.type) {
         case "checkout.session.completed": {
+            // Idempotency check
+            const evtRef = db.collection('stripeWebhookEvents').doc(event.id);
+            const seen = await evtRef.get();
+            if (seen.exists) {
+                console.log(`[Stripe Webhook] Duplicate event ignored: ${event.id}`);
+                res.status(200).send('duplicate');
+                return;
+            }
+            // Mark as processed
+            await evtRef.set({ type: event.type, processedAt: Date.now() });
+
             const session = event.data.object;
             const metadata = session.metadata || {};
 

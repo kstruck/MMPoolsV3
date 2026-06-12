@@ -32,7 +32,16 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
     creditsEarned: 0,
   });
 
-  const referralLink = referralService.generateReferralLink(userId);
+  const [referralLink, setReferralLink] = useState<string>('Generating link...');
+
+  useEffect(() => {
+    referralService.generateReferralLink(userId).then(link => {
+      setReferralLink(link);
+    }).catch(err => {
+      console.error("Error generating referral link", err);
+      setReferralLink('Error generating link');
+    });
+  }, [userId]);
   const creditsNeeded = config.creditsRequiredForFreePool;
   const creditsRemaining = Math.max(0, creditsNeeded - stats.creditsEarned);
   const progressPercent = creditsNeeded > 0 ? Math.min(100, (stats.creditsEarned / creditsNeeded) * 100) : 0;

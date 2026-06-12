@@ -15,6 +15,7 @@ import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc, updateDoc, increment, onSnapshot } from "firebase/firestore";
 import type { User } from "../types";
 import { emailService } from "./emailService";
+import { referralService } from "./referralService";
 import { logger } from '../utils/logger';
 
 const googleProvider = new GoogleAuthProvider();
@@ -52,7 +53,11 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
 
   if (!userSnap.exists()) {
     // NEW USER - Create document
-    const referredBy = localStorage.getItem(REFERRAL_STORAGE_KEY);
+    const referralToken = localStorage.getItem(REFERRAL_STORAGE_KEY);
+    let referredBy = null;
+    if (referralToken) {
+        referredBy = await referralService.parseReferralToken(referralToken);
+    }
 
     const newUserData: Record<string, unknown> = {
       id: user.id,

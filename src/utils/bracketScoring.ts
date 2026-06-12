@@ -35,6 +35,13 @@ export function extractSeedFromTeamId(teamId: string | undefined | null): number
     return null;
 }
 
+export function getSeedForTeam(teamId: string | undefined | null, tournament: Tournament): number | null {
+    if (!teamId) return null;
+    const seed = tournament.importedTeams?.[teamId]?.seed;
+    if (typeof seed === 'number' && seed > 0) return seed;
+    return extractSeedFromTeamId(teamId);
+}
+
 /**
  * Calculates current score + potential remaining points.
  */
@@ -79,9 +86,9 @@ export const calculateEntryMaxScore = (
                 maxScore += points; // Won
 
                 if (upsetBonusEnabled) {
-                    const winnerSeed = extractSeedFromTeamId(game.winnerTeamId);
+                    const winnerSeed = getSeedForTeam(game.winnerTeamId, tournament);
                     const loserId = game.homeTeamId === game.winnerTeamId ? game.awayTeamId : game.homeTeamId;
-                    const loserSeed = extractSeedFromTeamId(loserId);
+                    const loserSeed = getSeedForTeam(loserId, tournament);
 
                     if (winnerSeed && loserSeed && winnerSeed > loserSeed) {
                         maxScore += (winnerSeed - loserSeed) * upsetMultiplier;
@@ -97,11 +104,11 @@ export const calculateEntryMaxScore = (
                 maxScore += points; // Potential
 
                 if (upsetBonusEnabled) {
-                    const pickSeed = extractSeedFromTeamId(pickedTeamId);
+                    const pickSeed = getSeedForTeam(pickedTeamId, tournament);
                     if (pickSeed) {
                         const opponentId = game.homeTeamId === pickedTeamId ? game.awayTeamId : (game.awayTeamId === pickedTeamId ? game.homeTeamId : null);
                         if (opponentId && !eliminatedTeams!.has(opponentId)) {
-                            const oppSeed = extractSeedFromTeamId(opponentId);
+                            const oppSeed = getSeedForTeam(opponentId, tournament);
                             if (oppSeed && pickSeed > oppSeed) {
                                 maxScore += (pickSeed - oppSeed) * upsetMultiplier;
                             }

@@ -1,5 +1,7 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 
 const db = admin.firestore();
 
@@ -60,4 +62,33 @@ export const creditReferralOnPayment = onDocumentUpdated('pools/{poolId}', async
   });
 
   console.log(`Referral credit awarded to ${referrerId} for referred user ${ownerId}`);
+});
+
+export const generateReferralToken = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+    const uid = request.auth.uid;
+    const token = crypto.randomBytes(16).toString('hex');
+
+    await db.collection('referralTokens').doc(token).set({
+        uid,
+        createdAt: Date.now()
+    });
+
+    return { token };
+});
+
+export const resolveReferralToken = onCall(async (request) => {
+    const { token } = request.data;
+    if (!token) {
+        throw new HttpsError('invalid-argument', 'Missing token.');
+    }
+
+    const tokenDoc = await db.collection('referralTokens').doc(token).get();
+    if (!tokenDoc.exists) {
+        throw new HttpsError('not-found', 'Invalid referral token.');
+    }
+
+    return { uid: tokenDoc.data()?.uid };
 });

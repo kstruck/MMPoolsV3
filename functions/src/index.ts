@@ -43,5 +43,5 @@ export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolPartic
 export { createCheckoutSession, handleStripeWebhook } from "./stripe";
 
 // --- REFERRAL SYSTEM ---
-export { creditReferralOnPayment } from "./referral";
+export { creditReferralOnPayment, generateReferralToken, resolveReferralToken } from "./referral";
 

@@ -5,6 +5,7 @@
  */
 
 import type { BracketEntry, Tournament, BracketPool, Game } from '../../types';
+import { getSeedForTeam } from '../../utils/bracketScoring';
 
 // Standard round point values
 const ROUND_VALUES_CLASSIC = [10, 20, 40, 80, 160, 320];
@@ -138,9 +139,9 @@ export function calculateScore(
                 // Upset Bonus Logic (Calculated on actual match outcome)
                 if (upsetBonusEnabled) {
                     // Lower rank = bigger upset, so winnerSeed > loserSeed
-                    const winnerSeed = extractSeedFromTeamId(game.winnerTeamId);
+                    const winnerSeed = getSeedForTeam(game.winnerTeamId, tournament);
                     const loserId = game.homeTeamId === game.winnerTeamId ? game.awayTeamId : game.homeTeamId;
-                    const loserSeed = extractSeedFromTeamId(loserId);
+                    const loserSeed = getSeedForTeam(loserId, tournament);
 
                     if (winnerSeed && loserSeed && winnerSeed > loserSeed) {
                         const bonus = (winnerSeed - loserSeed) * upsetMultiplier;
@@ -160,12 +161,12 @@ export function calculateScore(
 
                 // Max possible upset bonus (Optimistic)
                 if (upsetBonusEnabled) {
-                    const pickSeed = extractSeedFromTeamId(pickedTeamId);
+                    const pickSeed = getSeedForTeam(pickedTeamId, tournament);
                     if (pickSeed) {
                         const opponentId = game.homeTeamId === pickedTeamId ? game.awayTeamId : (game.awayTeamId === pickedTeamId ? game.homeTeamId : null);
                         if (opponentId && isTeamAlive(opponentId, tournament)) {
                             // Known opponent
-                            const oppSeed = extractSeedFromTeamId(opponentId);
+                            const oppSeed = getSeedForTeam(opponentId, tournament);
                             if (oppSeed && pickSeed > oppSeed) {
                                 const bonus = (pickSeed - oppSeed) * upsetMultiplier;
                                 maxPossible += bonus;

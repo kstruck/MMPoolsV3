@@ -1,0 +1,103 @@
+<USER_REQUEST>
+I ran a code review and here are the results. Review and plan a fix
+
+MMPoolsV3 — Architecture & Security Review
+Repo: https://github.com/kstruck/MMPoolsV3 Reviewed: 2026-06-11 Scope: Business-logic correctness, payments, auth, data deletion, injection vectors, Firestore N+1 / performance. Architecture-level, not style. Stack: React + Vite (src/), Firebase Cloud Functions v2 / TypeScript (functions/src/), Firestore, Stripe.
+
+How to use this report
+Each finding is self-contained: severity, exact file:line, exploit scenario, and a concrete fix. Drop individual findings into Antigravity or Claude Code as remediation tasks. Findings are tagged:
+
+[VERIFIED] — I read the code and confirmed the issue directly.
+[REPORTED] — surfaced by a review agent; the pattern is real but confirm the exact line during remediation.
+Confidence filter applied: speculative items were dropped. Items that turned out to be properly handled are listed in Appendix B so you know they were checked.
+
+Executive summary
+The app is functionally broad (brackets, NFL pick'em/survivor/margin, squares, playoff, props) and the Firestore rules are better than typical AI-generated output — billing fields, participant indices, winners, and audit logs are all locked to Cloud Functions. Admin is a tamper-proof JWT claim, not a client field. That's the good news.
+
+The bad news is concentrated in the money path and in read-side data exposure:
+
+#	Severity	Finding	Area
+C1	🔴 Critical	Client controls checkout price; price:0 self-activates a pool with no Stripe, no coupon	Payments
+C2	🔴 Critical	Any authenticated user can read every other user's record and every pool's entries/picks	Auth / PII
+C3	🔴 Critical	Stripe webhook has no idempotency → retries double-credit bundles	Payments
+H1	🟠 High	Referral tokens are btoa(userId) — trivially forgeable; no self-referral block	Payments
+H2	🟠 High	redeemCoupon doesn't verify caller owns the target pool	Payments
+H3	🟠 High	confirmPayment doesn't verify caller owns t
+<truncated 20784 bytes>
+Scoring.ts files vs server (H4), git status / .env contents (L1, L2). REPORTED findings came from focused review agents over functions/src and src; the patterns are real but re-confirm the exact line at fix time.
+
+Appendix B — checked and found OK (don't re-investigate)
+Admin model: SUPER_ADMIN is a JWT custom claim, not a client-writable field. Correct design.
+billing field tampering: protected by firestore.rules:52 (protectedFieldsUnchanged) — clients cannot self-mark a pool paid. The earlier "user marks own invoice paid" hypothesis is false.
+Winners / participants / audit / participations subcollections: all write: if false (Cloud Functions only). Correct.
+Webhook signature: verified against req.rawBody (stripe.ts:389). Correct — the gap is idempotency (C3), not signature.
+Standard-pool charge amount: webhook records session.amount_total (real charged amount), not client price. Correct — the price gap is at session creation (C1), not at webhook recording.
+Delete authorization: gated to owner/manager/superadmin in rules. The gap is cascade + transactionality, not auth.
+Game cancellation handling: survivor/pickem/margin treat CANCELLED as no-strike / skip / 0. Looks correct.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-11T16:39:58-06:00.
+
+The user's current state is as follows:
+Other open documents:
+- d:\march-melee-pools\functions\src\types.ts (LANGUAGE_TYPESCRIPT)
+- d:\march-melee-pools\src\components\PricingPage.tsx (LANGUAGE_TSX)
+- d:\march-melee-pools\src\components\AdminPanel.tsx (LANGUAGE_TSX)
+- d:\march-melee-pools\src\components\AICommissioner.tsx (LANGUAGE_TSX)
+- d:\march-melee-pools\src\components\BracketPoolDashboard\PaymentLedger.tsx (LANGUAGE_TSX)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.1 Pro (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE><USER_REQUEST>
+I ran a code review and here are the results. Review and plan a fix
+
+MMPoolsV3 — Architecture & Security Review
+Repo: https://github.com/kstruck/MMPoolsV3 Reviewed: 2026-06-11 Scope: Business-logic correctness, payments, auth, data deletion, injection vectors, Firestore N+1 / performance. Architecture-level, not style. Stack: React + Vite (src/), Firebase Cloud Functions v2 / TypeScript (functions/src/), Firestore, Stripe.
+
+How to use this report
+Each finding is self-contained: severity, exact file:line, exploit scenario, and a concrete fix. Drop individual findings into Antigravity or Claude Code as remediation tasks. Findings are tagged:
+
+[VERIFIED] — I read the code and confirmed the issue directly.
+[REPORTED] — surfaced by a review agent; the pattern is real but confirm the exact line during remediation.
+Confidence filter applied: speculative items were dropped. Items that turned out to be properly handled are listed in Appendix B so you know they were checked.
+
+Executive summary
+The app is functionally broad (brackets, NFL pick'em/survivor/margin, squares, playoff, props) and the Firestore rules are better than typical AI-generated output — billing fields, participant indices, winners, and audit logs are all locked to Cloud Functions. Admin is a tamper-proof JWT claim, not a client field. That's the good news.
+
+The bad news is concentrated in the money path and in read-side data exposure:
+
+#	Severity	Finding	Area
+C1	🔴 Critical	Client controls checkout price; price:0 self-activates a pool with no Stripe, no coupon	Payments
+C2	🔴 Critical	Any authenticated user can read every other user's record and every pool's entries/picks	Auth / PII
+C3	🔴 Critical	Stripe webhook has no idempotency → retries double-credit bundles	Payments
+H1	🟠 High	Referral tokens are btoa(userId) — trivially forgeable; no self-referral block	Payments
+H2	🟠 High	redeemCoupon doesn't verify caller owns the target pool	Payments
+H3	🟠 High	confirmPayment doesn't verify caller owns t
+<truncated 20784 bytes>
+Scoring.ts files vs server (H4), git status / .env contents (L1, L2). REPORTED findings came from focused review agents over functions/src and src; the patterns are real but re-confirm the exact line at fix time.
+
+Appendix B — checked and found OK (don't re-investigate)
+Admin model: SUPER_ADMIN is a JWT custom claim, not a client-writable field. Correct design.
+billing field tampering: protected by firestore.rules:52 (protectedFieldsUnchanged) — clients cannot self-mark a pool paid. The earlier "user marks own invoice paid" hypothesis is false.
+Winners / participants / audit / participations subcollections: all write: if false (Cloud Functions only). Correct.
+Webhook signature: verified against req.rawBody (stripe.ts:389). Correct — the gap is idempotency (C3), not signature.
+Standard-pool charge amount: webhook records session.amount_total (real charged amount), not client price. Correct — the price gap is at session creation (C1), not at webhook recording.
+Delete authorization: gated to owner/manager/superadmin in rules. The gap is cascade + transactionality, not auth.
+Game cancellation handling: survivor/pickem/margin treat CANCELLED as no-strike / skip / 0. Looks correct.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-11T16:39:58-06:00.
+
+The user's current state is as follows:
+Other open documents:
+- d:\march-melee-pools\functions\src\types.ts (LANGUAGE_TYPESCRIPT)
+- d:\march-melee-pools\src\components\PricingPage.tsx (LANGUAGE_TSX)
+- d:\march-melee-pools\src\components\AdminPanel.tsx (LANGUAGE_TSX)
+- d:\march-melee-pools\src\components\AICommissioner.tsx (LANGUAGE_TSX)
+- d:\march-melee-pools\src\components\BracketPoolDashboard\PaymentLedger.tsx (LANGUAGE_TSX)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.1 Pro (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

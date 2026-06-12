@@ -37,6 +37,7 @@ exports.scoreNFLWeek = exports.executeSurvivorRebuy = exports.submitNFLPicks = e
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const audit_1 = require("./audit");
+const billing_1 = require("./billing");
 const poolOps_1 = require("./poolOps");
 const nflScoringEngine_1 = require("./nflScoringEngine");
 /**
@@ -188,6 +189,10 @@ exports.submitNFLPicks = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('not-found', 'Pool not found.');
     }
     const pool = poolSnap.data();
+    const billingCheck = (0, billing_1.checkBillingAccess)(pool.billing);
+    if (!billingCheck.allowed) {
+        throw new https_1.HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
+    }
     const type = pool.type;
     const now = Date.now();
     // 1. Fetch weekly games from firestore to validate lock-deadlines

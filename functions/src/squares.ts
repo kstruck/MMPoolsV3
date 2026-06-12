@@ -4,6 +4,7 @@ import { GameState } from "./types";
 import { writeAuditEvent } from "./audit";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml } from "./emailStyles";
+import { checkBillingAccess } from "./billing";
 
 
 export const reserveSquare = onCall(async (request) => {
@@ -49,6 +50,11 @@ export const reserveSquare = onCall(async (request) => {
         }
 
         const pool = poolDoc.data() as GameState;
+
+        const billingCheck = checkBillingAccess(pool.billing);
+        if (!billingCheck.allowed) {
+            throw new HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
+        }
 
         // Check if Pool is open explicitly?
         // Usually squares can be bought unless isLocked, BUT admin might reserve even if locked (Manual).

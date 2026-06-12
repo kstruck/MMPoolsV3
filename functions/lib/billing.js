@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.onPoolParticipantChange = exports.redeemCoupon = exports.validateBillingAccess = exports.enforceBillingStatus = void 0;
+exports.checkBillingAccess = checkBillingAccess;
 const functions = __importStar(require("firebase-functions/v2"));
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
@@ -98,17 +99,7 @@ exports.enforceBillingStatus = functions.scheduler.onSchedule("every day 03:00",
 // 2. validateBillingAccess — Callable Function
 //    Checks if a pool is accessible and optionally if a premium feature is unlocked
 // =============================================================================
-exports.validateBillingAccess = functions.https.onCall(async (request) => {
-    const { poolId, feature } = request.data;
-    if (!poolId) {
-        throw new https_1.HttpsError("invalid-argument", "poolId is required.");
-    }
-    const poolDoc = await db.collection("pools").doc(poolId).get();
-    if (!poolDoc.exists) {
-        throw new https_1.HttpsError("not-found", "Pool not found.");
-    }
-    const pool = poolDoc.data();
-    const billing = pool.billing;
+function checkBillingAccess(billing, feature) {
     // No billing record = free pool, always allowed
     if (!billing) {
         return { allowed: true };
@@ -125,6 +116,23 @@ exports.validateBillingAccess = functions.https.onCall(async (request) => {
                 return { allowed: false, reason: "Feature requires premium upgrade." };
             }
         }
+    }
+    return { allowed: true };
+}
+exports.validateBillingAccess = functions.https.onCall(async (request) => {
+    const { poolId, feature } = request.data;
+    if (!poolId) {
+        throw new https_1.HttpsError("invalid-argument", "poolId is required.");
+    }
+    const poolDoc = await db.collection("pools").doc(poolId).get();
+    if (!poolDoc.exists) {
+        throw new https_1.HttpsError("not-found", "Pool not found.");
+    }
+    const pool = poolDoc.data();
+    const result = checkBillingAccess(pool.billing, feature);
+    if (!result.allowed) {
+        // validateBillingAccess is traditionally expected to return { allowed: false, reason } rather than throw
+        return result;
     }
     return { allowed: true };
 });
@@ -148,6 +156,9 @@ exports.redeemCoupon = functions.https.onCall({ cors: true }, async (request) =>
         throw new https_1.HttpsError("not-found", "Pool not found.");
     }
     const pool = poolDoc.data();
+    if (pool.ownerId !== userId) {
+        throw new https_1.HttpsError("permission-denied", "You must be the pool owner to redeem a coupon.");
+    }
     // --- Transaction: Validate & Redeem ---
     const result = await db.runTransaction(async (transaction) => {
         // Find coupon by code

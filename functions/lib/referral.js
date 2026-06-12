@@ -33,9 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.creditReferralOnPayment = void 0;
+exports.resolveReferralToken = exports.generateReferralToken = exports.creditReferralOnPayment = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
+const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
+const crypto = __importStar(require("crypto"));
 const db = admin.firestore();
 // Triggered when a pool's billing status changes to 'active' (payment confirmed)
 exports.creditReferralOnPayment = (0, firestore_1.onDocumentUpdated)('pools/{poolId}', async (event) => {
@@ -88,5 +90,29 @@ exports.creditReferralOnPayment = (0, firestore_1.onDocumentUpdated)('pools/{poo
         });
     });
     console.log(`Referral credit awarded to ${referrerId} for referred user ${ownerId}`);
+});
+exports.generateReferralToken = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be logged in.');
+    }
+    const uid = request.auth.uid;
+    const token = crypto.randomBytes(16).toString('hex');
+    await db.collection('referralTokens').doc(token).set({
+        uid,
+        createdAt: Date.now()
+    });
+    return { token };
+});
+exports.resolveReferralToken = (0, https_1.onCall)(async (request) => {
+    var _a;
+    const { token } = request.data;
+    if (!token) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing token.');
+    }
+    const tokenDoc = await db.collection('referralTokens').doc(token).get();
+    if (!tokenDoc.exists) {
+        throw new https_1.HttpsError('not-found', 'Invalid referral token.');
+    }
+    return { uid: (_a = tokenDoc.data()) === null || _a === void 0 ? void 0 : _a.uid };
 });
 //# sourceMappingURL=referral.js.map

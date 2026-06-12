@@ -140,6 +140,19 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  // Referral Token Parsing
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) {
+      authService.storeReferralCode(ref);
+      // Clean up URL if desired
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('ref');
+      window.history.replaceState(null, '', newUrl.toString());
+    }
+  }, []);
+
   // Global Stats Subscription
   const [stats, setStats] = useState<GlobalStats | null>(null);
   useEffect(() => {

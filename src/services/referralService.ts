@@ -1,21 +1,30 @@
-import { db } from '../firebase';
+import { db, functions } from '../firebase';
 import { doc, setDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
 export const referralService = {
   // Generate a unique referral link for a user
-  generateReferralLink(userId: string): string {
+  async generateReferralLink(userId: string): Promise<string> {
     const baseUrl = window.location.origin;
-    const token = btoa(userId).replace(/=/g, ''); // Base64 encode user ID
-    return `${baseUrl}/#/?ref=${token}`;
+    try {
+      const generateToken = httpsCallable<{ userId: string }, { token: string }>(functions, 'generateReferralToken');
+      const response = await generateToken({ userId });
+      return `${baseUrl}/#/?ref=${response.data.token}`;
+    } catch (e) {
+      console.error("Failed to generate secure referral token, falling back to basic hash", e);
+      // Fallback only if absolutely necessary, but we shouldn't leak UID.
+      return `${baseUrl}/#/?ref=error`;
+    }
   },
 
   // Parse referral token from URL back to userId
-  parseReferralToken(token: string): string | null {
+  async parseReferralToken(token: string): Promise<string | null> {
     try {
-      // Pad base64 string back
-      const padded = token + '='.repeat((4 - token.length % 4) % 4);
-      return atob(padded);
-    } catch {
+      const resolveToken = httpsCallable<{ token: string }, { uid: string }>(functions, 'resolveReferralToken');
+      const response = await resolveToken({ token });
+      return response.data.uid;
+    } catch (e) {
+      console.error("Failed to resolve referral token", e);
       return null;
     }
   },

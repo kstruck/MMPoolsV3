@@ -2,9 +2,20 @@
 // Shared email styles matching the frontend Service (Light Theme)
 // Based on src/services/emailService.ts
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.renderEmailHtml = exports.STYLES = exports.LOGO_URL = exports.BASE_URL = void 0;
+exports.renderEmailHtml = exports.STYLES = exports.escapeHtml = exports.LOGO_URL = exports.BASE_URL = void 0;
 exports.BASE_URL = "https://www.marchmeleepools.com";
 exports.LOGO_URL = `${exports.BASE_URL}/email-logo.png`;
+const escapeHtml = (unsafe) => {
+    if (!unsafe)
+        return "";
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+};
+exports.escapeHtml = escapeHtml;
 exports.STYLES = {
     container: "font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #334155; line-height: 1.6;",
     header: "text-align: center; margin-bottom: 30px; padding: 20px; background-color: #0f172a; border-radius: 0 0 12px 12px;",

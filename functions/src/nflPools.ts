@@ -1,7 +1,8 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { writeAuditEvent } from './audit';
-import { assertPoolOwnerOrSuperAdmin } from './poolOps';
+import { writeAuditEvent } from "./audit";
+import { checkBillingAccess } from "./billing";
+import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
 import {
   NFLGame,
   NFLPickemPool,
@@ -211,6 +212,12 @@ export const submitNFLPicks = onCall(async (request) => {
   }
 
   const pool = poolSnap.data() as any;
+  
+  const billingCheck = checkBillingAccess(pool.billing);
+  if (!billingCheck.allowed) {
+    throw new HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
+  }
+
   const type = pool.type;
   const now = Date.now();
 

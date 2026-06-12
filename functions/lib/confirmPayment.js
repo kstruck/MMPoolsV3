@@ -73,10 +73,12 @@ exports.confirmPayment = (0, https_1.onCall)(async (request) => {
             const square = squares.find(s => s.id === sqId);
             if (!square)
                 continue;
-            // Check ownership - either by name match or guest key
-            // For now, we allow confirmation if they provide valid square IDs
+            // Check ownership
             if (!square.owner) {
                 throw new https_1.HttpsError("failed-precondition", `Square #${sqId} is not claimed.`);
+            }
+            if (square.reservedByUid !== userId) {
+                throw new https_1.HttpsError("permission-denied", `You do not own Square #${sqId}.`);
             }
             // Get player details from the first square
             if (!playerName && square.owner) {
@@ -116,22 +118,22 @@ exports.confirmPayment = (0, https_1.onCall)(async (request) => {
         const squareList = result.squareIds.map(id => `#${id}`).join(", ");
         const bodyContent = `
             <p style="font-size: 16px; color: #334155; margin-bottom: 20px;">
-                <strong>${result.playerName}</strong> has confirmed payment for their squares in your pool.
+                <strong>${(0, emailStyles_1.escapeHtml)(result.playerName)}</strong> has confirmed payment for their squares in your pool.
             </p>
             
             <div style="background-color: #f1f5f9; border-radius: 8px; padding: 20px; margin: 20px 0;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr>
                         <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Player:</td>
-                        <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${result.playerName}</td>
+                        <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${(0, emailStyles_1.escapeHtml)(result.playerName)}</td>
                     </tr>
                     <tr>
                         <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Email:</td>
-                        <td style="padding: 8px 0; color: #0f172a; text-align: right;">${result.playerEmail || "Not provided"}</td>
+                        <td style="padding: 8px 0; color: #0f172a; text-align: right;">${(0, emailStyles_1.escapeHtml)(result.playerEmail || "Not provided")}</td>
                     </tr>
                     <tr>
                         <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Squares:</td>
-                        <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${squareList}</td>
+                        <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${(0, emailStyles_1.escapeHtml)(squareList)}</td>
                     </tr>
                     <tr style="border-top: 1px solid #e2e8f0;">
                         <td style="padding: 12px 0 0; color: #64748b; font-size: 14px;">Total Amount:</td>
@@ -144,11 +146,11 @@ exports.confirmPayment = (0, https_1.onCall)(async (request) => {
                 Please verify receipt of payment and mark the squares as paid in your admin panel.
             </p>
         `;
-        const emailHtml = (0, emailStyles_1.renderEmailHtml)(`Payment Confirmation from ${result.playerName}`, bodyContent, `${emailStyles_1.BASE_URL}/#admin/${result.poolId}`, "View Pool Admin");
+        const emailHtml = (0, emailStyles_1.renderEmailHtml)((0, emailStyles_1.escapeHtml)(`Payment Confirmation from ${result.playerName}`), bodyContent, `${emailStyles_1.BASE_URL}/#admin/${result.poolId}`, "View Pool Admin");
         await db.collection("mail").add({
             to: result.hostEmail,
             message: {
-                subject: `[${result.poolName}] Payment Confirmation from ${result.playerName}`,
+                subject: (0, emailStyles_1.escapeHtml)(`[${result.poolName}] Payment Confirmation from ${result.playerName}`),
                 html: emailHtml
             }
         });
