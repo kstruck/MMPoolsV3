@@ -77,7 +77,7 @@ exports.createPool = (0, https_1.onCall)(async (request) => {
         const poolId = poolRef.id;
         // Prepare Pool Data
         const now = admin.firestore.Timestamp.now();
-        const newPool = Object.assign(Object.assign({}, data), { id: poolId, createdByUid: uid, ownerId: uid, createdAt: now, updatedAt: now, status: 'DRAFT', isLocked: false });
+        const newPool = Object.assign(Object.assign({}, data), { id: poolId, createdByUid: uid, ownerId: uid, createdAt: now, updatedAt: now, status: 'DRAFT', isLocked: false, isPublic: data.isPublic !== undefined ? data.isPublic : true });
         // Initialize Squares-specific data
         if (isSquaresPool) {
             newPool.squares = Array(100).fill(null).map((_, i) => ({ id: i, owner: null }));

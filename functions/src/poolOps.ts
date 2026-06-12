@@ -60,6 +60,7 @@ export const createPool = onCall(async (request) => {
             updatedAt: now,
             status: 'DRAFT',
             isLocked: false,
+            isPublic: data.isPublic !== undefined ? data.isPublic : true, // Explicitly set for rules
         };
 
         // Initialize Squares-specific data

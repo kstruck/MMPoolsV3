@@ -37,6 +37,7 @@ exports.backfillPools = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 exports.backfillPools = (0, https_1.onCall)(async (request) => {
+    var _a;
     if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
         throw new https_1.HttpsError('permission-denied', 'Only Super Admin can run migration.');
     }
@@ -53,12 +54,17 @@ exports.backfillPools = (0, https_1.onCall)(async (request) => {
         const poolId = poolDoc.id;
         if (!ownerId)
             continue;
-        // 1. Set createdByUid if missing
+        // 1. Backfill missing base fields (createdByUid, isPublic)
+        const updates = {};
         if (!pool.createdByUid) {
-            batch.update(poolDoc.ref, {
-                createdByUid: ownerId,
-                status: pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT')
-            });
+            updates.createdByUid = ownerId;
+            updates.status = pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT');
+        }
+        if (pool.isPublic === undefined) {
+            updates.isPublic = pool.type === 'BRACKET' ? ((_a = pool.isListedPublic) !== null && _a !== void 0 ? _a : false) : true;
+        }
+        if (Object.keys(updates).length > 0) {
+            batch.update(poolDoc.ref, updates);
             batchCount++;
         }
         // 2. Create Managed Pool Index

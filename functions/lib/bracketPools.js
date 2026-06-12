@@ -87,6 +87,7 @@ exports.createBracketPool = (0, https_1.onCall)(async (request) => {
         tournamentId: resolvedTournamentId,
         tournamentType: isConference ? 'conference' : 'ncaa',
         isListedPublic: false,
+        isPublic: false, // Default to false for draft
         status: "DRAFT",
         lockAt: 0, // Set on publish or specific date
         settings: Object.assign({ maxEntriesTotal: (_a = settings === null || settings === void 0 ? void 0 : settings.maxEntriesTotal) !== null && _a !== void 0 ? _a : -1, maxEntriesPerUser: (_b = settings === null || settings === void 0 ? void 0 : settings.maxEntriesPerUser) !== null && _b !== void 0 ? _b : -1, entryFee: (_c = settings === null || settings === void 0 ? void 0 : settings.entryFee) !== null && _c !== void 0 ? _c : 0, paymentInstructions: (_d = settings === null || settings === void 0 ? void 0 : settings.paymentInstructions) !== null && _d !== void 0 ? _d : "", scoringSystem: (_e = settings === null || settings === void 0 ? void 0 : settings.scoringSystem) !== null && _e !== void 0 ? _e : "CLASSIC", 
@@ -175,6 +176,7 @@ exports.publishBracketPool = (0, https_1.onCall)(async (request) => {
             slug: slugLower,
             slugLower,
             isListedPublic: !!isListedPublic,
+            isPublic: !!isListedPublic, // Sync for firestore rules
             passwordHash: passwordHash || admin.firestore.FieldValue.delete(),
             status: "OPEN",
             lockAt: lockAt,

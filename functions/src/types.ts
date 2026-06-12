@@ -571,6 +571,7 @@ export interface BracketPool {
     slug: string;
     slugLower: string;
     isListedPublic: boolean;
+    isPublic?: boolean; // Added for rules compatibility
     passwordHash?: string;
     lockAt: number;
     status: 'DRAFT' | 'OPEN' | 'LOCKED' | 'LIVE' | 'COMPLETED';

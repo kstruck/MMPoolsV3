@@ -23,12 +23,18 @@ export const backfillPools = onCall(async (request) => {
 
         if (!ownerId) continue;
 
-        // 1. Set createdByUid if missing
+        // 1. Backfill missing base fields (createdByUid, isPublic)
+        const updates: any = {};
         if (!pool.createdByUid) {
-            batch.update(poolDoc.ref, {
-                createdByUid: ownerId,
-                status: pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT')
-            });
+            updates.createdByUid = ownerId;
+            updates.status = pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT');
+        }
+        if (pool.isPublic === undefined) {
+            updates.isPublic = pool.type === 'BRACKET' ? (pool.isListedPublic ?? false) : true;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            batch.update(poolDoc.ref, updates);
             batchCount++;
         }
 

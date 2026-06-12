@@ -60,6 +60,7 @@ export const createBracketPool = onCall(async (request) => {
         tournamentId: resolvedTournamentId,
         tournamentType: isConference ? 'conference' : 'ncaa',
         isListedPublic: false,
+        isPublic: false, // Default to false for draft
         status: "DRAFT",
         lockAt: 0, // Set on publish or specific date
         settings: {
@@ -171,6 +172,7 @@ export const publishBracketPool = onCall(async (request) => {
             slug: slugLower,
             slugLower,
             isListedPublic: !!isListedPublic,
+            isPublic: !!isListedPublic, // Sync for firestore rules
             passwordHash: passwordHash || admin.firestore.FieldValue.delete(),
             status: "OPEN",
             lockAt: lockAt,
