@@ -347,7 +347,6 @@ export const SuperAdmin: React.FC = () => {
         return () => {
             unsubPools();
             unsubSettings();
-            unsubStats();
         };
     }, [activeTab]);
 
