@@ -37,7 +37,6 @@ export const SuperAdmin: React.FC = () => {
     const [pools, setPools] = useState<Pool[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
-    const [globalStats, setGlobalStats] = useState<any>(null);
 
     // UI State
     // UI State
@@ -336,7 +335,6 @@ export const SuperAdmin: React.FC = () => {
     useEffect(() => {
         const unsubPools = dbService.subscribeToAllPools(setPools);
         const unsubSettings = settingsService.subscribe(setSettings);
-        const unsubStats = dbService.onGlobalStatsUpdate(setGlobalStats);
         fetchUsers();
 
         // Load System Logs if on system tab
