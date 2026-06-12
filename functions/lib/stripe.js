@@ -467,16 +467,31 @@ exports.handleStripeWebhook = functions.https.onRequest(async (req, res) => {
             // Idempotency check: atomically create a processing marker.
             // If this fails, another instance is already processing or has processed this event.
             const evtRef = db.collection('stripeWebhookEvents').doc(event.id);
+            let shouldProcess = false;
             try {
                 await evtRef.create({ type: event.type, status: 'processing', startedAt: Date.now() });
+                shouldProcess = true;
             }
             catch (err) {
                 if (err.code === 6) { // ALREADY_EXISTS in Firebase Admin
-                    console.log(`[Stripe Webhook] Duplicate or concurrent event ignored: ${event.id}`);
-                    res.status(200).send('duplicate');
-                    return;
+                    // Check if it's a poisoned marker (stuck in 'processing' for > 5 mins)
+                    await db.runTransaction(async (t) => {
+                        const docSnap = await t.get(evtRef);
+                        const data = docSnap.data();
+                        if ((data === null || data === void 0 ? void 0 : data.status) === 'processing' && (Date.now() - (data.startedAt || 0) > 5 * 60 * 1000)) {
+                            t.update(evtRef, { startedAt: Date.now() });
+                            shouldProcess = true;
+                        }
+                    });
                 }
-                throw err;
+                else {
+                    throw err;
+                }
+            }
+            if (!shouldProcess) {
+                console.log(`[Stripe Webhook] Duplicate, concurrent, or already completed event ignored: ${event.id}`);
+                res.status(200).send('duplicate');
+                return;
             }
             const session = event.data.object;
             const metadata = session.metadata || {};

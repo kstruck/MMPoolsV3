@@ -47,7 +47,7 @@ export const dbService = {
     },
 
     async getPoolsByType(type: string): Promise<Pool[]> {
-        const q = query(collection(db, 'pools'), where('type', '==', type));
+        const q = query(collection(db, 'pools'), where('type', '==', type), where('isPublic', '==', true));
         const snap = await getDocs(q);
         const pools: Pool[] = [];
         snap.forEach(doc => pools.push({ id: doc.id, ...doc.data() } as Pool));
