@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAuditEvent } from "./audit";
 import { checkBillingAccess } from "./billing";
-import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
+import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields } from "./poolOps";
 import {
   NFLGame,
   NFLPickemPool,
@@ -36,8 +36,8 @@ export const createNFLPool = onCall(async (request) => {
     const uid = request.auth.uid;
     const db = admin.firestore();
     
-    // deep clean raw data
-    const data = JSON.parse(JSON.stringify(request.data || {}));
+    // deep clean raw data + strip privileged/server-controlled fields
+    const data = stripPrivilegedPoolFields(JSON.parse(JSON.stringify(request.data || {})));
 
     const { type, name, season } = data;
     if (!type || !['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(type)) {
@@ -548,7 +548,25 @@ export const scoreNFLWeek = onCall(async (request) => {
     return { success: true, message: 'No entries to score.' };
   }
 
-  const batch = db.batch();
+  // Staged, chunked writes — a single batch caps at 500 ops, so pools with
+  // >500 entries (or >250 Margin entries) would throw on commit and score nobody.
+  let batch = db.batch();
+  let opCount = 0;
+  const stage = async (ref: admin.firestore.DocumentReference, data: any) => {
+    batch.update(ref, data);
+    if (++opCount >= 400) {
+      await batch.commit();
+      batch = db.batch();
+      opCount = 0;
+    }
+  };
+  const flushBatch = async () => {
+    if (opCount > 0) {
+      await batch.commit();
+      batch = db.batch();
+      opCount = 0;
+    }
+  };
 
   // Recaps highlighting metrics
   let sharpUser: { uid: string; name: string; val: number } | null = null;
@@ -572,7 +590,7 @@ export const scoreNFLWeek = onCall(async (request) => {
       const weeklyPoints = { ...(entry.weeklyPoints || {}), [week]: points };
       const totalScore = Object.values(weeklyPoints).reduce((sum, p) => sum + p, 0);
 
-      batch.update(entryRef, {
+      await stage(entryRef, {
         weeklyPoints,
         totalScore
       });
@@ -601,7 +619,7 @@ export const scoreNFLWeek = onCall(async (request) => {
       if (isExempt) {
         // Log auto survive
         const exemptWeeks = [...(entry.exemptWeeks || []), week];
-        batch.update(entryRef, { exemptWeeks });
+        await stage(entryRef, { exemptWeeks });
         aliveCount++;
       } else {
         const { survived, strikeLogged } = evaluateSurvivorWeek(entry, week, games, pool);
@@ -619,7 +637,7 @@ export const scoreNFLWeek = onCall(async (request) => {
           aliveCount++;
         }
 
-        batch.update(entryRef, {
+        await stage(entryRef, {
           status: freshEntry.status,
           strikesUsed: freshEntry.strikesUsed,
           eliminatedWeek: freshEntry.eliminatedWeek ?? null
@@ -664,7 +682,7 @@ export const scoreNFLWeek = onCall(async (request) => {
       // Best single week
       const bestWeek = Object.values(weeklyScores).length > 0 ? Math.max(...Object.values(weeklyScores)) : 0;
 
-      batch.update(entryRef, {
+      await stage(entryRef, {
         weeklyScores,
         seasonTotal,
         negativeBurden,
@@ -676,19 +694,22 @@ export const scoreNFLWeek = onCall(async (request) => {
 
   // 3. Margin leaderboard sorting
   if (pool.type === 'NFL_MARGIN') {
+    // Flush pending score writes first so the re-read ranks on THIS week's
+    // fresh totals rather than last week's stale data.
+    await flushBatch();
     const updatedEntriesSnap = await poolRef.collection('entries').get();
     const updatedEntries = updatedEntriesSnap.docs.map(doc => doc.data() as MarginEntry);
     const ranked = sortMarginLeaderboard(updatedEntries);
-    
+
     // Write standings back
     for (let index = 0; index < ranked.length; index++) {
       const r = ranked[index];
       const docRef = poolRef.collection('entries').doc(r.ownerUid);
-      batch.update(docRef, { rank: index + 1 });
+      await stage(docRef, { rank: index + 1 });
     }
   }
 
-  await batch.commit();
+  await flushBatch();
 
   // 4. Generate automated Weekly Recap
   const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);

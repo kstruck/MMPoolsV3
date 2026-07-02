@@ -334,6 +334,8 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
                 data: { poolId: 'missing-pool', poolName: 'March Madness', poolType: 'BRACKET', tier: 'premium_tier', price: 29.00 }
             } as any;
 
+            // Authoritative price is resolved from billing_config first, then the pool is fetched.
+            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({ pricing: { bracket: [{ min: 0, max: 10, price: 29 }] } }) });
             mockGet.mockResolvedValueOnce({ exists: false });
 
             await expect(createCheckoutSession(req)).rejects.toThrowError('Pool not found.');

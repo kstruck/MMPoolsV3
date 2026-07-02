@@ -16,6 +16,26 @@ export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: s
     }
 };
 
+// Server-controlled / privileged fields a client must never set on pool creation.
+// Billing, lifecycle, membership, and scoring state are set by the server only.
+const PRIVILEGED_POOL_FIELDS = [
+    'billing', 'status', 'isLocked', 'lockedAt',
+    'participantIds', 'participantCount', 'entryCount', 'entries',
+    'winners', 'winnerDetermined', 'isPaid', 'paidOut', 'payouts',
+    'createdByUid', 'ownerId', 'managerUid', 'coManagers', 'role',
+    'id', 'createdAt', 'updatedAt', 'poolCredits',
+];
+
+// Strip privileged fields from a client-supplied payload before it is spread
+// into a pool document. Prevents clients from self-granting paid/active status.
+export const stripPrivilegedPoolFields = <T extends Record<string, any>>(data: T): T => {
+    const clean = { ...data };
+    for (const field of PRIVILEGED_POOL_FIELDS) {
+        delete (clean as any)[field];
+    }
+    return clean;
+};
+
 // V2 Create Pool Function
 export const createPool = onCall(async (request) => {
     try {
@@ -28,7 +48,7 @@ export const createPool = onCall(async (request) => {
         const db = admin.firestore();
         // Sanitize data: remove undefined values by JSON cycle (simplest way for deep clean)
         const rawData = request.data || {};
-        const data = JSON.parse(JSON.stringify(rawData));
+        const data = stripPrivilegedPoolFields(JSON.parse(JSON.stringify(rawData)));
 
         // Validate inputs
         if (!data.name) {

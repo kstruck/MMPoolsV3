@@ -78,6 +78,55 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
         }
     }
 
+    // --- Determine Authoritative Server Price (BEFORE any checkout path) ---
+    // Never trust the client-supplied `price`. Resolve it from billing_config so
+    // neither the bundle path nor the standard path can be charged a tampered amount.
+    let serverPrice: number | undefined;
+    try {
+        const billingConfigDoc = await db.collection("settings").doc("billing_config").get();
+        const configData = billingConfigDoc.data();
+        if (configData) {
+            if (isBundlePurchase) {
+                const packagesList = configData.packagesList || [];
+                const dynamicBundle = packagesList.find((b: any) => b.id === bundleType);
+                if (dynamicBundle) {
+                    serverPrice = dynamicBundle.price;
+                } else if (bundleType === "buy_3" && configData.packages?.buy_3) {
+                    serverPrice = configData.packages.buy_3;
+                } else if (bundleType === "unlimited_1yr" && configData.packages?.unlimited_1yr) {
+                    serverPrice = configData.packages.unlimited_1yr;
+                }
+            } else {
+                if (tier === "free_tier") {
+                    serverPrice = 0;
+                } else {
+                    let pricingArray: any[] = [];
+                    if (poolType === "NFL_SEASON" || poolType === "NFL_PICKEM" || poolType === "NFL_SURVIVOR" || poolType === "NFL_MARGIN") {
+                        pricingArray = configData.pricing?.season || [];
+                    } else if (poolType === "BRACKET" || poolType === "NFL_PLAYOFFS") {
+                        pricingArray = configData.pricing?.bracket || [];
+                    } else if (poolType === "SQUARES") {
+                        pricingArray = configData.pricing?.squares || [];
+                    } else if (poolType === "PROPS") {
+                        pricingArray = configData.pricing?.props || [];
+                    }
+
+                    const players = Number(maxPlayersAllowed) || 10;
+                    const applicableTier = pricingArray.find((t: any) => players >= t.min && players <= t.max);
+                    if (applicableTier) {
+                        serverPrice = applicableTier.price;
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch authoritative price", e);
+    }
+
+    if (serverPrice === undefined) {
+        throw new HttpsError("internal", "Unable to resolve authoritative server price for this pool type/tier.");
+    }
+
     // --- Build the base URL for redirect ---
     const rawOrigin = (request.rawRequest?.headers?.origin as string) || (request.rawRequest?.headers?.referer as string) || "https://marchmelee.com";
     const originUrl = rawOrigin.endsWith("/") ? rawOrigin.slice(0, -1) : rawOrigin;
@@ -161,7 +210,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
                                 name: bundleType === "buy_3" ? "3-Pool Bundle Package" : "1-Year Unlimited Pool Pass",
                                 description: bundleType === "buy_3" ? "Get 3 pool credits to use on any pool type" : "Create unlimited pools of any type for 1 year",
                             },
-                            unit_amount: Math.round(price * 100),
+                            unit_amount: Math.round(serverPrice * 100),
                         },
                         quantity: 1,
                     },
@@ -247,54 +296,8 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
         }
     }
 
-    // --- Determine Authoritative Server Price ---
-    let serverPrice: number | undefined;
-    try {
-        const billingConfigDoc = await db.collection("settings").doc("billing_config").get();
-        const configData = billingConfigDoc.data();
-        if (configData) {
-            if (isBundlePurchase) {
-                const packagesList = configData.packagesList || [];
-                const dynamicBundle = packagesList.find((b: any) => b.id === bundleType);
-                if (dynamicBundle) {
-                    serverPrice = dynamicBundle.price;
-                } else if (bundleType === "buy_3" && configData.packages?.buy_3) {
-                    serverPrice = configData.packages.buy_3;
-                } else if (bundleType === "unlimited_1yr" && configData.packages?.unlimited_1yr) {
-                    serverPrice = configData.packages.unlimited_1yr;
-                }
-            } else {
-                if (tier === "free_tier") {
-                    serverPrice = 0;
-                } else {
-                    let pricingArray: any[] = [];
-                    if (poolType === "NFL_SEASON" || poolType === "NFL_PICKEM" || poolType === "NFL_SURVIVOR" || poolType === "NFL_MARGIN") {
-                        pricingArray = configData.pricing?.season || [];
-                    } else if (poolType === "BRACKET" || poolType === "NFL_PLAYOFFS") {
-                        pricingArray = configData.pricing?.bracket || [];
-                    } else if (poolType === "SQUARES") {
-                        pricingArray = configData.pricing?.squares || [];
-                    } else if (poolType === "PROPS") {
-                        pricingArray = configData.pricing?.props || [];
-                    }
-                    
-                    const players = Number(maxPlayersAllowed) || 10;
-                    const applicableTier = pricingArray.find((t: any) => players >= t.min && players <= t.max);
-                    if (applicableTier) {
-                        serverPrice = applicableTier.price;
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Failed to fetch authoritative price", e);
-    }
-
-    if (serverPrice === undefined) {
-        throw new HttpsError("internal", "Unable to resolve authoritative server price for this pool type/tier.");
-    }
-
     // --- Secure $0 Stripe Bypass for 100% Off Coupons, Credit usage, or Unlimited Pass ---
+    // serverPrice was resolved authoritatively above (client `price` is never trusted).
     if (serverPrice === 0) {
         if (!validatedFreeReason && tier !== "free_tier") {
             throw new HttpsError("failed-precondition", "No valid free-activation reason provided.");

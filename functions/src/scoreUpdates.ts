@@ -329,6 +329,11 @@ const processGameUpdate = async (
 
     if (!espnScores) return { updated: false };
 
+    // Clone so the in-place home/away swap below is idempotent across transaction
+    // retries. Mutating the caller's object would double-swap (reversing scores)
+    // when Firestore retries the transaction under contention.
+    espnScores = JSON.parse(JSON.stringify(espnScores));
+
     // ============ CRITICAL: Detect and correct home/away team orientation ============
     // ESPN returns scores based on actual venue (Falcons = home in Atlanta)
     // Pool's homeTeam/awayTeam are just labels that may not match ESPN's designation
@@ -1197,6 +1202,8 @@ export const simulateGameUpdate = onCall({
         throw new HttpsError('invalid-argument', 'Missing poolId or scores');
     }
 
+    const uid = request.auth.uid;
+
     const db = admin.firestore();
     const poolRef = db.collection('pools').doc(poolId);
 
@@ -1208,7 +1215,18 @@ export const simulateGameUpdate = onCall({
             const doc = await transaction.get(poolRef);
             if (!doc.exists) throw new HttpsError('not-found', 'Pool not found');
 
-            // Ensure Axis Numbers Exist during Simulation 
+            // AUTHORIZATION: only the pool owner/manager or a SUPER_ADMIN may
+            // simulate scores. Without this, any authenticated user could set
+            // arbitrary scores (and thus winners) on any real-money pool.
+            const authPool = doc.data() as any;
+            const isSuperAdmin = request.auth?.token.role === 'SUPER_ADMIN';
+            const owns = [authPool.createdByUid, authPool.ownerId, authPool.managerUid].includes(uid);
+            const isCoManager = Array.isArray(authPool.coManagers) && authPool.coManagers.includes(uid);
+            if (!isSuperAdmin && !owns && !isCoManager) {
+                throw new HttpsError('permission-denied', 'You do not have permission to simulate scores for this pool.');
+            }
+
+            // Ensure Axis Numbers Exist during Simulation
             // IMPORTANT: Do NOT call transaction.update here - it would cause read-after-write
             // since processGameUpdate does transaction.getAll() for deduping.
             // Instead, pass the axis as an override and processGameUpdate will include it
