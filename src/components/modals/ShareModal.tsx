@@ -1,5 +1,5 @@
 import { logger } from '../../utils/logger';
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Share2, Twitter, Facebook, MessageCircle, Link as LinkIcon, LogOut, Instagram } from 'lucide-react';
 
 interface ShareModalProps {
@@ -9,6 +9,18 @@ interface ShareModalProps {
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUrl }) => {
+    const dialogRef = useRef<HTMLDivElement>(null);
+
+    // Hooks run unconditionally (before the isOpen early return). Escape closes;
+    // focus moves into the dialog on open.
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        dialogRef.current?.focus();
+        return () => document.removeEventListener('keydown', onKey);
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     // Clean the URL: Replace '/#' with '/' to strictly switch from Hash to Path strategy
@@ -36,12 +48,23 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full relative">
-                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
+            onClick={onClose}
+        >
+            <div
+                ref={dialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="share-modal-title"
+                tabIndex={-1}
+                className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full relative outline-none"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 text-slate-400 hover:text-white">
                     <LogOut className="rotate-45" size={20} />
                 </button>
-                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                <h3 id="share-modal-title" className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                     <Share2 size={20} className="text-indigo-400" /> Share Pool
                 </h3>
                 <p className="text-sm text-slate-400 mb-6">Invite friends to join the action.</p>

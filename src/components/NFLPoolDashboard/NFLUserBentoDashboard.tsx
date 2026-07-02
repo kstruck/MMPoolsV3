@@ -364,7 +364,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   const userPerformanceData = useMemo(() => {
     let accuracy = 70;
     let survival = 85;
-    let speed = 65;
+    const speed = 65;
     let consistency = 75;
     let rankingPercentile = 80;
 
