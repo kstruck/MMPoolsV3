@@ -51,3 +51,13 @@ test-builder.ts
 security_scan_results*.json
 git_superadmin.txt
 FIX_INSTRUCTIONS.md
+user_prompt.txt
+
+# Compiled Cloud Functions output (rebuilt on deploy via predeploy tsc)
+functions/lib/
+
+# Firebase deploy cache
+.firebase/
+
+# Duplicate skill pack (skills/ is kept — CI security scanner uses it)
+skills_backup/
