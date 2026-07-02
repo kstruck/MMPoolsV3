@@ -7,8 +7,16 @@ import { writeAuditEvent, computeDigitsHash } from "./audit";
 const db = admin.firestore();
 
 // --- HELPER: GENERATE DIGITS ---
+// Fisher-Yates shuffle — produces a uniform permutation of 0-9. A
+// `.sort(() => Math.random() - 0.5)` shuffle is biased, which is unacceptable
+// for axis numbers that determine real-money payouts.
 function generateDigits(): number[] {
-    return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
+    const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    for (let i = nums.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [nums[i], nums[j]] = [nums[j], nums[i]];
+    }
+    return nums;
 }
 
 // --- DEDICATED AUTO-LOCK SCHEDULER (Runs Every 1 Minute) ---

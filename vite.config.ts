@@ -36,6 +36,6 @@ export default defineConfig({
     target: 'es2020',
   },
   test: {
-    exclude: ['node_modules/**', 'functions/**']
+    exclude: ['node_modules/**', 'functions/**', '**/.claude/**']
   }
 })

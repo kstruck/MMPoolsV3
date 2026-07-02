@@ -42,6 +42,9 @@ export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolPartic
 // --- STRIPE PAYMENTS ---
 export { createCheckoutSession, handleStripeWebhook } from "./stripe";
 
+// --- SOCIAL LINK PREVIEWS (per-pool OG tags for /join/:id shares) ---
+export { joinPreview } from "./joinPreview";
+
 // --- REFERRAL SYSTEM ---
 export { creditReferralOnPayment, generateReferralToken, resolveReferralToken } from "./referral";
 

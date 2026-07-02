@@ -213,7 +213,8 @@ service cloud.firestore {
         (request.auth.uid == userId && (
           (resource == null && request.resource.data.role == 'PARTICIPANT') ||
           (resource != null && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'role', 'referralCredits', 'freePoolsAvailable'
+            'role', 'referralCredits', 'freePoolsAvailable',
+            'poolCredits', 'activeBundleType', 'bundleExpiresAt'
           ]))
         )) ||
         isSuperAdmin()
