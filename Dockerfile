@@ -27,8 +27,8 @@ ENV VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET
 ENV VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
 ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
 
-# Build the project
-RUN npm run build
+# Build the project (build:static also prerenders per-route HTML for SEO/social crawlers)
+RUN npm run build:static
 
 # Step 2: Serve with Nginx
 FROM nginx:alpine

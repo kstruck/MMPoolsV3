@@ -146,7 +146,29 @@ export const submitPlayoffPicks = onCall(async (request) => {
 
     if (pool.isLocked) throw new HttpsError('failed-precondition', 'Pool is locked');
 
-    // Create Entry Object
+    // VALIDATION: rankings must map known team ids to bounded integer points.
+    // Without this a client could submit e.g. { KC: 100000 } for an unbeatable
+    // score in a real-money pool, since scoring multiplies rankings[teamId] directly.
+    const validTeamIds = new Set((pool.teams || []).map((t: any) => t.id));
+    const teamCount = validTeamIds.size;
+    if (!rankings || typeof rankings !== 'object' || Array.isArray(rankings)) {
+        throw new HttpsError('invalid-argument', 'rankings must be an object.');
+    }
+    const rankingEntries = Object.entries(rankings);
+    if (rankingEntries.length > teamCount) {
+        throw new HttpsError('invalid-argument', 'rankings contains more teams than exist in this pool.');
+    }
+    for (const [teamId, points] of rankingEntries) {
+        if (!validTeamIds.has(teamId)) {
+            throw new HttpsError('invalid-argument', `Unknown team in rankings: ${teamId}`);
+        }
+        if (typeof points !== 'number' || !Number.isInteger(points) || points < 0 || points > teamCount) {
+            throw new HttpsError('invalid-argument', `Invalid ranking value for ${teamId}: must be an integer between 0 and ${teamCount}.`);
+        }
+    }
+
+    // Key Logic: use entryId if provided, else generate unique key
+    const key = entryId || `${uid}_${Date.now()}`;
     const entryData: PlayoffEntry = {
         userId: uid,
         userName,
@@ -154,34 +176,36 @@ export const submitPlayoffPicks = onCall(async (request) => {
         rankings,
         tiebreaker: Number(tiebreaker) || 0,
         totalScore: 0,
-        submittedAt: Date.now()
+        submittedAt: Date.now(),
+        id: key
     };
 
-    // Check Max Entries Limit (if creating new)
-    if (!entryId) {
-        const userEntries = Object.values(pool.entries || {}).filter(e => e.userId === uid);
-        const maxEntries = pool.settings?.maxEntriesPerUser || 50; // Default to 50 to prevent blocking if setting is missing
-        if (userEntries.length >= maxEntries) {
-            throw new HttpsError('resource-exhausted', `Max entries reached (${maxEntries})`);
-        }
+    // Transactional write: re-check lock + caps against fresh state so concurrent
+    // submits cannot race past maxEntries or the free-plan participant limit.
+    await db.runTransaction(async (t) => {
+        const freshSnap = await t.get(poolRef);
+        if (!freshSnap.exists) throw new HttpsError('not-found', 'Pool not found');
+        const fresh = freshSnap.data() as PlayoffPool;
+        if (fresh.isLocked) throw new HttpsError('failed-precondition', 'Pool is locked');
 
-        // Enforce 10-player Free Plan participant lock
-        const billingStatus = pool.billing?.status ?? 'free';
-        if (billingStatus === 'free') {
-            const currentEntriesCount = Object.keys(pool.entries || {}).length;
-            if (currentEntriesCount >= 10) {
+        if (!entryId) {
+            const userEntries = Object.values(fresh.entries || {}).filter(e => e.userId === uid);
+            const maxEntries = fresh.settings?.maxEntriesPerUser || 50; // Default to 50 to avoid blocking if unset
+            if (userEntries.length >= maxEntries) {
+                throw new HttpsError('resource-exhausted', `Max entries reached (${maxEntries})`);
+            }
+
+            // Enforce 10-player Free Plan participant lock
+            const billingStatus = fresh.billing?.status ?? 'free';
+            if (billingStatus === 'free' && Object.keys(fresh.entries || {}).length >= 10) {
                 throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
             }
         }
-    }
 
-    // Key Logic: use entryId if provided, else generate unique key
-    const key = entryId || `${uid}_${Date.now()}`;
-    entryData.id = key;
-
-    await poolRef.update({
-        [`entries.${key}`]: entryData,
-        participantIds: admin.firestore.FieldValue.arrayUnion(uid)
+        t.update(poolRef, {
+            [`entries.${key}`]: entryData,
+            participantIds: admin.firestore.FieldValue.arrayUnion(uid)
+        });
     });
 
 
@@ -464,8 +488,10 @@ export const onPlayoffConfigUpdate = onDocumentWritten("config/playoffs", async 
  * Useful if the trigger fails or for retro-fixing.
  */
 export const syncPlayoffPools = onCall(async (request) => {
-    // Ensure admin only (optional, but good practice)
-    // if (!request.auth?.token.admin) throw new HttpsError('permission-denied', 'Admins only');
+    // SUPER_ADMIN only — this fans out a write across every playoff pool.
+    if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
+        throw new HttpsError('permission-denied', 'Admins only');
+    }
 
     const db = admin.firestore();
     const configSnap = await db.doc("config/playoffs").get();

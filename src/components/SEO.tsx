@@ -1,5 +1,4 @@
 import React from 'react';
-import { Helmet } from 'react-helmet-async';
 
 interface SEOProps {
     title: string;
@@ -9,8 +8,13 @@ interface SEOProps {
     image?: string;
     type?: string;
     schemas?: object[];
+    /** Private/app routes: keep them out of the index and skip social tags. */
+    noindex?: boolean;
 }
 
+// React 19 natively hoists <title>/<meta>/<link> rendered anywhere in the tree
+// into <head> (and dedupes <title>). We use that directly instead of
+// react-helmet-async, which only reliably sets document.title under React 19.
 export const SEO: React.FC<SEOProps> = ({
     title,
     description,
@@ -18,16 +22,25 @@ export const SEO: React.FC<SEOProps> = ({
     url = 'https://www.marchmeleepools.com/',
     image = 'https://www.marchmeleepools.com/og-image.png',
     type = 'website',
-    schemas = []
+    schemas = [],
+    noindex = false
 }) => {
+    if (noindex) {
+        return (
+            <>
+                <title>{title}</title>
+                <meta name="robots" content="noindex, nofollow" />
+                <link rel="canonical" href={url} />
+            </>
+        );
+    }
+
     return (
-        <Helmet>
-            {/* Basic HTML Meta Tags */}
+        <>
             <title>{title}</title>
             <meta name="description" content={description} />
             {keywords && <meta name="keywords" content={keywords} />}
-
-            {/* Canonical URL */}
+            <meta name="robots" content="index, follow" />
             <link rel="canonical" href={url} />
 
             {/* Open Graph / Facebook */}
@@ -41,17 +54,18 @@ export const SEO: React.FC<SEOProps> = ({
 
             {/* Twitter */}
             <meta name="twitter:card" content="summary_large_image" />
-            <meta name="twitter:url" content={url} />
             <meta name="twitter:title" content={title} />
             <meta name="twitter:description" content={description} />
             <meta name="twitter:image" content={image} />
 
-            {/* Inject any JSON-LD Schemas Provided */}
+            {/* JSON-LD structured data (valid anywhere in the document). */}
             {schemas.map((schema, index) => (
-                <script key={index} type="application/ld+json">
-                    {JSON.stringify(schema)}
-                </script>
+                <script
+                    key={index}
+                    type="application/ld+json"
+                    dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+                />
             ))}
-        </Helmet>
+        </>
     );
 };

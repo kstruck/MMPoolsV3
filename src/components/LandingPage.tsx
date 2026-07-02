@@ -31,72 +31,12 @@ const BRAND = {
   lightGray: '#E5E7EB',
 };
 
-import { SEO } from './SEO';
-
-const landingPageSchemas = [
-  {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    "url": "https://www.marchmeleepools.com",
-    "name": "March Melee Pools",
-    "description": "Easy online NFL Survivor, Weekly Pick'em, Margin pools and Super Bowl squares",
-    "potentialAction": {
-      "@type": "SearchAction",
-      "target": "https://www.marchmeleepools.com/#browse?q={search_term_string}",
-      "query-input": "required name=search_term_string"
-    }
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "March Melee Pools",
-    "applicationCategory": "WebApplication",
-    "description": "Online platform for private NFL survivor, pick'em, and margin of victory pools",
-    "url": "https://www.marchmeleepools.com"
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "Is it free to start an NFL pool?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes! You can initialize a standard pool for free, featuring real-time scoreboard syncing."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How does NFL Survivor rebuying work?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "If configured by the host, players can purchase rebuys before the specified deadline week directly inside their dashboard."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What is the Margin pool?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "In Margin pools, you pick one team each week. Your score is their margin of victory (or defeat). Ties are broken using a 5-step negative burden cascade."
-        }
-      }
-    ]
-  }
-];
-
 export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0, isLoggedIn }) => {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen text-white font-sans selection:bg-orange-500 selection:text-white" style={{ backgroundColor: BRAND.navy }}>
-      <SEO
-        title="March Melee Pools - Free NFL Survivor, Pick'em & Margin Pools"
-        description="Host free NFL Survivor, Weekly Pick'em, and Margin of Victory pools online. Enjoy real-time scoreboard integrations, automated tiebreaker sorting, and commission-free charity trackers."
-        keywords="NFL Survivor Pool, Weekly Pick'em, Margin of Victory Pool, Super Bowl Squares, Office Football Pools, Online Pool Manager, free survivor pool host"
-        schemas={landingPageSchemas}
-      />
+      {/* SEO/meta for '/' is provided centrally by <RouteSEO /> (see src/seoConfig.ts). */}
 
       {/* Shared Header for Consistency */}
       <Header

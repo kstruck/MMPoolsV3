@@ -11,6 +11,7 @@ vi.mock('../functions/src/audit', () => ({
 
 vi.mock('../functions/src/emailStyles', () => ({
     renderEmailHtml: vi.fn((title, body) => `<html>${title}: ${body}</html>`),
+    escapeHtml: vi.fn((s: string) => s),
     BASE_URL: 'http://localhost'
 }));
 

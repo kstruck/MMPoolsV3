@@ -1,5 +1,20 @@
 User-agent: *
 Allow: /
 
+# Private / app routes — not useful in search
+Disallow: /admin/
+Disallow: /super-admin
+Disallow: /profile
+Disallow: /participant
+Disallow: /payment-success
+Disallow: /auth/
+Disallow: /create-pool
+Disallow: /bracket-wizard
+Disallow: /playoff-wizard
+Disallow: /props-wizard
+Disallow: /grid-wizard
+Disallow: /nfl-wizard
+Disallow: /tournament-sim
+
 # Sitemap
 Sitemap: https://www.marchmeleepools.com/sitemap.xml

@@ -1,0 +1,57 @@
+name: CI
+
+# Gate on every PR and on pushes to the main branch.
+# Blocks merges that fail to build, fail typecheck, or break the scoring tests.
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+# Least-privilege token: CI only needs to read the repo contents.
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install functions deps
+        run: npm ci
+        working-directory: functions
+
+      # REQUIRED: frontend typecheck + production build + per-route prerender
+      - name: Build (tsc -b + vite + prerender)
+        run: npm run build:static
+
+      # REQUIRED: Cloud Functions typecheck
+      - name: Typecheck functions
+        run: npx tsc --noEmit
+        working-directory: functions
+
+      # REQUIRED: full test suite (scoring engines, billing/checkout, onboarding).
+      - name: Test
+        run: npm test
+
+  # Advisory only — surfaces the ~540 lint findings (mostly no-explicit-any)
+  # without blocking merges. Promote to a required check as the debt is paid down.
+  lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
