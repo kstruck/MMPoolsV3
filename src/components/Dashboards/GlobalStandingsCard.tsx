@@ -25,7 +25,7 @@ export const GlobalStandingsCard: React.FC<GlobalStandingsCardProps> = ({ user, 
         const activePools = await dbService.getPoolsByType(poolType);
         
         let totalPrize = 0;
-        let participantSet = new Set<string>();
+        const participantSet = new Set<string>();
 
         activePools.forEach((pool: any) => {
           // Add to prize pot (using generic settings.entryFee or costPerSquare if applicable)

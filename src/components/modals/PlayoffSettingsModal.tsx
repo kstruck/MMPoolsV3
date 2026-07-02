@@ -1,5 +1,5 @@
 import { logger } from '../../utils/logger';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Lock, Unlock, Save, Loader } from 'lucide-react';
 import type { PlayoffPool } from '../../types';
 import { db } from '../../firebase';
@@ -17,6 +17,17 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const dialogRef = useRef<HTMLDivElement>(null);
+
+    // Escape closes; focus moves into the dialog on open. (No backdrop-click
+    // close on this form modal — avoids losing unsaved edits by accident.)
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        dialogRef.current?.focus();
+        return () => document.removeEventListener('keydown', onKey);
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
@@ -48,13 +59,20 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
 
     return (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div
+                ref={dialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="playoff-settings-title"
+                tabIndex={-1}
+                className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-xl shadow-2xl flex flex-col max-h-[90vh] outline-none"
+            >
                 {/* Header */}
                 <div className="flex justify-between items-center p-6 border-b border-slate-800">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <h2 id="playoff-settings-title" className="text-xl font-bold text-white flex items-center gap-2">
                         <SettingsIcon /> Pool Settings
                     </h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                    <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white transition-colors">
                         <X size={24} />
                     </button>
                 </div>

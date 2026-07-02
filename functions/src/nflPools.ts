@@ -517,7 +517,7 @@ export const scoreNFLWeek = onCall(async (request) => {
   const pool = poolSnap.data() as any;
   
   // RBAC checks
-  let userRole = request.auth.token.role || 'USER';
+  const userRole = request.auth.token.role || 'USER';
   try {
     assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
   } catch {
@@ -570,7 +570,7 @@ export const scoreNFLWeek = onCall(async (request) => {
 
   // Recaps highlighting metrics
   let sharpUser: { uid: string; name: string; val: number } | null = null;
-  let biggestUpset: { uid: string; name: string; gameId: string; team: string } | null = null;
+  const biggestUpset: { uid: string; name: string; gameId: string; team: string } | null = null;
   let closestTie: { uid: string; name: string; diff: number } | null = null;
 
   // Track closest MNF game score
