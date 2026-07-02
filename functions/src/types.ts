@@ -9,7 +9,8 @@ export interface PlayerDetails {
 export interface Square {
     id: number; // 0-99
     owner: string | null; // Name of owner
-    playerDetails?: PlayerDetails;
+    // NOTE: player PII (email/phone/etc) is NOT stored here — it lives in the
+    // restricted /pools/{poolId}/squarePrivate/{squareId} subcollection (audit H1).
     isPaid?: boolean;
     reservedAt?: number | null;
     guestDeviceKey?: string | null;

@@ -5,6 +5,7 @@ import { writeAuditEvent } from "./audit";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml } from "./emailStyles";
 import { checkBillingAccess } from "./billing";
+import { SQUARE_PRIVATE, buildSquarePrivate } from "./squarePrivate";
 
 
 export const reserveSquare = onCall(async (request) => {
@@ -85,7 +86,7 @@ export const reserveSquare = onCall(async (request) => {
             throw new HttpsError("resource-exhausted", `Max ${pool.maxSquaresPerPlayer} squares per player.`);
         }
 
-        // Reserve
+        // Reserve — only NON-SENSITIVE display data goes on the public square.
         const updatedSquares = squares.map((s) => {
             if (s.id === squareId) {
                 return {
@@ -93,10 +94,6 @@ export const reserveSquare = onCall(async (request) => {
                     owner: pickedAsName || userName, // Storing Name for display.
                     // Ideally we store ownerUid: userId too, but schema currently uses 'owner' string.
                     // We will stick to schema for now to avoid breaking UI.
-                    playerDetails: {
-                        email: userEmail,
-                        ...customerDetails
-                    },
                     isPaid: false,
                     guestDeviceKey: guestDeviceKey || null,
                     pickedAsName: pickedAsName || userName,
@@ -110,6 +107,10 @@ export const reserveSquare = onCall(async (request) => {
             participantIds: userId !== "anonymous" ? admin.firestore.FieldValue.arrayUnion(userId) : admin.firestore.FieldValue.arrayUnion("guest"),
             updatedAt: admin.firestore.Timestamp.now()
         });
+
+        // PII (email/phone/etc) is written to the restricted subcollection, NOT the pool doc.
+        const privateRef = poolRef.collection(SQUARE_PRIVATE).doc(String(squareId));
+        transaction.set(privateRef, buildSquarePrivate(squareId, { email: userEmail, ...customerDetails }));
 
         // --- AUDIT LOGGING ---
         const role = pool.ownerId === userId ? 'ADMIN' : (isAuthenticated ? 'USER' : 'GUEST');
@@ -207,4 +208,162 @@ export const markSquaresPaid = onCall(async (request) => {
     });
 
     return { success: true };
+});
+
+// Shared authorization: pool owner, manager, or super admin.
+async function assertPoolManager(
+    db: admin.firestore.Firestore,
+    transaction: admin.firestore.Transaction,
+    pool: GameState,
+    userId: string,
+): Promise<void> {
+    if (pool.ownerId === userId || pool.managerUid === userId) return;
+    const userDoc = await transaction.get(db.collection("users").doc(userId));
+    if (userDoc.exists && userDoc.data()?.role === "SUPER_ADMIN") return;
+    throw new HttpsError("permission-denied", "Only the pool manager can edit players.");
+}
+
+/**
+ * updatePlayer — manager/admin edits a player's display name and contact info.
+ * Display name (owner) is written to the public square; PII goes to the
+ * restricted squarePrivate subcollection. Renames all squares owned by
+ * `originalName`.
+ */
+export const updatePlayer = onCall(async (request) => {
+    const db = admin.firestore();
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
+    const userId = request.auth.uid;
+
+    const { poolId, originalName, details } = request.data as {
+        poolId: string;
+        originalName: string;
+        details: { name?: string; email?: string; phone?: string; notes?: string };
+    };
+
+    if (!poolId || !originalName || !details) {
+        throw new HttpsError("invalid-argument", "Missing required fields.");
+    }
+
+    const poolRef = db.collection("pools").doc(poolId);
+    const newName = details.name?.trim() || originalName;
+
+    await db.runTransaction(async (transaction) => {
+        const poolDoc = await transaction.get(poolRef);
+        if (!poolDoc.exists) throw new HttpsError("not-found", "Pool not found.");
+        const pool = poolDoc.data() as GameState;
+
+        await assertPoolManager(db, transaction, pool, userId);
+
+        const affected = pool.squares.filter((s) => s.owner === originalName);
+        if (affected.length === 0) throw new HttpsError("not-found", "Player not found.");
+
+        const updatedSquares = pool.squares.map((s) =>
+            s.owner === originalName ? { ...s, owner: newName } : s,
+        );
+        transaction.update(poolRef, {
+            squares: updatedSquares,
+            updatedAt: admin.firestore.Timestamp.now(),
+        });
+
+        // Upsert PII for each of the player's squares in the restricted subcollection.
+        for (const s of affected) {
+            const privateRef = poolRef.collection(SQUARE_PRIVATE).doc(String(s.id));
+            transaction.set(
+                privateRef,
+                buildSquarePrivate(s.id, {
+                    email: details.email,
+                    phone: details.phone,
+                    notes: details.notes,
+                }),
+                { merge: true },
+            );
+        }
+
+        await writeAuditEvent({
+            poolId,
+            type: "SQUARE_RESERVED",
+            message: `Player "${originalName}" updated by manager`,
+            severity: "INFO",
+            actor: { uid: userId, role: "ADMIN", label: newName },
+            payload: { squareIds: affected.map((s) => s.id), renamedTo: newName },
+        }, transaction);
+    });
+
+    return { success: true };
+});
+
+/**
+ * releaseSquares — manager/admin releases squares (clears owner + payment) and
+ * deletes the associated PII from the squarePrivate subcollection.
+ * Accepts either explicit squareIds or an ownerName (releases all their squares).
+ */
+export const releaseSquares = onCall(async (request) => {
+    const db = admin.firestore();
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in.");
+    const userId = request.auth.uid;
+
+    const { poolId, squareIds, ownerName } = request.data as {
+        poolId: string;
+        squareIds?: number[];
+        ownerName?: string;
+    };
+
+    if (!poolId || (!Array.isArray(squareIds) && !ownerName)) {
+        throw new HttpsError("invalid-argument", "Provide squareIds or ownerName.");
+    }
+
+    const poolRef = db.collection("pools").doc(poolId);
+
+    const releasedIds = await db.runTransaction(async (transaction) => {
+        const poolDoc = await transaction.get(poolRef);
+        if (!poolDoc.exists) throw new HttpsError("not-found", "Pool not found.");
+        const pool = poolDoc.data() as GameState;
+
+        await assertPoolManager(db, transaction, pool, userId);
+
+        const idSet = new Set<number>(Array.isArray(squareIds) ? squareIds : []);
+        const toRelease = pool.squares
+            .filter((s) => s.owner && (ownerName ? s.owner === ownerName : idSet.has(s.id)))
+            .map((s) => s.id);
+
+        if (toRelease.length === 0) return [];
+
+        const releaseSet = new Set(toRelease);
+        const updatedSquares = pool.squares.map((s) =>
+            releaseSet.has(s.id)
+                ? {
+                    ...s,
+                    owner: null,
+                    isPaid: false,
+                    guestDeviceKey: null,
+                    guestClaimId: null,
+                    reservedAt: null,
+                    reservedByUid: null,
+                    pickedAsName: null,
+                }
+                : s,
+        );
+        transaction.update(poolRef, {
+            squares: updatedSquares,
+            updatedAt: admin.firestore.Timestamp.now(),
+        });
+
+        // Delete PII for released squares.
+        for (const id of toRelease) {
+            transaction.delete(poolRef.collection(SQUARE_PRIVATE).doc(String(id)));
+        }
+
+        await writeAuditEvent({
+            poolId,
+            type: "SQUARE_RELEASED",
+            message: `Released ${toRelease.length} squares${ownerName ? ` for ${ownerName}` : ""}`,
+            severity: "INFO",
+            actor: { uid: userId, role: "ADMIN", label: "Manager" },
+            payload: { squareIds: toRelease },
+        }, transaction);
+
+        return toRelease;
+    });
+
+    return { success: true, released: releasedIds };
 });

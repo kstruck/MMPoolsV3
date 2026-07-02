@@ -4,6 +4,7 @@ import * as admin from "firebase-admin";
 
 import { sendEmail } from "./reminders";
 import { renderEmailHtml } from "./emailStyles";
+import { getSquareEmails } from "./squarePrivate";
 
 // Helper to calculate total pot and charity for a pool
 const calculatePoolPot = async (db: admin.firestore.Firestore, poolId: string, pool: any): Promise<{ prizePot: number; charityAmount: number }> => {
@@ -87,8 +88,8 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
                     "View Your Squares"
                 );
 
-                // Collect unique emails
-                const uniqueEmails = Array.from(new Set((after.squares || []).map((s: any) => s.playerDetails?.email).filter(Boolean))) as string[];
+                // Collect unique emails from the restricted squarePrivate subcollection.
+                const uniqueEmails = await getSquareEmails(db, event.params.poolId);
                 console.log(`[onPoolLocked] Sending to ${uniqueEmails.length} recipients`);
 
                 await Promise.all(uniqueEmails.map(email =>

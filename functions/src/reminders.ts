@@ -6,6 +6,7 @@ import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, P
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { sendCourierSMS } from "./notifications/smsService";
+import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 
 
 
@@ -242,10 +243,13 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
 
     // USER REMINDERS (Optional)
     if (settings.notifyUsers) {
+        // Emails live in the restricted squarePrivate subcollection, keyed by squareId.
+        const privateMap = await getSquarePrivateMap(db, pool.id);
         const squaresByOwner = unpaidSquares.reduce((acc, s) => {
-            if (s.playerDetails?.email) {
-                if (!acc[s.playerDetails.email]) acc[s.playerDetails.email] = [];
-                acc[s.playerDetails.email].push(s);
+            const email = privateMap.get(s.id)?.email;
+            if (email) {
+                if (!acc[email]) acc[email] = [];
+                acc[email].push(s);
             }
             return acc;
         }, {} as Record<string, Square[]>);
@@ -297,10 +301,10 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
                     const updatedSquares = currentPool.squares.map(s => {
                         const shouldRelease = squaresToRelease.some(r => r.id === s.id);
                         if (shouldRelease) {
+                            // PII cleanup for released squares is handled by onSquareReleased.
                             return {
                                 ...s,
                                 owner: null,
-                                playerDetails: undefined,
                                 guestDeviceKey: null,
                                 guestClaimId: null,
                                 reservedAt: null,
@@ -421,8 +425,7 @@ async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState
                 }
 
                 if (pool.type === 'SQUARES' || !pool.type) {
-                    const squaresPool = pool as GameState;
-                    const uniqueEmails = Array.from(new Set(squaresPool.squares.map(s => s.playerDetails?.email).filter(Boolean))) as string[];
+                    const uniqueEmails = await getSquareEmails(db, pool.id);
                     for (const email of uniqueEmails) {
                         const userBody = `<p>The pool locks in approximately ${Math.round(minutesUntilLock / 60)} hours.</p>`;
                         const userHtml = renderEmailHtml(`Grid Locking Soon: ${pool.name}`, userBody, `${BASE_URL}/pool/${pool.id}`, 'Check Your Squares');
@@ -468,7 +471,7 @@ export const onWinnerComputed = functions.firestore.onDocumentCreated("pools/{po
     });
 
     if (sent) {
-        const uniqueEmails = Array.from(new Set(pool.squares.map(s => s.playerDetails?.email).filter(Boolean))) as string[];
+        const uniqueEmails = await getSquareEmails(db, pool.id);
 
         // Add Host
         if (pool.contactEmail && !uniqueEmails.includes(pool.contactEmail)) {
