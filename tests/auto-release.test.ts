@@ -69,7 +69,10 @@ describe('Auto-Release Logic', () => {
         // Setup Firestore Mock Chain
         mockCollection.mockReturnValue({
             doc: mockDoc,
-            add: mockAdd
+            add: mockAdd,
+            // squarePrivate subcollection reads (getSquareEmails/getSquarePrivateMap)
+            // return an empty QuerySnapshot — these tests don't assert on PII emails.
+            get: vi.fn().mockResolvedValue({ forEach: () => { }, docs: [], empty: true, size: 0 })
         });
         mockDoc.mockReturnValue({
             get: mockGet,
