@@ -34,17 +34,9 @@ jobs:
         run: npx tsc --noEmit
         working-directory: functions
 
-      # REQUIRED: scoring/integration test suite.
-      # NOTE: three suites are temporarily excluded pending a mock-drift fix
-      # (onboarding-flow, auto-release, lock-unpaid — see tracked task). The
-      # excluded files test billing/checkout mocks, NOT the scoring engines,
-      # which remain gated here. Remove the excludes once the mocks are repaired.
-      - name: Test (scoring + integration)
-        run: >-
-          npx vitest run
-          --exclude '**/onboarding-flow.test.ts'
-          --exclude '**/auto-release.test.ts'
-          --exclude '**/lock-unpaid.test.ts'
+      # REQUIRED: full test suite (scoring engines, billing/checkout, onboarding).
+      - name: Test
+        run: npm test
 
   # Advisory only — surfaces the ~540 lint findings (mostly no-explicit-any)
   # without blocking merges. Promote to a required check as the debt is paid down.

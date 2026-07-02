@@ -80,7 +80,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             // Pool exists
             mockGet.mockResolvedValueOnce({
                 exists: true,
-                data: () => ({ type: 'BRACKET' })
+                data: () => ({ type: 'BRACKET', ownerId: 'user-123' })
             });
 
             // Coupon query empty
@@ -100,7 +100,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
 
             mockGet.mockResolvedValueOnce({
                 exists: true,
-                data: () => ({ type: 'BRACKET' })
+                data: () => ({ type: 'BRACKET', ownerId: 'user-123' })
             });
 
             mockTransactionGet.mockResolvedValueOnce({
@@ -128,7 +128,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
 
             mockGet.mockResolvedValueOnce({
                 exists: true,
-                data: () => ({ type: 'BRACKET' })
+                data: () => ({ type: 'BRACKET', ownerId: 'user-123' })
             });
 
             mockTransactionGet.mockResolvedValueOnce({
@@ -157,7 +157,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
 
             mockGet.mockResolvedValueOnce({
                 exists: true,
-                data: () => ({ type: 'BRACKET' })
+                data: () => ({ type: 'BRACKET', ownerId: 'user-123' })
             });
 
             mockTransactionGet.mockResolvedValueOnce({
@@ -189,7 +189,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
 
             mockGet.mockResolvedValueOnce({
                 exists: true,
-                data: () => ({ type: 'BRACKET' })
+                data: () => ({ type: 'BRACKET', ownerId: 'user-123' })
             });
 
             mockTransactionGet.mockResolvedValueOnce({
@@ -223,7 +223,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             mockGet.mockResolvedValueOnce({
                 exists: true,
                 // Pool type is BRACKET
-                data: () => ({ type: 'BRACKET' })
+                data: () => ({ type: 'BRACKET', ownerId: 'user-123' })
             });
 
             mockTransactionGet.mockResolvedValueOnce({
@@ -254,7 +254,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
 
             mockGet.mockResolvedValueOnce({
                 exists: true,
-                data: () => ({ type: 'BRACKET' })
+                data: () => ({ type: 'BRACKET', ownerId: 'user-123' })
             });
 
             const mockRef = { id: 'coupon-doc-ref' };
@@ -352,8 +352,10 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
                 }
             } as any;
 
-            // Mock pool exists
+            // Authoritative price resolved from billing_config first, then the pool.
+            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({ pricing: { bracket: [{ min: 0, max: 10, price: 49 }] } }) });
             mockGet.mockResolvedValueOnce({ exists: true });
+            mockGet.mockResolvedValueOnce({ empty: true }); // coupon 'HELLO' lookup — not a 100%-off coupon
 
             const result = await createCheckoutSession(req);
 
@@ -390,12 +392,14 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
         it('should fallback to default domain if referer/origin headers are missing', async () => {
             const req = {
                 auth: standardAuth,
-                data: { poolId: 'pool-123', poolName: 'Survivor Pool', poolType: 'SEASON', tier: 'standard_tier', price: 19.99 },
+                data: { poolId: 'pool-123', poolName: 'Survivor Pool', poolType: 'NFL_SEASON', tier: 'standard_tier', price: 19.99 },
                 rawRequest: {
                     headers: {}
                 }
             } as any;
 
+            // Authoritative price resolved from billing_config first, then the pool.
+            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({ pricing: { season: [{ min: 0, max: 10, price: 19.99 }] } }) });
             mockGet.mockResolvedValueOnce({ exists: true });
 
             await createCheckoutSession(req);

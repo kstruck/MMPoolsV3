@@ -1,34 +1,40 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 
-// Mock firebase-admin completely
-const mockGet = vi.fn();
-const mockSet = vi.fn();
-const mockUpdate = vi.fn();
-const mockRunTransaction = vi.fn();
+// Mock firebase-admin completely.
+// These must be created via vi.hoisted() because vi.mock() factories are hoisted
+// above normal const declarations — referencing plain consts would hit the TDZ.
+const { mockGet, mockSet, mockUpdate, mockRunTransaction, mockDb, mockAuth } = vi.hoisted(() => {
+    const mockGet = vi.fn();
+    const mockSet = vi.fn();
+    const mockUpdate = vi.fn();
+    const mockRunTransaction = vi.fn();
 
-const mockCollection = vi.fn(() => ({
-    doc: vi.fn(() => ({
-        collection: vi.fn(() => ({
-            doc: vi.fn(() => ({
-                get: mockGet
-            }))
-        })),
-        get: mockGet
-    }))
-}));
+    const mockCollection = vi.fn(() => ({
+        doc: vi.fn(() => ({
+            collection: vi.fn(() => ({
+                doc: vi.fn(() => ({
+                    get: mockGet
+                }))
+            })),
+            get: mockGet
+        }))
+    }));
 
-const mockDb = {
-    collection: mockCollection,
-    runTransaction: mockRunTransaction
-} as unknown as admin.firestore.Firestore;
+    const mockDb = {
+        collection: mockCollection,
+        runTransaction: mockRunTransaction
+    };
 
-const mockAuth = {
-    getUser: vi.fn().mockResolvedValue({
-        email: 'player@example.com',
-        displayName: 'Test Player'
-    })
-};
+    const mockAuth = {
+        getUser: vi.fn().mockResolvedValue({
+            email: 'player@example.com',
+            displayName: 'Test Player'
+        })
+    };
+
+    return { mockGet, mockSet, mockUpdate, mockRunTransaction, mockDb, mockAuth };
+});
 
 vi.mock('firebase-admin', () => {
     class MockTimestamp {
@@ -114,6 +120,11 @@ describe('Bracket Entry Submit Lock Unpaid Guard', () => {
         }).mockResolvedValueOnce({
             exists: true,
             data: () => mockPoolData
+        }).mockResolvedValueOnce({
+            exists: false // tournament lookup — no per-game lock in these tests
+        }).mockResolvedValueOnce({
+            exists: true,
+            data: () => mockPoolData // post-commit re-read for the confirmation email
         });
 
         const data = {
@@ -151,6 +162,8 @@ describe('Bracket Entry Submit Lock Unpaid Guard', () => {
             }
         };
 
+        // Throws after the pool read (before the tournament/email reads), so only
+        // two gets are queued — extra onces would leak into the next test.
         mockGet.mockResolvedValueOnce({
             exists: true,
             data: () => mockEntryData
@@ -201,6 +214,11 @@ describe('Bracket Entry Submit Lock Unpaid Guard', () => {
         }).mockResolvedValueOnce({
             exists: true,
             data: () => mockPoolData
+        }).mockResolvedValueOnce({
+            exists: false // tournament lookup — no per-game lock in these tests
+        }).mockResolvedValueOnce({
+            exists: true,
+            data: () => mockPoolData // post-commit re-read for the confirmation email
         });
 
         const data = {

@@ -8,7 +8,7 @@ export const mockRunTransaction = vi.fn();
 export const mockTransactionGet = vi.fn();
 export const mockTransactionUpdate = vi.fn();
 
-export const mockLimit = vi.fn();
+export const mockLimit = vi.fn(() => ({ get: mockGet }));
 export const mockWhere = vi.fn(() => ({
     limit: mockLimit
 }));
