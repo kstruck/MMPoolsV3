@@ -25,9 +25,9 @@ jobs:
         run: npm ci
         working-directory: functions
 
-      # REQUIRED: frontend typecheck + production build
-      - name: Build (tsc -b + vite)
-        run: npm run build
+      # REQUIRED: frontend typecheck + production build + per-route prerender
+      - name: Build (tsc -b + vite + prerender)
+        run: npm run build:static
 
       # REQUIRED: Cloud Functions typecheck
       - name: Typecheck functions
