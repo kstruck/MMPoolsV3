@@ -6,6 +6,7 @@ import { Loader } from 'lucide-react';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LandingPage } from './components/LandingPage';
+import { RouteSEO } from './components/RouteSEO';
 import { AuthModal } from './components/modals';
 
 // Lazy-loaded route components (loaded on demand)
@@ -197,6 +198,7 @@ const App: React.FC = () => {
   return (
     <>
       <LegacyHashHandler />
+      <RouteSEO />
       <Suspense fallback={<RouteLoader />}>
         <Routes>
           {/* Landing / Home */}
