@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
-import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry } from '../types';
+import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry, PlayerDetails } from '../types';
 import type { ESPNGame, ESPNCompetitor, ESPNCompetition } from '../types/espn';
 
 import Settings from 'lucide-react/dist/esm/icons/settings';
@@ -97,6 +97,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
   const [editingPlayer, setEditingPlayer] = useState<{ originalName: string, name: string, email: string, phone: string, notes: string } | null>(null);
 
+  // Player PII (email/phone/notes) lives in the restricted squarePrivate
+  // subcollection (audit H1), keyed by squareId. Owner/manager-only read.
+  const [squarePrivate, setSquarePrivate] = useState<Record<number, PlayerDetails>>({});
+  useEffect(() => {
+    if (!gameState.id) return;
+    const unsub = dbService.subscribeToSquarePrivate(gameState.id, setSquarePrivate);
+    return () => unsub();
+  }, [gameState.id]);
+  // Contact info for a player = the private record of their first square.
+  const contactFor = (squares: Square[]): PlayerDetails | undefined => {
+    for (const s of squares) {
+      if (squarePrivate[s.id]) return squarePrivate[s.id];
+    }
+    return undefined;
+  };
+
   // Email Broadcast State removed (replaced by AnnouncementManager)
 
 
@@ -131,23 +147,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   }, [activeTab, gameState.id]);
 
 
-  const updatePlayerDetails = (originalName: string, newDetails: { name: string, email: string, phone: string, notes: string }) => {
-    const newSquares = gameState.squares.map(sq => {
-      if (sq.owner === originalName) {
-        return {
-          ...sq,
-          owner: newDetails.name,
-          playerDetails: {
-            ...sq.playerDetails,
-            email: newDetails.email,
-            phone: newDetails.phone,
-            notes: newDetails.notes
-          }
-        };
-      }
-      return sq;
-    });
-    updateConfig({ squares: newSquares });
+  const updatePlayerDetails = async (originalName: string, newDetails: { name: string, email: string, phone: string, notes: string }) => {
+    // Name is public (square.owner); PII is written to squarePrivate. Both handled server-side.
+    await dbService.updatePlayer(gameState.id, originalName, newDetails);
     setEditingPlayer(null);
     setExpandedPlayer(null); // Close expanded view to refresh
   };
@@ -240,7 +242,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (!square.owner) return;
 
       // Use email as key if available, otherwise name
-      const email = square.playerDetails?.email || '';
+      const priv = squarePrivate[square.id];
+      const email = priv?.email || '';
       const name = square.owner;
       const key = email || name;
 
@@ -248,7 +251,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         uniqueUsers.set(key, {
           name,
           email,
-          phone: square.playerDetails?.phone || ''
+          phone: priv?.phone || ''
         });
       }
     });
@@ -453,7 +456,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       squares,
       totalPaid: squares.filter(s => s.isPaid).length * gameState.costPerSquare,
       totalOwed: squares.filter(s => !s.isPaid).length * gameState.costPerSquare,
-      contact: squares[0].playerDetails || undefined
+      contact: contactFor(squares)
     }));
   };
 
@@ -501,18 +504,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
 
 
-  const updateSquare = (id: number, updates: Partial<Square>) => {
-    const newSquares = [...gameState.squares];
-    newSquares[id] = { ...newSquares[id], ...updates };
-    updateConfig({ squares: newSquares });
-  };
-
-  const releasePlayer = (ownerName: string) => {
-    // Sandbox fix: Remove window.confirm
-    const newSquares = gameState.squares.map(sq =>
-      sq.owner === ownerName ? { ...sq, owner: null, playerDetails: null, isPaid: false } : sq
-    );
-    updateConfig({ squares: newSquares });
+  const releasePlayer = async (ownerName: string) => {
+    // Release + PII deletion handled server-side (squarePrivate is Cloud-Functions-only).
+    await dbService.releaseSquares(gameState.id, { ownerName });
   };
 
   const [isRandomizing, setIsRandomizing] = useState(false);
@@ -1215,7 +1209,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                         {sq.isPaid ? 'PAID' : 'UNPAID'}
                                       </button>
                                       <button
-                                        onClick={() => { updateSquare(sq.id, { owner: null, playerDetails: null, isPaid: false }); }}
+                                        onClick={async () => { await dbService.releaseSquares(gameState.id, { squareIds: [sq.id] }); }}
                                         className="text-slate-600 hover:text-rose-500 transition-colors"
                                         title="Release Square"
                                       >

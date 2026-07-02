@@ -2492,23 +2492,24 @@ export const SuperAdmin: React.FC = () => {
                                 <div className="flex gap-2">
                                     {/* Email Export Button */}
                                     <button
-                                        onClick={() => {
+                                        onClick={async () => {
                                             // 1. Collect Users
                                             const allEmails = new Map<string, string>(); // email -> name
                                             users.forEach(u => allEmails.set(u.email.toLowerCase(), u.name));
 
-                                            // 2. Scan Pools for Guests
-                                            pools.forEach((p) => {
-                                                if ((p as unknown as PoolLike).squares) {
-                                                    ((p as GameState).squares || []).forEach((s) => {
-                                                        if (s.playerDetails?.email) {
-                                                            const e = s.playerDetails.email.toLowerCase();
-                                                            if (!allEmails.has(e)) {
-                                                                allEmails.set(e, s.owner || 'Guest');
-                                                            }
-                                                        }
-                                                    });
-                                                }
+                                            // 2. Scan Pools for Guests — PII now lives in the
+                                            // squarePrivate subcollection (audit H1), fetched per pool.
+                                            const squarePools = pools.filter(p => (p as unknown as PoolLike).squares);
+                                            const privLists = await Promise.all(
+                                                squarePools.map(p => dbService.getSquarePrivateEmails(p.id).catch(() => []))
+                                            );
+                                            privLists.forEach(list => {
+                                                list.forEach(({ email, name }) => {
+                                                    const e = email.toLowerCase();
+                                                    if (!allEmails.has(e)) {
+                                                        allEmails.set(e, name || 'Guest');
+                                                    }
+                                                });
                                             });
 
                                             // 3. Generate CSV

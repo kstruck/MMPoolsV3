@@ -83,6 +83,7 @@ export const joinWaitlist = functions.https.onCall(async (request) => {
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { notifyWaitlist } from "./reminders";
 import { GameState } from "./types";
+import { SQUARE_PRIVATE } from "./squarePrivate";
 
 export const onSquareReleased = onDocumentUpdated("pools/{poolId}", async (event) => {
     if (!event.data) return;
@@ -91,19 +92,30 @@ export const onSquareReleased = onDocumentUpdated("pools/{poolId}", async (event
     const after = event.data.after.data() as GameState;
 
     if (!before.squares || !after.squares) return;
-    if (!after.waitlist || after.waitlist.length === 0) return;
 
-    let releasedSquaresCount = 0;
-
-    // Determine how many squares went from having an owner to not having an owner
+    // Determine which squares went from owned -> unowned.
+    const releasedIds: number[] = [];
     for (let i = 0; i < 100; i++) {
         const ownerBefore = before.squares[i]?.owner;
         const ownerAfter = after.squares[i]?.owner;
-
         if (ownerBefore && !ownerAfter) {
-            releasedSquaresCount++;
+            releasedIds.push(before.squares[i].id);
         }
     }
+    const releasedSquaresCount = releasedIds.length;
+
+    // Clean up PII for released squares regardless of how they were released.
+    // (Safe to run even if a release path already deleted the doc.)
+    if (releasedSquaresCount > 0) {
+        const cleanupDb = admin.firestore();
+        await Promise.all(releasedIds.map(id =>
+            cleanupDb.collection("pools").doc(event.params.poolId)
+                .collection(SQUARE_PRIVATE).doc(String(id)).delete()
+                .catch(err => console.error(`[SquarePrivate cleanup] Failed for #${id}:`, err))
+        ));
+    }
+
+    if (!after.waitlist || after.waitlist.length === 0) return;
 
     if (releasedSquaresCount > 0) {
         console.log(`[Waitlist] Detected ${releasedSquaresCount} released squares in pool ${event.params.poolId}. Notifying waitlist...`);

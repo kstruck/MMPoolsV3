@@ -90,6 +90,20 @@ service cloud.firestore {
         allow write: if false; // Only via Cloud Functions
       }
 
+      // SQUARE PRIVATE (Player PII — audit finding H1)
+      // Contact info (email/phone/etc) is kept OUT of the public pool doc and
+      // stored here so it is never exposed by the broad guest-link `get`.
+      // Readable only by the pool owner/manager or a SuperAdmin. Writes are
+      // Cloud Functions only (reserveSquare / updatePlayer / releaseSquares).
+      match /squarePrivate/{squareId} {
+        allow read: if request.auth != null && (
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isSuperAdmin()
+        );
+        allow write: if false; // Only via Cloud Functions
+      }
+
       // AUDIT LOGS
       match /audit/{auditId} {
         // Restrict reads to pool owner or super admin (audit logs contain UIDs and operation metadata)

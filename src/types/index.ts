@@ -225,7 +225,8 @@ export interface ClaimCode {
 export interface Square {
   id: number; // 0-99
   owner: string | null; // Name of owner
-  playerDetails?: PlayerDetails | null;
+  // Player PII (email/phone/etc) is NOT stored on the public pool doc — it lives
+  // in the restricted /pools/{poolId}/squarePrivate/{squareId} subcollection (audit H1).
   isPaid?: boolean;
   pickedAsName?: string;
   guestDeviceKey?: string | null;

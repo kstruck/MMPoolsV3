@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { GameState } from "./types";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { writeAuditEvent } from "./audit";
+import { SQUARE_PRIVATE, SquarePrivate } from "./squarePrivate";
 
 /**
  * Cloud Function: confirmPayment
@@ -39,7 +40,7 @@ export const confirmPayment = onCall(async (request) => {
         const squares = [...pool.squares];
         const confirmedSquares: number[] = [];
         let playerName = "";
-        let playerEmail = "";
+        let firstSquareId: number | null = null;
 
         for (const sqId of squareIds) {
             const square = squares.find(s => s.id === sqId);
@@ -54,10 +55,10 @@ export const confirmPayment = onCall(async (request) => {
                 throw new HttpsError("permission-denied", `You do not own Square #${sqId}.`);
             }
 
-            // Get player details from the first square
+            // Capture display name from the first owned square.
             if (!playerName && square.owner) {
                 playerName = square.owner;
-                playerEmail = square.playerDetails?.email || userEmail;
+                firstSquareId = sqId;
             }
 
             confirmedSquares.push(sqId);
@@ -65,6 +66,15 @@ export const confirmPayment = onCall(async (request) => {
 
         if (confirmedSquares.length === 0) {
             throw new HttpsError("invalid-argument", "No valid squares to confirm.");
+        }
+
+        // Resolve player email from the restricted subcollection (fallback: auth token).
+        let playerEmail = userEmail;
+        if (firstSquareId !== null) {
+            const privDoc = await transaction.get(
+                poolRef.collection(SQUARE_PRIVATE).doc(String(firstSquareId))
+            );
+            playerEmail = (privDoc.data() as SquarePrivate | undefined)?.email || userEmail;
         }
 
         // Update squares with payment confirmation timestamp

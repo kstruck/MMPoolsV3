@@ -2,6 +2,7 @@ import * as functions from "firebase-functions/v1";
 import * as admin from 'firebase-admin';
 import { Announcement, GameState } from './types';
 import { renderEmailHtml, BASE_URL } from './emailStyles';
+import { getSquareEmails } from './squarePrivate';
 
 /**
  * Triggered when a new announcement is added to a pool.
@@ -32,12 +33,9 @@ export const onAnnouncementCreated = functions.firestore
         // Add owner
         if (pool.contactEmail) emails.add(pool.contactEmail);
 
-        // Add square owners (if they have email in playerDetails)
-        pool.squares.forEach(sq => {
-            if (sq.playerDetails?.email) {
-                emails.add(sq.playerDetails.email);
-            }
-        });
+        // Add square owners — PII now lives in the restricted squarePrivate subcollection.
+        const squareEmails = await getSquareEmails(db, poolId);
+        squareEmails.forEach(e => emails.add(e));
 
         // Add registered users who are participants (if needed, query users collection? 
         // For now, rely on what's in the pool squares/playerDetails as that's the source of truth for "active" players)

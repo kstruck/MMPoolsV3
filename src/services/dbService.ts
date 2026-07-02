@@ -447,6 +447,63 @@ export const dbService = {
         }
     },
 
+    // --- SQUARE PRIVATE (Player PII, audit H1) ---
+    // Contact info lives in /pools/{poolId}/squarePrivate/{squareId}, readable
+    // only by owner/manager/SuperAdmin. Returns a squareId -> details map.
+    subscribeToSquarePrivate: (poolId: string, callback: (map: Record<number, PlayerDetails>) => void) => {
+        const col = collection(db, 'pools', poolId, 'squarePrivate');
+        return onSnapshot(col, (snap) => {
+            const map: Record<number, PlayerDetails> = {};
+            snap.forEach(d => {
+                const data = d.data() as PlayerDetails & { squareId?: number };
+                const id = typeof data.squareId === 'number' ? data.squareId : Number(d.id);
+                if (!Number.isNaN(id)) map[id] = data;
+            });
+            callback(map);
+        }, (error) => {
+            // Non-owners are denied by rules — that's expected, not a real error.
+            logger.error('[dbService] subscribeToSquarePrivate error:', error);
+            callback({});
+        });
+    },
+
+    // One-shot fetch of unique emails for a pool (SuperAdmin exports).
+    getSquarePrivateEmails: async (poolId: string): Promise<{ email: string; name?: string }[]> => {
+        const snap = await getDocs(collection(db, 'pools', poolId, 'squarePrivate'));
+        const out: { email: string; name?: string }[] = [];
+        snap.forEach(d => {
+            const data = d.data() as PlayerDetails & { name?: string };
+            if (data.email) out.push({ email: data.email, name: data.name });
+        });
+        return out;
+    },
+
+    updatePlayer: async (poolId: string, originalName: string, details: { name: string; email: string; phone: string; notes: string }): Promise<void> => {
+        try {
+            const fn = httpsCallable(functions, 'updatePlayer');
+            await fn({ poolId, originalName, details });
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'updatePlayer', poolId, originalName }
+            });
+            throw error;
+        }
+    },
+
+    releaseSquares: async (poolId: string, opts: { squareIds?: number[]; ownerName?: string }): Promise<void> => {
+        try {
+            const fn = httpsCallable(functions, 'releaseSquares');
+            await fn({ poolId, ...opts });
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'releaseSquares', poolId }
+            });
+            throw error;
+        }
+    },
+
     confirmPayment: async (poolId: string, squareIds: number[]): Promise<{ success: boolean; squaresConfirmed: number }> => {
         try {
             const confirmPaymentFn = httpsCallable<{ poolId: string; squareIds: number[] }, { success: boolean; squaresConfirmed: number }>(functions, 'confirmPayment');
