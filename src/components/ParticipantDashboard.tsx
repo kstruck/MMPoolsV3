@@ -605,6 +605,55 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             ))}
                         </div>
                     </div>
+                ) : filteredPools.length === 0 ? (
+                    /* EMPTY STATES — a blank grid is a dead end, especially for brand-new users */
+                    <div className="max-w-lg mx-auto bg-slate-900/40 border border-slate-800 rounded-3xl p-10 text-center">
+                        {myPools.length === 0 ? (
+                            <>
+                                <Trophy className="w-14 h-14 mx-auto mb-4 text-slate-600" aria-hidden="true" />
+                                <h3 className="text-xl font-black text-white mb-2">No pools yet</h3>
+                                <p className="text-sm text-slate-400 mb-8">
+                                    Join a pool with an invite link from a friend, browse public pools, or start your own.
+                                </p>
+                                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                                    <button
+                                        onClick={() => navigate('/browse')}
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-6 py-3 rounded-2xl transition-all"
+                                    >
+                                        Browse Public Pools
+                                    </button>
+                                    <button
+                                        onClick={() => navigate('/create-pool')}
+                                        className="bg-slate-800 hover:bg-slate-700 text-white font-extrabold px-6 py-3 rounded-2xl border border-slate-700 transition-all"
+                                    >
+                                        Create a Pool
+                                    </button>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-6">
+                                    Have an invite link? Just open it — you'll be dropped straight into the pool.
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <h3 className="text-lg font-black text-white mb-2">
+                                    {searchQuery ? `No pools match "${searchQuery}"` : 'Nothing in this tab'}
+                                </h3>
+                                <p className="text-sm text-slate-400 mb-6">
+                                    {searchQuery
+                                        ? 'Try a different name, or clear the search to see all your pools.'
+                                        : 'Your pools are under a different status tab.'}
+                                </p>
+                                {searchQuery && (
+                                    <button
+                                        onClick={() => setSearchQuery('')}
+                                        className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-5 py-2.5 rounded-xl border border-slate-700 transition-all"
+                                    >
+                                        Clear search
+                                    </button>
+                                )}
+                            </>
+                        )}
+                    </div>
                 ) : (
                     /* POOLS LIST TAB */
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -48,3 +48,9 @@ export { joinPreview } from "./joinPreview";
 // --- REFERRAL SYSTEM ---
 export { creditReferralOnPayment, generateReferralToken, resolveReferralToken } from "./referral";
 
+// --- SERVER TIME (client clock-drift correction for countdown/lock UI) ---
+export { getServerTime } from "./serverTime";
+
+// --- EMAIL PREFERENCES (unsubscribe compliance) ---
+export { emailUnsubscribe } from "./emailUnsubscribeHttp";
+

@@ -7,6 +7,7 @@ import {
     Calendar, Users, Activity, Clock
 } from 'lucide-react';
 import type { Tournament } from '../../types';
+import { useToast } from '../ui/Toast';
 
 interface TournamentOption {
     id: string;
@@ -17,6 +18,7 @@ interface TournamentOption {
 }
 
 export const TournamentManager: React.FC = () => {
+    const toast = useToast();
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -165,7 +167,12 @@ export const TournamentManager: React.FC = () => {
     };
 
     const handleReset = async () => {
-        if (!confirm('Are you sure you want to RESET the tournament? This will wipe existing data and re-initialize a skeleton.')) return;
+        const ok = await toast.confirm({
+            title: 'Reset the tournament?',
+            message: 'This will wipe existing data and re-initialize a skeleton.',
+            danger: true,
+        });
+        if (!ok) return;
 
         setIsLoading(true);
         setError(null);

@@ -6,9 +6,11 @@ interface AuthModalProps {
     isOpen: boolean;
     onClose: () => void;
     initialMode?: 'login' | 'register';
+    /** Fires after a successful sign-in/sign-up (modal closes first) */
+    onAuthenticated?: (result?: { isNewUser?: boolean }) => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'login' }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'login', onAuthenticated }) => {
     const dialogRef = useRef<HTMLDivElement>(null);
 
     // Hooks run unconditionally (before the isOpen early return). Escape closes;
@@ -44,7 +46,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
                 >
                     <X size={24} />
                 </button>
-                <Auth onLogin={() => { onClose(); }} defaultIsRegistering={initialMode === 'register'} />
+                <Auth onLogin={(result) => { onClose(); onAuthenticated?.(result); }} defaultIsRegistering={initialMode === 'register'} />
             </div>
         </div>
     );

@@ -4,6 +4,8 @@ import type { User } from '../types';
 import { dbService } from '../services/dbService';
 import { auth } from '../firebase';
 import { authService } from '../services/authService';
+import { useToast } from './ui/Toast';
+import { getUserMessage } from '../utils/errorMessages';
 
 import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon, Edit2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +18,7 @@ interface UserProfileProps {
 
 export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
     const navigate = useNavigate();
+    const toast = useToast();
     const [formData, setFormData] = useState<Partial<User>>({
         name: user.name,
         phone: user.phone || '',
@@ -208,7 +211,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                 {fullReferralLink}
                             </code>
                             <button
-                                onClick={() => { navigator.clipboard.writeText(fullReferralLink); alert('Link copied!'); }}
+                                onClick={() => { navigator.clipboard.writeText(fullReferralLink); toast.success('Link copied to clipboard!'); }}
                                 className="bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-lg transition-colors"
                             >
                                 <Copy size={18} />
@@ -237,13 +240,14 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                         if (auth.currentUser) {
                                             await auth.currentUser.getIdToken(true);
                                         }
-                                        alert(`Success: Admin claims synced! Your role is verified as ${res.role}.`);
-                                        window.location.reload();
+                                        toast.success(`Success: Admin claims synced! Your role is verified as ${res.role}.`);
+                                        // Let the toast register before the reload wipes the page
+                                        setTimeout(() => window.location.reload(), 1200);
                                     } else {
-                                        alert(`Sync failed: ${res.message}`);
+                                        toast.error(`Sync failed: ${res.message}`);
                                     }
                                 } catch (err: any) {
-                                    alert(`Error syncing claims: ${err.message}`);
+                                    toast.error(getUserMessage(err, 'Error syncing claims.'));
                                 }
                             }}
                             className="bg-amber-600 hover:bg-amber-505 bg-amber-500 text-black font-extrabold px-5 py-2.5 rounded-lg text-sm transition-colors shadow-lg shadow-amber-500/20"

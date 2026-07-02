@@ -10,6 +10,7 @@ import { PlayoffDashboard } from '../PlayoffPool/PlayoffDashboard';
 import { BracketPoolDashboard } from '../BracketPoolDashboard/BracketPoolDashboard';
 
 import { dbService } from '../../services/dbService';
+import { useToast } from '../ui/Toast';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, BracketPool } from '../../types';
 
 interface AdminRouteProps {
@@ -35,6 +36,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
 }) => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const toast = useToast();
     const [showShareModal, setShowShareModal] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
 
@@ -161,7 +163,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
                     // For now, I'll direct user to manually reset or just omit if complex.
                     // Actually, dbService.resetPool might exist or I can pass a callback from App?
                     // I'll pass `updatePool` and implement reset logic here if needed.
-                    alert("Please Use 'Reset' in settings if implemented, or Contact Support. Advanced Reset temporarily disabled in migration.");
+                    toast.info("Please Use 'Reset' in settings if implemented, or Contact Support. Advanced Reset temporarily disabled in migration.");
                 }}
                 onBack={() => navigate('/participant')}
                 onShare={() => openShare(currentPool.id)}

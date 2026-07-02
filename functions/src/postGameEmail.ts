@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { sendEmail } from "./reminders";
 
 
 
@@ -130,15 +131,10 @@ export const onGameComplete = functions.firestore.onDocumentUpdated(
             const emailHtml = renderEmailHtml('Game Complete!', emailBody, `${BASE_URL}/pool/${after.urlSlug || poolId}`, 'View Pool Result');
 
             // Store email request for EmailJS or other email service to process
-            await db.collection('mail').add({
-                to: Array.from(recipientEmails),
-                message: {
-                    subject: `🏈 Game Complete: ${after.awayTeam || 'Away'} ${awayScore} - ${after.homeTeam || 'Home'} ${homeScore}`,
-                    html: emailHtml
-                },
-                poolId: poolId,
-                createdAt: admin.firestore.FieldValue.serverTimestamp()
-            });
+            const summarySubject = `🏈 Game Complete: ${after.awayTeam || 'Away'} ${awayScore} - ${after.homeTeam || 'Home'} ${homeScore}`;
+            await Promise.all(Array.from(recipientEmails).map(email =>
+                sendEmail(db, email, summarySubject, emailHtml, { poolId: poolId })
+            ));
 
             console.log(`[PostGameEmail] Pool ${poolId}: Summary email queued for ${recipientEmails.size} recipients`);
 

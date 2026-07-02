@@ -15,6 +15,8 @@ import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check, Lock, B
 import { PropsWizard as PropWizard } from '../PropsWizard/PropsWizard';
 import { dbService } from '../../services/dbService';
 import { ShareModal } from '../modals/ShareModal';
+import { useToast } from '../ui/Toast';
+import { getUserMessage } from '../../utils/errorMessages';
 
 interface PropsPoolDashboardProps {
     pool: PropsPool;
@@ -27,6 +29,7 @@ interface PropsPoolDashboardProps {
 }
 
 export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, user, isManager, isAdmin, onBack, initialTab = 'cards', onOpenAuth }) => {
+    const toast = useToast();
     const [activeTab, setActiveTab] = useState<'cards' | 'leaderboard' | 'stats' | 'admin' | 'grading' | 'ai'>(initialTab);
     const [allCards, setAllCards] = useState<PropCard[]>([]);
     const [showShareModal, setShowShareModal] = useState(false);
@@ -150,17 +153,18 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                         <GameScoreboard
                             gameState={pool as any}
                             onRepair={(isManager || isAdmin) ? async () => {
-                                if (!window.confirm("Repair/Re-sync Scoreboard from ESPN?")) return;
+                                const ok = await toast.confirm({ title: 'Repair Scoreboard?', message: 'Repair/Re-sync Scoreboard from ESPN?', confirmLabel: 'Repair' });
+                                if (!ok) return;
                                 try {
                                     const res = await dbService.fixPoolScores(pool.id);
                                     if (res.success) {
-                                        alert("Repair Successful. Reloading...");
+                                        toast.success("Repair Successful. Reloading...");
                                         window.location.reload();
                                     } else {
-                                        alert("Repair Failed: " + res.message);
+                                        toast.error("Repair Failed: " + res.message);
                                     }
                                 } catch (e: any) {
-                                    alert("Error: " + e.message);
+                                    toast.error(getUserMessage(e, 'Repair failed. Please try again.'));
                                 }
                             } : undefined}
                         />
@@ -252,14 +256,15 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                                 </div>
                                 <button
                                     onClick={async () => {
-                                        if (!window.confirm("Are you sure you want to LOCK this pool? No more entries will be allowed.")) return;
+                                        const ok = await toast.confirm({ title: 'Lock this pool?', message: 'Are you sure you want to LOCK this pool? No more entries will be allowed.', confirmLabel: 'Lock Pool', danger: true });
+                                        if (!ok) return;
                                         setLocking(true);
                                         try {
                                             await dbService.lockPool(pool.id);
-                                            alert("Pool Locked Successfully!");
+                                            toast.success("Pool Locked Successfully!");
                                             window.location.reload();
                                         } catch (e: any) {
-                                            alert("Error: " + e.message);
+                                            toast.error(getUserMessage(e, 'Failed to lock the pool. Please try again.'));
                                         } finally {
                                             setLocking(false);
                                         }
@@ -282,15 +287,20 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                             </div>
                             <button
                                 onClick={async () => {
-                                    if (!window.confirm("This will force a full re-sync of scores from ESPN. Continue?")) return;
+                                    const ok = await toast.confirm({ title: 'Force Re-sync?', message: 'This will force a full re-sync of scores from ESPN. Continue?', confirmLabel: 'Re-sync' });
+                                    if (!ok) return;
                                     const btn = document.getElementById('btn-fix-sync');
                                     if (btn) btn.innerText = 'Repairing...';
                                     try {
                                         const res = await dbService.fixPoolScores(pool.id);
-                                        alert(res.success ? 'Success! Reloading page...' : 'Failed: ' + res.message);
-                                        if (res.success) window.location.reload();
+                                        if (res.success) {
+                                            toast.success('Success! Reloading page...');
+                                            window.location.reload();
+                                        } else {
+                                            toast.error('Failed: ' + res.message);
+                                        }
                                     } catch (e: any) {
-                                        alert('Error: ' + e.message);
+                                        toast.error(getUserMessage(e, 'Re-sync failed. Please try again.'));
                                     }
                                     if (btn) btn.innerText = 'Run Repair';
                                 }}

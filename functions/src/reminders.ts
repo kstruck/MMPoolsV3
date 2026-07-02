@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry, BracketPool, User, BracketEntry } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
+import { isOptedOut, buildUnsubUrl } from "./emailPrefs";
 import { sendCourierSMS } from "./notifications/smsService";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 
@@ -14,6 +15,8 @@ import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 
 /**
  * Sends an email by writing to the /mail collection (triggered by EmailJS or other service).
+ * Honors unsubscribe opt-outs and injects the per-recipient unsubscribe link
+ * (templates carry a {{UNSUB_URL}} placeholder in the footer).
  */
 export async function sendEmail(db: admin.firestore.Firestore, to: string, subject: string, html: string, context?: Record<string, unknown>) {
     if (!to || !to.includes('@')) {
@@ -22,11 +25,28 @@ export async function sendEmail(db: admin.firestore.Firestore, to: string, subje
     }
 
     try {
+        // Opt-out check + unsubscribe link. Fail-open: if this infra is ever
+        // unavailable, deadline/payment emails still go out — a broken
+        // unsubscribe store must never silently suppress critical mail.
+        let unsubUrl: string | null = null;
+        try {
+            // Transactional mail (password resets, payment receipts) is exempt from
+            // marketing opt-out — flag via context.transactional
+            if (!context?.transactional && await isOptedOut(db, to)) {
+                console.log(`Skipping email to ${to}: recipient has unsubscribed`);
+                return;
+            }
+            unsubUrl = await buildUnsubUrl(db, to);
+        } catch (prefError) {
+            console.warn("Unsubscribe infra unavailable — sending without opt-out check:", prefError);
+        }
+        const finalHtml = unsubUrl ? html.replace(/\{\{UNSUB_URL\}\}/g, unsubUrl) : html;
+
         await db.collection("mail").add({
             to,
             message: {
                 subject,
-                html,
+                html: finalHtml,
             },
             ...context, // e.g. poolId, reason
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -186,10 +206,7 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
             const html = renderEmailHtml('Payment Reminder', body, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
 
             // Queue Email
-            await db.collection("mail").add({
-                to: recipient.email,
-                message: { subject, html }
-            });
+            await sendEmail(db, recipient.email, subject, html);
 
             // Send SMS if opted in and pool enables SMS
             if (pool.reminders?.smsEnabled && recipient.smsOptIn && recipient.phone) {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Sparkles, Trash2, Settings } from 'lucide-react';
+import { useToast } from '../ui/Toast';
 
 interface WizardStepBrandingProps {
     branding?: {
@@ -15,6 +16,7 @@ export const WizardStepBranding: React.FC<WizardStepBrandingProps> = ({
     onUpdate,
     onLogoUpload
 }) => {
+    const toast = useToast();
     const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (onLogoUpload) {
             onLogoUpload(e);
@@ -27,7 +29,7 @@ export const WizardStepBranding: React.FC<WizardStepBrandingProps> = ({
 
         // 2MB limit
         if (file.size > 2 * 1024 * 1024) {
-            alert('File size must be under 2MB');
+            toast.error('File size must be under 2MB');
             return;
         }
 

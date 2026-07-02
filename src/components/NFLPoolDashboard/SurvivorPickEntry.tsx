@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lock, AlertCircle, Save, RotateCcw, Shield, ShieldAlert, Heart, Check } from 'lucide-react';
+import { Lock, AlertCircle, Save, RotateCcw, Shield, ShieldAlert, Heart, Check, CheckCircle2 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
+import { useToast } from '../ui/Toast';
+import { getUserMessage } from '../../utils/errorMessages';
+import { now as serverNow } from '../../utils/serverClock';
+import { formatTimeWithZone } from '../../utils/formatTime';
 import type { User, Pool, NFLGame } from '../../types';
 
 interface SurvivorPickEntryProps {
@@ -24,6 +28,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRebuying, setIsRebuying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submittedAt, setSubmittedAt] = useState<number | null>(null);
+  const toast = useToast();
 
   const settings = (pool as any).settings || {};
   const maxStrikes = settings.maxStrikes ?? 0;
@@ -54,11 +60,11 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     return teams;
   }, [entry, week]);
 
-  // Check if a specific game is locked
+  // Check if a specific game is locked (server-corrected clock — device time can drift)
   const isGameLocked = (game: NFLGame): boolean => {
     if (isWeekLocked) return true;
     const bufferMs = (settings.lockBufferMinutes ?? 5) * 60 * 1000;
-    return Date.now() >= (game.startTime - bufferMs);
+    return serverNow() >= (game.startTime - bufferMs);
   };
 
   // Determine if the user has selected a team in a game that is locked
@@ -103,10 +109,13 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
           [week]: selectedTeam
         }
       });
-      alert('Survivor selection locked in successfully!');
+      setSubmittedAt(serverNow());
+      toast.success(`Survivor pick locked in: ${selectedTeam}`);
     } catch (err: any) {
       logger.error('Failed to submit Survivor pick:', err);
-      setError(err.message || 'Failed to submit selection. Please try again.');
+      const message = getUserMessage(err, 'Your pick was NOT saved. Please try again.');
+      setError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -114,17 +123,29 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
 
   const handleRebuy = async () => {
     if (!canRebuy) return;
-    if (!window.confirm(`Are you sure you want to purchase a Rebuy for $${rebuyCost}? This will restore your ALIVE status.`)) return;
+    const ok = await toast.confirm({
+      title: `Rebuy for $${rebuyCost}?`,
+      message: (
+        <>
+          <p>This restores your ALIVE status and adds <strong>${rebuyCost}</strong> to what you owe the commissioner.</p>
+          <p className="mt-2 text-slate-400">Rebuys used: {(entry?.rebuysUsed ?? 0)} of {maxRebuys}. Available through Week {rebuyDeadlineWeek}.</p>
+        </>
+      ),
+      confirmLabel: `Rebuy — $${rebuyCost}`,
+    });
+    if (!ok) return;
 
     setIsRebuying(true);
     setError(null);
 
     try {
       await dbService.executeSurvivorRebuy(pool.id, week);
-      alert('Rebuy successful! You are back in the game.');
+      toast.success(`Rebuy confirmed — you're back in the game! $${rebuyCost} due to the commissioner.`);
     } catch (err: any) {
       logger.error('Failed to execute Survivor rebuy:', err);
-      setError(err.message || 'Failed to purchase rebuy. Please contact the commissioner.');
+      const message = getUserMessage(err, 'The rebuy did not go through. Please contact the commissioner.');
+      setError(message);
+      toast.error(message);
     } finally {
       setIsRebuying(false);
     }
@@ -205,8 +226,16 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
       )}
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
-          <AlertCircle size={18} /> {error}
+        <div role="alert" className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
+          <AlertCircle size={18} aria-hidden="true" /> {error}
+        </div>
+      )}
+
+      {/* Persistent receipt — survives the toast so the user can always verify */}
+      {submittedAt && !error && (
+        <div role="status" className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          Week {week} pick ({selectedTeam}) submitted at {formatTimeWithZone(submittedAt)}. You can change it until the game locks.
         </div>
       )}
 
@@ -290,7 +319,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     )}
 
                     {game.awayTeam.logoUrl && (
-                      <img src={game.awayTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt="Away Logo" />
+                      <img src={game.awayTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt={`${game.awayTeam.name} logo`} />
                     )}
                     <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
                       {game.awayTeam.name}
@@ -351,7 +380,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     )}
 
                     {game.homeTeam.logoUrl && (
-                      <img src={game.homeTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt="Home Logo" />
+                      <img src={game.homeTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt={`${game.homeTeam.name} logo`} />
                     )}
                     <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
                       {game.homeTeam.name}

@@ -324,6 +324,9 @@ export const initializeTournament = async (
     // Default lockAt: First round of NCAA tournament starts ~March 20
     // For 2025: March 20, 2025 12:00 PM ET
     // For 2026: March 19, 2026 12:00 PM ET
+    // The -04:00 (EDT) offset is safe here: US DST always starts the second Sunday
+    // of March (Mar 8–14), so any date from Mar 15 onward is guaranteed to be EDT.
+    // Do NOT reuse this pattern for dates before Mar 15 or after early November.
     let defaultLockAt: number;
     if (seasonYear === 2026) {
         defaultLockAt = new Date('2026-03-19T12:00:00-04:00').getTime();

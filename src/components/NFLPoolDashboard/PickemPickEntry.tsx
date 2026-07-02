@@ -1,8 +1,19 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Lock, AlertCircle, Save } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Lock, AlertCircle, Save, CheckCircle2 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
+import { useToast } from '../ui/Toast';
+import { getUserMessage } from '../../utils/errorMessages';
+import { now as serverNow } from '../../utils/serverClock';
+import { formatTimeWithZone } from '../../utils/formatTime';
+import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
 import type { User, Pool, NFLGame } from '../../types';
+
+interface PickemDraft {
+  picks: Record<string, string>;
+  confidence: Record<string, number>;
+  tiebreakerPrediction: number;
+}
 
 interface PickemPickEntryProps {
   pool: Pool;
@@ -26,22 +37,46 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   const [tiebreakerPrediction, setTiebreakerPrediction] = useState<number>(40);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [submittedAt, setSubmittedAt] = useState<number | null>(null);
+  const toast = useToast();
+  const errorRef = useRef<HTMLDivElement>(null);
+  // Only persist drafts after the user actually edits — otherwise entry hydration
+  // would immediately write a no-op draft and "Draft restored" would fire forever
+  const dirtyRef = useRef(false);
 
   const confidenceMode = castPool.settings?.confidenceMode ?? false;
   const bufferMinutes = castPool.settings?.lockBufferMinutes ?? 5;
+  const draftKey = `pickem:${pool.id}:${week}`;
 
-  // Load existing picks when week, games, or entry changes
+  // Load existing picks when week, games, or entry changes; unsaved drafts win over
+  // the last submitted entry (they are newer edits the user never got to submit)
   useEffect(() => {
-    if (entry) {
-      setPicks(entry.picks || {});
-      setConfidence(entry.confidence || {});
-      setTiebreakerPrediction(entry.weeklyTiebreakers?.[week] ?? 40);
+    dirtyRef.current = false;
+    const base: PickemDraft = entry
+      ? { picks: entry.picks || {}, confidence: entry.confidence || {}, tiebreakerPrediction: entry.weeklyTiebreakers?.[week] ?? 40 }
+      : { picks: {}, confidence: {}, tiebreakerPrediction: 40 };
+
+    const draft = loadDraft<PickemDraft>(draftKey);
+    if (draft && JSON.stringify(draft) !== JSON.stringify(base)) {
+      setPicks(draft.picks);
+      setConfidence(draft.confidence);
+      setTiebreakerPrediction(draft.tiebreakerPrediction);
+      dirtyRef.current = true;
+      toast.info('Restored your unsubmitted picks from last time — submit to lock them in.');
     } else {
-      setPicks({});
-      setConfidence({});
-      setTiebreakerPrediction(40);
+      if (draft) clearDraft(draftKey);
+      setPicks(base.picks);
+      setConfidence(base.confidence);
+      setTiebreakerPrediction(base.tiebreakerPrediction);
     }
-  }, [entry, week]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry, week, draftKey]);
+
+  // Persist edits so a closed tab never loses work
+  useEffect(() => {
+    if (!dirtyRef.current || isWeekLocked) return;
+    saveDraft<PickemDraft>(draftKey, { picks, confidence, tiebreakerPrediction });
+  }, [picks, confidence, tiebreakerPrediction, draftKey, isWeekLocked]);
 
   // Compute confidence range for this week: [17 - N .. 16]
   const N = games.length;
@@ -50,11 +85,11 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     return Array.from({ length: N }, (_, i) => minVal + i).reverse(); // high to low e.g., 16, 15, 14...
   }, [N, minVal]);
 
-  // Check if a game is locked
+  // Check if a game is locked (server-corrected clock — device time can drift)
   const isGameLocked = (game: NFLGame): boolean => {
     if (isWeekLocked) return true; // Whole week locks
     const bufferMs = bufferMinutes * 60 * 1000;
-    return Date.now() >= (game.startTime - bufferMs);
+    return serverNow() >= (game.startTime - bufferMs);
   };
 
   // Check for duplicate confidence selections
@@ -99,6 +134,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     const game = games.find(g => g.id === gameId);
     if (!game || isGameLocked(game)) return;
 
+    dirtyRef.current = true;
     setPicks(prev => ({
       ...prev,
       [gameId]: teamAbbreviation
@@ -109,6 +145,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     const game = games.find(g => g.id === gameId);
     if (!game || isGameLocked(game)) return;
 
+    dirtyRef.current = true;
     setConfidence(prev => ({
       ...prev,
       [gameId]: val
@@ -128,14 +165,23 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
         confidence: confidenceMode ? confidence : undefined,
         tiebreakerPrediction
       });
-      alert('Picks submitted successfully!');
+      clearDraft(draftKey);
+      dirtyRef.current = false;
+      setSubmittedAt(serverNow());
+      toast.success(`Week ${week} picks submitted!`);
     } catch (err: any) {
       logger.error('Failed to submit pick sheet:', err);
-      setValidationError(err.message || 'Verification failed. Please try again.');
+      const message = getUserMessage(err, 'Your picks were NOT saved. Please try again.');
+      setValidationError(message);
+      toast.error(message);
+      // Make sure a failed save is impossible to miss — the banner may be scrolled away
+      setTimeout(() => errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const pickedCount = useMemo(() => games.filter(g => !!picks[g.id]).length, [games, picks]);
 
   // Find if there is a scheduled MNF tiebreaker game
   const showTiebreaker = useMemo(() => {
@@ -160,8 +206,31 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   return (
     <div className="space-y-6">
       {validationError && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
-          <AlertCircle size={18} /> {validationError}
+        <div ref={errorRef} role="alert" className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
+          <AlertCircle size={18} aria-hidden="true" /> {validationError}
+        </div>
+      )}
+
+      {/* Persistent receipt — survives the toast so the user can always verify */}
+      {submittedAt && !validationError && (
+        <div role="status" className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          Week {week} picks submitted at {formatTimeWithZone(submittedAt)}. You can change unlocked picks and resubmit until kickoff.
+        </div>
+      )}
+
+      {/* Progress — how much of the sheet is done */}
+      {games.length > 0 && !isWeekLocked && (
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${pickedCount === games.length ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+              style={{ width: `${(pickedCount / games.length) * 100}%` }}
+            />
+          </div>
+          <span className="text-xs font-bold text-slate-400 whitespace-nowrap">
+            {pickedCount} of {games.length} picked
+          </span>
         </div>
       )}
 
@@ -216,7 +285,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     } ${locked ? 'cursor-not-allowed opacity-90' : ''}`}
                   >
                     {game.awayTeam.logoUrl && (
-                      <img src={game.awayTeam.logoUrl} className="w-10 h-10 object-contain mb-2" alt="Away Logo" />
+                      <img src={game.awayTeam.logoUrl} className="w-10 h-10 object-contain mb-2" alt={`${game.awayTeam.name} logo`} />
                     )}
                     <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
                       {game.awayTeam.name}
@@ -268,7 +337,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     } ${locked ? 'cursor-not-allowed opacity-90' : ''}`}
                   >
                     {game.homeTeam.logoUrl && (
-                      <img src={game.homeTeam.logoUrl} className="w-10 h-10 object-contain mb-2" alt="Home Logo" />
+                      <img src={game.homeTeam.logoUrl} className="w-10 h-10 object-contain mb-2" alt={`${game.homeTeam.name} logo`} />
                     )}
                     <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
                       {game.homeTeam.name}
@@ -287,7 +356,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                       value={confidence[game.id] || ''}
                       disabled={locked}
                       onChange={e => handleConfidenceSelect(game.id, parseInt(e.target.value))}
-                      className={`bg-slate-950 text-white border border-slate-800 rounded-xl px-2 py-1 focus:outline-none text-xs font-bold w-full text-center ${
+                      aria-label={`Confidence weight for ${game.awayTeam.abbreviation} at ${game.homeTeam.abbreviation}`}
+                      className={`bg-slate-950 text-white border border-slate-800 rounded-xl px-2 py-2.5 focus:outline-none text-xs font-bold w-full text-center ${
                         duplicateConfidenceValues.has(confidence[game.id]) ? 'border-yellow-500 focus:ring-yellow-500' : ''
                       } ${locked ? 'opacity-85 cursor-not-allowed' : ''}`}
                     >
@@ -321,7 +391,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
               <input
                 type="number"
                 value={tiebreakerPrediction}
-                onChange={e => setTiebreakerPrediction(Math.max(1, parseInt(e.target.value) || 0))}
+                onChange={e => { dirtyRef.current = true; setTiebreakerPrediction(Math.max(1, parseInt(e.target.value) || 0)); }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-center font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <p className="text-[10px] text-slate-500 leading-normal text-center">

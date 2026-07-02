@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { User as UserType, Pool, NFLGame } from '../../types';
 import { dbService, db } from '../../services/dbService';
+import { useToast } from '../ui/Toast';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
   Lock, 
@@ -46,6 +47,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   onSelectTab: _onSelectTab
 }) => {
   const castPool = pool as any;
+  const toast = useToast();
   const [aiMood, setAiMood] = useState<'savage' | 'professional' | 'analyst'>('savage');
   const [banterText, setBanterText] = useState('');
   const [banterFeed, setBanterFeed] = useState<string[]>([
@@ -76,7 +78,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       await dbService.updateBracketEntryPayment(pool.id, entryId, nextStatus);
     } catch (err) {
       console.error("Failed to update payment status:", err);
-      alert("Failed to update payment status in database.");
+      toast.error("Failed to update payment status in database.");
     } finally {
       setTogglingId(null);
     }
@@ -97,7 +99,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       setEditingEntryId(null);
     } catch (err) {
       console.error("Failed to update detailed payment:", err);
-      alert("Database error: Insufficient permissions or network loss.");
+      toast.error("Database error: Insufficient permissions or network loss.");
     } finally {
       setSavingLedgerId(null);
     }
@@ -186,7 +188,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const handleNudge = (name: string) => {
     setIsNudging(name);
     setTimeout(() => {
-      alert(`Nudge notification dispatched successfully to ${name}!`);
+      toast.success(`Nudge notification dispatched successfully to ${name}!`);
       setIsNudging(null);
     }, 800);
   };
@@ -554,14 +556,14 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           {/* Quick Admin Toggles */}
           <div className="grid grid-cols-2 gap-4 mb-6">
             <button
-              onClick={() => alert('Initiating ESPN Sync score recalculation...')}
+              onClick={() => toast.info('Initiating ESPN Sync score recalculation...')}
               className="bg-gradient-to-r from-orange-500 to-indigo-600 hover:from-orange-600 hover:to-indigo-700 text-white font-extrabold text-xs uppercase tracking-wider py-4 rounded-2xl transition-all shadow-lg hover:scale-[1.02]"
             >
               🔄 Recalculate Scores
             </button>
             
             <button
-              onClick={() => alert('Toggling locks status...')}
+              onClick={() => toast.info('Toggling locks status...')}
               className="bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-extrabold text-xs uppercase tracking-wider py-4 rounded-2xl transition-all flex items-center justify-center gap-2"
             >
               <Lock size={13} /> Toggle Locks

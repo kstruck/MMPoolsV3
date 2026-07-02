@@ -39,6 +39,7 @@ import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import { isSuperAdmin } from '../utils/auth';
 import { Loader } from 'lucide-react';
+import { useToast } from './ui/Toast';
 
 interface ManagerDashboardProps {
     user: User | null;
@@ -65,6 +66,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
     onOpenAuth,
     onLogout
 }) => {
+    const toast = useToast();
     const [searchTerm, setSearchTerm] = useState('');
     const [archiveTab, setArchiveTab] = useState<'active' | 'archived'>('active');
     const [filterCharity, setFilterCharity] = useState(false);
@@ -854,7 +856,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         setDeleteModal({ isOpen: false, poolId: '', poolName: '' });
                                         setDeleteConfirmText('');
                                     } else {
-                                        alert("Pool name does not match.");
+                                        toast.error("Pool name does not match.");
                                     }
                                 }}
                                 disabled={deleteConfirmText !== deleteModal.poolName}

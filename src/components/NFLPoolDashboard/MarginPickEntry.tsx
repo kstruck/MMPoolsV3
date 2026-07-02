@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lock, AlertCircle, Save, Percent, ArrowUpRight, ArrowDownRight, Check } from 'lucide-react';
+import { Lock, AlertCircle, Save, Percent, ArrowUpRight, ArrowDownRight, Check, CheckCircle2 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
+import { useToast } from '../ui/Toast';
+import { getUserMessage } from '../../utils/errorMessages';
+import { now as serverNow } from '../../utils/serverClock';
+import { formatTimeWithZone } from '../../utils/formatTime';
 import type { User, Pool, NFLGame } from '../../types';
 
 interface MarginPickEntryProps {
@@ -23,6 +27,8 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submittedAt, setSubmittedAt] = useState<number | null>(null);
+  const toast = useToast();
 
   const settings = (pool as any).settings || {};
 
@@ -47,11 +53,11 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
     return teams;
   }, [entry, week]);
 
-  // Check if a specific game is locked
+  // Check if a specific game is locked (server-corrected clock — device time can drift)
   const isGameLocked = (game: NFLGame): boolean => {
     if (isWeekLocked) return true;
     const bufferMs = (settings.lockBufferMinutes ?? 5) * 60 * 1000;
-    return Date.now() >= (game.startTime - bufferMs);
+    return serverNow() >= (game.startTime - bufferMs);
   };
 
   // Determine if the user has selected a team in a game that is locked
@@ -88,10 +94,13 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
           [week]: selectedTeam
         }
       });
-      alert('Margin selection locked in successfully!');
+      setSubmittedAt(serverNow());
+      toast.success(`Margin pick locked in: ${selectedTeam}`);
     } catch (err: any) {
       logger.error('Failed to submit Margin pick:', err);
-      setError(err.message || 'Failed to submit selection. Please try again.');
+      const message = getUserMessage(err, 'Your pick was NOT saved. Please try again.');
+      setError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -185,8 +194,16 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
       )}
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
-          <AlertCircle size={18} /> {error}
+        <div role="alert" className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
+          <AlertCircle size={18} aria-hidden="true" /> {error}
+        </div>
+      )}
+
+      {/* Persistent receipt — survives the toast so the user can always verify */}
+      {submittedAt && !error && (
+        <div role="status" className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          Week {week} pick ({selectedTeam}) submitted at {formatTimeWithZone(submittedAt)}. You can change it until the game locks.
         </div>
       )}
 
@@ -264,7 +281,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
                     )}
 
                     {game.awayTeam.logoUrl && (
-                      <img src={game.awayTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt="Away Logo" />
+                      <img src={game.awayTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt={`${game.awayTeam.name} logo`} />
                     )}
                     <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
                       {game.awayTeam.name}
@@ -325,7 +342,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
                     )}
 
                     {game.homeTeam.logoUrl && (
-                      <img src={game.homeTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt="Home Logo" />
+                      <img src={game.homeTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt={`${game.homeTeam.name} logo`} />
                     )}
                     <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
                       {game.homeTeam.name}

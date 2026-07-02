@@ -4,6 +4,7 @@ import { db } from '../services/dbService'; // Ensure this uses your shared db i
 import { collection, query, orderBy, limit, onSnapshot, addDoc, where } from 'firebase/firestore';
 import type { AIArtifact, AIRequest } from '../types';
 import { Bot, Gavel, HelpCircle, CheckCircle, ChevronDown, ChevronUp, Loader } from 'lucide-react';
+import { useToast } from './ui/Toast';
 
 interface AICommissionerProps {
     poolId: string;
@@ -20,6 +21,7 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [userRequests, setUserRequests] = useState<AIRequest[]>([]);
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const toast = useToast();
 
     // Fetch Artifacts (Winner Explanations, Recaps)
     useEffect(() => {
@@ -65,7 +67,7 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
             setActiveTab('DISPUTE'); // Switch to view status
         } catch (e) {
             logger.error("Error submitting dispute", e);
-            alert("Failed to submit. Try again.");
+            toast.error("Failed to submit. Try again.");
         } finally {
             setIsSubmitting(false);
         }
@@ -87,7 +89,7 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
             setActiveTab('DISPUTE');
         } catch (e) {
             logger.error("Error submitting insight", e);
-            alert("Failed to request insight. Try again.");
+            toast.error("Failed to request insight. Try again.");
         } finally {
             setIsSubmitting(false);
         }

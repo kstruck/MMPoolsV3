@@ -5,6 +5,7 @@ import { RegionTabs } from './RegionTabs';
 import { ESPNBracket } from './ESPNBracket';
 import { TeamDataContext } from './teamDataContext';
 import { ChevronRight, ChevronLeft, Trophy, Star, Dices, Wand2, LayoutGrid, List } from 'lucide-react';
+import { useToast } from '../ui/Toast';
 
 interface BracketBuilderProps {
     tournament: Tournament;
@@ -24,6 +25,7 @@ interface BracketBuilderProps {
 type ViewType = 'espn' | 'tabs';
 
 export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, picks, onPick, readOnly, viewMode = 'tabs', comparisonPicks, entryName, entryScore, maxPossibleScore, rank, totalEntries }) => {
+    const toast = useToast();
     const [activeRegion, setActiveRegion] = useState<BracketRegion | 'FF'>('East');
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
     // Mobile → Regions, Desktop → Full bracket
@@ -101,13 +103,17 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
         );
     }
 
-    const handleQuickPick = (strategy: 'favorites' | 'random' | 'smart') => {
+    const handleQuickPick = async (strategy: 'favorites' | 'random' | 'smart') => {
         if (readOnly) return;
 
         if (strategy !== 'smart' && Object.keys(picks).length > 0) {
-            if (!window.confirm(`This will overwrite your current picks with ${strategy} picks. Are you sure?`)) {
-                return;
-            }
+            const ok = await toast.confirm({
+                title: 'Overwrite picks?',
+                message: `This will overwrite your current picks with ${strategy} picks. Are you sure?`,
+                confirmLabel: 'Overwrite',
+                danger: true
+            });
+            if (!ok) return;
         }
 
         const newPicks: Record<string, string> = strategy === 'smart' ? { ...picks } : {};

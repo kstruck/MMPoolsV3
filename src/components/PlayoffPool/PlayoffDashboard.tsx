@@ -9,6 +9,7 @@ import type { PlayoffEntry } from '../../types';
 import { PlayoffPayoutCard } from './PlayoffPayoutCard'; // [NEW]
 import { AnnouncementManager } from '../AnnouncementManager'; // [NEW]
 import { AICommissioner } from '../AICommissioner';
+import { useToast } from '../ui/Toast';
 
 interface PlayoffDashboardProps {
     pool: PlayoffPool;
@@ -17,6 +18,7 @@ interface PlayoffDashboardProps {
 }
 
 export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack }) => {
+    const toast = useToast();
     const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules' | 'commissioner' | 'ai'>('picks'); // [MODIFIED] Added 'commissioner'
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
@@ -224,10 +226,10 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                 <Edit2 size={16} />
                                                             </button>
                                                             <button
-                                                                onClick={() => {
-                                                                    if (confirm('Delete this entry?')) {
-                                                                        dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
-                                                                    }
+                                                                onClick={async () => {
+                                                                    const ok = await toast.confirm({ title: 'Delete Entry?', message: 'Delete this entry?', confirmLabel: 'Delete', danger: true });
+                                                                    if (!ok) return;
+                                                                    dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
                                                                 }}
                                                                 className="text-white hover:text-rose-100 bg-rose-600 hover:bg-rose-500 p-2 rounded-lg transition-colors border border-rose-500/50 shadow-lg shadow-rose-500/10"
                                                                 title="Delete Entry"
@@ -370,12 +372,13 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                             <button
                                                                                 onClick={async (e) => {
                                                                                     e.stopPropagation();
-                                                                                    if (!confirm(`Mark ${entry.entryName} as ${entry.paid ? 'Unpaid' : 'Paid'}?`)) return;
+                                                                                    const ok = await toast.confirm({ title: 'Update Payment?', message: `Mark ${entry.entryName} as ${entry.paid ? 'Unpaid' : 'Paid'}?` });
+                                                                                    if (!ok) return;
                                                                                     try {
                                                                                         await dbService.managePlayoffEntry(pool.id, entry.id || '', 'togglePaid', !entry.paid);
                                                                                         // Optimistic update handled by Firestore sub
                                                                                     } catch (err) {
-                                                                                        alert('Failed to update payment status');
+                                                                                        toast.error('Failed to update payment status');
                                                                                     }
                                                                                 }}
                                                                                 className={`p-1.5 rounded hover:bg-slate-700 transition-colors ${entry.paid ? 'text-emerald-400' : 'text-slate-500'}`}
@@ -384,13 +387,12 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                                 <span className="font-bold text-xs">$</span>
                                                                             </button>
                                                                             <button
-                                                                                onClick={(e) => {
+                                                                                onClick={async (e) => {
                                                                                     e.stopPropagation();
-                                                                                    if (confirm('Are you sure you want to delete this entry?')) {
-                                                                                        // alert('Deletion feature coming soon');
-                                                                                        // TODO: Implement delete
-                                                                                        dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
-                                                                                    }
+                                                                                    const ok = await toast.confirm({ title: 'Delete Entry?', message: 'Are you sure you want to delete this entry?', confirmLabel: 'Delete', danger: true });
+                                                                                    if (!ok) return;
+                                                                                    // TODO: Implement delete
+                                                                                    dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
                                                                                 }}
                                                                                 className="p-1.5 rounded hover:bg-rose-900/50 text-slate-500 hover:text-rose-500 transition-colors"
                                                                                 title="Delete Entry"
@@ -531,12 +533,17 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                     <button
                                         onClick={async () => {
                                             const newStatus = !pool.isLocked;
-                                            if (confirm(`Are you sure you want to ${newStatus ? 'LOCK' : 'UNLOCK'} the pool?`)) {
-                                                try {
-                                                    await dbService.updatePool(pool.id, { isLocked: newStatus });
-                                                } catch (err) {
-                                                    alert('Failed to update pool status');
-                                                }
+                                            const ok = await toast.confirm({
+                                                title: newStatus ? 'Lock Pool?' : 'Unlock Pool?',
+                                                message: `Are you sure you want to ${newStatus ? 'LOCK' : 'UNLOCK'} the pool?`,
+                                                confirmLabel: newStatus ? 'Lock Pool' : 'Unlock Pool',
+                                                danger: newStatus
+                                            });
+                                            if (!ok) return;
+                                            try {
+                                                await dbService.updatePool(pool.id, { isLocked: newStatus });
+                                            } catch (err) {
+                                                toast.error('Failed to update pool status');
                                             }
                                         }}
                                         className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${pool.isLocked

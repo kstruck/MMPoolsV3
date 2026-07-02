@@ -10,6 +10,7 @@ import {
     Shield, Zap, Search, Save, CheckCircle, 
     ToggleLeft, ToggleRight, Calendar, Plus, Trash2, Ticket, Award
 } from 'lucide-react';
+import { useToast } from '../ui/Toast';
 
 const DEFAULT_BILLING_CONFIG: BillingConfig = {
     freePlayerThreshold: 10,
@@ -60,6 +61,7 @@ const DEFAULT_REFERRAL_CONFIG: ReferralConfig = {
 type AdminSubTab = 'tiers' | 'features' | 'packages' | 'coupons' | 'referrals' | 'pools';
 
 export const SuperAdminBillingPanel: React.FC = () => {
+    const toast = useToast();
     const [config, setConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
     const [subTab, setSubTab] = useState<AdminSubTab>('tiers');
     const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -193,7 +195,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
     // 5.5. Dynamic Bundle Helpers
     const handleAddBundle = () => {
         if (!newBundleName.trim() || !newBundleDesc.trim()) {
-            alert("Name and description are required.");
+            toast.error("Name and description are required.");
             return;
         }
 
@@ -225,8 +227,9 @@ export const SuperAdminBillingPanel: React.FC = () => {
         setNewBundleDuration(0);
     };
 
-    const handleDeleteBundle = (bundleId: string) => {
-        if (!window.confirm("Are you sure you want to delete this custom bundle?")) return;
+    const handleDeleteBundle = async (bundleId: string) => {
+        const ok = await toast.confirm({ title: 'Delete Custom Bundle?', message: 'Are you sure you want to delete this custom bundle?', confirmLabel: 'Delete', danger: true });
+        if (!ok) return;
         const currentList = Array.isArray(config.packagesList) ? config.packagesList : [];
         setConfig({
             ...config,
@@ -253,7 +256,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
             setTimeout(() => setSaveSuccess(false), 2000);
         } catch (error) {
             console.error("Failed to save billing config:", error);
-            alert("Error saving configuration to Firestore.");
+            toast.error("Error saving configuration to Firestore.");
         } finally {
             setIsSaving(false);
         }
@@ -270,7 +273,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
             setTimeout(() => setSaveSuccess(false), 2000);
         } catch (error) {
             console.error("Failed to save referral config:", error);
-            alert("Error saving referral configurations.");
+            toast.error("Error saving referral configurations.");
         } finally {
             setIsSaving(false);
         }
@@ -304,10 +307,10 @@ export const SuperAdminBillingPanel: React.FC = () => {
             setNewCouponPerUserLimit('');
             setNewCouponExpiresAt('');
             setNewCouponAllowedTypes([]);
-            alert(`Coupon ${couponData.code} created successfully!`);
+            toast.success(`Coupon ${couponData.code} created successfully!`);
         } catch (error) {
             console.error("Failed to create coupon:", error);
-            alert("Failed to write coupon to database.");
+            toast.error("Failed to write coupon to database.");
         } finally {
             setIsCreatingCoupon(false);
         }
@@ -315,12 +318,13 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
     // 9. Delete Coupon code
     const handleDeleteCoupon = async (couponId: string, code: string) => {
-        if (!window.confirm(`Are you sure you want to delete coupon ${code}?`)) return;
+        const ok = await toast.confirm({ title: 'Delete Coupon?', message: `Are you sure you want to delete coupon ${code}?`, confirmLabel: 'Delete', danger: true });
+        if (!ok) return;
         try {
             await deleteDoc(doc(db, 'coupons', couponId));
         } catch (error) {
             console.error("Failed to delete coupon:", error);
-            alert("Deletion failed.");
+            toast.error("Deletion failed.");
         }
     };
 
@@ -345,16 +349,17 @@ export const SuperAdminBillingPanel: React.FC = () => {
                 updatedAt: Date.now()
             });
             setEditingPoolId('');
-            alert("Pool billing parameters overridden successfully!");
+            toast.success("Pool billing parameters overridden successfully!");
         } catch (error) {
             console.error("Override failed:", error);
-            alert("Failed to update pool billing configuration.");
+            toast.error("Failed to update pool billing configuration.");
         }
     };
 
     // 11b. Quick Action: Extend Trial by 14 days
     const handleExtendTrial = async (pool: Pool) => {
-        if (!window.confirm(`Extend trial for "${pool.name}" by 14 days?`)) return;
+        const ok = await toast.confirm({ title: 'Extend Trial?', message: `Extend trial for "${pool.name}" by 14 days?`, confirmLabel: 'Extend' });
+        if (!ok) return;
         try {
             const poolRef = doc(db, 'pools', pool.id);
             const currentEnd = pool.billing?.trialEndsAt || Date.now();
@@ -363,16 +368,17 @@ export const SuperAdminBillingPanel: React.FC = () => {
                 'billing.trialEndsAt': currentEnd + (14 * 24 * 60 * 60 * 1000),
                 updatedAt: Date.now()
             });
-            alert(`Trial extended by 14 days for "${pool.name}"`);
+            toast.success(`Trial extended by 14 days for "${pool.name}"`);
         } catch (error) {
             console.error("Extend trial failed:", error);
-            alert("Failed to extend trial.");
+            toast.error("Failed to extend trial.");
         }
     };
 
     // 11c. Quick Action: Reset Grace Period
     const handleResetGrace = async (pool: Pool) => {
-        if (!window.confirm(`Reset grace period for "${pool.name}"? This will move it from locked/grace back to grace_period with ${config.gracePeriodDays} days.`)) return;
+        const ok = await toast.confirm({ title: 'Reset Grace Period?', message: `Reset grace period for "${pool.name}"? This will move it from locked/grace back to grace_period with ${config.gracePeriodDays} days.`, confirmLabel: 'Reset', danger: true });
+        if (!ok) return;
         try {
             const poolRef = doc(db, 'pools', pool.id);
             await updateDoc(poolRef, {
@@ -380,10 +386,10 @@ export const SuperAdminBillingPanel: React.FC = () => {
                 'billing.gracePeriodEndsAt': Date.now() + (config.gracePeriodDays * 24 * 60 * 60 * 1000),
                 updatedAt: Date.now()
             });
-            alert(`Grace period reset for "${pool.name}" — ${config.gracePeriodDays} days from now.`);
+            toast.success(`Grace period reset for "${pool.name}" — ${config.gracePeriodDays} days from now.`);
         } catch (error) {
             console.error("Reset grace failed:", error);
-            alert("Failed to reset grace period.");
+            toast.error("Failed to reset grace period.");
         }
     };
 
@@ -395,14 +401,14 @@ export const SuperAdminBillingPanel: React.FC = () => {
                 freePoolsAvailable: editFreePools
             });
             setEditingUserId('');
-            alert("User referral credit balances updated!");
+            toast.success("User referral credit balances updated!");
             
             // Reload list
             const list = await dbService.getAllUsers();
             setAllUsers(list);
         } catch (error) {
             console.error(error);
-            alert("Failed to update user profile.");
+            toast.error("Failed to update user profile.");
         }
     };
 

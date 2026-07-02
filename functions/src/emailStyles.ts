@@ -62,6 +62,9 @@ export const renderEmailHtml = (title: string, bodyContent: string, ctaLink?: st
             <p style="font-size: 12px; color: #666; text-align: center;">
                 Want to create and host your own pool? Go to <a href="${BASE_URL}" style="color: #4f46e5;">MarchMeleePools.com</a> and create a pool for your office, friends, or favorite charity today!
             </p>
+            <p style="font-size: 11px; color: #999999; text-align: center; margin-top: 12px;">
+                Don't want these emails? <a href="{{UNSUB_URL}}" style="color: #999999;">Unsubscribe</a>
+            </p>
         </div>
     </div>
 </body>

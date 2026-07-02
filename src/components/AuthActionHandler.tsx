@@ -12,6 +12,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User } from '../types';
 import { authService } from '../services/authService';
+import { getUserMessage } from '../utils/errorMessages';
 
 interface AuthActionHandlerProps {
     user: User | null;
@@ -91,8 +92,7 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
                         setError('Invalid action mode.');
                 }
             } catch (err: unknown) {
-                const error = err as Error;
-                setError(error.message || 'An error occurred while processing your request. The link may have expired.');
+                setError(getUserMessage(err, 'Something went wrong processing this link. It may have expired — request a new one and try again.'));
             } finally {
                 setLoading(false);
             }
@@ -113,8 +113,7 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
             setMessage('Password has been reset successfully. You can now log in.');
             setResetEmail(null); // Hide the form
         } catch (err: unknown) {
-            const error = err as Error;
-            setError(error.message || 'Failed to reset password.');
+            setError(getUserMessage(err, 'Failed to reset password. The link may have expired — request a new one.'));
         } finally {
             setLoading(false);
         }

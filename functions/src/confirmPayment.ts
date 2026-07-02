@@ -4,6 +4,7 @@ import { GameState } from "./types";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { writeAuditEvent } from "./audit";
 import { SQUARE_PRIVATE, SquarePrivate } from "./squarePrivate";
+import { sendEmail } from "./reminders";
 
 /**
  * Cloud Function: confirmPayment
@@ -150,13 +151,13 @@ export const confirmPayment = onCall(async (request) => {
             "View Pool Admin"
         );
 
-        await db.collection("mail").add({
-            to: result.hostEmail,
-            message: {
-                subject: escapeHtml(`[${result.poolName}] Payment Confirmation from ${result.playerName}`),
-                html: emailHtml
-            }
-        });
+        await sendEmail(
+            db,
+            result.hostEmail,
+            escapeHtml(`[${result.poolName}] Payment Confirmation from ${result.playerName}`),
+            emailHtml,
+            { transactional: true }
+        );
 
         console.log(`Payment confirmation email sent to ${result.hostEmail} for pool ${poolId}`);
     }

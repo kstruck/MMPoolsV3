@@ -1,6 +1,7 @@
 import { logger } from '../../utils/logger';
 import React, { useEffect, useRef } from 'react';
 import { Share2, Twitter, Facebook, MessageCircle, Link as LinkIcon, LogOut, Instagram } from 'lucide-react';
+import { useToast } from '../ui/Toast';
 
 interface ShareModalProps {
     isOpen: boolean;
@@ -10,6 +11,7 @@ interface ShareModalProps {
 
 export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUrl }) => {
     const dialogRef = useRef<HTMLDivElement>(null);
+    const toast = useToast();
 
     // Hooks run unconditionally (before the isOpen early return). Escape closes;
     // focus moves into the dialog on open.
@@ -43,7 +45,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
         } else {
             // Fallback for desktop if they clicked the mobile share icon (unlikely but safe)
             navigator.clipboard.writeText(cleanUrl);
-            alert("Link copied to clipboard!");
+            toast.success("Link copied to clipboard!");
         }
     };
 
@@ -119,7 +121,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
                 <div className="bg-slate-900 p-3 rounded-lg flex items-center gap-2 border border-slate-700">
                     <span className="text-xs text-slate-400 truncate flex-1 font-mono">{cleanUrl}</span>
                     <button
-                        onClick={() => { navigator.clipboard.writeText(cleanUrl); alert("Link copied!"); }}
+                        onClick={() => { navigator.clipboard.writeText(cleanUrl); toast.success("Link copied to clipboard!"); }}
                         className="bg-slate-800 hover:bg-slate-700 text-white p-2 rounded transition-colors"
                         title="Copy Link"
                     >

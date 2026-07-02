@@ -24,6 +24,7 @@ import type { Tournament, Game } from '../../types';
 
 import { getTeamLogo } from '../../constants';
 import { Trophy, Check, X, Link, Printer } from 'lucide-react';
+import { useToast } from '../ui/Toast';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -692,6 +693,7 @@ export const StatsHeader: React.FC<StatsHeaderProps> = ({
     const champGame = Object.values(tournament.games).find(g => g.round === 6);
     const champPick = champGame ? picks[champGame.id] : undefined;
     const teamData = useContext(TeamDataContext);
+    const toast = useToast();
     const champName = champPick ? (teamData[champPick]?.name ?? champPick) : 'No Champion Picked';
     const champLogo = champPick ? getTeamLogo(champPick, 'ncaa') : null;
 
@@ -702,9 +704,9 @@ export const StatsHeader: React.FC<StatsHeaderProps> = ({
 
     const copyLink = useCallback(() => {
         navigator.clipboard.writeText(window.location.href)
-            .then(() => alert('Link copied!'))
+            .then(() => toast.success('Link copied to clipboard!'))
             .catch(() => {});
-    }, []);
+    }, [toast]);
     const printBracket = useCallback(() => window.print(), []);
 
     return (

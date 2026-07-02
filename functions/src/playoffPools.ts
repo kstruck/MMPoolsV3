@@ -4,6 +4,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { PlayoffPool, PlayoffEntry } from "./types";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { sendEmail } from "./reminders";
 
 
 
@@ -244,14 +245,7 @@ export const submitPlayoffPicks = onCall(async (request) => {
             const emailHtml = renderEmailHtml('Entry Confirmed! ✅', bodyContent, poolUrl, 'View Your Entry');
 
             // Send via Firestore Trigger
-            await db.collection('mail').add({
-                to: userEmail,
-                message: {
-                    subject: `Entry Confirmed: ${pool.name}`,
-                    html: emailHtml,
-                    text: `Your picks for ${pool.name} have been saved. Entry: ${entryData.entryName}. View at ${poolUrl}`
-                }
-            });
+            await sendEmail(db, userEmail, `Entry Confirmed: ${pool.name}`, emailHtml);
         }
     } catch (emailErr) {
         console.error("Failed to send confirmation email:", emailErr);
@@ -312,10 +306,8 @@ export const managePlayoffEntry = onCall(async (request) => {
                         <p>You are all set! Good luck in the playoffs.</p>
                     `;
                     const html = renderEmailHtml('Payment Receipt', body, `${BASE_URL}/pool/${poolId}`, 'View Pool');
-                    await db.collection('mail').add({
-                        to: recipientEmail,
-                        message: { subject, html }
-                    });
+                    // Payment receipts are transactional — exempt from marketing opt-out
+                    await sendEmail(db, recipientEmail, subject, html, { transactional: true });
                 }
             } catch (err) {
                 console.error("Failed to send receipt email:", err);

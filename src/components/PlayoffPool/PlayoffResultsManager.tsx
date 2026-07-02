@@ -5,6 +5,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions, db } from '../../firebase'; // Adjust import if needed
 import { doc, getDoc } from 'firebase/firestore';
 import { Save, Trophy } from 'lucide-react';
+import { useToast } from '../ui/Toast';
 
 interface PlayoffResultsManagerProps {
     teams: PlayoffTeam[];
@@ -12,6 +13,7 @@ interface PlayoffResultsManagerProps {
 }
 
 export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ teams, onClose }) => {
+    const toast = useToast();
     // Initialize with empty results
     const [results, setResults] = useState<{
         WILD_CARD: string[];
@@ -80,7 +82,12 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
     };
 
     const handleReset = async () => {
-        if (!confirm("Are you sure you want to RESET all results? This will set all scores to 0 for affected rounds.")) return;
+        const ok = await toast.confirm({
+            title: 'Reset all results?',
+            message: 'This will set all scores to 0 for affected rounds.',
+            danger: true,
+        });
+        if (!ok) return;
 
         setIsSaving(true);
         try {

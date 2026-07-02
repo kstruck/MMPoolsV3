@@ -5,6 +5,7 @@ import { Pool, PoolBilling, Coupon, BillingConfig } from "./types";
 import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { sendEmail } from "./reminders";
 
 const db = admin.firestore();
 
@@ -284,11 +285,8 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
             <p>To accept more players and unlock your pool instantly, please upgrade to a Premium plan.</p>
         `;
         const html = renderEmailHtml('Pool Entries Locked!', body, `${BASE_URL}/pricing`, 'Upgrade to Premium');
-        
-        await db.collection('mail').add({
-            to: managerEmail,
-            message: { subject, html }
-        });
+
+        await sendEmail(db, managerEmail, subject, html);
 
         updates["billing.notified10"] = true;
         updates["billing.notified8"] = true; // Mark 8 as true too
@@ -308,11 +306,8 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
             <p>Upgrade to a Premium plan now to ensure your participants have a seamless, uninterrupted onboarding experience!</p>
         `;
         const html = renderEmailHtml('Approaching Free Limit!', body, `${BASE_URL}/pricing`, 'Upgrade to Premium');
-        
-        await db.collection('mail').add({
-            to: managerEmail,
-            message: { subject, html }
-        });
+
+        await sendEmail(db, managerEmail, subject, html);
 
         updates["billing.notified8"] = true;
         console.log(`[onPoolParticipantChange] Approaching limit (8/10) email queued for pool ${poolId} to manager ${managerEmail}`);

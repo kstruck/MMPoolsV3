@@ -7,6 +7,8 @@ import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
+import { useToast } from '../ui/Toast';
+import { now as serverNow } from '../../utils/serverClock';
 
 interface NFLManagerViewProps {
   pool: Pool;
@@ -25,6 +27,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   user,
   onSelectTab = () => {}
 }) => {
+  const toast = useToast();
   const [isScoring, setIsScoring] = useState(false);
   const [isSavingPayment, setIsSavingPayment] = useState<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -40,7 +43,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // Regular managers can only edit before Week 1 starts (Sep 10, 2026).
   // SuperAdmins can ALWAYS edit.
   const seasonStartMs = new Date('2026-09-10T00:00:00-06:00').getTime();
-  const isPreSeason = Date.now() < seasonStartMs;
+  const isPreSeason = serverNow() < seasonStartMs;
   const canEditSettings = isSuperAdmin || isPreSeason;
 
   // ---- Local settings state (initialized from pool) ----
@@ -90,7 +93,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   // --- Handlers ---
   const handleScoreWeek = async () => {
-    if (!window.confirm(`Score Week ${week} now? This will lock results and generate a recap.`)) return;
+    const ok = await toast.confirm({
+      title: `Score Week ${week}?`,
+      message: 'This will lock results and generate a recap.',
+      confirmLabel: 'Score Week',
+      danger: true
+    });
+    if (!ok) return;
     setIsScoring(true);
     setFeedback(null);
     try {

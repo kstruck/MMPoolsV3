@@ -17,6 +17,7 @@ import { getFirestore, collection, addDoc, getDocs, updateDoc, setDoc, doc, getD
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { Header } from '../Header';
 import { Footer } from '../Footer';
+import { useToast } from '../ui/Toast';
 import { calculateScore } from '../BracketPoolDashboard/bracketScoring';
 import {
     generateTournament2025,
@@ -97,6 +98,7 @@ const POOL_SETTINGS: BracketPool['settings'] = {
 // ─── MAIN COMPONENT ──────────────────────────────────────────────
 
 export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) => {
+    const toast = useToast();
     // Phase state
     const [phase, setPhase] = useState<SimPhase>('SETUP');
     const [isLoading, setIsLoading] = useState(false);
@@ -366,11 +368,16 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
         }
     }, [tournament, userPicks, tieBreakerInput]);
 
-    const handleClear = useCallback(() => {
-        if (window.confirm('Are you sure you want to clear all picks?')) {
+    const handleClear = useCallback(async () => {
+        const ok = await toast.confirm({
+            title: 'Clear all picks?',
+            message: 'Are you sure you want to clear all picks?',
+            danger: true,
+        });
+        if (ok) {
             setUserPicks({});
         }
-    }, []);
+    }, [toast]);
 
     const handleSkipBracket = useCallback(() => {
         setPhase('SIMULATION');
@@ -522,7 +529,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
         try {
             const loadedTournament = await loadTournament2025('mens-2025');
             setTournament(loadedTournament);
-            alert('✅ Tournament data loaded successfully to tournaments/mens-2025');
+            toast.success('✅ Tournament data loaded successfully to tournaments/mens-2025');
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
             logger.error('[Simulator] Load tournament failed:', e);
@@ -530,7 +537,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [toast]);
 
     const handleLoadRound = useCallback(async (round: number) => {
         setIsLoading(true);
@@ -539,7 +546,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
             const loadedTournament = await loadTournamentAtRound(round, 'mens-2025');
             setTournament(loadedTournament);
             setCurrentRound(round);
-            alert(`✅ Tournament loaded at Round ${round} to tournaments/mens-2025`);
+            toast.success(`✅ Tournament loaded at Round ${round} to tournaments/mens-2025`);
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
             logger.error('[Simulator] Load round failed:', e);
@@ -547,17 +554,22 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [toast]);
 
     const handleClearTournament = useCallback(async () => {
-        if (!window.confirm('Clear tournament data from Firestore?')) return;
+        const ok = await toast.confirm({
+            title: 'Clear tournament data?',
+            message: 'Clear tournament data from Firestore?',
+            danger: true,
+        });
+        if (!ok) return;
         setIsLoading(true);
         setError(null);
         try {
             await clearTournament('mens-2025');
             setTournament(null);
             setCurrentRound(0);
-            alert('✅ Tournament data cleared from Firestore');
+            toast.success('✅ Tournament data cleared from Firestore');
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
             logger.error('[Simulator] Clear tournament failed:', e);
@@ -565,7 +577,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [toast]);
 
     // ─── RENDER ─────────────────────────────────────────────────
 

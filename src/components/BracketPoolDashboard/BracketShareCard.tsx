@@ -6,6 +6,7 @@ import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBui
 import { toPng } from 'html-to-image';
 import { X, Download, Share2, Loader2, Image as ImageIcon } from 'lucide-react';
 import { getTeamLogo } from '../../constants';
+import { useToast } from '../ui/Toast';
 
 interface BracketShareModalProps {
     entry: BracketEntry;
@@ -17,6 +18,7 @@ interface BracketShareModalProps {
 
 export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tournament, poolName, onClose, isConference }) => {
     const cardRef = useRef<HTMLDivElement>(null);
+    const toast = useToast();
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -76,7 +78,7 @@ export const BracketShareModal: React.FC<BracketShareModalProps> = ({ entry, tou
                     files: [file]
                 });
             } else {
-                alert("Your browser doesn't support direct image sharing. Please use the Download button instead.");
+                toast.info("Your browser doesn't support direct image sharing. Please use the Download button instead.");
             }
         } catch (err) {
             logger.error("Error sharing:", err);

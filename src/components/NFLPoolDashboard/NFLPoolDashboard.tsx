@@ -14,6 +14,8 @@ import { NFLManagerView } from './NFLManagerView';
 import { PickDistribution } from './PickDistribution';
 import { NFLUserBentoDashboard } from './NFLUserBentoDashboard';
 import { AICommissioner } from '../AICommissioner';
+import { useToast } from '../ui/Toast';
+import { now as serverNow } from '../../utils/serverClock';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -31,6 +33,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   onOpenAuth
 }) => {
   const castPool = pool as any;
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'picks' | 'standings' | 'recaps' | 'rules' | 'manager'>('dashboard');
 
   // Estimate current NFL Week based on date (standard season calculations)
@@ -107,12 +110,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return entries.find(e => e.ownerUid === user.id) || null;
   }, [entries, user]);
 
-  // Check if the current selected week is locked (earliest game kicked off)
+  // Check if the current selected week is locked (earliest game kicked off).
+  // Server-corrected clock — device time can drift and lie about the deadline.
   const isWeekLocked = useMemo(() => {
     if (weeklyGames.length === 0) return false;
     const bufferMs = (castPool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
     const earliestKickoff = Math.min(...weeklyGames.map(g => g.startTime));
-    return Date.now() >= (earliestKickoff - bufferMs);
+    return serverNow() >= (earliestKickoff - bufferMs);
   }, [weeklyGames, castPool.settings?.lockBufferMinutes]);
 
   // Time remaining to earliest game this week
@@ -125,7 +129,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const handleShare = () => {
     const url = `${window.location.origin}/join/${pool.id}`;
     navigator.clipboard.writeText(url);
-    alert('Invite link copied to clipboard!');
+    toast.success('Invite link copied to clipboard!');
   };
 
   const branding = castPool.branding || {};
