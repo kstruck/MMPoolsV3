@@ -25,16 +25,20 @@ export const esc = (s: string) =>
 
 export const isSocialCrawler = (ua: string | undefined): boolean => SOCIAL_CRAWLER.test(ua || "");
 
+// Pool slug/id from a share path. Covers both the invite route (/join/:id) and
+// the pool page (/pool/:id) — most share links in the app use /pool/.
 export const extractPoolId = (path: string): string => {
-    const m = (path || "").match(/\/join\/([^/?#]+)/);
+    const m = (path || "").match(/\/(?:join|pool)\/([^/?#]+)/);
     return m ? decodeURIComponent(m[1]) : "";
 };
 
-// Build the per-pool Open Graph HTML served to social crawlers.
-export const buildJoinPreviewHtml = (opts: { poolId: string; name?: string; type?: string }): string => {
+// Build the per-pool Open Graph HTML served to social crawlers. `path` is the
+// actual requested share path (e.g. "/pool/abc") so og:url/canonical match the
+// shared link; it defaults to the /join form.
+export const buildJoinPreviewHtml = (opts: { poolId: string; name?: string; type?: string; path?: string }): string => {
     const name = opts.name && opts.name.trim() ? opts.name.trim() : "a sports pool";
     const typeLabel = (opts.type && TYPE_LABEL[opts.type]) || "sports";
-    const joinUrl = `${SITE}/join/${opts.poolId}`;
+    const joinUrl = `${SITE}${opts.path || `/join/${opts.poolId}`}`;
     const title = `Join ${name} — March Melee Pools`;
     const desc = `You're invited to join ${name}, a ${typeLabel} pool. Make your picks and compete!`;
 

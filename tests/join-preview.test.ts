@@ -13,11 +13,14 @@ describe('join preview helpers', () => {
         expect(isSocialCrawler(undefined)).toBe(false);
     });
 
-    it('extracts poolId from the join path', () => {
+    it('extracts poolId/slug from both /join and /pool share paths', () => {
         expect(extractPoolId('/join/abc123')).toBe('abc123');
         expect(extractPoolId('/join/abc123?ref=x')).toBe('abc123');
+        expect(extractPoolId('/pool/mmplayoffs')).toBe('mmplayoffs'); // most share links use /pool/
+        expect(extractPoolId('/pool/mmplayoffs?utm=x')).toBe('mmplayoffs');
         expect(extractPoolId('/join/')).toBe('');
-        expect(extractPoolId('/pool/abc123')).toBe('');
+        expect(extractPoolId('/pool/')).toBe('');
+        expect(extractPoolId('/features')).toBe('');
     });
 
     it('builds per-pool OG tags and escapes user content', () => {
@@ -28,6 +31,13 @@ describe('join preview helpers', () => {
         expect(html).toContain('name="robots" content="noindex, follow"');
         // No raw unescaped angle brackets injected from names.
         expect(html).not.toContain('<script>');
+    });
+
+    it('uses the actual share path for og:url/canonical when provided', () => {
+        const html = buildJoinPreviewHtml({ poolId: 'mmplayoffs', name: 'MM Playoffs', type: 'NFL_PLAYOFFS', path: '/pool/mmplayoffs' });
+        expect(html).toContain('<link rel="canonical" href="https://www.marchmeleepools.com/pool/mmplayoffs"');
+        expect(html).toContain('<meta property="og:url" content="https://www.marchmeleepools.com/pool/mmplayoffs"');
+        expect(html).toContain('og:title" content="Join MM Playoffs — March Melee Pools"');
     });
 
     it('falls back gracefully when name/type are missing', () => {
