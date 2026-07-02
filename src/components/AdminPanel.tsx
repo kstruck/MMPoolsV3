@@ -204,7 +204,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSaveMessage('Settings Saved Successfully!');
     setTimeout(() => {
       setSaveMessage(null);
-      window.location.href = `/ pool / ${gameState.id} `;
+      window.location.href = `/pool/${gameState.id}`;
     }, 1500);
   };
 
