@@ -42,6 +42,15 @@ jobs:
       - name: Test
         run: npm test
 
+  # Validate the nginx config used by the Docker/Coolify production deploy.
+  # A syntax error here would fail the container start, so gate it on every PR.
+  nginx-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: nginx -t
+        run: docker run --rm -v "${{ github.workspace }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine nginx -t
+
   # Advisory only — surfaces the ~540 lint findings (mostly no-explicit-any)
   # without blocking merges. Promote to a required check as the debt is paid down.
   lint:
