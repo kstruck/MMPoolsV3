@@ -88,8 +88,31 @@ async function fetchESPNScores(gameId: string, league: string): Promise<any | nu
         const leaguePath = league === 'college' || league === 'ncaa' ? 'college-football' : 'nfl';
         const url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/summary?event=${gameId}`;
 
-        const resp = await fetch(url);
-        if (!resp.ok) return null;
+        // Bounded fetch: an 8s timeout so one hung socket can't burn the whole
+        // scheduler budget, plus one retry with backoff for transient failures.
+        const fetchWithTimeout = async (): Promise<Response> => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8000);
+            try {
+                return await fetch(url, { signal: controller.signal });
+            } finally {
+                clearTimeout(timer);
+            }
+        };
+
+        let resp: Response | null = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                resp = await fetchWithTimeout();
+                if (resp.ok) break;
+                // 5xx is worth retrying; 4xx is not.
+                if (resp.status < 500) return null;
+            } catch (err) {
+                if (attempt === 1) throw err; // final attempt failed — surface to caller
+            }
+            await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        }
+        if (!resp || !resp.ok) return null;
 
         const data = await resp.json();
         if (!data.header?.competitions?.[0]) return null;
@@ -1038,13 +1061,20 @@ async function finalizeEventPayouts(
 
 export const syncGameStatus = onSchedule({
     schedule: "every 1 minutes",
-    timeoutSeconds: 60,
+    timeoutSeconds: 120,
     memory: "256MiB"
 }, async (event) => {
     const db = admin.firestore();
     const startTime = Date.now();
     let processedCount = 0;
     let errorCount = 0;
+
+    // Dedupe ESPN calls: many pools share one gameId, so fetch each game once
+    // per run and fan the result out. Safe because processGameUpdate clones
+    // espnScores before mutating it. Failures are logged once per game, not
+    // once per pool, to avoid flooding system_logs during an ESPN outage.
+    const scoreCache = new Map<string, any | null>();
+    const failureLogged = new Set<string>();
 
     try {
         // 1. Fetch Active Pools AND Recently Completed Pools
@@ -1097,16 +1127,27 @@ export const syncGameStatus = onSchedule({
             }
 
             try {
-                const espnScores = await fetchESPNScores(pool.gameId, (pool as any).league || 'nfl');
+                const league = (pool as any).league || 'nfl';
+                const cacheKey = `${league}:${pool.gameId}`;
+                let espnScores: any | null;
+                if (scoreCache.has(cacheKey)) {
+                    espnScores = scoreCache.get(cacheKey);
+                } else {
+                    espnScores = await fetchESPNScores(pool.gameId, league);
+                    scoreCache.set(cacheKey, espnScores);
+                }
                 if (!espnScores) {
                     console.warn(`[Sync] Failed to fetch scores for pool ${doc.id}`);
-                    await db.collection('system_logs').add({
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                        type: 'ESPN_FETCH_FAIL',
-                        status: 'error',
-                        message: `Failed to fetch valid scores for pool ${doc.id} (GameID: ${pool.gameId})`,
-                        details: { poolId: doc.id, gameId: pool.gameId }
-                    });
+                    if (!failureLogged.has(cacheKey)) {
+                        failureLogged.add(cacheKey);
+                        await db.collection('system_logs').add({
+                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                            type: 'ESPN_FETCH_FAIL',
+                            status: 'error',
+                            message: `Failed to fetch valid scores for GameID: ${pool.gameId}`,
+                            details: { gameId: pool.gameId }
+                        });
+                    }
                     errorCount++;
                     continue;
                 }
