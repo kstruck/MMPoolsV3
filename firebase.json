@@ -27,6 +27,10 @@
         ],
         "rewrites": [
             {
+                "source": "/join/**",
+                "function": "joinPreview"
+            },
+            {
                 "source": "**",
                 "destination": "/index.html"
             }
