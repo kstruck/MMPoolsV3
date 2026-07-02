@@ -65,6 +65,18 @@ service cloud.firestore {
         return resource.data.get('status', 'DRAFT') in ['DRAFT', 'OPEN'];
       }
 
+      // Is the caller a participant of this pool? (owner, manager, listed
+      // participant, or SuperAdmin). Used to scope pool sub-resources (audit M2).
+      function isPoolParticipant() {
+        let pool = get(/databases/$(database)/documents/pools/$(poolId)).data;
+        return request.auth != null && (
+          pool.ownerId == request.auth.uid ||
+          pool.managerUid == request.auth.uid ||
+          (pool.get('participantIds', []) != null && request.auth.uid in pool.get('participantIds', [])) ||
+          isSuperAdmin()
+        );
+      }
+
       // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted)
       allow update: if request.auth != null && (
         (isPoolManager() && protectedFieldsUnchanged() && poolIsEditable())
@@ -122,10 +134,11 @@ service cloud.firestore {
       }
       
       match /ai_requests/{docId} {
-         allow read: if request.auth != null;
-         allow create: if request.auth != null 
+         // Scoped to pool participants — requests can contain prompt/user context (audit M2).
+         allow read: if isPoolParticipant();
+         allow create: if request.auth != null
                        && request.resource.data.userId == request.auth.uid;
-         allow update, delete: if false; 
+         allow update, delete: if false;
       }
 
       // ANNOUNCEMENTS
@@ -139,9 +152,10 @@ service cloud.firestore {
       }
 
       // BANTER MESSAGES
-      // authorUid must match the authenticated user to prevent identity spoofing.
+      // Reads scoped to pool participants (audit M2). authorUid must match the
+      // authenticated user to prevent identity spoofing.
       match /messages/{messageId} {
-        allow read: if request.auth != null;
+        allow read: if isPoolParticipant();
         allow create: if request.auth != null
                       && request.resource.data.authorUid == request.auth.uid;
         allow update, delete: if false;
