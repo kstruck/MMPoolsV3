@@ -19,8 +19,27 @@ function generateDigits(): number[] {
     return nums;
 }
 
+// Normalize a lockAt value (number | Firestore Timestamp | date string) to ms.
+function toMillis(raw: any): number {
+    if (typeof raw === 'number') return raw;
+    return raw?.toMillis?.() ?? new Date(raw).getTime();
+}
+
+// Lock pools with bounded concurrency so the ~1PM Sunday lock wave (hundreds of
+// pools due in the same run) finishes inside the scheduler budget instead of
+// serializing — otherwise stragglers lock AFTER kickoff, which is unacceptable
+// for a real-money grid. Each executeAutoLock is an independent per-pool
+// transaction, so running them in parallel is safe.
+async function lockAllWithConcurrency(pools: GameState[], limit = 15): Promise<void> {
+    for (let i = 0; i < pools.length; i += limit) {
+        await Promise.all(pools.slice(i, i + limit).map(p => executeAutoLock(p)));
+    }
+}
+
 // --- DEDICATED AUTO-LOCK SCHEDULER (Runs Every 1 Minute) ---
-export const autoLockPools = functions.scheduler.onSchedule("every 1 minutes", async (_event) => {
+export const autoLockPools = functions.scheduler.onSchedule(
+    { schedule: "every 1 minutes", timeoutSeconds: 300, memory: "512MiB" },
+    async (_event) => {
     const now = Date.now();
     console.log(`[AutoLock] Starting auto-lock check at ${new Date(now).toISOString()}`);
 
@@ -41,60 +60,36 @@ export const autoLockPools = functions.scheduler.onSchedule("every 1 minutes", a
 
         console.log(`[AutoLock] Found ${squaresSnapshot.size} SQUARES pools, ${bracketSnapshot.size} BRACKET pools ready to lock`);
 
-        // Process SQUARES pools
+        // Collect the pools that are actually due (lockAt within 30s), then lock
+        // them with bounded concurrency below.
+        const duePools: GameState[] = [];
+
         for (const doc of squaresSnapshot.docs) {
-            try {
-                const pool = { id: doc.id, ...doc.data() } as GameState;
-
-                if (!pool.reminders?.lock?.lockAt) continue;
-
-                // Robust handling of lockAt (could be number or Timestamp)
-                const lockAtNum = typeof pool.reminders.lock.lockAt === 'number'
-                    ? pool.reminders.lock.lockAt
-                    : (pool.reminders.lock.lockAt as any)?.toMillis?.() || new Date(pool.reminders.lock.lockAt as any).getTime();
-
-                if (isNaN(lockAtNum)) {
-                    console.warn(`[AutoLock] Invalid lockAt for pool ${pool.id}:`, pool.reminders.lock.lockAt);
-                    continue;
-                }
-
-                const msUntilLock = lockAtNum - now;
-                if (msUntilLock <= 30000) {
-                    console.log(`[AutoLock] Locking SQUARES pool ${pool.id} (lockAt: ${new Date(lockAtNum).toISOString()})`);
-                    await executeAutoLock(pool);
-                }
-            } catch (poolError: any) {
-                console.error(`[AutoLock] Error processing SQUARES pool ${doc.id}:`, poolError);
+            const pool = { id: doc.id, ...doc.data() } as GameState;
+            const raw = pool.reminders?.lock?.lockAt;
+            if (!raw) continue;
+            const lockAtNum = toMillis(raw);
+            if (isNaN(lockAtNum)) {
+                console.warn(`[AutoLock] Invalid lockAt for pool ${pool.id}:`, raw);
+                continue;
             }
+            if (lockAtNum - now <= 30000) duePools.push(pool);
         }
 
-        // Process BRACKET pools
         for (const doc of bracketSnapshot.docs) {
-            try {
-                const pool = { id: doc.id, ...doc.data() } as GameState;
-
-                // Read root-level lockAt (stored as ms timestamp)
-                const rawLockAt = (pool as any).lockAt;
-                if (!rawLockAt) continue;
-
-                const lockAtNum = typeof rawLockAt === 'number'
-                    ? rawLockAt
-                    : (rawLockAt as any)?.toMillis?.() || new Date(rawLockAt as any).getTime();
-
-                if (isNaN(lockAtNum)) {
-                    console.warn(`[AutoLock] Invalid lockAt for BRACKET pool ${pool.id}:`, rawLockAt);
-                    continue;
-                }
-
-                const msUntilLock = lockAtNum - now;
-                if (msUntilLock <= 30000) {
-                    console.log(`[AutoLock] Locking BRACKET pool ${pool.id} (lockAt: ${new Date(lockAtNum).toISOString()})`);
-                    await executeAutoLock(pool);
-                }
-            } catch (poolError: any) {
-                console.error(`[AutoLock] Error processing BRACKET pool ${doc.id}:`, poolError);
+            const pool = { id: doc.id, ...doc.data() } as GameState;
+            const raw = (pool as any).lockAt;
+            if (!raw) continue;
+            const lockAtNum = toMillis(raw);
+            if (isNaN(lockAtNum)) {
+                console.warn(`[AutoLock] Invalid lockAt for BRACKET pool ${pool.id}:`, raw);
+                continue;
             }
+            if (lockAtNum - now <= 30000) duePools.push(pool);
         }
+
+        console.log(`[AutoLock] Locking ${duePools.length} due pool(s) with bounded concurrency`);
+        await lockAllWithConcurrency(duePools);
 
         console.log(`[AutoLock] Completed auto-lock check`);
     } catch (error) {
