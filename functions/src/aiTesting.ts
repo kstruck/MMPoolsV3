@@ -95,6 +95,11 @@ Example: { "actionType": "SCORE_UPDATE", "period": "Q1", "homeScore": 7, "awaySc
 export const generateTestScenario = onCall(
     { secrets: [geminiApiKey], timeoutSeconds: 300, memory: "1GiB" },
     async (request) => {
+        // Test-only tooling that runs expensive Gemini jobs — SUPER_ADMIN only.
+        // Without this, any authenticated user could drain the Gemini quota / bill.
+        if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
+            throw new HttpsError("permission-denied", "Only super admins can run AI testing tools.");
+        }
         try {
             const { poolType, userRequest } = request.data;
 
@@ -142,6 +147,11 @@ Be precise and cite evidence from the test results.
 export const validateTestResults = onCall(
     { secrets: [geminiApiKey], timeoutSeconds: 300, memory: "1GiB" },
     async (request) => {
+        // Test-only tooling that runs expensive Gemini jobs — SUPER_ADMIN only.
+        // Without this, any authenticated user could drain the Gemini quota / bill.
+        if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
+            throw new HttpsError("permission-denied", "Only super admins can run AI testing tools.");
+        }
         try {
             const { scenario, testResult } = request.data;
 
@@ -189,6 +199,11 @@ Provide actionable recommendations.
 export const generateTestReport = onCall(
     { secrets: [geminiApiKey], timeoutSeconds: 300, memory: "1GiB" },
     async (request) => {
+        // Test-only tooling that runs expensive Gemini jobs — SUPER_ADMIN only.
+        // Without this, any authenticated user could drain the Gemini quota / bill.
+        if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
+            throw new HttpsError("permission-denied", "Only super admins can run AI testing tools.");
+        }
         try {
             const { scenario, testResult, validation } = request.data;
 
