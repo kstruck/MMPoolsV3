@@ -2,6 +2,7 @@ import { logger } from '../utils/logger';
 import React, { useState } from 'react';
 import { Mail, CheckCircle, AlertCircle } from 'lucide-react';
 import { emailService } from '../services/emailService';
+import { Input, Select, FieldLabel, Checkbox, Button } from './ui';
 
 export const SupportPage: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -69,27 +70,32 @@ Sent via March Melee Pools Support Form
         }
     };
 
+    const labelCls = 'text-[#EDF1F8]';
+    const textareaClass =
+        'w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none resize-none';
+
+    /* Marketing/support page is navy chrome end-to-end — always dark in both themes. */
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-300">
+        <div className="min-h-screen bg-navy-950 text-[#EDF1F8] font-body">
             {/* Content */}
             <div className="max-w-3xl mx-auto px-6 py-16">
                 <div className="text-center mb-12">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-900/20 rounded-full mb-4">
-                        <Mail className="text-indigo-400" size={32} />
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gold-500/10 border border-gold-500/25 rounded-full mb-4">
+                        <Mail className="text-gold-400" size={32} />
                     </div>
-                    <h1 className="text-4xl font-black text-white mb-4">Contact Support</h1>
-                    <p className="text-lg text-slate-300">
+                    <h1 className="font-display font-extrabold uppercase text-4xl leading-[0.95] text-white mb-4">Contact Support</h1>
+                    <p className="text-lg font-body text-[#9FB0CC]">
                         We're here to help! Send us a message and we'll respond within 48 hours.
                     </p>
                 </div>
 
                 {/* Success Message */}
                 {submitStatus === 'success' && (
-                    <div className="mb-8 bg-emerald-900/20 border border-emerald-500/30 rounded-xl p-6 flex items-start gap-3">
+                    <div className="mb-8 bg-[#0F7B4A]/15 border border-[#0F7B4A]/40 rounded-xl p-6 flex items-start gap-3">
                         <CheckCircle className="text-emerald-400 shrink-0" size={24} />
                         <div>
-                            <h3 className="font-bold text-emerald-100 mb-1">Message Sent Successfully!</h3>
-                            <p className="text-emerald-300 text-sm">
+                            <h3 className="font-display font-bold uppercase text-white mb-1">Message Sent Successfully!</h3>
+                            <p className="text-[#9FB0CC] text-sm">
                                 Thank you for contacting us. We'll get back to you within 48 hours.
                             </p>
                         </div>
@@ -98,11 +104,11 @@ Sent via March Melee Pools Support Form
 
                 {/* Error Message */}
                 {submitStatus === 'error' && (
-                    <div className="mb-8 bg-rose-900/20 border border-rose-500/30 rounded-xl p-6 flex items-start gap-3">
-                        <AlertCircle className="text-rose-400 shrink-0" size={24} />
+                    <div className="mb-8 bg-brandred-600/15 border border-brandred-600/35 rounded-xl p-6 flex items-start gap-3">
+                        <AlertCircle className="text-brandred-500 shrink-0" size={24} />
                         <div>
-                            <h3 className="font-bold text-rose-100 mb-1">Error Sending Message</h3>
-                            <p className="text-rose-300 text-sm">
+                            <h3 className="font-display font-bold uppercase text-white mb-1">Error Sending Message</h3>
+                            <p className="text-[#9FB0CC] text-sm">
                                 Something went wrong. Please try again or email us directly.
                             </p>
                         </div>
@@ -110,96 +116,94 @@ Sent via March Melee Pools Support Form
                 )}
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-8 space-y-6">
+                <form onSubmit={handleSubmit} className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-8 space-y-6">
                     {/* Name */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-300 mb-2">
-                            Your Name <span className="text-rose-500">*</span>
-                        </label>
-                        <input
+                        <FieldLabel className={labelCls}>
+                            Your Name <span className="text-brandred-500">*</span>
+                        </FieldLabel>
+                        <Input
                             type="text"
                             required
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
                             placeholder="John Doe"
                         />
                     </div>
 
                     {/* Email */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-300 mb-2">
-                            Your Email <span className="text-rose-500">*</span>
-                        </label>
-                        <input
+                        <FieldLabel className={labelCls}>
+                            Your Email <span className="text-brandred-500">*</span>
+                        </FieldLabel>
+                        <Input
                             type="email"
                             required
                             value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
                             placeholder="john@example.com"
                         />
                     </div>
 
                     {/* Support Type */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-300 mb-2">
-                            Support Type <span className="text-rose-500">*</span>
-                        </label>
-                        <select
+                        <FieldLabel className={labelCls}>
+                            Support Type <span className="text-brandred-500">*</span>
+                        </FieldLabel>
+                        <Select
                             required
                             value={formData.supportType}
                             onChange={(e) => setFormData({ ...formData, supportType: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
                         >
                             <option value="">Select a type...</option>
                             {supportTypes.map((type) => (
                                 <option key={type} value={type}>{type}</option>
                             ))}
-                        </select>
+                        </Select>
                     </div>
 
                     {/* Message */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-300 mb-2">
-                            Message <span className="text-rose-500">*</span>
-                        </label>
+                        <FieldLabel className={labelCls}>
+                            Message <span className="text-brandred-500">*</span>
+                        </FieldLabel>
                         <textarea
                             required
                             rows={6}
                             value={formData.message}
                             onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent outline-none transition-all resize-none"
+                            className={textareaClass}
                             placeholder="Please describe your issue or question in detail..."
                         />
                     </div>
 
                     {/* Send Copy Checkbox */}
                     <div className="flex items-start gap-3">
-                        <input
-                            type="checkbox"
+                        <Checkbox
                             id="sendCopy"
                             checked={formData.sendCopy}
                             onChange={(e) => setFormData({ ...formData, sendCopy: e.target.checked })}
-                            className="mt-1 w-4 h-4 text-indigo-600 bg-slate-950 border-slate-700 rounded focus:ring-indigo-500"
+                            className="mt-1"
                         />
-                        <label htmlFor="sendCopy" className="text-sm text-slate-300 cursor-pointer">
+                        <label htmlFor="sendCopy" className="text-sm font-body text-[#9FB0CC] cursor-pointer">
                             Send me a copy of this message for my records
                         </label>
                     </div>
 
                     {/* SLA Notice */}
-                    <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-4">
-                        <p className="text-sm text-indigo-100 font-medium">
+                    <div className="bg-navy-950 border border-gold-500/25 rounded-xl p-4">
+                        <p className="text-sm font-body text-[#EDF1F8]">
                             <strong>Response Time:</strong> We aim to respond to all support requests within 48 hours during business days.
                         </p>
                     </div>
 
                     {/* Submit Button */}
-                    <button
+                    <Button
                         type="submit"
+                        variant="primary"
+                        size="lg"
                         disabled={isSubmitting}
-                        className="w-full bg-indigo-500 hover:bg-indigo-400 text-white py-4 rounded-xl font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="w-full"
                     >
                         {isSubmitting ? (
                             <>
@@ -212,7 +216,7 @@ Sent via March Melee Pools Support Form
                                 Send Message
                             </>
                         )}
-                    </button>
+                    </Button>
                 </form>
             </div>
         </div>

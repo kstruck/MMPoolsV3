@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User } from '../types';
-import { HelpCircle, CheckCircle, Shield, Trophy, LayoutGrid, BookOpen, AlertCircle, Mail, Sparkles, Zap, Star } from 'lucide-react';
+import { HelpCircle, CheckCircle, Shield, Trophy, LayoutGrid, BookOpen, AlertCircle, Mail, Sparkles, Zap, Star, Lightbulb, MessageCircle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { isSuperAdmin } from '../utils/auth';
 import { emailService } from '../services/emailService';
 import { logger } from '../utils/logger';
+import { Input, Select, FieldLabel, Checkbox, Button } from './ui';
 
 interface Props {
     user: User | null;
@@ -22,13 +23,13 @@ type ViewMode = 'overview' | 'strategy' | 'faq' | 'contact';
 /* ─────────────────────────────────────────── DATA ─────────────────────────────────────────── */
 
 const POOL_TYPES = [
-    { id: 'brackets' as Sport, name: 'NCAA Brackets', icon: Trophy, color: 'from-orange-400 to-amber-400', theme: 'orange' },
-    { id: 'squares' as Sport, name: 'Gameday Squares', icon: LayoutGrid, color: 'from-indigo-400 to-blue-400', theme: 'indigo' },
-    { id: 'survivor' as Sport, name: 'Survivor Pools', icon: Zap, color: 'from-red-400 to-rose-400', theme: 'red' },
-    { id: 'pickem' as Sport, name: "Weekly Pick'em", icon: Star, color: 'from-blue-400 to-cyan-400', theme: 'blue' },
-    { id: 'margin' as Sport, name: 'Margin Pools', icon: Sparkles, color: 'from-teal-400 to-emerald-400', theme: 'teal' },
-    { id: 'playoffs' as Sport, name: 'Playoff Challenge', icon: Trophy, color: 'from-fuchsia-400 to-pink-400', theme: 'fuchsia' },
-    { id: 'props' as Sport, name: 'Side Hustle Props', icon: HelpCircle, color: 'from-emerald-400 to-green-400', theme: 'emerald' },
+    { id: 'brackets' as Sport, name: 'NCAA Brackets', icon: Trophy },
+    { id: 'squares' as Sport, name: 'Gameday Squares', icon: LayoutGrid },
+    { id: 'survivor' as Sport, name: 'Survivor Pools', icon: Zap },
+    { id: 'pickem' as Sport, name: "Weekly Pick'em", icon: Star },
+    { id: 'margin' as Sport, name: 'Margin Pools', icon: Sparkles },
+    { id: 'playoffs' as Sport, name: 'Playoff Challenge', icon: Trophy },
+    { id: 'props' as Sport, name: 'Side Hustle Props', icon: HelpCircle },
 ];
 
 const poolData: Record<Sport, {
@@ -220,9 +221,11 @@ const poolData: Record<Sport, {
 
 /* ────────────────────────────────────────── COMPONENT ────────────────────────────────────────── */
 
+/* Marketing/help page is navy chrome end-to-end — always dark in both themes. */
+
 export const HowItWorksPage: React.FC<Props> = (props) => {
     const [searchParams, setSearchParams] = useSearchParams();
-    
+
     // Read Query Params
     const activeSport = (searchParams.get('sport') as Sport) || 'brackets';
     const activeView = (searchParams.get('view') as ViewMode) || 'overview';
@@ -298,24 +301,28 @@ Sent via March Melee Pools Central FAQ Support Form
         }
     };
 
+    const chromeCard = 'bg-navy-900 border border-[rgba(230,206,150,0.16)]';
+    const textareaClass =
+        'w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none resize-none';
+
     return (
-        <div className="bg-slate-950 min-h-screen text-slate-300 font-sans selection:bg-indigo-500/30 flex flex-col">
+        <div className="bg-navy-950 min-h-screen text-[#EDF1F8] font-body flex flex-col">
             <Header {...props} />
 
             {/* Title / Hero */}
-            <div className="relative overflow-hidden bg-slate-900 border-b border-slate-800">
-                <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-b from-indigo-900/10 to-transparent pointer-events-none`} />
+            <div className="relative overflow-hidden bg-navy-900 border-b border-[rgba(230,206,150,0.16)]">
+                <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-b from-navy-600/10 to-transparent pointer-events-none`} />
                 <div className="max-w-7xl mx-auto px-6 py-12 md:py-16 relative z-10">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mb-4">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full font-display font-bold uppercase text-xs tracking-[0.16em] bg-gold-500/10 border border-gold-500/25 text-gold-400 mb-4">
                         <BookOpen size={12} /> Help Center & Knowledge Base
                     </div>
-                    <h1 className="text-3xl md:text-5xl font-black text-white leading-tight">
+                    <h1 className="font-display font-extrabold uppercase text-3xl md:text-5xl text-white leading-[0.95]">
                         Pool Guides &{' '}
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-indigo-400">
+                        <span className="text-gold-400">
                             Knowledge Hub
                         </span>
                     </h1>
-                    <p className="text-base md:text-lg text-slate-400 max-w-2xl mt-4">
+                    <p className="text-base md:text-lg font-body text-[#9FB0CC] max-w-2xl mt-4">
                         Everything you need to know about setting up, running, and winning your office or social pools. Check out rules, strategies, FAQs, or contact our support team.
                     </p>
                 </div>
@@ -324,11 +331,11 @@ Sent via March Melee Pools Central FAQ Support Form
             {/* Main Area */}
             <main className="max-w-7xl mx-auto px-4 md:px-6 py-12 flex-grow w-full">
                 <div className="flex flex-col lg:flex-row gap-8">
-                    
+
                     {/* Sidebar Navigation (Pool Types) */}
                     <div className="w-full lg:w-64 shrink-0">
-                        <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl sticky top-28 space-y-2">
-                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-4">Select Pool Type</h3>
+                        <div className={`${chromeCard} p-4 rounded-2xl sticky top-28 space-y-2`}>
+                            <h3 className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6] px-3 mb-4">Select Pool Type</h3>
                             {POOL_TYPES.map((type) => {
                                 const IconComp = type.icon;
                                 const isSelected = activeSport === type.id;
@@ -336,13 +343,13 @@ Sent via March Melee Pools Central FAQ Support Form
                                     <button
                                         key={type.id}
                                         onClick={() => handleSportChange(type.id)}
-                                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left font-bold text-sm transition-all group ${
-                                            isSelected 
-                                                ? 'bg-slate-800 text-white border-l-4 border-indigo-500 shadow-md' 
-                                                : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left font-display font-bold uppercase tracking-[0.05em] text-sm transition-all group ${
+                                            isSelected
+                                                ? 'bg-navy-800 text-white border-l-4 border-gold-500 shadow-md'
+                                                : 'text-[#9FB0CC] hover:text-white hover:bg-navy-900/60'
                                         }`}
                                     >
-                                        <IconComp size={16} className={`${isSelected ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                                        <IconComp size={16} className={`${isSelected ? 'text-gold-400' : 'text-[#7C8BA6] group-hover:text-[#9FB0CC]'}`} />
                                         {type.name}
                                     </button>
                                 );
@@ -353,25 +360,26 @@ Sent via March Melee Pools Central FAQ Support Form
                     {/* Content Pane */}
                     <div className="flex-grow">
                         {/* Sub Navigation (View Modes) */}
-                        <div className="flex bg-slate-900/40 border border-slate-850 p-1.5 rounded-2xl gap-1 mb-8">
+                        <div className={`flex ${chromeCard} p-1.5 rounded-2xl gap-1 mb-8`}>
                             {[
-                                { id: 'overview' as ViewMode, label: '📖 How it Works', activeColor: 'bg-indigo-500 text-white shadow-indigo-500/20' },
-                                { id: 'strategy' as ViewMode, label: '💡 Strategy Guide', activeColor: 'bg-orange-500 text-white shadow-orange-500/20' },
-                                { id: 'faq' as ViewMode, label: '💬 FAQs & Rules', activeColor: 'bg-emerald-500 text-white shadow-emerald-500/20' },
-                                { id: 'contact' as ViewMode, label: '✉️ Contact Support', activeColor: 'bg-slate-700 text-white' }
+                                { id: 'overview' as ViewMode, label: 'How it Works', icon: BookOpen },
+                                { id: 'strategy' as ViewMode, label: 'Strategy Guide', icon: Lightbulb },
+                                { id: 'faq' as ViewMode, label: 'FAQs & Rules', icon: MessageCircle },
+                                { id: 'contact' as ViewMode, label: 'Contact Support', icon: Mail }
                             ].map((tab) => {
                                 const isViewSelected = activeView === tab.id;
+                                const TabIcon = tab.icon;
                                 return (
                                     <button
                                         key={tab.id}
                                         onClick={() => handleViewChange(tab.id)}
-                                        className={`flex-grow md:flex-grow-0 px-4 md:px-6 py-3 rounded-xl font-bold text-xs md:text-sm text-center transition-all ${
+                                        className={`flex-grow md:flex-grow-0 inline-flex items-center justify-center gap-1.5 px-4 md:px-6 py-3 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-xs md:text-sm text-center transition-all ${
                                             isViewSelected
-                                                ? `${tab.activeColor} shadow-lg`
-                                                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                                                ? 'bg-gold-foil text-navy-900 shadow-[0_6px_16px_rgba(140,109,51,0.28)]'
+                                                : 'text-[#9FB0CC] hover:text-white hover:bg-navy-800'
                                         }`}
                                     >
-                                        {tab.label}
+                                        <TabIcon size={14} /> {tab.label}
                                     </button>
                                 );
                             })}
@@ -380,33 +388,33 @@ Sent via March Melee Pools Central FAQ Support Form
                         {/* VIEW 1: OVERVIEW */}
                         {activeView === 'overview' && (
                             <div className="space-y-12">
-                                <div className="border-b border-slate-850 pb-6">
-                                    <h2 className="text-2xl md:text-3xl font-black text-white mb-3">{activeData.title} Overview</h2>
-                                    <p className="text-slate-400 text-base leading-relaxed">{activeData.description}</p>
+                                <div className="border-b border-[rgba(230,206,150,0.16)] pb-6">
+                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-white mb-3">{activeData.title} Overview</h2>
+                                    <p className="font-body text-[#9FB0CC] text-base leading-relaxed">{activeData.description}</p>
                                 </div>
 
                                 <div className="space-y-6">
-                                    <h3 className="text-lg font-bold text-white uppercase tracking-wider">{activeData.stepsTitle}</h3>
+                                    <h3 className="font-display font-bold uppercase text-lg tracking-[0.08em] text-white">{activeData.stepsTitle}</h3>
                                     <div className="space-y-4">
                                         {activeData.steps.map((step, idx) => (
-                                            <div key={idx} className="flex gap-4 items-start p-5 rounded-2xl bg-slate-900/30 border border-slate-900 hover:border-slate-800 hover:bg-slate-900/50 transition-all">
-                                                <div className="bg-indigo-900/30 text-indigo-400 font-black text-lg w-10 h-10 rounded-full flex items-center justify-center shrink-0 border border-indigo-500/10">
+                                            <div key={idx} className={`flex gap-4 items-start p-5 rounded-2xl ${chromeCard} hover:border-gold-500/40 transition-all`}>
+                                                <div className="bg-gold-500/15 text-gold-400 font-display font-extrabold text-lg w-10 h-10 rounded-full flex items-center justify-center shrink-0 border border-gold-500/25 num">
                                                     {idx + 1}
                                                 </div>
                                                 <div>
-                                                    <h4 className="font-bold text-lg text-white mb-1">{step.title}</h4>
-                                                    <p className="text-slate-400 text-sm leading-relaxed">{step.desc}</p>
+                                                    <h4 className="font-display font-bold uppercase text-lg text-white mb-1">{step.title}</h4>
+                                                    <p className="font-body text-[#9FB0CC] text-sm leading-relaxed">{step.desc}</p>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
-                                <div className="bg-amber-950/20 border border-amber-800/30 rounded-2xl p-6 flex gap-4">
-                                    <Shield className="text-amber-500 shrink-0 mt-0.5" size={28} />
+                                <div className="bg-gold-500/10 border border-gold-500/25 rounded-2xl p-6 flex gap-4">
+                                    <Shield className="text-gold-400 shrink-0 mt-0.5" size={28} />
                                     <div>
-                                        <h4 className="font-bold text-white mb-2">Fairness Guarantee</h4>
-                                        <p className="text-sm text-slate-400 leading-relaxed">{activeData.fairness}</p>
+                                        <h4 className="font-display font-bold uppercase text-white mb-2">Fairness Guarantee</h4>
+                                        <p className="text-sm font-body text-[#9FB0CC] leading-relaxed">{activeData.fairness}</p>
                                     </div>
                                 </div>
                             </div>
@@ -415,31 +423,31 @@ Sent via March Melee Pools Central FAQ Support Form
                         {/* VIEW 2: STRATEGY GUIDE */}
                         {activeView === 'strategy' && (
                             <div className="space-y-8">
-                                <div className="border-b border-slate-850 pb-6">
-                                    <h2 className="text-2xl md:text-3xl font-black text-white mb-3">{activeData.strategyTitle}</h2>
-                                    <p className="text-slate-400 text-sm italic">Master optimal game theory and secure seasonal or tournament leverage.</p>
+                                <div className="border-b border-[rgba(230,206,150,0.16)] pb-6">
+                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-white mb-3">{activeData.strategyTitle}</h2>
+                                    <p className="font-body text-[#9FB0CC] text-sm italic">Master optimal game theory and secure seasonal or tournament leverage.</p>
                                 </div>
 
                                 <div className="space-y-8">
                                     {activeData.strategySections.map((section, idx) => (
-                                        <div key={idx} className="p-6 md:p-8 bg-slate-900/40 border border-slate-800 rounded-3xl space-y-3">
+                                        <div key={idx} className={`p-6 md:p-8 ${chromeCard} rounded-3xl space-y-3`}>
                                             <div className="flex items-center gap-2">
-                                                <div className="h-2 w-2 rounded-full bg-orange-500" />
-                                                <h4 className="text-xl font-bold text-white">{section.title}</h4>
+                                                <div className="h-2 w-2 rounded-full bg-gold-500" />
+                                                <h4 className="font-display font-bold uppercase text-xl text-white">{section.title}</h4>
                                             </div>
-                                            <p className="text-slate-300 text-base leading-relaxed pl-4 border-l border-slate-800">{section.content}</p>
+                                            <p className="font-body text-[#EDF1F8] text-base leading-relaxed pl-4 border-l border-[rgba(230,206,150,0.16)]">{section.content}</p>
                                         </div>
                                     ))}
                                 </div>
 
                                 {/* Custom Content for Brackets Guide from the original Article */}
                                 {activeSport === 'brackets' && (
-                                    <div className="mt-12 bg-slate-900/50 p-8 rounded-3xl border border-slate-800 space-y-6">
-                                        <h3 className="text-xl font-bold text-white">Running a Charity Tournament Bracket</h3>
-                                        <p className="text-slate-400 text-sm leading-relaxed">
+                                    <div className={`mt-12 ${chromeCard} p-8 rounded-3xl space-y-6`}>
+                                        <h3 className="font-display font-bold uppercase text-xl text-white">Running a Charity Tournament Bracket</h3>
+                                        <p className="font-body text-[#9FB0CC] text-sm leading-relaxed">
                                             Charity pools are incredibly popular in 2026. Setting up a Charity Bracket is simple: designate a fixed percentage (e.g., 50% or 100%) of entries to be directly donated to a 501(c)(3) charity. The platform tracks collection transparently, so everyone in your Slack or email chain can see the cumulative impact.
                                         </p>
-                                        <p className="text-slate-400 text-sm leading-relaxed">
+                                        <p className="font-body text-[#9FB0CC] text-sm leading-relaxed">
                                             Ensure that you communicate the charity details, deadline locks, and receipt verifications early on to foster trust and excitement.
                                         </p>
                                     </div>
@@ -450,33 +458,33 @@ Sent via March Melee Pools Central FAQ Support Form
                         {/* VIEW 3: FAQ */}
                         {activeView === 'faq' && (
                             <div className="space-y-8">
-                                <div className="border-b border-slate-850 pb-6">
-                                    <h2 className="text-2xl md:text-3xl font-black text-white mb-3">Frequently Asked Questions</h2>
-                                    <p className="text-slate-400 text-sm">Have rules questions? Review the comprehensive answers below.</p>
+                                <div className="border-b border-[rgba(230,206,150,0.16)] pb-6">
+                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-white mb-3">Frequently Asked Questions</h2>
+                                    <p className="font-body text-[#9FB0CC] text-sm">Have rules questions? Review the comprehensive answers below.</p>
                                 </div>
 
                                 <div className="grid gap-4">
                                     {activeData.faqs.map((faq, i) => (
-                                        <details key={i} className="group bg-slate-900/40 rounded-xl border border-slate-850 overflow-hidden transition-all">
-                                            <summary className="flex justify-between items-center p-6 cursor-pointer font-bold text-white hover:bg-slate-900/80 transition-colors list-none">
+                                        <details key={i} className={`group ${chromeCard} rounded-xl overflow-hidden transition-all`}>
+                                            <summary className="flex justify-between items-center p-6 cursor-pointer font-display font-bold uppercase text-white hover:bg-navy-800/60 transition-colors list-none">
                                                 {faq.q}
-                                                <span className="text-indigo-400 group-open:rotate-180 transition-transform">▼</span>
+                                                <span className="text-gold-400 group-open:rotate-180 transition-transform">▼</span>
                                             </summary>
-                                            <div className="px-6 pb-6 text-slate-400 text-sm leading-relaxed border-t border-slate-850 pt-4">
+                                            <div className="px-6 pb-6 font-body text-[#9FB0CC] text-sm leading-relaxed border-t border-[rgba(230,206,150,0.16)] pt-4">
                                                 {faq.a}
                                             </div>
                                         </details>
                                     ))}
                                 </div>
 
-                                <div className="p-6 bg-slate-900/30 rounded-2xl border border-slate-850 flex flex-col md:flex-row justify-between items-center gap-4 mt-12">
+                                <div className={`p-6 ${chromeCard} rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 mt-12`}>
                                     <div>
-                                        <h4 className="font-bold text-white mb-1">Didn't find your answer?</h4>
-                                        <p className="text-xs text-slate-400">Our technical customer service team is standing by to resolve any issue.</p>
+                                        <h4 className="font-display font-bold uppercase text-white mb-1">Didn't find your answer?</h4>
+                                        <p className="text-xs font-body text-[#9FB0CC]">Our technical customer service team is standing by to resolve any issue.</p>
                                     </div>
                                     <button
                                         onClick={() => handleViewChange('contact')}
-                                        className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 rounded-xl transition-all"
+                                        className="font-display font-bold uppercase tracking-[0.05em] text-xs text-white bg-brandred-600 hover:bg-brandred-500 px-4 py-2.5 rounded-md transition-all duration-150 hover:-translate-y-px shadow-red-cta"
                                     >
                                         Open Support Ticket
                                     </button>
@@ -487,65 +495,62 @@ Sent via March Melee Pools Central FAQ Support Form
                         {/* VIEW 4: CONTACT SUPPORT */}
                         {activeView === 'contact' && (
                             <div className="space-y-8">
-                                <div className="border-b border-slate-850 pb-6">
-                                    <h2 className="text-2xl md:text-3xl font-black text-white mb-3">Contact Technical Support</h2>
-                                    <p className="text-slate-400 text-sm">Send us a ticket, and our support representatives will respond within 48 hours.</p>
+                                <div className="border-b border-[rgba(230,206,150,0.16)] pb-6">
+                                    <h2 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-[0.95] text-white mb-3">Contact Technical Support</h2>
+                                    <p className="font-body text-[#9FB0CC] text-sm">Send us a ticket, and our support representatives will respond within 48 hours.</p>
                                 </div>
 
                                 {/* Form Alerts */}
                                 {submitStatus === 'success' && (
-                                    <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-6 flex gap-3">
+                                    <div className="bg-[#0F7B4A]/15 border border-[#0F7B4A]/40 rounded-2xl p-6 flex gap-3">
                                         <CheckCircle className="text-emerald-400 shrink-0" size={24} />
                                         <div>
-                                            <h4 className="font-bold text-emerald-100 mb-1">Message Sent Successfully!</h4>
-                                            <p className="text-emerald-300 text-sm">Thank you. We have received your query and will reply within 48 hours.</p>
+                                            <h4 className="font-display font-bold uppercase text-white mb-1">Message Sent Successfully!</h4>
+                                            <p className="font-body text-[#9FB0CC] text-sm">Thank you. We have received your query and will reply within 48 hours.</p>
                                         </div>
                                     </div>
                                 )}
 
                                 {submitStatus === 'error' && (
-                                    <div className="bg-red-950/20 border border-red-500/30 rounded-2xl p-6 flex gap-3">
-                                        <AlertCircle className="text-red-400 shrink-0" size={24} />
+                                    <div className="bg-brandred-600/15 border border-brandred-600/35 rounded-2xl p-6 flex gap-3">
+                                        <AlertCircle className="text-brandred-500 shrink-0" size={24} />
                                         <div>
-                                            <h4 className="font-bold text-red-100 mb-1">Failed to Send Message</h4>
-                                            <p className="text-red-300 text-sm">Something went wrong. Please check your network connection or try again.</p>
+                                            <h4 className="font-display font-bold uppercase text-white mb-1">Failed to Send Message</h4>
+                                            <p className="font-body text-[#9FB0CC] text-sm">Something went wrong. Please check your network connection or try again.</p>
                                         </div>
                                     </div>
                                 )}
 
-                                <form onSubmit={handleSupportSubmit} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 space-y-6">
+                                <form onSubmit={handleSupportSubmit} className={`${chromeCard} rounded-3xl p-6 md:p-8 space-y-6`}>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Your Name</label>
-                                            <input
+                                            <FieldLabel className="text-[#EDF1F8]">Your Name</FieldLabel>
+                                            <Input
                                                 type="text"
                                                 required
                                                 value={supportData.name}
                                                 onChange={(e) => setSupportData({ ...supportData, name: e.target.value })}
-                                                className="w-full px-4 py-3.5 bg-slate-950 border border-slate-850 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
                                                 placeholder="John Doe"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Your Email</label>
-                                            <input
+                                            <FieldLabel className="text-[#EDF1F8]">Your Email</FieldLabel>
+                                            <Input
                                                 type="email"
                                                 required
                                                 value={supportData.email}
                                                 onChange={(e) => setSupportData({ ...supportData, email: e.target.value })}
-                                                className="w-full px-4 py-3.5 bg-slate-950 border border-slate-850 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
                                                 placeholder="john@example.com"
                                             />
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Inquiry Category</label>
-                                        <select
+                                        <FieldLabel className="text-[#EDF1F8]">Inquiry Category</FieldLabel>
+                                        <Select
                                             required
                                             value={supportData.supportType}
                                             onChange={(e) => setSupportData({ ...supportData, supportType: e.target.value })}
-                                            className="w-full px-4 py-3.5 bg-slate-950 border border-slate-850 rounded-xl text-slate-300 outline-none focus:ring-2 focus:ring-indigo-500/50"
                                         >
                                             <option value="">Select category...</option>
                                             <option value="Technical Issue">Technical Issue</option>
@@ -553,38 +558,39 @@ Sent via March Melee Pools Central FAQ Support Form
                                             <option value="Payment/Billing">Payment / Billing</option>
                                             <option value="Feature Request">Feature Request</option>
                                             <option value="Other">Other</option>
-                                        </select>
+                                        </Select>
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Your Message</label>
+                                        <FieldLabel className="text-[#EDF1F8]">Your Message</FieldLabel>
                                         <textarea
                                             required
                                             rows={6}
                                             value={supportData.message}
                                             onChange={(e) => setSupportData({ ...supportData, message: e.target.value })}
-                                            className="w-full px-4 py-3.5 bg-slate-950 border border-slate-850 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"
+                                            className={textareaClass}
                                             placeholder="Detail your question or issue..."
                                         />
                                     </div>
 
                                     <div className="flex items-start gap-3">
-                                        <input
-                                            type="checkbox"
+                                        <Checkbox
                                             id="sendCopy"
                                             checked={supportData.sendCopy}
                                             onChange={(e) => setSupportData({ ...supportData, sendCopy: e.target.checked })}
-                                            className="mt-1 w-4 h-4 text-indigo-600 bg-slate-950 border-slate-700 rounded focus:ring-indigo-500"
+                                            className="mt-1"
                                         />
-                                        <label htmlFor="sendCopy" className="text-xs text-slate-400 cursor-pointer">
+                                        <label htmlFor="sendCopy" className="text-xs font-body text-[#9FB0CC] cursor-pointer">
                                             Send me a confirmation copy of this ticket for my records
                                         </label>
                                     </div>
 
-                                    <button
+                                    <Button
                                         type="submit"
+                                        variant="primary"
+                                        size="md"
                                         disabled={isSubmitting}
-                                        className="w-full bg-indigo-600 hover:bg-indigo-550 text-white font-bold py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                                        className="w-full"
                                     >
                                         {isSubmitting ? (
                                             <>
@@ -597,25 +603,25 @@ Sent via March Melee Pools Central FAQ Support Form
                                                 Send Ticket
                                             </>
                                         )}
-                                    </button>
+                                    </Button>
                                 </form>
                             </div>
                         )}
 
                         {/* CTA Box (Active for overview/strategy/faq views) */}
                         {activeView !== 'contact' && (
-                            <div className="mt-16 bg-gradient-to-br from-indigo-950/40 to-slate-950 border border-slate-800 rounded-3xl p-8 text-center relative overflow-hidden group">
-                                <div className="absolute inset-0 bg-indigo-500/5 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+                            <div className={`mt-16 ${chromeCard} rounded-3xl p-8 text-center relative overflow-hidden group`}>
+                                <div className="absolute inset-0 bg-gold-500/5 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
                                 <div className="relative z-10">
-                                    <h3 className="text-2xl font-black text-white mb-2">Ready to kick off your pool?</h3>
-                                    <p className="text-sm text-slate-400 mb-8 max-w-lg mx-auto">
+                                    <h3 className="font-display font-extrabold uppercase text-2xl leading-[0.95] text-white mb-2">Ready to kick off your pool?</h3>
+                                    <p className="text-sm font-body text-[#9FB0CC] mb-8 max-w-lg mx-auto">
                                         Create a free {activeData.title} now. Live score boards, automatic payouts, and automated standings. Zero spreadsheet headaches.
                                     </p>
                                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                                         <button
                                             onClick={isSuperAdmin(props.user) ? props.onCreatePool : undefined}
                                             disabled={!isSuperAdmin(props.user)}
-                                            className="inline-flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-550 px-8 py-3.5 rounded-xl font-bold text-sm transition-all transform hover:scale-[1.02] shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="inline-flex items-center justify-center gap-2 bg-brandred-600 text-white hover:bg-brandred-500 px-8 py-3.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                                             title={isSuperAdmin(props.user) ? `Create a ${activeData.title}` : "Commissioners can host soon"}
                                         >
                                             {activeData.ctaText}
@@ -623,7 +629,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                         </button>
                                         <button
                                             onClick={() => window.location.href = '/browse'}
-                                            className="px-8 py-3.5 bg-slate-900 hover:bg-slate-850 text-slate-300 font-bold text-sm rounded-xl border border-slate-800 transition-all"
+                                            className="px-8 py-3.5 bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase tracking-[0.05em] text-sm rounded-md transition-all"
                                         >
                                             Join a Public Pool
                                         </button>

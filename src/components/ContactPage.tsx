@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Mail, MessageSquare, CheckCircle, AlertCircle, Phone, MapPin, Clock } from 'lucide-react';
+import { Mail, MessageSquare, CheckCircle, AlertCircle, Phone, MapPin, Clock, Rocket } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { emailService } from '../services/emailService';
 import { logger } from '../utils/logger';
 import type { User } from '../types';
+import { Input, Select, FieldLabel, Checkbox, Button } from './ui';
 
 interface ContactPageProps {
     user: User | null;
@@ -24,6 +25,8 @@ const SUBJECTS: Subject[] = [
     'Payment / Billing',
     'Other',
 ];
+
+/* Marketing page is navy chrome end-to-end — always dark in both themes. */
 
 export const ContactPage: React.FC<ContactPageProps> = ({
     user, onLogin, onLogout, onCreatePool
@@ -68,26 +71,28 @@ export const ContactPage: React.FC<ContactPageProps> = ({
         }
     };
 
-    const inputClass = 'w-full px-4 py-3 bg-slate-950 border border-slate-700/60 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm';
+    const labelCls = 'text-[#EDF1F8]';
+    const textareaClass =
+        'w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none resize-none';
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <div className="min-h-screen bg-navy-950 text-white font-body flex flex-col">
             <Header user={user} isManager={false} onOpenAuth={onLogin} onLogout={onLogout} onCreatePool={onCreatePool} />
 
             <main className="flex-1">
                 {/* Hero */}
-                <div className="relative overflow-hidden bg-gradient-to-b from-indigo-950/60 to-slate-950 border-b border-slate-800">
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(99,102,241,0.15),transparent)]" />
+                <div className="relative overflow-hidden bg-gradient-to-b from-navy-900 to-navy-950 border-b border-[rgba(230,206,150,0.16)]">
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(230,206,150,0.10),transparent)]" />
                     <div className="relative max-w-4xl mx-auto px-6 py-20 text-center">
-                        <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-4 py-1.5 mb-6">
-                            <MessageSquare size={14} className="text-indigo-400" />
-                            <span className="text-xs font-semibold text-indigo-300 uppercase tracking-widest">Get In Touch</span>
+                        <div className="inline-flex items-center gap-2 bg-gold-500/10 border border-gold-500/25 rounded-full px-4 py-1.5 mb-6">
+                            <MessageSquare size={14} className="text-gold-400" />
+                            <span className="font-display font-bold uppercase text-xs tracking-[0.16em] text-gold-400">Get In Touch</span>
                         </div>
-                        <h1 className="text-5xl md:text-6xl font-black text-white mb-4 leading-tight">
+                        <h1 className="font-display font-extrabold uppercase text-5xl md:text-6xl text-white mb-4 leading-[0.9]">
                             We'd love to<br />
-                            <span className="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">hear from you.</span>
+                            <span className="text-gold-400">hear from you.</span>
                         </h1>
-                        <p className="text-lg text-slate-400 max-w-xl mx-auto">
+                        <p className="text-lg font-body text-[#9FB0CC] max-w-xl mx-auto">
                             Questions, feedback, or partnership inquiries — we're real people who read every message.
                         </p>
                     </div>
@@ -97,51 +102,51 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                     {/* Sidebar Info */}
                     <div className="lg:col-span-1 space-y-8">
                         <div>
-                            <h2 className="text-lg font-bold text-white mb-4">Other ways to reach us</h2>
+                            <h2 className="font-display font-bold uppercase text-lg text-white mb-4">Other ways to reach us</h2>
                             <div className="space-y-4">
                                 <a href="mailto:support@marchmeleepools.com" className="flex items-start gap-3 group">
-                                    <div className="w-9 h-9 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-indigo-500/20 transition-colors">
-                                        <Mail size={16} className="text-indigo-400" />
+                                    <div className="w-9 h-9 bg-gold-500/10 border border-gold-500/25 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-gold-500/20 transition-colors">
+                                        <Mail size={16} className="text-gold-400" />
                                     </div>
                                     <div>
-                                        <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Email</p>
-                                        <p className="text-sm text-slate-300 group-hover:text-white transition-colors">support@marchmeleepools.com</p>
+                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6]">Email</p>
+                                        <p className="text-sm text-[#9FB0CC] group-hover:text-white transition-colors">support@marchmeleepools.com</p>
                                     </div>
                                 </a>
                                 <div className="flex items-start gap-3">
-                                    <div className="w-9 h-9 bg-violet-500/10 border border-violet-500/20 rounded-lg flex items-center justify-center shrink-0">
-                                        <Clock size={16} className="text-violet-400" />
+                                    <div className="w-9 h-9 bg-navy-700/50 border border-[rgba(230,206,150,0.16)] rounded-lg flex items-center justify-center shrink-0">
+                                        <Clock size={16} className="text-[#9FB0CC]" />
                                     </div>
                                     <div>
-                                        <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Response Time</p>
-                                        <p className="text-sm text-slate-300">Within 48 business hours</p>
+                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6]">Response Time</p>
+                                        <p className="text-sm text-[#9FB0CC]">Within 48 business hours</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3">
-                                    <div className="w-9 h-9 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-center shrink-0">
-                                        <MapPin size={16} className="text-emerald-400" />
+                                    <div className="w-9 h-9 bg-gold-500/10 border border-gold-500/25 rounded-lg flex items-center justify-center shrink-0">
+                                        <MapPin size={16} className="text-gold-400" />
                                     </div>
                                     <div>
-                                        <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Based in</p>
-                                        <p className="text-sm text-slate-300">United States 🇺🇸</p>
+                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6]">Based in</p>
+                                        <p className="text-sm text-[#9FB0CC]">United States</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3">
-                                    <div className="w-9 h-9 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-center shrink-0">
-                                        <Phone size={16} className="text-amber-400" />
+                                    <div className="w-9 h-9 bg-navy-700/50 border border-[rgba(230,206,150,0.16)] rounded-lg flex items-center justify-center shrink-0">
+                                        <Phone size={16} className="text-[#9FB0CC]" />
                                     </div>
                                     <div>
-                                        <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">SMS / Text</p>
-                                        <p className="text-sm text-slate-300">(980) 375-4395</p>
+                                        <p className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#7C8BA6]">SMS / Text</p>
+                                        <p className="text-sm text-[#9FB0CC] num">(980) 375-4395</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
-                            <h3 className="text-sm font-bold text-white mb-2">🚀 Quick Help</h3>
-                            <p className="text-xs text-slate-400 mb-3">Most common questions are answered in our support guide.</p>
-                            <a href="/support" className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold underline underline-offset-2 transition-colors">
+                        <div className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-5">
+                            <h3 className="font-display font-bold uppercase text-sm text-white mb-2 flex items-center gap-1.5"><Rocket size={14} className="text-gold-400" /> Quick Help</h3>
+                            <p className="text-xs text-[#9FB0CC] mb-3">Most common questions are answered in our support guide.</p>
+                            <a href="/support" className="font-display font-bold uppercase tracking-[0.05em] text-xs text-gold-400 hover:text-gold-300 underline underline-offset-2 transition-colors">
                                 Visit Support Center →
                             </a>
                         </div>
@@ -150,105 +155,102 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                     {/* Contact Form */}
                     <div className="lg:col-span-2">
                         {status === 'success' && (
-                            <div className="mb-6 bg-emerald-900/20 border border-emerald-500/30 rounded-xl p-5 flex items-start gap-3">
+                            <div className="mb-6 bg-[#0F7B4A]/15 border border-[#0F7B4A]/40 rounded-xl p-5 flex items-start gap-3">
                                 <CheckCircle className="text-emerald-400 shrink-0 mt-0.5" size={20} />
                                 <div>
-                                    <h3 className="font-bold text-emerald-100 mb-1">Message sent!</h3>
-                                    <p className="text-sm text-emerald-300">We'll get back to you within 48 business hours. Check your inbox for a confirmation.</p>
+                                    <h3 className="font-display font-bold uppercase text-white mb-1">Message sent!</h3>
+                                    <p className="text-sm text-[#9FB0CC]">We'll get back to you within 48 business hours. Check your inbox for a confirmation.</p>
                                 </div>
                             </div>
                         )}
                         {status === 'error' && (
-                            <div className="mb-6 bg-rose-900/20 border border-rose-500/30 rounded-xl p-5 flex items-start gap-3">
-                                <AlertCircle className="text-rose-400 shrink-0 mt-0.5" size={20} />
+                            <div className="mb-6 bg-brandred-600/15 border border-brandred-600/35 rounded-xl p-5 flex items-start gap-3">
+                                <AlertCircle className="text-brandred-500 shrink-0 mt-0.5" size={20} />
                                 <div>
-                                    <h3 className="font-bold text-rose-100 mb-1">Something went wrong</h3>
-                                    <p className="text-sm text-rose-300">Please try again or email us directly at support@marchmeleepools.com.</p>
+                                    <h3 className="font-display font-bold uppercase text-white mb-1">Something went wrong</h3>
+                                    <p className="text-sm text-[#9FB0CC]">Please try again or email us directly at support@marchmeleepools.com.</p>
                                 </div>
                             </div>
                         )}
 
                         <form
                             onSubmit={handleSubmit}
-                            className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 space-y-5"
+                            className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-8 space-y-5"
                         >
                             <div className="grid sm:grid-cols-2 gap-5">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Full Name <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input
+                                    <FieldLabel className={labelCls}>
+                                        Full Name <span className="text-brandred-500">*</span>
+                                    </FieldLabel>
+                                    <Input
                                         type="text"
                                         required
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        className={inputClass}
                                         placeholder="Jane Smith"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Email Address <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input
+                                    <FieldLabel className={labelCls}>
+                                        Email Address <span className="text-brandred-500">*</span>
+                                    </FieldLabel>
+                                    <Input
                                         type="email"
                                         required
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className={inputClass}
                                         placeholder="jane@example.com"
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                    Subject <span className="text-rose-500">*</span>
-                                </label>
-                                <select
+                                <FieldLabel className={labelCls}>
+                                    Subject <span className="text-brandred-500">*</span>
+                                </FieldLabel>
+                                <Select
                                     required
                                     value={formData.subject}
                                     onChange={(e) => setFormData({ ...formData, subject: e.target.value as Subject })}
-                                    className={inputClass}
                                 >
                                     <option value="">Select a subject...</option>
                                     {SUBJECTS.map((s) => (
                                         <option key={s} value={s}>{s}</option>
                                     ))}
-                                </select>
+                                </Select>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                    Message <span className="text-rose-500">*</span>
-                                </label>
+                                <FieldLabel className={labelCls}>
+                                    Message <span className="text-brandred-500">*</span>
+                                </FieldLabel>
                                 <textarea
                                     required
                                     rows={7}
                                     value={formData.message}
                                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                                    className={`${inputClass} resize-none`}
+                                    className={textareaClass}
                                     placeholder="Tell us what's on your mind..."
                                 />
                             </div>
 
                             <div className="flex items-center gap-3">
-                                <input
+                                <Checkbox
                                     id="sendCopy"
-                                    type="checkbox"
                                     checked={formData.sendCopy}
                                     onChange={(e) => setFormData({ ...formData, sendCopy: e.target.checked })}
-                                    className="w-4 h-4 text-indigo-600 bg-slate-950 border-slate-700 rounded focus:ring-indigo-500"
                                 />
-                                <label htmlFor="sendCopy" className="text-sm text-slate-400 cursor-pointer">
+                                <label htmlFor="sendCopy" className="text-sm font-body text-[#9FB0CC] cursor-pointer">
                                     Send me a copy of this message
                                 </label>
                             </div>
 
-                            <button
+                            <Button
                                 type="submit"
+                                variant="primary"
+                                size="md"
                                 disabled={isSubmitting}
-                                className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white py-4 rounded-xl font-bold text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+                                className="w-full"
                             >
                                 {isSubmitting ? (
                                     <>
@@ -261,7 +263,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                                         Send Message
                                     </>
                                 )}
-                            </button>
+                            </Button>
                         </form>
                     </div>
                 </div>
