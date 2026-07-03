@@ -1,6 +1,34 @@
 {
     "indexes": [
         {
+            "collectionGroup": "admin_audit",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "actorUid",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "admin_audit",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "action",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "at",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
             "collectionGroup": "pools",
             "queryScope": "COLLECTION",
             "fields": [

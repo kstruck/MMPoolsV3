@@ -21,6 +21,7 @@ import { TournamentManager } from './admin/TournamentManager';
 import { SuperAdminBentoDashboard } from './SuperAdminBentoDashboard';
 import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
 import { SuperAdminBillingPanel } from './admin/SuperAdminBillingPanel';
+import { AdminAuditViewer } from './admin/AdminAuditViewer';
 import { SuperAdminNFLSpreads } from './admin/SuperAdminNFLSpreads';
 import { useToast } from './ui/Toast';
 import { getUserMessage } from '../utils/errorMessages';
@@ -2503,6 +2504,9 @@ export const SuperAdmin: React.FC = () => {
 
             {activeTab === 'system' && (
                 <div className="space-y-6 w-full">
+                    {/* ADMIN AUDIT LOG (T7) */}
+                    <AdminAuditViewer />
+
                     {/* SYSTEM STATS CARDS */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">

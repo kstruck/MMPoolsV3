@@ -44,5 +44,20 @@ A User with Role `MEMBER`. The default role assigned on registration. Formerly c
 ### User Management
 The admin feature set enabling SUPER_ADMIN and MODERATOR users to view all Users, change Roles (SUPER_ADMIN only), view Activity Logs, send one-off emails, and trigger password resets.
 
+### Entry Fee
+The amount a Member pays the Commissioner to enter a Pool. Money moves outside the platform (peer-to-peer); the platform only records the amount and whether a Member has paid. Distinct from Billing.
+
+### Payment Handle
+A Commissioner's identifier on a peer-to-peer payment service (Venmo, Zelle, CashApp, PayPal, Google Pay) displayed to Members so they can pay the Entry Fee. The platform never moves Entry Fee money.
+
+### Paid Status
+Per-entry bookkeeping flag a Commissioner sets to record that a Member has paid the Entry Fee. Informational only; does not gate participation by itself.
+
+### Billing
+The commissioner-side subscription relationship between a Commissioner and the platform for a Pool (trial, tier, price, coupon). Paid via Stripe. Entirely separate from Entry Fees, which flow between Members and Commissioners.
+
+### Pool Draft
+An in-progress, unlaunched Pool configuration a Commissioner is building in the creation wizard. Exists only on the Commissioner's device; becomes a Pool when launched.
+
 ### Password Reset
 An admin-triggered action that sends a Firebase password-reset email to a User via the `mail` collection + Trigger Email extension. Callable by SUPER_ADMIN or MODERATOR. Logged as `PASSWORD_RESET_SENT` in the target User's Activity Log.
