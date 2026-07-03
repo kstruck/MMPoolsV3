@@ -1,0 +1,112 @@
+import { useFieldArray, useFormContext, Controller } from 'react-hook-form';
+import type { User } from '../../../types';
+import { dbService } from '../../../services/dbService';
+import { propsCreateInputSchema } from '@shared/schemas';
+import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, StepReview } from '../index';
+import { TextField, NumberField, Field } from '../fields';
+import type { WizardStepDef } from '../types';
+import { buildPropsPayload } from './buildPropsPayload';
+
+const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500';
+
+// Props questions builder. Each question keeps its options as a real string[]
+// (edited via a comma-separated input through Controller) so the zod resolver
+// validates the array shape (2–4 options).
+function StepPropsSetup() {
+  const { register, control } = useFormContext();
+  const { fields, append, remove } = useFieldArray({ control, name: 'props.questions' });
+
+  return (
+    <div>
+      <h3 className="mb-1 text-lg font-bold text-white">Props setup</h3>
+      <p className="mb-5 text-sm text-slate-400">The matchup and the questions players answer.</p>
+
+      <div className="grid grid-cols-2 gap-x-4">
+        <TextField name="homeTeam" label="Home team" placeholder="Optional" />
+        <TextField name="awayTeam" label="Away team" placeholder="Optional" />
+      </div>
+      <NumberField name="props.maxCards" label="Max cards per player" min={1} />
+
+      <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Questions</p>
+      <div className="space-y-4">
+        {fields.map((f, i) => (
+          <div key={f.id} className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-400">Question {i + 1}</span>
+              <button type="button" onClick={() => remove(i)} className="text-xs font-semibold text-rose-400 hover:text-rose-300">Remove</button>
+            </div>
+            <Field label="Prompt" htmlFor={`q-${i}-text`}>
+              <input id={`q-${i}-text`} className={inputCls} placeholder="Who wins the coin toss?" {...register(`props.questions.${i}.text`)} />
+            </Field>
+            <Controller
+              control={control}
+              name={`props.questions.${i}.options`}
+              render={({ field }) => (
+                <Field label="Options (comma-separated, 2–4)" htmlFor={`q-${i}-opts`} hint="e.g. Heads, Tails">
+                  <input
+                    id={`q-${i}-opts`}
+                    className={inputCls}
+                    value={Array.isArray(field.value) ? field.value.join(', ') : ''}
+                    onChange={(e) => field.onChange(e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                    placeholder="Heads, Tails"
+                  />
+                </Field>
+              )}
+            />
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => append({ text: '', options: ['', ''] })}
+        className="mt-2 rounded-md border border-slate-700 px-4 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+      >
+        + Add question
+      </button>
+    </div>
+  );
+}
+
+const steps: WizardStepDef[] = [
+  { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
+  { id: 'setup', title: 'Props setup', fields: ['props.questions'], Component: StepPropsSetup },
+  { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="props.cost" feeLabel="Cost per card ($)" /> },
+  { id: 'branding', title: 'Branding', Component: StepBranding },
+  { id: 'review', title: 'Review', Component: () => <StepReview feeField="props.cost" /> },
+];
+
+const defaultValues: Record<string, unknown> = {
+  type: 'PROPS',
+  name: '', managerName: '', contactEmail: '', isPublic: true,
+  homeTeam: '', awayTeam: '', theme: 'default',
+  paymentInstructions: '',
+  paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
+  branding: { logoUrl: '', primaryColor: '', secondaryColor: '' },
+  props: { cost: 0, maxCards: 1, questions: [{ text: '', options: ['', ''] }] },
+  _tosAccepted: false,
+};
+
+export function CreatePropsPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
+  const { user, onComplete, onCancel } = props;
+  return (
+    <div className="min-h-screen bg-slate-950 px-4 py-10">
+      <div className="mx-auto mb-6 max-w-2xl">
+        <h1 className="text-2xl font-bold text-white">Create a Props pool</h1>
+      </div>
+      <WizardShell
+        poolType="PROPS"
+        steps={steps}
+        schema={propsCreateInputSchema}
+        defaultValues={defaultValues}
+        userId={user.id}
+        submitLabel="Launch pool"
+        onSubmit={async (values) => {
+          const poolId = await dbService.createPool(buildPropsPayload(values));
+          onComplete(poolId);
+        }}
+        onCancel={onCancel}
+      />
+    </div>
+  );
+}
