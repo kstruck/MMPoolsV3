@@ -6,6 +6,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User } from '../types';
 import { POOLS_OPEN } from '../config/season';
+import { useFeatureFlags } from '../hooks/useFeatureFlags';
 
 interface CreatePoolSelectionProps {
     onSelectSquares: () => void;
@@ -31,6 +32,15 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
     onSelectProps
 }) => {
     const navigate = useNavigate();
+    const { poolTypeFlags } = useFeatureFlags();
+
+    // A card is available when the season master switch is open AND the pool
+    // type's feature flag is on. Server enforces creation; this is UX only.
+    const squaresEnabled = POOLS_OPEN && poolTypeFlags.SQUARES;
+    const pickemEnabled = POOLS_OPEN && poolTypeFlags.NFL_PICKEM;
+    const survivorEnabled = POOLS_OPEN && poolTypeFlags.NFL_SURVIVOR;
+    const marginEnabled = POOLS_OPEN && poolTypeFlags.NFL_MARGIN;
+    const propsEnabled = POOLS_OPEN && poolTypeFlags.PROPS;
 
     // Prevent unused variable TS errors for offseason options
     React.useEffect(() => {
@@ -79,9 +89,9 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* GAMEDAY SQUARES CARD */}
                             <button
-                                onClick={POOLS_OPEN ? onSelectSquares : undefined}
-                                disabled={!POOLS_OPEN}
-                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-violet-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
+                                onClick={squaresEnabled ? onSelectSquares : undefined}
+                                disabled={!squaresEnabled}
+                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${squaresEnabled ? 'hover:bg-slate-700 hover:border-violet-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
                                 <div className="absolute top-4 right-4 bg-violet-500/20 p-2.5 rounded-xl group-hover:bg-violet-500 transition-colors">
                                     {POOLS_OPEN ? <Grid3X3 size={20} className="text-violet-400 group-hover:text-white" /> : <Lock size={20} className="text-slate-500" />}
@@ -100,9 +110,9 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                             {/* WEEKLY PICK'EM CARD */}
                             <button
-                                onClick={POOLS_OPEN ? () => navigate('/nfl-wizard?type=NFL_PICKEM') : undefined}
-                                disabled={!POOLS_OPEN}
-                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-blue-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
+                                onClick={pickemEnabled ? () => navigate('/nfl-wizard?type=NFL_PICKEM') : undefined}
+                                disabled={!pickemEnabled}
+                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${pickemEnabled ? 'hover:bg-slate-700 hover:border-blue-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
                                 <div className="absolute top-4 right-4 bg-blue-500/20 p-2.5 rounded-xl group-hover:bg-blue-500 transition-colors">
                                     {POOLS_OPEN ? <Trophy size={20} className="text-blue-400 group-hover:text-white" /> : <Lock size={20} className="text-slate-500" />}
@@ -121,9 +131,9 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                             {/* SURVIVOR CARD */}
                             <button
-                                onClick={POOLS_OPEN ? () => navigate('/nfl-wizard?type=NFL_SURVIVOR') : undefined}
-                                disabled={!POOLS_OPEN}
-                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-red-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
+                                onClick={survivorEnabled ? () => navigate('/nfl-wizard?type=NFL_SURVIVOR') : undefined}
+                                disabled={!survivorEnabled}
+                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${survivorEnabled ? 'hover:bg-slate-700 hover:border-red-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
                                 <div className="absolute top-4 right-4 bg-red-500/20 p-2.5 rounded-xl group-hover:bg-red-500 transition-colors">
                                     {POOLS_OPEN ? <Trophy size={20} className="text-red-400 group-hover:text-white" /> : <Lock size={20} className="text-slate-500" />}
@@ -142,9 +152,9 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                             {/* MARGIN CARD */}
                             <button
-                                onClick={POOLS_OPEN ? () => navigate('/nfl-wizard?type=NFL_MARGIN') : undefined}
-                                disabled={!POOLS_OPEN}
-                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-teal-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
+                                onClick={marginEnabled ? () => navigate('/nfl-wizard?type=NFL_MARGIN') : undefined}
+                                disabled={!marginEnabled}
+                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${marginEnabled ? 'hover:bg-slate-700 hover:border-teal-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
                                 <div className="absolute top-4 right-4 bg-teal-500/20 p-2.5 rounded-xl group-hover:bg-teal-500 transition-colors">
                                     {POOLS_OPEN ? <Trophy size={20} className="text-teal-400 group-hover:text-white" /> : <Lock size={20} className="text-slate-500" />}
@@ -173,9 +183,9 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                         {/* PROPS / SIDE HUSTLE OPTION */}
                         <button
-                            onClick={POOLS_OPEN ? onSelectProps : undefined}
-                            disabled={!POOLS_OPEN}
-                            className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-8 text-left transition-all shadow-xl w-full ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-emerald-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
+                            onClick={propsEnabled ? onSelectProps : undefined}
+                            disabled={!propsEnabled}
+                            className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-8 text-left transition-all shadow-xl w-full ${propsEnabled ? 'hover:bg-slate-700 hover:border-emerald-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                         >
                             <div className="absolute top-4 right-4 bg-emerald-500/20 p-3 rounded-xl group-hover:bg-emerald-500 transition-colors">
                                 {POOLS_OPEN ? <Grid3X3 size={32} className="text-emerald-400 group-hover:text-white" /> : <Lock size={32} className="text-slate-500" />}

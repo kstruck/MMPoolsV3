@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { writeAuditEvent } from './audit';
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { assertPoolCreationAllowed } from './lib/systemGuards';
 
 // Helper to determine if user can manage pool
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
@@ -56,6 +57,9 @@ export const createPool = onCall(async (request) => {
         }
 
         const isSquaresPool = !data.type || data.type === 'SQUARES';
+
+        // Feature-flag + maintenance guard (server-authoritative).
+        await assertPoolCreationAllowed(data.type || 'SQUARES');
 
         if (isSquaresPool && data.costPerSquare === undefined) {
             throw new HttpsError('invalid-argument', 'Missing required field: costPerSquare');

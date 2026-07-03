@@ -4,6 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { BracketPool } from "./types";
 import { Timestamp } from "firebase-admin/firestore";
 import * as crypto from "crypto";
+import { assertPoolCreationAllowed } from "./lib/systemGuards";
 
 
 
@@ -26,6 +27,9 @@ export const createBracketPool = onCall(async (request) => {
         console.error("Missing required fields");
         throw new HttpsError("invalid-argument", "Missing required fields.");
     }
+
+    // Feature-flag + maintenance guard (server-authoritative).
+    await assertPoolCreationAllowed("BRACKET");
 
     // Resolve tournament ID based on type
     const isConference = tournamentType && tournamentType !== 'ncaa';

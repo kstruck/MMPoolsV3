@@ -4,6 +4,7 @@ import { writeAuditEvent } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields } from "./poolOps";
+import { assertPoolCreationAllowed, assertNotMaintenance } from "./lib/systemGuards";
 import {
   NFLGame,
   NFLPickemPool,
@@ -44,6 +45,8 @@ export const createNFLPool = onCall(async (request) => {
     if (!type || !['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(type)) {
       throw new HttpsError('invalid-argument', 'Invalid or missing pool type.');
     }
+    // Feature-flag + maintenance guard (server-authoritative).
+    await assertPoolCreationAllowed(type);
     if (!name || !season) {
       throw new HttpsError('invalid-argument', 'Missing required fields: name, season.');
     }
@@ -127,6 +130,7 @@ export const joinNFLPool = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be logged in.');
   }
+  await assertNotMaintenance();
 
   const uid = request.auth.uid;
   const db = admin.firestore();

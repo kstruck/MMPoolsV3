@@ -52,6 +52,9 @@ export { creditReferralOnPayment, generateReferralToken, resolveReferralToken } 
 // --- SERVER TIME (client clock-drift correction for countdown/lock UI) ---
 export { getServerTime } from "./serverTime";
 
+// --- ADMIN HEALTH (real Super-Admin Overview vitals; replaces fake status card) ---
+export { getAdminHealthSnapshot } from "./adminHealth";
+
 // --- EMAIL PREFERENCES (unsubscribe compliance + category preferences) ---
 export { emailUnsubscribe } from "./emailUnsubscribeHttp";
 export { manageEmailPrefs } from "./emailPrefsPage";

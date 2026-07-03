@@ -8,6 +8,8 @@ import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
+import { getPoolSport, getPoolLifecycleState } from '../utils/poolSport';
+import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
 import { db } from '../firebase';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -976,59 +978,20 @@ export const SuperAdmin: React.FC = () => {
         }
     };
 
-    // Group pools by sport/league (using existing league field from setup wizard)
-    const getLeagueDisplayName = (league: string | undefined) => {
-        switch (league) {
-            case 'nfl': return 'NFL Football';
-            case 'college': return 'NCAA Football';
-            case 'ncaa': return 'NCAA Football';
-            default: return 'Other';
-        }
-    };
-
     const filteredPools = pools.filter(p => {
         const isBracket = p.type === 'BRACKET';
 
-        // Sport filter
-        let matchesSport = true;
-        if (sportFilter !== 'ALL') {
-            let sport = 'Other';
-            if (isBracket) {
-                sport = 'March Madness';
-            } else if (p.type === 'NFL_PLAYOFFS') {
-                sport = 'NFL Playoffs';
-            } else if (p.type === 'PROPS') {
-                sport = 'Props Pool';
-            } else if (p.type === 'SQUARES') {
-                sport = getLeagueDisplayName((p as GameState).league);
-            } else {
-                sport = getLeagueDisplayName((p as unknown as PoolLike).league as string | undefined);
-            }
-            if (sport !== sportFilter) matchesSport = false;
-        }
-        if (!matchesSport) return false;
+        // Sport filter — single source of truth shared with the grouping below.
+        if (sportFilter !== 'ALL' && getPoolSport(p) !== sportFilter) return false;
 
-        // Status filter
+        // Status filter — per-type lifecycle state (SQUARES via gameStatus,
+        // string-status types via `status`).
         if (statusFilter !== 'all') {
-            let isLocked = false;
-            let isLive = false;
-            let isClosed = false;
-
-            if (isBracket) {
-                const bp = p as unknown as PoolLike;
-                isClosed = bp.status === 'COMPLETED';
-                isLocked = bp.status === 'LOCKED' || bp.status === 'COMPLETED';
-            } else {
-                const sp = p as GameState;
-                isClosed = sp.scores?.gameStatus === 'post';
-                isLive = sp.scores?.gameStatus === 'in';
-                isLocked = sp.isLocked;
-            }
-
-            if (statusFilter === 'open' && isLocked) return false;
-            if (statusFilter === 'locked' && (!isLocked || isLive || isClosed)) return false;
-            if (statusFilter === 'live' && !isLive) return false;
-            if (statusFilter === 'final' && !isClosed) return false;
+            const state = getPoolLifecycleState(p);
+            if (statusFilter === 'open' && state !== 'open') return false;
+            if (statusFilter === 'locked' && state !== 'locked') return false;
+            if (statusFilter === 'live' && state !== 'live') return false;
+            if (statusFilter === 'final' && state !== 'final') return false;
         }
 
         // Price filter
@@ -1054,21 +1017,7 @@ export const SuperAdmin: React.FC = () => {
     });
 
     const poolsBySport = filteredPools.reduce((acc, pool) => {
-        let sport = 'Other';
-        if (pool.type === 'BRACKET') {
-            sport = 'March Madness';
-        } else if (pool.type === 'NFL_PLAYOFFS') {
-            sport = 'NFL Playoffs';
-        } else if (pool.type === 'PROPS') {
-            sport = 'Props Pool';
-        } else if (pool.type === 'SQUARES') {
-            // SQUARES type has league property
-            sport = getLeagueDisplayName((pool as GameState).league);
-        } else {
-            // Fallback for any other types that might have league
-            sport = getLeagueDisplayName((pool as unknown as PoolLike).league as string | undefined);
-        }
-
+        const sport = getPoolSport(pool);
         if (!acc[sport]) acc[sport] = [];
         acc[sport].push(pool);
         return acc;
@@ -2829,6 +2778,31 @@ export const SuperAdmin: React.FC = () => {
                                 >
                                     {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-amber-500/20" /> : <ToggleLeft size={40} />}
                                 </button>
+                            </div>
+
+                            {/* Per-pool-type creation flags (T5). Server-enforced: disabling a
+                                type blocks its create callable end-to-end, not just the UI. */}
+                            <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                                <h4 className="font-bold text-white mb-1">Pool Type Availability</h4>
+                                <p className="text-sm text-slate-400 mb-4">Disabling a type hides its card on <span className="font-mono">/create-pool</span> and rejects new creation server-side.</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {POOL_TYPES.map((pt) => {
+                                        const flags = resolvePoolTypeFlags(settings);
+                                        const on = flags[pt];
+                                        return (
+                                            <div key={pt} className="flex items-center justify-between px-3 py-2 bg-slate-900/60 rounded-lg border border-slate-700/60">
+                                                <span className="text-sm font-mono text-slate-200">{pt}</span>
+                                                <button
+                                                    aria-label={`Toggle ${pt} pool creation`}
+                                                    onClick={() => settingsService.update({ poolTypeFlags: { ...flags, [pt]: !on } })}
+                                                    className={on ? 'text-emerald-400' : 'text-slate-500'}
+                                                >
+                                                    {on ? <ToggleRight size={32} className="fill-emerald-500/20" /> : <ToggleLeft size={32} />}
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
                     </div>
