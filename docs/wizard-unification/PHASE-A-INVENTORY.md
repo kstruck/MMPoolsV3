@@ -100,14 +100,23 @@ Done + verified (branch `feat/wizard-unification`, in worktree `D:/mmp-wizard`):
   (self-check green). Payloads captured from every wizard build site.
 - ✅ **Billing decision** — free-default (§5 resolved).
 
+- ✅ **Predeploy-copy packaging** — `functions/scripts/copy-shared.mjs` mirrors
+  `shared/`→`functions/src/shared/` (gitignored) in build + test; zod added to functions.
+- ✅ **Consolidated create path** — `functions/src/lib/poolCreation.ts` core; all three
+  create callables route through it (schema gate, deny-BANNED w/ legacy+new roles, free
+  billing, uniform side-effect bundle). Bracket now transactional + gains managedPools.
+- ✅ **`POOL_CREATED` activity writer** — new, in the side-effect bundle (§2).
+- ✅ **Publish op** — `publishBracketPool` already owns slug reservation / password hash /
+  lockAt / DRAFT→OPEN; kept as-is (only bracket has draft→publish; a `publishPool` rename
+  is cosmetic, deferred).
+
 Still to do:
-- **Editability matrix source:** what each current dashboard actually lets a
-  commissioner change, per lifecycle state, per type — read before encoding the matrix
-  (avoid guessing; plan risk). Feeds `UpdatePoolSettings` schemas.
-- **Predeploy-copy packaging:** wire `shared/` into the functions build and confirm a
-  deploy dry-run contains the copied modules (not done blind).
-- **Consolidated `createPool` + `publishPool` + `updatePoolSettings`** (functions/) —
-  unblocked now that the parallel role-rename work has merged. Must accept both legacy
-  and new role values, stamp `free` billing, emit the side-effect bundle (§2), and use
-  the `shared/schemas` gates.
-- **`settings/billing_config` unification** + **`POOL_CREATED` activity writer** (§1, §5).
+- **`updatePoolSettings` callable + per-type editability matrix** — the edit-mode path.
+  Needs reading each dashboard's actual edit affordances before encoding the matrix
+  (avoid guessing). This is the last substantive Phase A code piece.
+- **Deploy dry-run** of the predeploy copy (validated locally: build+test green; a real
+  `firebase deploy --only functions` dry-run still recommended before merge).
+- **`settings/billing_config` unification** — DEFERRED / off critical path: with
+  free-default billing, `enforceBillingStatus` (reads `config/billing_config`) never
+  touches new pools, so the dual-path only matters for trial/grace pools that this branch
+  no longer creates. Fold into a later billing cleanup.
