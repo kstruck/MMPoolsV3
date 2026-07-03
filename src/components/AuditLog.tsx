@@ -110,18 +110,18 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
     };
 
     const getIcon = (type: AuditEventType) => {
-        if (type === 'POOL_LOCKED') return <Lock size={16} className="text-amber-400" />;
-        if (type === 'POOL_UNLOCKED') return <Unlock size={16} className="text-emerald-400" />;
-        if (type === 'POOL_CREATED') return <Grid size={16} className="text-indigo-400" />;
-        if (type === 'DIGITS_GENERATED') return <RefreshCw size={16} className="text-indigo-400" />;
-        if (type === 'SCORE_FINALIZED') return <Activity size={16} className="text-emerald-400" />;
-        if (type === 'WINNER_COMPUTED') return <DollarSign size={16} className="text-yellow-400" />;
-        if (type === 'SQUARE_RESERVED') return <User size={16} className="text-blue-400" />;
-        if (type === 'SQUARE_RELEASED') return <User size={16} className="text-slate-400" />;
-        if (type === 'ADMIN_OVERRIDE_SCORE' || type === 'PROP_QUESTION_GRADED') return <HelpCircle className="text-amber-400" size={16} />;
-        if (type === 'PROP_CARD_PURCHASED') return <UserPlus className="text-indigo-400" size={16} />;
-        if (type.startsWith('ADMIN_OVERRIDE')) return <AlertTriangle size={16} className="text-rose-500" />;
-        return <Info size={16} className="text-slate-400" />;
+        if (type === 'POOL_LOCKED') return <Lock size={16} className="text-gold-500" />;
+        if (type === 'POOL_UNLOCKED') return <Unlock size={16} className="text-[#0F7B4A]" />;
+        if (type === 'POOL_CREATED') return <Grid size={16} className="text-navy-600 dark:text-gold-400" />;
+        if (type === 'DIGITS_GENERATED') return <RefreshCw size={16} className="text-navy-600 dark:text-gold-400" />;
+        if (type === 'SCORE_FINALIZED') return <Activity size={16} className="text-[#0F7B4A]" />;
+        if (type === 'WINNER_COMPUTED') return <DollarSign size={16} className="text-gold-500" />;
+        if (type === 'SQUARE_RESERVED') return <User size={16} className="text-navy-600 dark:text-gold-400" />;
+        if (type === 'SQUARE_RELEASED') return <User size={16} className="text-muted" />;
+        if (type === 'ADMIN_OVERRIDE_SCORE' || type === 'PROP_QUESTION_GRADED') return <HelpCircle className="text-gold-500" size={16} />;
+        if (type === 'PROP_CARD_PURCHASED') return <UserPlus className="text-navy-600 dark:text-gold-400" size={16} />;
+        if (type.startsWith('ADMIN_OVERRIDE')) return <AlertTriangle size={16} className="text-brandred-600" />;
+        return <Info size={16} className="text-muted" />;
     };
 
     const formatTime = (ts: any) => {
@@ -148,28 +148,28 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex justify-end">
-            <div className="w-full max-w-2xl bg-slate-900 h-full border-l border-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="w-full max-w-2xl bg-surface h-full border-l border-line shadow-panel flex flex-col animate-in slide-in-from-right duration-300">
                 {/* Header */}
-                <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+                <div className="p-6 border-b border-line flex justify-between items-center bg-page">
                     <div>
-                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                            <Shield className="text-emerald-400" /> Audit Log & Disputes
+                        <h2 className="text-xl font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] flex items-center gap-2">
+                            <Shield className="text-gold-500" /> Audit Log & Disputes
                         </h2>
-                        <p className="text-slate-400 text-sm">Tamper-evident history of all critical pool actions.</p>
+                        <p className="text-muted font-body text-sm">Tamper-evident history of all critical pool actions.</p>
                     </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white font-bold px-4 py-2">Close</button>
+                    <button onClick={onClose} className="text-muted hover:text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] px-4 py-2 transition-colors">Close</button>
                 </div>
 
                 {/* Filters */}
-                <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex gap-2 overflow-x-auto">
+                <div className="p-4 border-b border-line bg-surface flex gap-2 overflow-x-auto">
                     {(['ALL', 'SQUARES', 'LOCK', 'DIGITS', 'SCORES', 'WINNERS', 'OVERRIDES'] as FilterType[]).map(f => (
                         <button
                             key={f}
                             onClick={() => setFilter(f)}
-                            className={`px-3 py-1 rounded-full text-xs font-bold transition-colors whitespace-nowrap flex items-center gap-1 ${filter === f ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                            className={`px-3 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em] transition-colors whitespace-nowrap flex items-center gap-1 ${filter === f ? 'bg-navy-800 text-white' : 'bg-card text-muted border border-line hover:text-[color:var(--text)]'}`}
                         >
                             {f}
-                            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${filter === f ? 'bg-indigo-500' : 'bg-slate-700'}`}>
+                            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] num ${filter === f ? 'bg-navy-700' : 'bg-line'}`}>
                                 {counts[f]}
                             </span>
                         </button>
@@ -178,26 +178,26 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
 
                 {/* Feed */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                    {loading && <div className="text-slate-500 text-center py-10">Loading audit history...</div>}
-                    {!loading && deduplicatedEvents.length === 0 && <div className="text-slate-500 text-center py-10">No events found matching this filter.</div>}
+                    {loading && <div className="text-muted text-center py-10">Loading audit history...</div>}
+                    {!loading && deduplicatedEvents.length === 0 && <div className="text-muted text-center py-10">No events found matching this filter.</div>}
 
                     {deduplicatedEvents.map((event) => (
-                        <div key={event.id} className={`bg-slate-950 border rounded-lg p-4 transition-all ${event.severity === 'CRITICAL' ? 'border-rose-500/50 bg-rose-900/10' : 'border-slate-800'}`}>
+                        <div key={event.id} className={`bg-card border rounded-lg p-4 transition-all ${event.severity === 'CRITICAL' ? 'border-brandred-600/40 bg-brandred-600/5' : 'border-line'}`}>
                             <div className="flex items-start gap-4">
-                                <div className={`mt-1 p-2 rounded-full bg-slate-900 border border-slate-700`}>
+                                <div className={`mt-1 p-2 rounded-full bg-surface border border-line`}>
                                     {getIcon(event.type)}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-start">
-                                        <h4 className={`font-bold text-sm ${event.severity === 'CRITICAL' ? 'text-rose-400' : 'text-slate-200'}`}>{event.message}</h4>
-                                        <span className="text-[10px] text-slate-500 whitespace-nowrap ml-2 flex items-center gap-1">
+                                        <h4 className={`font-body font-bold text-sm ${event.severity === 'CRITICAL' ? 'text-brandred-600' : 'text-[color:var(--text)]'}`}>{event.message}</h4>
+                                        <span className="text-[10px] text-faint whitespace-nowrap ml-2 flex items-center gap-1 num">
                                             <Clock size={10} /> {formatTime(event.timestamp)}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-xs text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">{event.type}</span>
-                                        <span className="text-xs text-slate-500">by</span>
-                                        <span className={`text-xs font-bold ${event.actor.role === 'ADMIN' ? 'text-indigo-400' : event.actor.role === 'SYSTEM' ? 'text-emerald-400' : 'text-slate-300'}`}>
+                                        <span className="text-xs font-display uppercase tracking-[0.05em] text-muted bg-surface px-1.5 py-0.5 rounded border border-line">{event.type}</span>
+                                        <span className="text-xs text-faint">by</span>
+                                        <span className={`text-xs font-display font-bold uppercase tracking-[0.05em] ${event.actor.role === 'ADMIN' ? 'text-navy-600 dark:text-gold-400' : event.actor.role === 'SYSTEM' ? 'text-[#0F7B4A]' : 'text-[color:var(--text)]'}`}>
                                             {event.actor.label || event.actor.role}
                                         </span>
                                     </div>
@@ -207,13 +207,13 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
                                         <div className="mt-2">
                                             <button
                                                 onClick={() => toggleExpand(event.id)}
-                                                className="text-[10px] flex items-center gap-1 text-slate-500 hover:text-indigo-400 transition-colors"
+                                                className="text-[10px] flex items-center gap-1 text-faint hover:text-gold-600 dark:hover:text-gold-400 transition-colors"
                                             >
                                                 <FileJson size={10} /> {expandedIds.has(event.id) ? 'Hide Details' : 'View System Payload'}
                                             </button>
 
                                             {expandedIds.has(event.id) && (
-                                                <pre className="mt-2 p-2 bg-black/50 rounded text-[10px] text-emerald-400 font-mono overflow-x-auto border border-slate-800">
+                                                <pre className="mt-2 p-2 bg-navy-950 rounded text-[10px] text-gold-300 font-mono overflow-x-auto border border-navy-800">
                                                     {JSON.stringify(event.payload, null, 2)}
                                                 </pre>
                                             )}

@@ -6,7 +6,7 @@ import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
 import { SimulationDashboard } from './SimulationDashboard';
 import { SimpleTestingDashboard } from './SimpleTestingDashboard';
-import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw, Wrench, Ticket, Megaphone, Globe, PartyPopper } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
 import { db } from '../firebase';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -1130,14 +1130,14 @@ export const SuperAdmin: React.FC = () => {
     };
 
     return (
-        <div className="w-[80%] mx-auto py-4 md:py-6 relative text-slate-100">
+        <div className="w-[80%] mx-auto py-4 md:py-6 relative font-body text-[color:var(--text)]">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold flex items-center gap-3">
-                    <Shield className="text-emerald-500" /> Super Admin Dashboard
+                <h1 className="text-3xl font-display font-extrabold uppercase leading-none flex items-center gap-3">
+                    <Shield className="text-gold-500" /> Super Admin Dashboard
                 </h1>
                 <button
                     onClick={() => navigate('/tournament-sim')}
-                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold transition-colors shadow-lg"
+                    className="flex items-center gap-2 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px shadow-red-cta"
                 >
                     <Trophy size={18} />
                     Tournament Simulator
@@ -1147,7 +1147,7 @@ export const SuperAdmin: React.FC = () => {
             {/* TWO-LEVEL NAVIGATION */}
             <div className="mb-8 space-y-4">
                 {/* Level 1: Groups */}
-                <div className="flex flex-wrap gap-2 p-1 bg-slate-900/50 rounded-xl border border-slate-700/50 backdrop-blur-sm w-fit">
+                <div className="flex flex-wrap gap-2 p-1 bg-surface rounded-xl border border-line backdrop-blur-sm w-fit">
                     {(Object.keys(navStructure) as NavGroup[]).map(group => (
                         <button
                             key={group}
@@ -1156,9 +1156,9 @@ export const SuperAdmin: React.FC = () => {
                                 // Auto-select first tab in group
                                 setActiveTab(navStructure[group][0].id as typeof activeTab);
                             }}
-                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeGroup === group
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
-                                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                            className={`px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all ${activeGroup === group
+                                ? 'bg-navy-800 text-white shadow-card'
+                                : 'text-muted hover:text-[color:var(--text)] hover:bg-card'
                                 }`}
                         >
                             {group}
@@ -1167,14 +1167,14 @@ export const SuperAdmin: React.FC = () => {
                 </div>
 
                 {/* Level 2: Tabs */}
-                <div className="flex flex-wrap gap-2 border-b border-slate-700 pb-1">
+                <div className="flex flex-wrap gap-2 border-b border-line pb-1">
                     {navStructure[activeGroup].map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-bold text-sm transition-colors border-b-2 ${activeTab === tab.id
-                                ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10'
-                                : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
+                            className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors border-b-2 ${activeTab === tab.id
+                                ? 'border-gold-500 text-gold-600 dark:text-gold-400 bg-gold-500/10'
+                                : 'border-transparent text-muted hover:text-[color:var(--text)] hover:bg-surface'
                                 }`}
                         >
                             {tab.icon} {tab.label}
@@ -1195,26 +1195,26 @@ export const SuperAdmin: React.FC = () => {
             {activeTab === 'tournament' && (
                 <div className="space-y-6">
                     {/* ⚠️ BIG 12 RE-INIT BANNER */}
-                    <div className="bg-amber-900/40 border border-amber-500/60 rounded-xl p-5 flex items-center justify-between gap-4">
+                    <div className="bg-brandred-600/5 border border-brandred-600/40 rounded-xl p-5 flex items-center justify-between gap-4">
                         <div>
-                            <h3 className="text-amber-400 font-bold text-lg flex items-center gap-2">
-                                <Trophy size={20} className="text-amber-400" />
+                            <h3 className="text-brandred-500 font-display font-bold uppercase tracking-[0.05em] text-lg flex items-center gap-2">
+                                <Trophy size={20} className="text-brandred-500" />
                                 Big 12 2026 — Bracket Re-Initialization Required
                             </h3>
-                            <p className="text-amber-200/70 text-sm mt-1">
+                            <p className="text-muted font-body text-sm mt-1">
                                 The seeds were incorrect. Click to overwrite the Firestore tournament skeleton with the correct 2026 ESPN seedings (Arizona #1, Houston #2, ASU #12 vs Baylor #13, etc).
                             </p>
                         </div>
                         <button
                             onClick={handleReinitBig12Tournament}
-                            className="shrink-0 bg-amber-500 hover:bg-amber-400 text-black font-extrabold px-5 py-3 rounded-xl text-sm transition-all shadow-lg shadow-amber-500/30 whitespace-nowrap"
+                            className="shrink-0 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta whitespace-nowrap flex items-center gap-2"
                         >
-                            🔧 Re-Init Big 12 Now
+                            <Wrench size={16} /> Re-Init Big 12 Now
                         </button>
                         <button
                             onClick={handleScoreBracketEntries}
                             disabled={isScoringBrackets}
-                            className="shrink-0 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-extrabold px-5 py-3 rounded-xl text-sm transition-all shadow-lg shadow-emerald-500/30 whitespace-nowrap flex items-center gap-2"
+                            className="shrink-0 bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-card whitespace-nowrap flex items-center gap-2"
                         >
                             <Trophy size={16} /> {isScoringBrackets ? 'Scoring...' : 'Score Bracket Entries'}
                         </button>
@@ -1238,11 +1238,11 @@ export const SuperAdmin: React.FC = () => {
                         {/* SEARCH BAR */}
                         <div className="flex gap-4">
                             <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={20} />
                                 <input
                                     type="text"
                                     placeholder="Search pools by name, ID, or owner..."
-                                    className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-indigo-500"
+                                    className="w-full bg-surface border border-line rounded-xl py-3 pl-10 pr-4 font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600"
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
                                 />
@@ -1253,7 +1253,7 @@ export const SuperAdmin: React.FC = () => {
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                             <button
                                 onClick={() => setSportFilter('ALL')}
-                                className={`px - 4 py - 2 rounded - full text - xs font - bold whitespace - nowrap transition - colors ${sportFilter === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'} `}
+                                className={`px-4 py-2 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em] whitespace-nowrap transition-colors ${sportFilter === 'ALL' ? 'bg-navy-800 text-white' : 'bg-surface text-muted hover:bg-card border border-line'} `}
                             >
                                 ALL SPORTS
                             </button>
@@ -1261,7 +1261,7 @@ export const SuperAdmin: React.FC = () => {
                                 <button
                                     key={sport}
                                     onClick={() => setSportFilter(sport)}
-                                    className={`px - 4 py - 2 rounded - full text - xs font - bold whitespace - nowrap transition - colors ${sportFilter === sport ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'} `}
+                                    className={`px-4 py-2 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em] whitespace-nowrap transition-colors ${sportFilter === sport ? 'bg-navy-800 text-white' : 'bg-surface text-muted hover:bg-card border border-line'} `}
                                 >
                                     {sport.toUpperCase()}
                                 </button>
@@ -1269,10 +1269,10 @@ export const SuperAdmin: React.FC = () => {
                         </div>
 
                         {/* STATUS, PRICE & CHARITY FILTERS */}
-                        <div className="flex flex-wrap gap-4 items-center bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                        <div className="flex flex-wrap gap-4 items-center bg-card p-4 rounded-xl border border-line">
                             {/* Status Filter */}
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-500 uppercase">Status:</span>
+                                <span className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em]">Status:</span>
                                 {[
                                     { id: 'all', label: 'All' },
                                     { id: 'open', label: 'Open' },
@@ -1283,9 +1283,9 @@ export const SuperAdmin: React.FC = () => {
                                     <button
                                         key={status.id}
                                         onClick={() => setStatusFilter(status.id as 'all' | 'open' | 'locked' | 'live' | 'final')}
-                                        className={`px - 3 py - 1 rounded text - xs font - bold transition - colors ${statusFilter === status.id
-                                            ? status.id === 'live' ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white'
-                                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                                        className={`px-3 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors ${statusFilter === status.id
+                                            ? status.id === 'live' ? 'bg-brandred-600 text-white' : 'bg-navy-800 text-white'
+                                            : 'bg-surface text-muted hover:bg-card border border-line'
                                             } `}
                                     >
                                         {status.label}
@@ -1295,7 +1295,7 @@ export const SuperAdmin: React.FC = () => {
 
                             {/* Price Filter */}
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-500 uppercase">Price:</span>
+                                <span className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em]">Price:</span>
                                 {[
                                     { id: 'all', label: 'Any' },
                                     { id: 'low', label: '< $20' },
@@ -1305,9 +1305,9 @@ export const SuperAdmin: React.FC = () => {
                                     <button
                                         key={price.id}
                                         onClick={() => setPriceFilter(price.id as 'all' | 'low' | 'mid' | 'high')}
-                                        className={`px - 3 py - 1 rounded text - xs font - bold transition - colors ${priceFilter === price.id
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                                        className={`px-3 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.05em] num transition-colors ${priceFilter === price.id
+                                            ? 'bg-navy-800 text-white'
+                                            : 'bg-surface text-muted hover:bg-card border border-line'
                                             } `}
                                     >
                                         {price.label}
@@ -1317,12 +1317,12 @@ export const SuperAdmin: React.FC = () => {
 
                             {/* Charity Filter */}
                             <label className="flex items-center gap-2 cursor-pointer">
-                                <span className="text-xs font-bold text-slate-500 uppercase">Charity Only:</span>
+                                <span className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em]">Charity Only:</span>
                                 <button
                                     onClick={() => setCharityFilter(!charityFilter)}
-                                    className={`w - 10 h - 5 rounded - full relative transition - colors ${charityFilter ? 'bg-rose-500' : 'bg-slate-700'} `}
+                                    className={`w-10 h-5 rounded-full relative transition-colors ${charityFilter ? 'bg-brandred-600' : 'bg-line'} `}
                                 >
-                                    <div className={`absolute top - 1 w - 3 h - 3 bg - white rounded - full transition - all ${charityFilter ? 'left-6' : 'left-1'} `} />
+                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${charityFilter ? 'left-6' : 'left-1'} `} />
                                 </button>
                             </label>
                         </div>
@@ -1331,16 +1331,16 @@ export const SuperAdmin: React.FC = () => {
                         {(Object.entries(poolsBySport) as [string, Pool[]][])
                             .sort(([a], [b]) => a.localeCompare(b))
                             .map(([sport, sportPools]) => (
-                                <div key={sport} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl">
-                                    <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
-                                        <h2 className="text-xl font-bold flex items-center gap-2">
-                                            🏆 {sport}
-                                            <span className="text-sm font-normal text-slate-400">({sportPools.length} pools)</span>
+                                <div key={sport} className="bg-card rounded-xl border border-line overflow-hidden shadow-card">
+                                    <div className="p-4 border-b border-line bg-surface flex justify-between items-center">
+                                        <h2 className="text-xl font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2">
+                                            <Trophy size={18} className="text-gold-500" /> {sport}
+                                            <span className="text-sm font-body font-normal normal-case tracking-normal text-muted num">({sportPools.length} pools)</span>
                                         </h2>
                                     </div>
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left">
-                                            <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
+                                            <thead className="font-display font-bold text-xs text-muted uppercase tracking-[0.08em] bg-surface">
                                                 <tr>
                                                     <th className="p-4 font-bold tracking-wider">Pool Name</th>
                                                     <th className="p-4 font-bold tracking-wider">Created</th>
@@ -1351,7 +1351,7 @@ export const SuperAdmin: React.FC = () => {
                                                     <th className="p-4 font-bold tracking-wider">Actions</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-700/50">
+                                            <tbody className="divide-y divide-line">
                                                 {[...sportPools].sort((a, b) => {
                                                     const timeA = typeof a.createdAt === 'number' ? a.createdAt : a.createdAt?.seconds || 0;
                                                     const timeB = typeof b.createdAt === 'number' ? b.createdAt : b.createdAt?.seconds || 0;
@@ -1386,26 +1386,26 @@ export const SuperAdmin: React.FC = () => {
                                                     }
 
                                                     return (
-                                                        <tr key={pool.id} className="hover:bg-slate-700/30 transition-colors">
+                                                        <tr key={pool.id} className="hover:bg-surface transition-colors">
                                                             <td className="p-4">
                                                                 <button
                                                                     onClick={() => setViewingPool(pool as GameState)} // Type assertion or update setViewingPool type
-                                                                    className="font-bold text-white hover:text-indigo-400 hover:underline flex items-center gap-2 text-left"
+                                                                    className="font-bold text-[color:var(--text)] hover:text-gold-600 dark:hover:text-gold-400 hover:underline flex items-center gap-2 text-left"
                                                                 >
                                                                     {pool.name}
                                                                     {!isBracket && (pool as GameState).charity?.enabled && (
                                                                         <div title="Charity Pool">
-                                                                            <Heart size={12} className="text-rose-500 fill-rose-500" />
+                                                                            <Heart size={12} className="text-brandred-500 fill-brandred-500" />
                                                                         </div>
                                                                     )}
                                                                 </button>
-                                                                <div className="text-[10px] text-slate-500 font-mono mt-0.5">{pool.id}</div>
+                                                                <div className="text-[10px] text-faint font-mono mt-0.5">{pool.id}</div>
                                                             </td>
-                                                            <td className="p-4 text-slate-400 text-sm">
+                                                            <td className="p-4 text-muted font-body text-sm num">
                                                                 {createdAt}
                                                             </td>
-                                                            <td className="p-4 font-bold text-sm">{matchUp}</td>
-                                                            <td className="p-4 text-xs text-slate-400 font-mono">
+                                                            <td className="p-4 font-bold font-body text-sm">{matchUp}</td>
+                                                            <td className="p-4 text-xs text-muted font-mono num">
                                                                 {(() => {
                                                                     if (pool.type === 'BRACKET') {
                                                                         const lockAt = (pool as unknown as PoolLike).lockAt as string | undefined;
@@ -1420,24 +1420,24 @@ export const SuperAdmin: React.FC = () => {
                                                                     }
                                                                 })()}
                                                             </td>
-                                                            <td className="p-4 text-slate-400 text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
+                                                            <td className="p-4 text-muted font-body text-sm max-w-[150px] truncate" title={contact}>{contact}</td>
                                                             <td className="p-4">
                                                                 <div className="flex items-center gap-2">
                                                                     {(pool.type === 'SQUARES' || isBracket) && (
-                                                                        <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-                                                                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${filledPct}%` }}></div>
+                                                                        <div className="w-16 h-2 bg-line rounded-full overflow-hidden">
+                                                                            <div className="h-full bg-gold-foil rounded-full" style={{ width: `${filledPct}%` }}></div>
                                                                         </div>
                                                                     )}
-                                                                    <span className="text-xs text-slate-500">{filledDisplay}</span>
+                                                                    <span className="text-xs text-muted num">{filledDisplay}</span>
                                                                 </div>
                                                             </td>
                                                             <td className="p-4 flex gap-2 flex-wrap">
-                                                                <button onClick={() => navigate(`/admin/${pool.id}`)} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Manage</button>
+                                                                <button onClick={() => navigate(`/admin/${pool.id}`)} className="text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-navy-600/40 px-2 py-1 rounded transition-colors">Manage</button>
                                                                 {!isBracket && (
-                                                                    <button onClick={() => handleRunSim(pool as GameState)} className="text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 px-2 py-1 rounded">Sim</button>
+                                                                    <button onClick={() => handleRunSim(pool as GameState)} className="text-gold-700 dark:text-gold-400 hover:bg-gold-500/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-gold-500/40 px-2 py-1 rounded transition-colors">Sim</button>
                                                                 )}
                                                                 {!isBracket && (
-                                                                    <button onClick={() => handleFixScores(pool as GameState)} className="text-amber-400 hover:text-amber-300 text-xs font-bold border border-amber-500/30 px-2 py-1 rounded flex items-center gap-1">
+                                                                    <button onClick={() => handleFixScores(pool as GameState)} className="text-gold-700 dark:text-gold-400 hover:bg-gold-500/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-gold-500/40 px-2 py-1 rounded flex items-center gap-1 transition-colors">
                                                                         <Settings size={12} /> Fix
                                                                     </button>
                                                                 )}
@@ -1458,7 +1458,7 @@ export const SuperAdmin: React.FC = () => {
                                                                                 // Ideally refresh pools
                                                                             } catch (e: unknown) { toast.error(getUserMessage(e, "Failed to lock pool.")); }
                                                                         }}
-                                                                        className="text-rose-400 hover:text-rose-300 text-xs font-bold border border-rose-500/30 px-2 py-1 rounded flex items-center gap-1"
+                                                                        className="text-brandred-500 hover:bg-brandred-600/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-brandred-600/40 px-2 py-1 rounded flex items-center gap-1 transition-colors"
                                                                         title="Lock Pool"
                                                                     >
                                                                         <Lock size={12} /> Lock
@@ -1468,13 +1468,13 @@ export const SuperAdmin: React.FC = () => {
                                                                 {isBracket && (pool as unknown as PoolLike).status !== 'COMPLETED' && (
                                                                     <button
                                                                         onClick={(e) => { e.stopPropagation(); handleClosePool(pool); }}
-                                                                        className="text-orange-400 hover:text-orange-300 text-xs font-bold border border-orange-500/30 px-2 py-1 rounded flex items-center gap-1"
+                                                                        className="text-brandred-500 hover:bg-brandred-600/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-brandred-600/40 px-2 py-1 rounded flex items-center gap-1 transition-colors"
                                                                         title="Close Pool (mark as Completed)"
                                                                     >
                                                                         <CheckCircle size={12} /> Close Pool
                                                                     </button>
                                                                 )}
-                                                                <button onClick={() => handleDeletePool(pool.id)} className="text-rose-400 hover:text-rose-300 transition-colors"><Trash2 size={16} /></button>
+                                                                <button onClick={() => handleDeletePool(pool.id)} className="text-brandred-500 hover:text-brandred-600 transition-colors"><Trash2 size={16} /></button>
                                                             </td>
                                                         </tr>
                                                     );
@@ -1492,9 +1492,9 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ USERS TAB ============ */}
             {
                 activeTab === 'users' && (
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-xl w-full">
-                        <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center w-full">
-                            <h2 className="text-xl font-bold">Registered Users</h2>
+                    <div className="bg-card rounded-xl border border-line overflow-hidden shadow-card w-full">
+                        <div className="p-4 border-b border-line bg-surface flex justify-between items-center w-full">
+                            <h2 className="text-xl font-display font-bold uppercase tracking-[0.05em]">Registered Users</h2>
                             <div className="flex gap-2">
                                 <button
                                     onClick={async () => {
@@ -1512,7 +1512,7 @@ export const SuperAdmin: React.FC = () => {
                                             }
                                         }
                                     }}
-                                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-bold"
+                                    className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-display font-bold uppercase tracking-[0.05em]"
                                 >
                                     Force Sync
                                 </button>
@@ -1533,13 +1533,13 @@ export const SuperAdmin: React.FC = () => {
                                             }
                                         }
                                     }}
-                                    className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-bold"
+                                    className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-1 rounded transition-colors flex items-center gap-1 font-display font-bold uppercase tracking-[0.05em]"
                                 >
                                     <Activity size={12} /> Recalculate Stats
                                 </button>
                                 <button
                                     onClick={fetchUsers}
-                                    className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                                    className="text-xs bg-surface hover:bg-card border border-line text-[color:var(--text)] px-3 py-1 rounded transition-colors flex items-center gap-1 font-display font-bold uppercase tracking-[0.05em]"
                                 >
                                     <Activity size={12} /> Refresh List
                                 </button>
@@ -1547,7 +1547,7 @@ export const SuperAdmin: React.FC = () => {
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
-                                <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
+                                <thead className="font-display font-bold text-xs text-muted uppercase tracking-[0.08em] bg-surface">
                                     <tr>
                                         <th className="p-4 tracking-wider">Name</th>
                                         <th className="p-4 tracking-wider">Email</th>
@@ -1559,45 +1559,45 @@ export const SuperAdmin: React.FC = () => {
                                         <th className="p-4 tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-700/50">
+                                <tbody className="divide-y divide-line">
                                     {users.map(u => (
-                                        <tr key={u.id} className="hover:bg-slate-700/30 transition-colors">
+                                        <tr key={u.id} className="hover:bg-surface transition-colors">
                                             <td className="p-4 font-medium">
-                                                <button onClick={() => handleViewUser(u)} className="hover:text-indigo-400 hover:underline font-bold text-left">{u.name}</button>
+                                                <button onClick={() => handleViewUser(u)} className="hover:text-gold-600 dark:hover:text-gold-400 hover:underline font-bold text-left">{u.name}</button>
                                             </td>
-                                            <td className="p-4 text-slate-400">{u.email}</td>
+                                            <td className="p-4 text-muted font-body">{u.email}</td>
                                             <td className="p-4">
-                                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'POOL_MANAGER' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                                                <span className={`text-[10px] uppercase font-display font-bold tracking-[0.08em] px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-brandred-600/10 text-brandred-500 border-brandred-600/25' : u.role === 'POOL_MANAGER' ? 'bg-navy-600/10 text-navy-700 dark:text-gold-400 border-navy-600/25' : 'bg-surface text-muted border-line'}`}>
                                                     {u.role || 'USER'}
                                                 </span>
                                             </td>
                                             <td className="p-4">
-                                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
+                                                <span className={`text-[10px] uppercase font-display font-bold tracking-[0.08em] px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-gold-500/10 text-gold-700 dark:text-gold-400 border-gold-500/25' : 'bg-navy-600/10 text-navy-700 dark:text-gold-400 border-navy-600/25'}`}>
                                                     {u.registrationMethod || 'EMAIL'}
                                                 </span>
                                             </td>
                                             <td className="p-4 text-center">
-                                                <span className="text-indigo-400 font-bold">{u.referralCount || 0}</span>
+                                                <span className="text-navy-700 dark:text-gold-400 font-display font-bold num">{u.referralCount || 0}</span>
                                             </td>
-                                            <td className="p-4 text-slate-500 text-xs">
+                                            <td className="p-4 text-faint text-xs num">
                                                 {u.createdAt ? (() => {
                                                     const d = new Date(u.createdAt);
                                                     return `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getFullYear()}`;
                                                 })() : '—'}
                                             </td>
-                                            <td className="p-4 text-slate-500 font-mono text-xs max-w-[100px] truncate" title={u.id}>{u.id}</td>
+                                            <td className="p-4 text-faint font-mono text-xs max-w-[100px] truncate" title={u.id}>{u.id}</td>
                                             <td className="p-4 flex gap-2">
                                                 <button
                                                     onClick={() => handleResetPassword(u)}
-                                                    className="text-amber-400 hover:text-amber-300 transition-colors border border-amber-500/30 px-2 py-1 rounded text-xs font-bold"
+                                                    className="text-gold-700 dark:text-gold-400 hover:bg-gold-500/10 transition-colors border border-gold-500/40 px-2 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.05em]"
                                                     title="Send Password Reset (Admin API)"
                                                 >
                                                     <div className="flex items-center gap-1">
                                                         <Settings size={14} /> Reset
                                                     </div>
                                                 </button>
-                                                <button onClick={() => handleEditUser(u)} className="text-indigo-400 hover:text-indigo-300 text-xs font-bold border border-indigo-500/30 px-2 py-1 rounded">Edit</button>
-                                                <button onClick={() => handleDeleteUser(u)} className="text-rose-400 hover:text-rose-300 transition-colors border border-rose-500/30 px-2 py-1 rounded"><Trash2 size={16} /></button>
+                                                <button onClick={() => handleEditUser(u)} className="text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 text-xs font-display font-bold uppercase tracking-[0.05em] border border-navy-600/40 px-2 py-1 rounded transition-colors">Edit</button>
+                                                <button onClick={() => handleDeleteUser(u)} className="text-brandred-500 hover:bg-brandred-600/10 transition-colors border border-brandred-600/40 px-2 py-1 rounded"><Trash2 size={16} /></button>
                                             </td>
                                         </tr>
                                     ))}
@@ -1610,37 +1610,37 @@ export const SuperAdmin: React.FC = () => {
 
             {/* ============ REFERRALS TAB ============ */}
             {activeTab === 'referrals' && (
-                <div className="bg-slate-800 rounded-xl border border-indigo-500/30 overflow-hidden shadow-xl">
-                    <div className="p-4 border-b border-slate-700 bg-indigo-900/20 flex justify-between items-center">
-                        <h2 className="text-xl font-bold flex items-center gap-2"><Users className="text-indigo-400" size={20} /> Referral Dashboard</h2>
-                        <span className="text-xs font-mono text-slate-500">Top Referrers & Referral Chain</span>
+                <div className="bg-card rounded-xl border border-line overflow-hidden shadow-card">
+                    <div className="p-4 border-b border-line bg-surface flex justify-between items-center">
+                        <h2 className="text-xl font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2"><Users className="text-gold-500" size={20} /> Referral Dashboard</h2>
+                        <span className="text-xs font-mono text-faint">Top Referrers & Referral Chain</span>
                     </div>
 
                     {/* Referral Stats Row */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border-b border-slate-700/50">
-                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                            <p className="text-3xl font-bold text-indigo-400">{users.reduce((sum, u) => sum + (getComputedReferrals(u.id) || 0), 0)}</p>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Total Referrals</p>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border-b border-line">
+                        <div className="bg-surface border border-line p-4 rounded-lg text-center">
+                            <p className="text-3xl font-display font-bold text-navy-800 dark:text-gold-400 num">{users.reduce((sum, u) => sum + (getComputedReferrals(u.id) || 0), 0)}</p>
+                            <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em]">Total Referrals</p>
                         </div>
-                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                            <p className="text-3xl font-bold text-emerald-400">{users.filter(u => u.referredBy).length}</p>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Referred Users</p>
+                        <div className="bg-surface border border-line p-4 rounded-lg text-center">
+                            <p className="text-3xl font-display font-bold text-gold-600 dark:text-gold-400 num">{users.filter(u => u.referredBy).length}</p>
+                            <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em]">Referred Users</p>
                         </div>
-                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                            <p className="text-3xl font-bold text-amber-400">
+                        <div className="bg-surface border border-line p-4 rounded-lg text-center">
+                            <p className="text-3xl font-display font-bold text-gold-600 dark:text-gold-400 num">
                                 {new Set(users.filter(u => u.referredBy).map(u => u.referredBy)).size}
                             </p>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Active Referrers</p>
+                            <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em]">Active Referrers</p>
                         </div>
-                        <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                            <p className="text-3xl font-bold text-white">{users.length > 0 ? ((users.filter(u => u.referredBy).length / users.length) * 100).toFixed(1) : 0}%</p>
-                            <p className="text-xs text-slate-500 uppercase font-bold">Referral Rate</p>
+                        <div className="bg-surface border border-line p-4 rounded-lg text-center">
+                            <p className="text-3xl font-display font-bold text-[color:var(--text)] num">{users.length > 0 ? ((users.filter(u => u.referredBy).length / users.length) * 100).toFixed(1) : 0}%</p>
+                            <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em]">Referral Rate</p>
                         </div>
                     </div>
 
                     {/* Top Referrers Leaderboard */}
                     <div className="p-4">
-                        <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">🏆 Top Referrers</h3>
+                        <h3 className="text-sm font-display font-bold text-[color:var(--text)] mb-3 uppercase tracking-[0.08em] flex items-center gap-1.5"><Trophy size={14} className="text-gold-500" /> Top Referrers</h3>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
                             {[...users]
                                 .map(u => ({ ...u, _computedCount: getComputedReferrals(u.id) }))
@@ -1648,30 +1648,30 @@ export const SuperAdmin: React.FC = () => {
                                 .sort((a, b) => b._computedCount - a._computedCount)
                                 .slice(0, 3)
                                 .map((u, i) => (
-                                    <div key={u.id} className={`p - 4 rounded - xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'} `}>
+                                    <div key={u.id} className={`p-4 rounded-xl border ${i === 0 ? 'bg-gold-500/10 border-gold-500/40' : i === 1 ? 'bg-surface border-line' : 'bg-gold-700/10 border-gold-700/40'}`}>
                                         <div className="flex items-center gap-3">
-                                            <div className={`text - 2xl font - black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'} `}>#{i + 1}</div>
+                                            <div className={`text-2xl font-display font-extrabold num ${i === 0 ? 'text-gold-500' : i === 1 ? 'text-muted' : 'text-gold-700'}`}>#{i + 1}</div>
                                             <div className="flex-1 min-w-0">
-                                                <button onClick={() => handleViewUser(u)} className="font-bold text-white truncate hover:text-indigo-400">{u.name}</button>
-                                                <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                                                <button onClick={() => handleViewUser(u)} className="font-bold text-[color:var(--text)] truncate hover:text-gold-600 dark:hover:text-gold-400">{u.name}</button>
+                                                <p className="text-xs text-muted truncate">{u.email}</p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-2xl font-bold text-indigo-400">{u._computedCount}</p>
-                                                <p className="text-[10px] text-slate-500 uppercase">referrals</p>
+                                                <p className="text-2xl font-display font-bold text-navy-800 dark:text-gold-400 num">{u._computedCount}</p>
+                                                <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">referrals</p>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                             {users.every(u => getComputedReferrals(u.id) === 0) && (
-                                <div className="col-span-3 text-center py-8 text-slate-500">No referrals yet</div>
+                                <div className="col-span-3 text-center py-8 text-faint">No referrals yet</div>
                             )}
                         </div>
 
                         {/* Full Referral Table */}
-                        <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">All Users Referral Data</h3>
-                        <div className="overflow-x-auto rounded-lg border border-slate-700">
+                        <h3 className="text-sm font-display font-bold text-[color:var(--text)] mb-3 uppercase tracking-[0.08em]">All Users Referral Data</h3>
+                        <div className="overflow-x-auto rounded-lg border border-line">
                             <table className="w-full text-left text-sm">
-                                <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
+                                <thead className="font-display font-bold text-xs text-muted uppercase tracking-[0.08em] bg-surface">
                                     <tr>
                                         <th className="p-3 font-bold">User</th>
                                         <th className="p-3 font-bold">Referral Code</th>
@@ -1680,34 +1680,34 @@ export const SuperAdmin: React.FC = () => {
                                         <th className="p-3 font-bold">Joined</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-700/50">
+                                <tbody className="divide-y divide-line">
                                     {[...users]
                                         .map(u => ({ ...u, _computedCount: getComputedReferrals(u.id) }))
                                         .sort((a, b) => b._computedCount - a._computedCount)
                                         .map(u => {
                                             const referrer = u.referredBy ? users.find(ref => ref.id === u.referredBy) : null;
                                             return (
-                                                <tr key={u.id} className="hover:bg-slate-700/30">
+                                                <tr key={u.id} className="hover:bg-surface">
                                                     <td className="p-3">
-                                                        <button onClick={() => handleViewUser(u)} className="font-bold text-white hover:text-indigo-400">{u.name}</button>
-                                                        <p className="text-xs text-slate-500">{u.email}</p>
+                                                        <button onClick={() => handleViewUser(u)} className="font-bold text-[color:var(--text)] hover:text-gold-600 dark:hover:text-gold-400">{u.name}</button>
+                                                        <p className="text-xs text-faint">{u.email}</p>
                                                     </td>
                                                     <td className="p-3">
-                                                        <code className="text-xs bg-slate-900 px-2 py-1 rounded text-indigo-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
+                                                        <code className="text-xs bg-surface border border-line px-2 py-1 rounded text-gold-700 dark:text-gold-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
                                                     </td>
                                                     <td className="p-3 text-center">
-                                                        <span className={`font - bold ${u._computedCount > 0 ? 'text-indigo-400' : 'text-slate-500'} `}>{u._computedCount}</span>
+                                                        <span className={`font-bold num ${u._computedCount > 0 ? 'text-navy-700 dark:text-gold-400' : 'text-faint'} `}>{u._computedCount}</span>
                                                     </td>
                                                     <td className="p-3">
                                                         {referrer ? (
-                                                            <span className="text-emerald-400 text-xs">{referrer.name}</span>
+                                                            <span className="text-gold-600 dark:text-gold-400 text-xs">{referrer.name}</span>
                                                         ) : u.referredBy ? (
-                                                            <span className="text-slate-500 text-xs font-mono">{u.referredBy.slice(0, 8)}...</span>
+                                                            <span className="text-faint text-xs font-mono">{u.referredBy.slice(0, 8)}...</span>
                                                         ) : (
-                                                            <span className="text-slate-600 text-xs">—</span>
+                                                            <span className="text-faint text-xs">—</span>
                                                         )}
                                                     </td>
-                                                    <td className="p-3 text-xs text-slate-500">
+                                                    <td className="p-3 text-xs text-faint">
                                                         {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
                                                     </td>
                                                 </tr>
@@ -1726,23 +1726,23 @@ export const SuperAdmin: React.FC = () => {
                     
                     {/* TIER CONFIGURATION CONTROL CENTER */}
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                        <div className="lg:col-span-3 bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col justify-between">
+                        <div className="lg:col-span-3 bg-card border border-line rounded-3xl p-6 shadow-panel flex flex-col justify-between">
                             <div>
-                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                    <Shield className="text-indigo-400" /> Tiers Control Center
+                                <h3 className="text-lg font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                    <Shield className="text-gold-500" /> Tiers Control Center
                                 </h3>
-                                <p className="text-slate-400 text-xs mt-1">
+                                <p className="text-muted text-xs mt-1">
                                     Define loyalty tiers based on lifetime pool entries. Changes will apply immediately across all user dashboards.
                                 </p>
                             </div>
                             
                             <div className="space-y-4 mt-6">
                                 {editingTiers?.map((tier, index) => (
-                                    <div key={tier.id} className="bg-slate-850 border border-slate-700/60 rounded-2xl p-4 flex flex-col md:flex-row items-center gap-4 relative group">
+                                    <div key={tier.id} className="bg-surface border border-line rounded-2xl p-4 flex flex-col md:flex-row items-center gap-4 relative group">
                                         <div className="flex-1 w-full space-y-3">
                                             <div className="grid grid-cols-3 gap-3">
                                                 <div className="col-span-2">
-                                                    <label className="text-[10px] text-slate-500 font-extrabold uppercase">Tier Name</label>
+                                                    <label className="text-[10px] text-muted font-display font-extrabold uppercase tracking-[0.08em]">Tier Name</label>
                                                     <input
                                                         type="text"
                                                         value={tier.name}
@@ -1751,11 +1751,11 @@ export const SuperAdmin: React.FC = () => {
                                                             updated[index] = { ...tier, name: e.target.value };
                                                             setEditingTiers(updated);
                                                         }}
-                                                        className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-bold"
+                                                        className="w-full bg-surface border border-line rounded-xl px-3 py-1.5 text-xs font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600 font-bold"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="text-[10px] text-slate-500 font-extrabold uppercase">Min Pools</label>
+                                                    <label className="text-[10px] text-muted font-display font-extrabold uppercase tracking-[0.08em]">Min Pools</label>
                                                     <input
                                                         type="number"
                                                         value={tier.minPools}
@@ -1764,12 +1764,12 @@ export const SuperAdmin: React.FC = () => {
                                                             updated[index] = { ...tier, minPools: Math.max(0, parseInt(e.target.value) || 0) };
                                                             setEditingTiers(updated);
                                                         }}
-                                                        className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono font-bold"
+                                                        className="w-full bg-surface border border-line rounded-xl px-3 py-1.5 text-xs font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600 font-mono font-bold"
                                                     />
                                                 </div>
                                             </div>
                                             <div>
-                                                <label className="text-[10px] text-slate-500 font-extrabold uppercase">Description</label>
+                                                <label className="text-[10px] text-muted font-display font-extrabold uppercase tracking-[0.08em]">Description</label>
                                                 <input
                                                     type="text"
                                                     value={tier.description}
@@ -1778,13 +1778,13 @@ export const SuperAdmin: React.FC = () => {
                                                         updated[index] = { ...tier, description: e.target.value };
                                                         setEditingTiers(updated);
                                                     }}
-                                                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 text-slate-350"
+                                                    className="w-full bg-surface border border-line rounded-xl px-3 py-1.5 text-xs font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600"
                                                 />
                                             </div>
                                         </div>
                                         <button
                                             onClick={() => handleRemoveTierLocal(tier.id)}
-                                            className="p-2 border border-rose-500/20 text-rose-450 hover:bg-rose-500/10 rounded-xl mt-3 md:mt-0 transition-all duration-200"
+                                            className="p-2 border border-brandred-600/30 text-brandred-500 hover:bg-brandred-600/10 rounded-xl mt-3 md:mt-0 transition-all duration-200"
                                             title="Delete Tier"
                                         >
                                             <Trash2 size={16} />
@@ -1793,16 +1793,16 @@ export const SuperAdmin: React.FC = () => {
                                 ))}
                             </div>
 
-                            <div className="flex gap-3 mt-6 pt-4 border-t border-slate-800">
+                            <div className="flex gap-3 mt-6 pt-4 border-t border-line">
                                 <button
                                     onClick={handleAddTierLocal}
-                                    className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-slate-750"
+                                    className="flex items-center gap-1 bg-surface hover:bg-card text-[color:var(--text)] px-4 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border border-line"
                                 >
                                     <Plus size={14} /> Add New Tier
                                 </button>
                                 <button
                                     onClick={handleSaveTiers}
-                                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all ml-auto shadow-lg"
+                                    className="bg-brandred-600 hover:bg-brandred-500 text-white px-5 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all ml-auto shadow-red-cta"
                                 >
                                     Save Tier Configuration
                                 </button>
@@ -1810,12 +1810,12 @@ export const SuperAdmin: React.FC = () => {
                         </div>
 
                         {/* TIER DISTRIBUTION GRAPH */}
-                        <div className="lg:col-span-2 bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col justify-between">
+                        <div className="lg:col-span-2 bg-card border border-line rounded-3xl p-6 shadow-panel flex flex-col justify-between">
                             <div>
-                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                    <Activity className="text-emerald-400" /> Tier Distribution
+                                <h3 className="text-lg font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                    <Activity className="text-gold-500" /> Tier Distribution
                                 </h3>
-                                <p className="text-slate-400 text-xs mt-1">
+                                <p className="text-muted text-xs mt-1">
                                     Active user split across loyalty thresholds.
                                 </p>
                             </div>
@@ -1827,19 +1827,19 @@ export const SuperAdmin: React.FC = () => {
                                     return (
                                         <div key={t.id} className="space-y-1.5">
                                             <div className="flex justify-between text-xs font-bold">
-                                                <span className="text-white flex items-center gap-1.5">
-                                                    <span className="h-2 w-2 rounded-full bg-indigo-500"></span>
+                                                <span className="text-[color:var(--text)] flex items-center gap-1.5">
+                                                    <span className="h-2 w-2 rounded-full bg-gold-500"></span>
                                                     {t.name}
                                                 </span>
-                                                <span className="text-slate-400 font-mono">{count} ({pct.toFixed(0)}%)</span>
+                                                <span className="text-muted font-mono num">{count} ({pct.toFixed(0)}%)</span>
                                             </div>
-                                            <div className="h-3 w-full bg-slate-950/60 rounded-full border border-slate-800 overflow-hidden">
+                                            <div className="h-3 w-full bg-surface rounded-full border border-line overflow-hidden">
                                                 <div
-                                                    className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-500"
+                                                    className="h-full bg-gold-foil rounded-full transition-all duration-500"
                                                     style={{ width: `${pct}%` }}
                                                 ></div>
                                             </div>
-                                            <p className="text-[10px] text-slate-500">{t.description}</p>
+                                            <p className="text-[10px] text-faint">{t.description}</p>
                                         </div>
                                     );
                                 })}
@@ -1848,13 +1848,13 @@ export const SuperAdmin: React.FC = () => {
                     </div>
 
                     {/* TARGETED MARKETING HUB */}
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-2xl">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 pb-4 border-b border-slate-800">
+                    <div className="bg-card border border-line rounded-3xl p-6 shadow-panel">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 pb-4 border-b border-line">
                             <div>
-                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                    <Users className="text-orange-500" /> Targeted Marketing Hub
+                                <h3 className="text-lg font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                    <Users className="text-gold-500" /> Targeted Marketing Hub
                                 </h3>
-                                <p className="text-slate-400 text-xs mt-0.5">
+                                <p className="text-muted text-xs mt-0.5">
                                     Filter and search users by tier, copy bulk emails, export CSV data, or send mock promos.
                                 </p>
                             </div>
@@ -1872,7 +1872,7 @@ export const SuperAdmin: React.FC = () => {
                                         navigator.clipboard.writeText(emails);
                                         toast.success(`Copied ${list.length} emails to clipboard!`);
                                     }}
-                                    className="text-xs bg-slate-850 hover:bg-slate-805 text-slate-300 font-bold px-4 py-2.5 rounded-xl border border-slate-700 transition-all flex items-center gap-1.5"
+                                    className="text-xs bg-surface hover:bg-card text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] px-4 py-2.5 rounded-xl border border-line transition-all flex items-center gap-1.5"
                                 >
                                     <Copy size={13} /> Copy Group Emails
                                 </button>
@@ -1903,7 +1903,7 @@ export const SuperAdmin: React.FC = () => {
                                         link.click();
                                         document.body.removeChild(link);
                                     }}
-                                    className="text-xs bg-emerald-650/10 hover:bg-emerald-650/20 text-emerald-450 font-bold px-4 py-2.5 rounded-xl border border-emerald-500/20 transition-all flex items-center gap-1.5"
+                                    className="text-xs bg-gold-500/10 hover:bg-gold-500/20 text-gold-700 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] px-4 py-2.5 rounded-xl border border-gold-500/30 transition-all flex items-center gap-1.5"
                                 >
                                     <ArrowDown size={13} /> Export CSV
                                 </button>
@@ -1920,7 +1920,7 @@ export const SuperAdmin: React.FC = () => {
                                         setPromoType('coupon');
                                         setPromoCoupon('LOYALTY20');
                                     }}
-                                    className="text-xs bg-orange-600 hover:bg-orange-500 text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-orange-500/10 flex items-center gap-1.5"
+                                    className="text-xs bg-gold-foil text-navy-900 hover:brightness-105 font-display font-bold uppercase tracking-[0.05em] px-4 py-2.5 rounded-xl transition-all shadow-card flex items-center gap-1.5"
                                 >
                                     <Plus size={13} /> Bulk Mock Promo
                                 </button>
@@ -1928,13 +1928,13 @@ export const SuperAdmin: React.FC = () => {
                         </div>
 
                         {/* FILTERS TOOLBAR */}
-                        <div className="flex flex-col sm:flex-row gap-3 mb-6 items-center bg-slate-900/30 p-3 rounded-2xl border border-slate-800">
+                        <div className="flex flex-col sm:flex-row gap-3 mb-6 items-center bg-surface p-3 rounded-2xl border border-line">
                             <div className="flex items-center gap-2 w-full sm:w-auto">
-                                <span className="text-[10px] text-slate-500 font-extrabold uppercase shrink-0">Filter Tier:</span>
+                                <span className="text-[10px] text-muted font-display font-extrabold uppercase tracking-[0.08em] shrink-0">Filter Tier:</span>
                                 <select
                                     value={selectedMarketingTier}
                                     onChange={(e) => setSelectedMarketingTier(e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-bold"
+                                    className="w-full bg-card border border-line rounded-xl px-3 py-2 text-xs font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600 font-bold"
                                 >
                                     <option value="all">All Tiers (Show All Users)</option>
                                     {activeTiers.map((t: LoyaltyTier) => (
@@ -1944,21 +1944,21 @@ export const SuperAdmin: React.FC = () => {
                             </div>
 
                             <div className="relative w-full sm:flex-grow">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
                                 <input
                                     type="text"
                                     placeholder="Search roster by name, email, or phone..."
                                     value={marketingSearch}
                                     onChange={(e) => setMarketingSearch(e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 pl-9 pr-4 text-xs text-white focus:outline-none focus:border-indigo-500 font-semibold"
+                                    className="w-full bg-card border border-line rounded-xl py-2 pl-9 pr-4 text-xs font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600 font-semibold"
                                 />
                             </div>
                         </div>
 
                         {/* ROSTER TABLE */}
-                        <div className="overflow-x-auto rounded-2xl border border-slate-800/80">
+                        <div className="overflow-x-auto rounded-2xl border border-line">
                             <table className="w-full text-left text-xs">
-                                <thead className="bg-slate-900/80 text-slate-400 uppercase font-black tracking-wider text-[10px]">
+                                <thead className="bg-surface text-muted uppercase font-display font-black tracking-[0.08em] text-[10px]">
                                     <tr>
                                         <th className="p-4">Name</th>
                                         <th className="p-4">Email</th>
@@ -1968,7 +1968,7 @@ export const SuperAdmin: React.FC = () => {
                                         <th className="p-4">Marketing Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-800/60 font-semibold text-slate-350 text-[11px]">
+                                <tbody className="divide-y divide-line font-body font-semibold text-muted text-[11px]">
                                     {(() => {
                                         let list: User[] = [];
                                         if (selectedMarketingTier === 'all') {
@@ -1987,29 +1987,29 @@ export const SuperAdmin: React.FC = () => {
                                         }
 
                                         if (list.length === 0) {
-                                            return <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-bold uppercase tracking-wider text-[10px]">No users match this filter</td></tr>;
+                                            return <tr><td colSpan={6} className="p-8 text-center text-faint font-display font-bold uppercase tracking-[0.08em] text-[10px]">No users match this filter</td></tr>;
                                         }
 
                                         return list.map((u: User) => {
                                             const count = userPoolCounts[u.id] || 0;
                                             const tier = userTiers.mapping[u.id] || 'None';
                                             return (
-                                                <tr key={u.id} className="hover:bg-slate-800/20 transition-colors">
-                                                    <td className="p-4 font-bold text-white">
-                                                        <button onClick={() => handleViewUser(u)} className="hover:text-indigo-400 hover:underline text-left">{u.name}</button>
+                                                <tr key={u.id} className="hover:bg-surface transition-colors">
+                                                    <td className="p-4 font-bold text-[color:var(--text)]">
+                                                        <button onClick={() => handleViewUser(u)} className="hover:text-gold-600 dark:hover:text-gold-400 hover:underline text-left">{u.name}</button>
                                                     </td>
-                                                    <td className="p-4 text-slate-400">{u.email}</td>
-                                                    <td className="p-4 font-mono text-slate-400">{u.phone || '—'}</td>
-                                                    <td className="p-4 text-center font-mono text-white font-bold">{count}</td>
+                                                    <td className="p-4 text-muted">{u.email}</td>
+                                                    <td className="p-4 font-mono text-muted num">{u.phone || '—'}</td>
+                                                    <td className="p-4 text-center font-mono text-[color:var(--text)] font-bold num">{count}</td>
                                                     <td className="p-4">
-                                                        <span className="text-[9px] uppercase font-black tracking-widest px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                                        <span className="text-[9px] uppercase font-display font-black tracking-widest px-2 py-0.5 rounded-full bg-gold-500/10 text-gold-700 dark:text-gold-400 border border-gold-500/30">
                                                             {tier}
                                                         </span>
                                                     </td>
                                                     <td className="p-4 flex gap-2">
                                                         <a
                                                             href={`mailto:${u.email}`}
-                                                            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-750 transition-all font-bold"
+                                                            className="text-xs bg-surface hover:bg-card text-[color:var(--text)] px-2.5 py-1 rounded-lg border border-line transition-all font-display font-bold uppercase tracking-[0.05em]"
                                                         >
                                                             Email
                                                         </a>
@@ -2018,7 +2018,7 @@ export const SuperAdmin: React.FC = () => {
                                                                 navigator.clipboard.writeText(u.email);
                                                                 toast.success('Email copied to clipboard!');
                                                             }}
-                                                            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-750 transition-all"
+                                                            className="text-xs bg-surface hover:bg-card text-[color:var(--text)] px-2.5 py-1 rounded-lg border border-line transition-all"
                                                             title="Copy Email"
                                                         >
                                                             <Copy size={12} />
@@ -2031,7 +2031,7 @@ export const SuperAdmin: React.FC = () => {
                                                                 setPromoType('coupon');
                                                                 setPromoCoupon('DIRECT15');
                                                             }}
-                                                            className="text-xs bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-455 border border-indigo-500/20 px-2.5 py-1 rounded-lg transition-all font-black"
+                                                            className="text-xs bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-gold-400 border border-navy-600/30 px-2.5 py-1 rounded-lg transition-all font-display font-black uppercase tracking-[0.05em]"
                                                         >
                                                             Direct Mock Promo
                                                         </button>
@@ -2048,20 +2048,20 @@ export const SuperAdmin: React.FC = () => {
                     {/* MOCK PROMO SENDER MODAL */}
                     {(promoUser || promoBulkTier) && (
                         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-2xl flex flex-col justify-between relative">
+                            <div className="bg-card border border-line rounded-3xl p-6 w-full max-w-lg shadow-panel flex flex-col justify-between relative">
                                 <button
                                     onClick={() => { setPromoUser(null); setPromoBulkTier(null); }}
-                                    className="absolute top-4 right-4 p-1.5 border border-slate-800 text-slate-400 hover:text-white rounded-xl bg-slate-950/40"
+                                    className="absolute top-4 right-4 p-1.5 border border-line text-muted hover:text-[color:var(--text)] rounded-xl bg-surface"
                                 >
                                     <X size={18} />
                                 </button>
 
                                 <div>
-                                    <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-1">
-                                        <Bot className="text-orange-550 animate-pulse" /> Mock Promo Campaign Creator
+                                    <h3 className="text-lg font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2 mb-1">
+                                        <Bot className="text-gold-500 animate-pulse" /> Mock Promo Campaign Creator
                                     </h3>
-                                    <p className="text-slate-400 text-xs font-semibold">
-                                        {promoBulkTier 
+                                    <p className="text-muted text-xs font-body font-semibold">
+                                        {promoBulkTier
                                           ? `Broadcasting simulated campaign to all members of the ${activeTiers.find((t: LoyaltyTier) => t.id === promoBulkTier)?.name} loyalty tier.`
                                           : `Configuring mock coupon code/marketing email directly to ${promoUser?.name}.`
                                         }
@@ -2070,63 +2070,63 @@ export const SuperAdmin: React.FC = () => {
 
                                 <div className="space-y-4 mt-6">
                                     <div>
-                                        <label className="text-[10px] text-slate-500 font-extrabold uppercase block mb-1">Marketing Action Type</label>
+                                        <label className="text-[10px] text-muted font-display font-extrabold uppercase tracking-[0.08em] block mb-1">Marketing Action Type</label>
                                         <div className="grid grid-cols-2 gap-2">
                                             <button
                                                 onClick={() => setPromoType('coupon')}
-                                                className={`py-2 text-xs font-bold rounded-xl border transition-all ${promoType === 'coupon' ? 'bg-orange-500/10 border-orange-500/30 text-orange-500' : 'bg-slate-950 border-slate-855 text-slate-500'}`}
+                                                className={`py-2 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-xl border transition-all flex items-center justify-center gap-1.5 ${promoType === 'coupon' ? 'bg-gold-500/10 border-gold-500/40 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-muted'}`}
                                             >
-                                                🎫 Discount Coupon
+                                                <Ticket size={13} /> Discount Coupon
                                             </button>
                                             <button
                                                 onClick={() => setPromoType('reminder')}
-                                                className={`py-2 text-xs font-bold rounded-xl border transition-all ${promoType === 'reminder' ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-slate-950 border-slate-855 text-slate-500'}`}
+                                                className={`py-2 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-xl border transition-all flex items-center justify-center gap-1.5 ${promoType === 'reminder' ? 'bg-navy-600/10 border-navy-600/40 text-navy-700 dark:text-gold-400' : 'bg-surface border-line text-muted'}`}
                                             >
-                                                📢 Text Reminder/Promo
+                                                <Megaphone size={13} /> Text Reminder/Promo
                                             </button>
                                         </div>
                                     </div>
 
                                     {promoType === 'coupon' && (
                                         <div>
-                                            <label className="text-[10px] text-slate-500 font-extrabold uppercase block mb-1">Coupon Code</label>
+                                            <label className="text-[10px] text-muted font-display font-extrabold uppercase tracking-[0.08em] block mb-1">Coupon Code</label>
                                             <input
                                                 type="text"
                                                 value={promoCoupon}
                                                 onChange={(e) => setPromoCoupon(e.target.value.toUpperCase())}
-                                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500 font-mono font-bold"
+                                                className="w-full bg-surface border border-line rounded-xl px-3 py-2 text-xs text-[color:var(--text)] focus:outline-none focus:border-gold-500 font-mono font-bold"
                                                 placeholder="e.g. LOYALTY50"
                                             />
                                         </div>
                                     )}
 
                                     <div>
-                                        <label className="text-[10px] text-slate-500 font-extrabold uppercase block mb-1">Subject / Header</label>
+                                        <label className="text-[10px] text-muted font-display font-extrabold uppercase tracking-[0.08em] block mb-1">Subject / Header</label>
                                         <input
                                             type="text"
                                             value={promoSubject}
                                             onChange={(e) => setPromoSubject(e.target.value)}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-555 font-semibold"
+                                            className="w-full bg-surface border border-line rounded-xl px-3 py-2 text-xs font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600 font-semibold"
                                             placeholder="Subject of marketing email"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="text-[10px] text-slate-500 font-extrabold uppercase block mb-1">Message Content</label>
+                                        <label className="text-[10px] text-muted font-display font-extrabold uppercase tracking-[0.08em] block mb-1">Message Content</label>
                                         <textarea
                                             value={promoMessage}
                                             onChange={(e) => setPromoMessage(e.target.value)}
                                             rows={3}
-                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-555 font-semibold resize-none"
+                                            className="w-full bg-surface border border-line rounded-xl px-3 py-2 text-xs font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600 font-semibold resize-none"
                                             placeholder="Tell them about the coupon/remind them to lock in their picks..."
                                         />
                                     </div>
                                 </div>
 
-                                <div className="flex gap-3 mt-6 pt-4 border-t border-slate-800">
+                                <div className="flex gap-3 mt-6 pt-4 border-t border-line">
                                     <button
                                         onClick={() => { setPromoUser(null); setPromoBulkTier(null); }}
-                                        className="bg-slate-800 hover:bg-slate-700 text-slate-350 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-slate-750"
+                                        className="bg-surface hover:bg-card text-[color:var(--text)] px-4 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border border-line"
                                     >
                                         Cancel
                                     </button>
@@ -2145,7 +2145,7 @@ export const SuperAdmin: React.FC = () => {
                                             setPromoBulkTier(null);
                                         }}
                                         disabled={isSendingPromo}
-                                        className="bg-orange-600 hover:bg-orange-555 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all ml-auto shadow-lg shadow-orange-500/10 disabled:opacity-50"
+                                        className="bg-brandred-600 hover:bg-brandred-500 text-white px-5 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all ml-auto shadow-red-cta disabled:opacity-50"
                                     >
                                         {isSendingPromo ? 'Sending Simulation...' : 'Execute Mock Campaign'}
                                     </button>
@@ -2162,8 +2162,8 @@ export const SuperAdmin: React.FC = () => {
                     {/* Header */}
                     <div className="flex justify-between items-center">
                         <div>
-                            <h2 className="text-xl font-bold text-white">Theme Manager</h2>
-                            <p className="text-sm text-slate-400">Create and manage custom pool themes. Only active themes are visible to pool managers.</p>
+                            <h2 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">Theme Manager</h2>
+                            <p className="text-sm text-muted">Create and manage custom pool themes. Only active themes are visible to pool managers.</p>
                         </div>
                         <button
                             onClick={() => {
@@ -2179,7 +2179,7 @@ export const SuperAdmin: React.FC = () => {
                                     setShowThemeBuilder(true);
                                 });
                             }}
-                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold transition-colors"
+                            className="flex items-center gap-2 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] transition-colors shadow-red-cta"
                         >
                             <Plus size={18} /> Create Theme
                         </button>
@@ -2187,8 +2187,8 @@ export const SuperAdmin: React.FC = () => {
 
                     {/* Seed Presets Button */}
                     {themes.length === 0 && (
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center">
-                            <p className="text-amber-400 mb-3">No themes found. Seed the preset themes to get started.</p>
+                        <div className="bg-gold-500/10 border border-gold-500/40 rounded-xl p-4 text-center">
+                            <p className="text-gold-700 dark:text-gold-400 mb-3 font-body">No themes found. Seed the preset themes to get started.</p>
                             <button
                                 onClick={async () => {
                                     const { PRESET_THEMES } = await import('../constants/presetThemes');
@@ -2201,7 +2201,7 @@ export const SuperAdmin: React.FC = () => {
                                     }
                                     toast.success(`Seeded ${PRESET_THEMES.length} preset themes!`);
                                 }}
-                                className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg font-bold"
+                                className="bg-gold-foil text-navy-900 hover:brightness-105 px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em]"
                             >
                                 Seed Preset Themes
                             </button>
@@ -2213,7 +2213,7 @@ export const SuperAdmin: React.FC = () => {
                         {themes.map((theme) => (
                             <div
                                 key={theme.id}
-                                className={`bg-slate-800 rounded-xl border overflow-hidden transition-all ${theme.isDefault ? 'border-amber-500' : theme.isActive ? 'border-emerald-500/50' : 'border-slate-700'}`}
+                                className={`bg-card rounded-xl border overflow-hidden transition-all shadow-card ${theme.isDefault ? 'border-gold-500' : theme.isActive ? 'border-[#0F7B4A]/50' : 'border-line'}`}
                             >
                                 {/* Preview */}
                                 <div
@@ -2238,16 +2238,16 @@ export const SuperAdmin: React.FC = () => {
                                     {/* Status Badges */}
                                     <div className="absolute top-2 right-2 flex gap-1">
                                         {theme.isDefault && (
-                                            <span className="bg-amber-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                            <span className="bg-gold-foil text-navy-900 text-[10px] font-display font-bold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded flex items-center gap-0.5">
                                                 <Star size={10} /> DEFAULT
                                             </span>
                                         )}
                                         {theme.isActive ? (
-                                            <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                            <span className="bg-[#E4F5EC] text-[#0F7B4A] text-[10px] font-display font-bold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded flex items-center gap-0.5">
                                                 <Eye size={10} /> ACTIVE
                                             </span>
                                         ) : (
-                                            <span className="bg-slate-700 text-slate-400 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                            <span className="bg-surface text-muted border border-line text-[10px] font-display font-bold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded flex items-center gap-0.5">
                                                 <EyeOff size={10} /> HIDDEN
                                             </span>
                                         )}
@@ -2256,15 +2256,15 @@ export const SuperAdmin: React.FC = () => {
 
                                 {/* Info */}
                                 <div className="p-4">
-                                    <h3 className="font-bold text-white text-lg">{theme.name}</h3>
-                                    <p className="text-xs text-slate-400 mb-3 line-clamp-1">{theme.description || 'No description'}</p>
+                                    <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-lg">{theme.name}</h3>
+                                    <p className="text-xs text-muted font-body mb-3 line-clamp-1">{theme.description || 'No description'}</p>
 
                                     {/* Color Swatches */}
                                     <div className="flex gap-1 mb-4">
                                         {['primary', 'secondary', 'success', 'warning', 'error'].map(key => (
                                             <div
                                                 key={key}
-                                                className="w-5 h-5 rounded-full border border-slate-600"
+                                                className="w-5 h-5 rounded-full border border-line"
                                                 style={{ background: (theme.colors as unknown as Record<string, string>)?.[key] }}
                                                 title={key}
                                             />
@@ -2275,7 +2275,7 @@ export const SuperAdmin: React.FC = () => {
                                     <div className="flex gap-2 flex-wrap">
                                         <button
                                             onClick={() => { setEditingTheme(theme); setShowThemeBuilder(true); }}
-                                            className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-bold"
+                                            className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-1.5 rounded font-display font-bold uppercase tracking-[0.05em]"
                                         >
                                             Edit
                                         </button>
@@ -2283,14 +2283,14 @@ export const SuperAdmin: React.FC = () => {
                                             onClick={async () => {
                                                 await dbService.saveTheme({ ...theme, isActive: !theme.isActive });
                                             }}
-                                            className={`text - xs px - 3 py - 1.5 rounded font - bold border ${theme.isActive ? 'border-slate-600 text-slate-400 hover:bg-slate-700' : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20'} `}
+                                            className={`px-3 py-1.5 rounded text-xs font-display font-bold uppercase tracking-[0.05em] border transition-colors ${theme.isActive ? 'border-line text-muted hover:bg-surface' : 'border-gold-500/50 text-gold-700 dark:text-gold-400 hover:bg-gold-500/10'} `}
                                         >
                                             {theme.isActive ? 'Deactivate' : 'Activate'}
                                         </button>
                                         {!theme.isDefault && (
                                             <button
                                                 onClick={() => dbService.setDefaultTheme(theme.id)}
-                                                className="text-xs border border-amber-500/50 text-amber-400 hover:bg-amber-500/20 px-3 py-1.5 rounded font-bold"
+                                                className="text-xs border border-gold-500/50 text-gold-700 dark:text-gold-400 hover:bg-gold-500/10 px-3 py-1.5 rounded font-display font-bold uppercase tracking-[0.05em]"
                                             >
                                                 Set Default
                                             </button>
@@ -2307,7 +2307,7 @@ export const SuperAdmin: React.FC = () => {
                                                     createdAt: Date.now()
                                                 });
                                             }}
-                                            className="text-xs border border-slate-600 text-slate-400 hover:bg-slate-700 px-2 py-1.5 rounded"
+                                            className="text-xs border border-line text-muted hover:bg-surface px-2 py-1.5 rounded"
                                             title="Duplicate"
                                         >
                                             <Copy size={12} />
@@ -2323,7 +2323,7 @@ export const SuperAdmin: React.FC = () => {
                                                     await dbService.deleteTheme(theme.id);
                                                 }
                                             }}
-                                            className="text-xs text-rose-400 hover:bg-rose-500/20 px-2 py-1.5 rounded"
+                                            className="text-xs text-brandred-500 hover:bg-brandred-600/10 px-2 py-1.5 rounded"
                                             title="Delete"
                                         >
                                             <Trash2 size={12} />
@@ -2339,11 +2339,11 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ THEME BUILDER MODAL ============ */}
             {showThemeBuilder && editingTheme && (
                 <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-auto">
-                    <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-5xl max-h-[90vh] overflow-auto">
+                    <div className="bg-card rounded-2xl border border-line w-full max-w-5xl max-h-[90vh] overflow-auto">
                         {/* Modal Header */}
-                        <div className="p-4 border-b border-slate-700 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
-                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                <Palette size={20} className="text-indigo-400" />
+                        <div className="p-4 border-b border-line flex justify-between items-center sticky top-0 bg-card z-10">
+                            <h2 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                <Palette size={20} className="text-gold-500" />
                                 {editingTheme.id ? 'Edit Theme' : 'Create Theme'}
                             </h2>
                             <div className="flex gap-2">
@@ -2353,13 +2353,13 @@ export const SuperAdmin: React.FC = () => {
                                         setShowThemeBuilder(false);
                                         setEditingTheme(null);
                                     }}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold"
+                                    className="bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta"
                                 >
                                     Save Theme
                                 </button>
                                 <button
                                     onClick={() => { setShowThemeBuilder(false); setEditingTheme(null); }}
-                                    className="text-slate-400 hover:text-white p-2"
+                                    className="text-muted hover:text-[color:var(--text)] p-2"
                                 >
                                     <X size={24} />
                                 </button>
@@ -2371,33 +2371,33 @@ export const SuperAdmin: React.FC = () => {
                             {/* Left: Settings */}
                             <div className="space-y-6">
                                 {/* Basic Info */}
-                                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                                    <h3 className="font-bold text-white mb-4">Basic Info</h3>
+                                <div className="bg-surface rounded-xl p-4 border border-line">
+                                    <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4">Basic Info</h3>
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Theme Name</label>
+                                            <label className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] block mb-1">Theme Name</label>
                                             <input
                                                 type="text"
                                                 value={editingTheme.name}
                                                 onChange={(e) => setEditingTheme({ ...editingTheme, name: e.target.value })}
-                                                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                                                className="w-full bg-card border border-line rounded-lg px-3 py-2 font-body text-[color:var(--text)]"
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Description</label>
+                                            <label className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] block mb-1">Description</label>
                                             <input
                                                 type="text"
                                                 value={editingTheme.description}
                                                 onChange={(e) => setEditingTheme({ ...editingTheme, description: e.target.value })}
-                                                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                                                className="w-full bg-card border border-line rounded-lg px-3 py-2 font-body text-[color:var(--text)]"
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-xs text-slate-400 font-bold uppercase block mb-1">Category</label>
+                                            <label className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] block mb-1">Category</label>
                                             <select
                                                 value={editingTheme.category}
                                                 onChange={(e) => setEditingTheme({ ...editingTheme, category: e.target.value as PoolTheme['category'] })}
-                                                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                                                className="w-full bg-card border border-line rounded-lg px-3 py-2 font-body text-[color:var(--text)]"
                                             >
                                                 <option value="sports">Sports</option>
                                                 <option value="holiday">Holiday</option>
@@ -2409,8 +2409,8 @@ export const SuperAdmin: React.FC = () => {
                                 </div>
 
                                 {/* Color Palette */}
-                                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                                    <h3 className="font-bold text-white mb-4">Color Palette</h3>
+                                <div className="bg-surface rounded-xl p-4 border border-line">
+                                    <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4">Color Palette</h3>
                                     <div className="grid grid-cols-2 gap-3">
                                         {Object.entries(editingTheme.colors || {}).map(([key, value]) => (
                                             <div key={key} className="flex items-center gap-2">
@@ -2421,17 +2421,17 @@ export const SuperAdmin: React.FC = () => {
                                                         ...editingTheme,
                                                         colors: { ...editingTheme.colors, [key]: e.target.value }
                                                     })}
-                                                    className="w-8 h-8 rounded cursor-pointer border border-slate-600"
+                                                    className="w-8 h-8 rounded cursor-pointer border border-line"
                                                 />
-                                                <span className="text-xs text-slate-300 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                                                <span className="text-xs text-[color:var(--text)] font-body capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
                                 {/* Grid Styling */}
-                                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                                    <h3 className="font-bold text-white mb-4">Grid Styling</h3>
+                                <div className="bg-surface rounded-xl p-4 border border-line">
+                                    <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4">Grid Styling</h3>
                                     <div className="space-y-3">
                                         {['cellBackground', 'cellBackgroundAlt', 'cellBorder', 'headerBackground', 'winnerGlowColor'].map((key) => (
                                             <div key={key} className="flex items-center gap-2">
@@ -2442,9 +2442,9 @@ export const SuperAdmin: React.FC = () => {
                                                         ...editingTheme,
                                                         grid: { ...editingTheme.grid, [key]: e.target.value }
                                                     })}
-                                                    className="w-8 h-8 rounded cursor-pointer border border-slate-600"
+                                                    className="w-8 h-8 rounded cursor-pointer border border-line"
                                                 />
-                                                <span className="text-xs text-slate-300 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                                                <span className="text-xs text-[color:var(--text)] font-body capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
                                             </div>
                                         ))}
                                         <label className="flex items-center gap-2 cursor-pointer">
@@ -2457,15 +2457,15 @@ export const SuperAdmin: React.FC = () => {
                                                 })}
                                                 className="w-5 h-5 rounded"
                                             />
-                                            <span className="text-xs text-slate-300">Enable Winner Glow Effect</span>
+                                            <span className="text-xs text-[color:var(--text)] font-body">Enable Winner Glow Effect</span>
                                         </label>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Right: Live Preview */}
-                            <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                                <h3 className="font-bold text-white mb-4">Live Preview</h3>
+                            <div className="bg-surface rounded-xl p-4 border border-line">
+                                <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4">Live Preview</h3>
                                 <div
                                     className="rounded-lg p-4 min-h-[400px]"
                                     style={{ background: editingTheme.colors?.background }}
@@ -2482,7 +2482,7 @@ export const SuperAdmin: React.FC = () => {
                                         style={{ background: editingTheme.colors?.surface, border: `1px solid ${editingTheme.colors?.border} ` }}
                                     >
                                         <p style={{ color: editingTheme.colors?.text }} className="font-bold mb-1">Score: 24 - 17</p>
-                                        <p style={{ color: editingTheme.colors?.success }} className="text-sm font-bold">🎉 Winner: John Smith</p>
+                                        <p style={{ color: editingTheme.colors?.success }} className="text-sm font-bold flex items-center gap-1"><PartyPopper size={14} /> Winner: John Smith</p>
                                     </div>
 
                                     {/* Grid Preview */}
@@ -2556,32 +2556,32 @@ export const SuperAdmin: React.FC = () => {
                 <div className="space-y-6 w-full">
                     {/* SYSTEM STATS CARDS */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                            <p className="text-xs text-slate-500 font-bold uppercase mb-1">Active Pools</p>
-                            <p className="text-3xl font-black text-white">
+                        <div className="bg-card p-4 rounded-xl border border-line shadow-card">
+                            <p className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mb-1">Active Pools</p>
+                            <p className="text-3xl font-display font-black text-[color:var(--text)] num">
                                 {pools.filter(p => !('isLocked' in p) ? false : !(p as GameState).isLocked && (p as GameState).scores?.gameStatus !== 'post').length}
                             </p>
                         </div>
-                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                            <p className="text-xs text-slate-500 font-bold uppercase mb-1">Live Games</p>
-                            <p className="text-3xl font-black text-emerald-400">
+                        <div className="bg-card p-4 rounded-xl border border-line shadow-card">
+                            <p className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mb-1">Live Games</p>
+                            <p className="text-3xl font-display font-black text-brandred-500 num">
                                 {pools.filter(p => (p as GameState).scores?.gameStatus === 'in').length}
                             </p>
                         </div>
-                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                            <p className="text-xs text-slate-500 font-bold uppercase mb-1">Finished</p>
-                            <p className="text-3xl font-black text-slate-400">
+                        <div className="bg-card p-4 rounded-xl border border-line shadow-card">
+                            <p className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mb-1">Finished</p>
+                            <p className="text-3xl font-display font-black text-muted num">
                                 {pools.filter(p => (p as GameState).scores?.gameStatus === 'post').length}
                             </p>
                         </div>
                     </div>
 
                     {/* EXECUTION LOGS */}
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden w-full">
-                        <div className="p-4 border-b border-slate-700 bg-slate-900/40 flex flex-col gap-4">
+                    <div className="bg-card rounded-xl border border-line overflow-hidden w-full">
+                        <div className="p-4 border-b border-line bg-surface flex flex-col gap-4">
                             <div className="flex justify-between items-center">
-                                <h3 className="font-bold text-white flex items-center gap-2">
-                                    <Activity size={18} className="text-slate-400" />
+                                <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                    <Activity size={18} className="text-gold-500" />
                                     System Logs
                                 </h3>
                                 <div className="flex gap-2">
@@ -2623,7 +2623,7 @@ export const SuperAdmin: React.FC = () => {
                                             link.click();
                                             document.body.removeChild(link);
                                         }}
-                                        className="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded text-white transition-colors font-bold flex items-center gap-1"
+                                        className="text-xs bg-navy-800 hover:bg-navy-700 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"
                                     >
                                         <ArrowDown size={12} /> Export Emails
                                     </button>
@@ -2643,20 +2643,20 @@ export const SuperAdmin: React.FC = () => {
                                                 } catch { toast.error('Fix Failed'); }
                                             }
                                         }}
-                                        className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded text-white transition-colors font-bold"
+                                        className="text-xs bg-navy-800 hover:bg-navy-700 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em]"
                                     >
                                         Fix Scoring
                                     </button>
                                     <button
                                         onClick={handleFixParticipantIds}
-                                        className="text-xs bg-amber-600 hover:bg-amber-500 px-3 py-1 rounded text-white transition-colors font-bold flex items-center gap-1"
+                                        className="text-xs bg-navy-800 hover:bg-navy-700 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"
                                     >
                                         <Users size={12} /> Fix Participants
                                     </button>
                                     <button
                                         onClick={handleInitBigEast}
                                         disabled={isInitializingBigEast}
-                                        className="text-xs bg-purple-600 hover:bg-purple-500 disabled:opacity-50 px-3 py-1 rounded text-white transition-colors font-bold flex items-center gap-1"
+                                        className="text-xs bg-navy-800 hover:bg-navy-700 disabled:opacity-50 px-3 py-1 rounded text-white transition-colors font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"
                                     >
                                         <Trophy size={12} /> {isInitializingBigEast ? 'Initializing...' : 'Init Big East'}
                                     </button>
@@ -2666,7 +2666,7 @@ export const SuperAdmin: React.FC = () => {
                                                 dbService.getSystemLogs().then(setSystemLogs).catch(logger.error);
                                             }
                                         }}
-                                        className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-white transition-colors"
+                                        className="text-xs bg-surface hover:bg-card border border-line px-3 py-1 rounded text-[color:var(--text)] transition-colors font-display font-bold uppercase tracking-[0.05em]"
                                     >
                                         Refresh
                                     </button>
@@ -2674,10 +2674,10 @@ export const SuperAdmin: React.FC = () => {
                             </div>
 
                             {/* Filters Toolbar */}
-                            <div className="flex flex-wrap gap-2 items-center bg-slate-900/50 p-2 rounded-lg border border-slate-700">
+                            <div className="flex flex-wrap gap-2 items-center bg-card p-2 rounded-lg border border-line">
                                 {/* Status Filter */}
                                 <select
-                                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    className="bg-surface border border-line rounded px-2 py-1 text-xs font-body text-[color:var(--text)] focus:ring-1 focus:ring-navy-600 outline-none"
                                     value={logStatusFilter}
                                     onChange={(e) => setLogStatusFilter(e.target.value)}
                                 >
@@ -2689,7 +2689,7 @@ export const SuperAdmin: React.FC = () => {
 
                                 {/* Tag Filter */}
                                 <select
-                                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    className="bg-surface border border-line rounded px-2 py-1 text-xs font-body text-[color:var(--text)] focus:ring-1 focus:ring-navy-600 outline-none"
                                     value={logTagFilter}
                                     onChange={(e) => setLogTagFilter(e.target.value)}
                                 >
@@ -2703,7 +2703,7 @@ export const SuperAdmin: React.FC = () => {
 
                                 {/* Time Filter */}
                                 <select
-                                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    className="bg-surface border border-line rounded px-2 py-1 text-xs font-body text-[color:var(--text)] focus:ring-1 focus:ring-navy-600 outline-none"
                                     value={logTimeFilter}
                                     onChange={(e) => setLogTimeFilter(e.target.value)}
                                 >
@@ -2715,11 +2715,11 @@ export const SuperAdmin: React.FC = () => {
 
                                 {/* Search Input */}
                                 <div className="relative flex-1 min-w-[150px]">
-                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" size={12} />
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-faint" size={12} />
                                     <input
                                         type="text"
                                         placeholder="Search logs..."
-                                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 pl-7 text-xs text-white placeholder:text-slate-600 w-full focus:ring-1 focus:ring-indigo-500 outline-none"
+                                        className="bg-surface border border-line rounded px-2 py-1 pl-7 text-xs font-body text-[color:var(--text)] placeholder:text-faint w-full focus:ring-1 focus:ring-navy-600 outline-none"
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                     />
@@ -2729,7 +2729,7 @@ export const SuperAdmin: React.FC = () => {
 
                         <div className="overflow-x-auto max-h-[600px]">
                             <table className="w-full text-left text-sm">
-                                <thead className="text-xs text-slate-500 uppercase bg-slate-900 sticky top-0">
+                                <thead className="font-display font-bold text-xs text-muted uppercase tracking-[0.08em] bg-surface sticky top-0">
                                     <tr>
                                         <th className="p-3 font-bold">Time</th>
                                         <th className="p-3 font-bold">Status</th>
@@ -2737,13 +2737,13 @@ export const SuperAdmin: React.FC = () => {
                                         <th className="p-3 font-bold w-full">Details</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-700/50">
+                                <tbody className="divide-y divide-line">
                                     {filteredLogs.length === 0 ? (
-                                        <tr><td colSpan={4} className="p-8 text-center text-slate-500">No logs found matching filters</td></tr>
+                                        <tr><td colSpan={4} className="p-8 text-center text-faint">No logs found matching filters</td></tr>
                                     ) : (
                                         filteredLogs.map((log, i) => (
-                                            <tr key={i} className={`log-row hover:bg-slate-700/20 font-mono text-xs ${log.status === 'error' ? 'bg-rose-900/10' : log.status === 'partial' ? 'bg-amber-900/10' : ''}`}>
-                                                <td className="p-3 text-slate-400 whitespace-nowrap">
+                                            <tr key={i} className={`log-row hover:bg-surface font-mono text-xs ${log.status === 'error' ? 'bg-brandred-600/5' : log.status === 'partial' ? 'bg-gold-500/5' : ''}`}>
+                                                <td className="p-3 text-muted whitespace-nowrap num">
                                                     {(() => {
                                                         const ts2 = log.timestamp;
                                                         return ts2 && typeof ts2 === 'object' && 'toDate' in ts2 && typeof ts2.toDate === 'function'
@@ -2752,9 +2752,9 @@ export const SuperAdmin: React.FC = () => {
                                                     })()}
                                                 </td>
                                                 <td className="p-3">
-                                                    <span className={`px-2 py-0.5 rounded ${log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
-                                                        log.status === 'partial' ? 'bg-amber-500/10 text-amber-400' :
-                                                            'bg-rose-500/10 text-rose-400'
+                                                    <span className={`px-2 py-0.5 rounded font-display font-bold uppercase tracking-[0.08em] ${log.status === 'success' ? 'bg-[#0F7B4A]/15 text-[#0F7B4A]' :
+                                                        log.status === 'partial' ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400' :
+                                                            'bg-brandred-600/10 text-brandred-500'
                                                         }`}>
                                                         {(log.status as string | undefined)?.toUpperCase() ?? 'UNKNOWN'}
                                                     </span>
@@ -2763,21 +2763,21 @@ export const SuperAdmin: React.FC = () => {
                                                     {(() => {
                                                         const type = log.type || 'UNKNOWN';
                                                         let label = type;
-                                                        let colorClass = 'bg-slate-700 text-slate-300';
+                                                        let colorClass = 'bg-surface text-muted border border-line';
 
-                                                        if (type === 'ESPN_FETCH_SUCCESS') { label = 'ESPN Update'; colorClass = 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'; }
-                                                        else if (type === 'ESPN_FETCH_FAIL') { label = 'ESPN Error'; colorClass = 'bg-rose-500/20 text-rose-300 border border-rose-500/30'; }
-                                                        else if (type === 'SYNC_GAME_STATUS') { label = 'System Sync'; colorClass = 'bg-slate-600/30 text-slate-300 border border-slate-600/50'; }
-                                                        else if (type === 'POOL_SYNC_ERROR') { label = 'Pool Error'; colorClass = 'bg-amber-500/20 text-amber-300 border border-amber-500/30'; }
-                                                        else if (type === 'SIMULATION') { label = 'Sim Run'; colorClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'; }
+                                                        if (type === 'ESPN_FETCH_SUCCESS') { label = 'ESPN Update'; colorClass = 'bg-navy-600/10 text-navy-700 dark:text-gold-400 border border-navy-600/30'; }
+                                                        else if (type === 'ESPN_FETCH_FAIL') { label = 'ESPN Error'; colorClass = 'bg-brandred-600/10 text-brandred-500 border border-brandred-600/30'; }
+                                                        else if (type === 'SYNC_GAME_STATUS') { label = 'System Sync'; colorClass = 'bg-surface text-muted border border-line'; }
+                                                        else if (type === 'POOL_SYNC_ERROR') { label = 'Pool Error'; colorClass = 'bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30'; }
+                                                        else if (type === 'SIMULATION') { label = 'Sim Run'; colorClass = 'bg-gold-500/10 text-gold-700 dark:text-gold-400 border border-gold-500/30'; }
 
-                                                        return <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${colorClass}`}>{label}</span>;
+                                                        return <span className={`px-2 py-0.5 rounded text-[10px] font-display font-bold uppercase tracking-[0.08em] whitespace-nowrap ${colorClass}`}>{label}</span>;
                                                     })()}
                                                 </td>
-                                                <td className="p-3 text-slate-300 w-full">
+                                                <td className="p-3 text-[color:var(--text)] w-full">
                                                     <div className="flex flex-col gap-1">
-                                                        {log.message && <span className="font-bold text-white mb-1 block">{log.message}</span>}
-                                                        {log.details !== undefined && <span className="font-mono text-[10px] text-slate-500">{String(log.details)}</span>}
+                                                        {log.message && <span className="font-bold text-[color:var(--text)] mb-1 block">{log.message}</span>}
+                                                        {log.details !== undefined && <span className="font-mono text-[10px] text-faint">{String(log.details)}</span>}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -2798,50 +2798,50 @@ export const SuperAdmin: React.FC = () => {
 
             {activeTab === 'settings' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <div className="bg-card border border-line rounded-xl p-6 shadow-card">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400"><Settings size={24} /></div>
-                            <h3 className="text-xl font-bold text-white">Feature Flags</h3>
+                            <div className="p-2 bg-gold-500/15 rounded-lg text-gold-600 dark:text-gold-400"><Settings size={24} /></div>
+                            <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">Feature Flags</h3>
                         </div>
 
                         <div className="space-y-4">
-                            <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                            <div className="flex items-center justify-between p-4 bg-surface rounded-lg border border-line">
                                 <div>
-                                    <h4 className="font-bold text-white">Enable Bracket Pools</h4>
-                                    <p className="text-sm text-slate-400">Allow managers to create bracket pools.</p>
+                                    <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">Enable Bracket Pools</h4>
+                                    <p className="text-sm text-muted">Allow managers to create bracket pools.</p>
                                 </div>
                                 <button
                                     onClick={() => settingsService.update({ enableBracketPools: !settings?.enableBracketPools })}
-                                    className={`transition - colors ${settings?.enableBracketPools ? 'text-emerald-400' : 'text-slate-500'} `}
+                                    className={`transition-colors ${settings?.enableBracketPools ? 'text-[#0F7B4A]' : 'text-faint'} `}
                                 >
-                                    {settings?.enableBracketPools ? <ToggleRight size={40} className="fill-emerald-500/20" /> : <ToggleLeft size={40} />}
+                                    {settings?.enableBracketPools ? <ToggleRight size={40} className="fill-[#0F7B4A]/20" /> : <ToggleLeft size={40} />}
                                 </button>
                             </div>
 
-                            <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                            <div className="flex items-center justify-between p-4 bg-surface rounded-lg border border-line">
                                 <div>
-                                    <h4 className="font-bold text-white">Maintenance Mode</h4>
-                                    <p className="text-sm text-slate-400">Disable all write actions for users.</p>
+                                    <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">Maintenance Mode</h4>
+                                    <p className="text-sm text-muted">Disable all write actions for users.</p>
                                 </div>
                                 <button
                                     onClick={() => settingsService.update({ maintenanceMode: !settings?.maintenanceMode })}
-                                    className={`transition - colors ${settings?.maintenanceMode ? 'text-amber-400' : 'text-slate-500'} `}
+                                    className={`transition-colors ${settings?.maintenanceMode ? 'text-gold-500' : 'text-faint'} `}
                                 >
-                                    {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-amber-500/20" /> : <ToggleLeft size={40} />}
+                                    {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-gold-500/20" /> : <ToggleLeft size={40} />}
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <div className="bg-card border border-line rounded-xl p-6 shadow-card">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-pink-500/20 rounded-lg text-pink-400"><PlayCircle size={24} /></div>
-                            <h3 className="text-xl font-bold text-white">Simulation Tools</h3>
+                            <div className="p-2 bg-gold-500/15 rounded-lg text-gold-600 dark:text-gold-400"><PlayCircle size={24} /></div>
+                            <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">Simulation Tools</h3>
                         </div>
 
                         <div className="space-y-4">
-                            <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                                <h4 className="font-bold text-white mb-2">Tournament Data</h4>
+                            <div className="p-4 bg-surface rounded-lg border border-line">
+                                <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Tournament Data</h4>
                                 <div className="flex flex-col gap-2">
                                     <button
                                         onClick={async () => {
@@ -2859,15 +2859,15 @@ export const SuperAdmin: React.FC = () => {
                                                 toast.error(getUserMessage(e, "Failed to seed tournament."));
                                             }
                                         }}
-                                        className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold text-sm transition-colors text-left"
+                                        className="bg-surface hover:bg-card border border-line text-[color:var(--text)] px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors text-left"
                                     >
                                         1. Seed Test Tournament (Teams & R64)
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                                <h4 className="font-bold text-white mb-2">Advance Tournament</h4>
+                            <div className="p-4 bg-surface rounded-lg border border-line">
+                                <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Advance Tournament</h4>
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
                                         onClick={async () => {
@@ -2885,7 +2885,7 @@ export const SuperAdmin: React.FC = () => {
                                                 toast.error(getUserMessage(e, "Failed to simulate round."));
                                             }
                                         }}
-                                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors"
+                                        className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors"
                                     >
                                         Simulate Round
                                     </button>
@@ -2905,7 +2905,7 @@ export const SuperAdmin: React.FC = () => {
                                                 toast.error(getUserMessage(e, "Failed to reset tournament."));
                                             }
                                         }}
-                                        className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors"
+                                        className="bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors"
                                     >
                                         Reset Scores
                                     </button>
@@ -2918,65 +2918,65 @@ export const SuperAdmin: React.FC = () => {
             }
             {
                 activeTab === 'referrals' && (
-                    <div className="bg-slate-800 rounded-xl border border-indigo-500/30 overflow-hidden shadow-xl">
-                        <div className="p-4 border-b border-slate-700 bg-indigo-900/20 flex justify-between items-center">
-                            <h2 className="text-xl font-bold flex items-center gap-2"><Users className="text-indigo-400" size={20} /> Referral Dashboard</h2>
-                            <span className="text-xs font-mono text-slate-500">Top Referrers & Referral Chain</span>
+                    <div className="bg-card rounded-xl border border-line overflow-hidden shadow-card">
+                        <div className="p-4 border-b border-line bg-surface flex justify-between items-center">
+                            <h2 className="text-xl font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2"><Users className="text-gold-500" size={20} /> Referral Dashboard</h2>
+                            <span className="text-xs font-mono text-faint">Top Referrers & Referral Chain</span>
                         </div>
 
                         {/* Referral Stats Row */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border-b border-slate-700/50">
-                            <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                                <p className="text-3xl font-bold text-indigo-400">{users.reduce((sum, u) => sum + (u.referralCount || 0), 0)}</p>
-                                <p className="text-xs text-slate-500 uppercase font-bold">Total Referrals</p>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border-b border-line">
+                            <div className="bg-surface border border-line p-4 rounded-lg text-center">
+                                <p className="text-3xl font-display font-bold text-navy-800 dark:text-gold-400 num">{users.reduce((sum, u) => sum + (u.referralCount || 0), 0)}</p>
+                                <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em]">Total Referrals</p>
                             </div>
-                            <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                                <p className="text-3xl font-bold text-emerald-400">{users.filter(u => u.referredBy).length}</p>
-                                <p className="text-xs text-slate-500 uppercase font-bold">Referred Users</p>
+                            <div className="bg-surface border border-line p-4 rounded-lg text-center">
+                                <p className="text-3xl font-display font-bold text-gold-600 dark:text-gold-400 num">{users.filter(u => u.referredBy).length}</p>
+                                <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em]">Referred Users</p>
                             </div>
-                            <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                                <p className="text-3xl font-bold text-amber-400">{users.filter(u => (u.referralCount || 0) > 0).length}</p>
-                                <p className="text-xs text-slate-500 uppercase font-bold">Active Referrers</p>
+                            <div className="bg-surface border border-line p-4 rounded-lg text-center">
+                                <p className="text-3xl font-display font-bold text-gold-600 dark:text-gold-400 num">{users.filter(u => (u.referralCount || 0) > 0).length}</p>
+                                <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em]">Active Referrers</p>
                             </div>
-                            <div className="bg-slate-900/50 p-4 rounded-lg text-center">
-                                <p className="text-3xl font-bold text-white">{users.length > 0 ? ((users.filter(u => u.referredBy).length / users.length) * 100).toFixed(1) : 0}%</p>
-                                <p className="text-xs text-slate-500 uppercase font-bold">Referral Rate</p>
+                            <div className="bg-surface border border-line p-4 rounded-lg text-center">
+                                <p className="text-3xl font-display font-bold text-[color:var(--text)] num">{users.length > 0 ? ((users.filter(u => u.referredBy).length / users.length) * 100).toFixed(1) : 0}%</p>
+                                <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em]">Referral Rate</p>
                             </div>
                         </div>
 
                         {/* Top Referrers Leaderboard */}
                         <div className="p-4">
-                            <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">🏆 Top Referrers</h3>
+                            <h3 className="text-sm font-display font-bold text-[color:var(--text)] mb-3 uppercase tracking-[0.08em] flex items-center gap-1.5"><Trophy size={14} className="text-gold-500" /> Top Referrers</h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
                                 {[...users]
                                     .filter(u => (u.referralCount || 0) > 0)
                                     .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
                                     .slice(0, 3)
                                     .map((u, i) => (
-                                        <div key={u.id} className={`p - 4 rounded - xl border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : i === 1 ? 'bg-slate-500/10 border-slate-400/30' : 'bg-orange-500/10 border-orange-600/30'} `}>
+                                        <div key={u.id} className={`p-4 rounded-xl border ${i === 0 ? 'bg-gold-500/10 border-gold-500/40' : i === 1 ? 'bg-surface border-line' : 'bg-gold-700/10 border-gold-700/40'}`}>
                                             <div className="flex items-center gap-3">
-                                                <div className={`text - 2xl font - black ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : 'text-orange-500'} `}>#{i + 1}</div>
+                                                <div className={`text-2xl font-display font-extrabold num ${i === 0 ? 'text-gold-500' : i === 1 ? 'text-muted' : 'text-gold-700'}`}>#{i + 1}</div>
                                                 <div className="flex-1 min-w-0">
-                                                    <button onClick={() => handleViewUser(u)} className="font-bold text-white truncate hover:text-indigo-400">{u.name}</button>
-                                                    <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                                                    <button onClick={() => handleViewUser(u)} className="font-bold text-[color:var(--text)] truncate hover:text-gold-600 dark:hover:text-gold-400">{u.name}</button>
+                                                    <p className="text-xs text-muted truncate">{u.email}</p>
                                                 </div>
                                                 <div className="text-right">
-                                                    <p className="text-2xl font-bold text-indigo-400">{u.referralCount || 0}</p>
-                                                    <p className="text-[10px] text-slate-500 uppercase">referrals</p>
+                                                    <p className="text-2xl font-display font-bold text-navy-800 dark:text-gold-400 num">{u.referralCount || 0}</p>
+                                                    <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">referrals</p>
                                                 </div>
                                             </div>
                                         </div>
                                     ))}
                                 {users.filter(u => (u.referralCount || 0) > 0).length === 0 && (
-                                    <div className="col-span-3 text-center py-8 text-slate-500">No referrals yet</div>
+                                    <div className="col-span-3 text-center py-8 text-faint">No referrals yet</div>
                                 )}
                             </div>
 
                             {/* Full Referral Table */}
-                            <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">All Users Referral Data</h3>
-                            <div className="overflow-x-auto rounded-lg border border-slate-700">
+                            <h3 className="text-sm font-display font-bold text-[color:var(--text)] mb-3 uppercase tracking-[0.08em]">All Users Referral Data</h3>
+                            <div className="overflow-x-auto rounded-lg border border-line">
                                 <table className="w-full text-left text-sm">
-                                    <thead className="text-xs text-slate-400 uppercase bg-slate-900/80">
+                                    <thead className="font-display font-bold text-xs text-muted uppercase tracking-[0.08em] bg-surface">
                                         <tr>
                                             <th className="p-3 font-bold">User</th>
                                             <th className="p-3 font-bold">Referral Code</th>
@@ -2985,33 +2985,33 @@ export const SuperAdmin: React.FC = () => {
                                             <th className="p-3 font-bold">Joined</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-700/50">
+                                    <tbody className="divide-y divide-line">
                                         {[...users]
                                             .sort((a, b) => (b.referralCount || 0) - (a.referralCount || 0))
                                             .map(u => {
                                                 const referrer = u.referredBy ? users.find(ref => ref.id === u.referredBy) : null;
                                                 return (
-                                                    <tr key={u.id} className="hover:bg-slate-700/30">
+                                                    <tr key={u.id} className="hover:bg-surface">
                                                         <td className="p-3">
-                                                            <button onClick={() => handleViewUser(u)} className="font-bold text-white hover:text-indigo-400">{u.name}</button>
-                                                            <p className="text-xs text-slate-500">{u.email}</p>
+                                                            <button onClick={() => handleViewUser(u)} className="font-bold text-[color:var(--text)] hover:text-gold-600 dark:hover:text-gold-400">{u.name}</button>
+                                                            <p className="text-xs text-faint">{u.email}</p>
                                                         </td>
                                                         <td className="p-3">
-                                                            <code className="text-xs bg-slate-900 px-2 py-1 rounded text-indigo-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
+                                                            <code className="text-xs bg-surface border border-line px-2 py-1 rounded text-gold-700 dark:text-gold-400 font-mono">{u.referralCode || u.id.slice(0, 8)}</code>
                                                         </td>
                                                         <td className="p-3 text-center">
-                                                            <span className={`font - bold ${(u.referralCount || 0) > 0 ? 'text-indigo-400' : 'text-slate-500'} `}>{u.referralCount || 0}</span>
+                                                            <span className={`font-bold num ${(u.referralCount || 0) > 0 ? 'text-navy-700 dark:text-gold-400' : 'text-faint'} `}>{u.referralCount || 0}</span>
                                                         </td>
                                                         <td className="p-3">
                                                             {referrer ? (
-                                                                <span className="text-emerald-400 text-xs">{referrer.name}</span>
+                                                                <span className="text-gold-600 dark:text-gold-400 text-xs">{referrer.name}</span>
                                                             ) : u.referredBy ? (
-                                                                <span className="text-slate-500 text-xs font-mono">{u.referredBy.slice(0, 8)}...</span>
+                                                                <span className="text-faint text-xs font-mono">{u.referredBy.slice(0, 8)}...</span>
                                                             ) : (
-                                                                <span className="text-slate-600 text-xs">—</span>
+                                                                <span className="text-faint text-xs">—</span>
                                                             )}
                                                         </td>
-                                                        <td className="p-3 text-xs text-slate-500">
+                                                        <td className="p-3 text-xs text-faint">
                                                             {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
                                                         </td>
                                                     </tr>
@@ -3029,16 +3029,16 @@ export const SuperAdmin: React.FC = () => {
             {
                 viewingPool && (
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+                        <div className="bg-card border border-line rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-panel flex flex-col">
                             {/* Modal Header */}
-                            <div className="p-6 border-b border-slate-700 flex justify-between items-start bg-slate-950/50">
+                            <div className="p-6 border-b border-line flex justify-between items-start bg-surface">
                                 <div>
-                                    <h2 className="text-2xl font-bold text-white mb-1 flex items-center gap-2">
+                                    <h2 className="text-2xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-1 flex items-center gap-2">
                                         {viewingPool.name}
-                                        {viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && <Heart size={20} className="text-rose-500 fill-rose-500 animate-pulse" />}
+                                        {viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && <Heart size={20} className="text-brandred-500 fill-brandred-500 animate-pulse" />}
                                     </h2>
-                                    <p className="text-slate-400 text-sm">
-                                        ID: <span className="font-mono text-slate-500">{viewingPool.id}</span>
+                                    <p className="text-muted font-body text-sm">
+                                        ID: <span className="font-mono text-faint">{viewingPool.id}</span>
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -3062,12 +3062,12 @@ export const SuperAdmin: React.FC = () => {
                                                     toast.error(getUserMessage(err, 'Failed to update max entries.'));
                                                 }
                                             }}
-                                            className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/50 rounded-lg text-xs font-bold transition-all"
+                                            className="px-3 py-1.5 bg-gold-500/10 text-gold-700 dark:text-gold-400 hover:bg-gold-500/20 border border-gold-500/50 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] transition-all"
                                         >
                                             Fix Max Entries
                                         </button>
                                     )}
-                                    <button onClick={() => setViewingPool(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors">
+                                    <button onClick={() => setViewingPool(null)} className="p-2 hover:bg-surface rounded-lg text-muted hover:text-[color:var(--text)] transition-colors">
                                         <span className="sr-only">Close</span>
                                         <X size={20} />
                                     </button>
@@ -3075,7 +3075,7 @@ export const SuperAdmin: React.FC = () => {
                             </div>
 
                             {/* Modal Tabs Navigation */}
-                            <div className="flex border-b border-slate-700 bg-slate-950/20 px-6 py-2 overflow-x-auto gap-2">
+                            <div className="flex border-b border-line bg-surface px-6 py-2 overflow-x-auto gap-2">
                                 {[
                                     { id: 'overview', label: 'Overview & Stats' },
                                     { id: 'settings', label: 'Edit Settings (Override)' },
@@ -3085,10 +3085,10 @@ export const SuperAdmin: React.FC = () => {
                                     <button
                                         key={tab.id}
                                         onClick={() => setModalTab(tab.id as any)}
-                                        className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                                        className={`px-4 py-2 text-xs font-display font-bold uppercase tracking-[0.08em] rounded-lg transition-all ${
                                             modalTab === tab.id
-                                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                                                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                                ? 'bg-navy-800 text-white shadow-card'
+                                                : 'text-muted hover:text-[color:var(--text)] hover:bg-card'
                                         }`}
                                     >
                                         {tab.label}
@@ -3102,54 +3102,54 @@ export const SuperAdmin: React.FC = () => {
                                     <div className="space-y-6">
                                         {/* Meta Data */}
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-                                                <h4 className="text-slate-400 text-xs font-bold uppercase mb-1">Created At</h4>
-                                                <p className="font-medium text-white text-lg">
+                                            <div className="bg-surface p-4 rounded-xl border border-line">
+                                                <h4 className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em] mb-1">Created At</h4>
+                                                <p className="font-medium text-[color:var(--text)] text-lg num">
                                                     {typeof viewingPool.createdAt === 'number'
                                                         ? new Date(viewingPool.createdAt).toLocaleString()
                                                         : (viewingPool.createdAt?.seconds
                                                             ? new Date(viewingPool.createdAt.seconds * 1000).toLocaleString()
-                                                            : <span className="italic text-slate-500">Unknown Date</span>)}
+                                                            : <span className="italic text-faint">Unknown Date</span>)}
                                                 </p>
                                             </div>
-                                            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-                                                <h4 className="text-slate-400 text-xs font-bold uppercase mb-1">Owner</h4>
-                                                <p className="font-medium text-white text-lg">
+                                            <div className="bg-surface p-4 rounded-xl border border-line">
+                                                <h4 className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em] mb-1">Owner</h4>
+                                                <p className="font-medium text-[color:var(--text)] text-lg">
                                                     {users.find(u => u.id === (viewingPool.type === 'BRACKET' ? (viewingPool as unknown as PoolLike).managerUid as string : (viewingPool as unknown as PoolLike).ownerId as string))?.name || 'Unknown User'}
                                                 </p>
-                                                <p className="text-xs text-slate-500 font-mono mt-1 break-all">
+                                                <p className="text-xs text-faint font-mono mt-1 break-all">
                                                     UID: {viewingPool.type === 'BRACKET' ? (viewingPool as unknown as PoolLike).managerUid as string : (viewingPool as unknown as PoolLike).ownerId as string}
                                                 </p>
                                             </div>
                                         </div>
 
                                         {/* Status */}
-                                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50">
-                                            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Live Statistics</h3>
+                                        <div className="bg-surface p-6 rounded-xl border border-line">
+                                            <h3 className="text-sm font-display font-bold text-[color:var(--text)] uppercase tracking-[0.08em] mb-4">Live Statistics</h3>
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-80">
-                                                    <div className="text-xs text-slate-500 font-bold uppercase">State</div>
-                                                    <div className="text-2xl font-bold text-white mt-1">
+                                                <div className="bg-card p-4 rounded-lg border border-line">
+                                                    <div className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em]">State</div>
+                                                    <div className="text-2xl font-display font-bold text-[color:var(--text)] mt-1 num">
                                                         {viewingPool.type === 'BRACKET'
                                                             ? (viewingPool as unknown as PoolLike).status as string
                                                             : ((viewingPool as GameState).isLocked ? "LOCKED" : "OPEN")}
                                                     </div>
                                                 </div>
-                                                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-80">
-                                                    <div className="text-xs text-slate-500 font-bold uppercase">Entries</div>
-                                                    <div className="text-2xl font-bold text-white mt-1">
+                                                <div className="bg-card p-4 rounded-lg border border-line">
+                                                    <div className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em]">Entries</div>
+                                                    <div className="text-2xl font-display font-bold text-[color:var(--text)] mt-1 num">
                                                         {viewingPoolEntries.length}
                                                     </div>
                                                 </div>
-                                                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-80">
-                                                    <div className="text-xs text-slate-500 font-bold uppercase">Cost / Fee</div>
-                                                    <div className="text-2xl font-bold text-emerald-400 mt-1">
+                                                <div className="bg-card p-4 rounded-lg border border-line">
+                                                    <div className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em]">Cost / Fee</div>
+                                                    <div className="text-2xl font-display font-bold text-gold-700 dark:text-gold-400 mt-1 num">
                                                         ${adminEntryFee}
                                                     </div>
                                                 </div>
-                                                <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-80">
-                                                    <div className="text-xs text-slate-500 font-bold uppercase">Total Pot</div>
-                                                    <div className="text-2xl font-bold text-indigo-400 font-mono mt-1">
+                                                <div className="bg-card p-4 rounded-lg border border-line">
+                                                    <div className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em]">Total Pot</div>
+                                                    <div className="text-2xl font-display font-bold text-gold-700 dark:text-gold-400 mt-1 num">
                                                         ${viewingPoolEntries.length * adminEntryFee}
                                                     </div>
                                                 </div>
@@ -3158,15 +3158,15 @@ export const SuperAdmin: React.FC = () => {
 
                                         {/* Charity Info */}
                                         {viewingPool.type !== 'BRACKET' && (viewingPool as GameState).charity?.enabled && (
-                                            <div className="bg-rose-950/20 p-5 rounded-xl border border-rose-500/20 flex gap-4 items-start">
-                                                <div className="p-3 bg-rose-500/10 rounded-lg text-rose-500">
+                                            <div className="bg-brandred-600/5 p-5 rounded-xl border border-brandred-600/20 flex gap-4 items-start">
+                                                <div className="p-3 bg-brandred-600/10 rounded-lg text-brandred-500">
                                                     <Heart size={24} fill="currentColor" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <h4 className="text-rose-400 text-xs font-bold uppercase tracking-wider mb-1">Fundraising for Charity</h4>
-                                                    <p className="text-white font-bold text-lg">{(viewingPool as GameState).charity?.name}</p>
-                                                    <a href={(viewingPool as GameState).charity?.url} target="_blank" rel="noreferrer" className="text-rose-400 text-sm hover:underline truncate block mt-0.5">{(viewingPool as GameState).charity?.url}</a>
-                                                    <p className="text-xs text-rose-300/70 mt-2 bg-rose-500/10 px-3 py-1.5 rounded-lg w-fit">Donating {(viewingPool as GameState).charity?.percentage}% of the pot</p>
+                                                    <h4 className="text-brandred-500 text-xs font-display font-bold uppercase tracking-[0.08em] mb-1">Fundraising for Charity</h4>
+                                                    <p className="text-[color:var(--text)] font-bold text-lg">{(viewingPool as GameState).charity?.name}</p>
+                                                    <a href={(viewingPool as GameState).charity?.url} target="_blank" rel="noreferrer" className="text-brandred-500 text-sm hover:underline truncate block mt-0.5">{(viewingPool as GameState).charity?.url}</a>
+                                                    <p className="text-xs text-brandred-500/80 mt-2 bg-brandred-600/10 px-3 py-1.5 rounded-lg w-fit num">Donating {(viewingPool as GameState).charity?.percentage}% of the pot</p>
                                                 </div>
                                             </div>
                                         )}
@@ -3174,63 +3174,63 @@ export const SuperAdmin: React.FC = () => {
                                 )}
 
                                 {modalTab === 'settings' && (
-                                    <div className="space-y-4 max-w-xl mx-auto bg-slate-800/20 p-6 rounded-xl border border-slate-700/50">
-                                        <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2 border-b border-slate-700 pb-2">
-                                            <Settings size={20} className="text-indigo-400" /> Pool Configuration Overrides
+                                    <div className="space-y-4 max-w-xl mx-auto bg-surface p-6 rounded-xl border border-line">
+                                        <h3 className="text-lg font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2 flex items-center gap-2 border-b border-line pb-2">
+                                            <Settings size={20} className="text-gold-500" /> Pool Configuration Overrides
                                         </h3>
                                         <div className="space-y-4">
                                             <div>
-                                                <label className="block text-xs uppercase text-slate-400 font-bold mb-1.5">Pool Name</label>
+                                                <label className="block text-xs uppercase text-muted font-display font-bold tracking-[0.08em] mb-1.5">Pool Name</label>
                                                 <input
                                                     type="text"
                                                     value={adminPoolName}
                                                     onChange={e => setAdminPoolName(e.target.value)}
-                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                                                    className="w-full bg-card border border-line rounded-xl p-3 font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600 transition-colors"
                                                 />
                                             </div>
                                             
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 <div>
-                                                    <label className="block text-xs uppercase text-slate-400 font-bold mb-1.5">Entry Cost / Fee ($)</label>
+                                                    <label className="block text-xs uppercase text-muted font-display font-bold tracking-[0.08em] mb-1.5">Entry Cost / Fee ($)</label>
                                                     <input
                                                         type="number"
                                                         value={adminEntryFee}
                                                         onChange={e => setAdminEntryFee(Number(e.target.value))}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                                                        className="w-full bg-card border border-line rounded-xl p-3 font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600 transition-colors"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs uppercase text-slate-400 font-bold mb-1.5">Privacy Status</label>
+                                                    <label className="block text-xs uppercase text-muted font-display font-bold tracking-[0.08em] mb-1.5">Privacy Status</label>
                                                     <button
                                                         type="button"
                                                         onClick={() => setAdminIsPublic(!adminIsPublic)}
                                                         className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
                                                             adminIsPublic
-                                                                ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 font-bold'
-                                                                : 'bg-slate-900 border-slate-700 text-slate-400 font-medium'
+                                                                ? 'bg-gold-500/10 border-gold-500/50 text-gold-700 dark:text-gold-400 font-bold'
+                                                                : 'bg-card border-line text-muted font-medium'
                                                         }`}
                                                     >
-                                                        <span>{adminIsPublic ? '🌍 Publicly Listed' : '🔒 Private (Invite Only)'}</span>
+                                                        <span className="flex items-center gap-1.5">{adminIsPublic ? <><Globe size={14} /> Publicly Listed</> : <><Lock size={14} /> Private (Invite Only)</>}</span>
                                                         <span className="text-xs">{adminIsPublic ? 'Public' : 'Private'}</span>
                                                     </button>
                                                 </div>
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs uppercase text-slate-400 font-bold mb-1.5">Payment Instructions</label>
+                                                <label className="block text-xs uppercase text-muted font-display font-bold tracking-[0.08em] mb-1.5">Payment Instructions</label>
                                                 <textarea
                                                     rows={4}
                                                     value={adminInstructions}
                                                     onChange={e => setAdminInstructions(e.target.value)}
                                                     placeholder="Specify how participants should pay (e.g. Venmo, PayPal link, etc.)"
-                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500 transition-colors font-sans resize-none"
+                                                    className="w-full bg-card border border-line rounded-xl p-3 font-body text-[color:var(--text)] focus:outline-none focus:border-navy-600 transition-colors font-sans resize-none"
                                                 />
                                             </div>
 
                                             <div className="pt-2">
                                                 <button
                                                     onClick={handleSavePoolSettingsAdmin}
-                                                    className="w-full bg-emerald-600 hover:bg-emerald-500 hover:shadow-emerald-600/20 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                                                    className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-3 rounded-xl transition-all shadow-red-cta flex items-center justify-center gap-2"
                                                 >
                                                     <CheckCircle size={18} />
                                                     Save Settings Override
@@ -3244,20 +3244,20 @@ export const SuperAdmin: React.FC = () => {
                                     <div className="space-y-4">
                                         <div className="flex items-center gap-3">
                                             <div className="relative flex-1">
-                                                <Search className="absolute left-3 top-3.5 text-slate-500" size={18} />
+                                                <Search className="absolute left-3 top-3.5 text-muted" size={18} />
                                                 <input
                                                     type="text"
                                                     placeholder="Search participants by name, email, or entry ID..."
                                                     value={adminSearchEntry}
                                                     onChange={e => setAdminSearchEntry(e.target.value)}
-                                                    className="w-full bg-slate-900/60 border border-slate-700/80 rounded-xl py-3 pl-10 pr-4 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                                                    className="w-full bg-surface border border-line rounded-xl py-3 pl-10 pr-4 font-body text-[color:var(--text)] placeholder:text-faint focus:outline-none focus:border-navy-600 transition-colors"
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="overflow-x-auto rounded-xl border border-slate-700 bg-slate-900/40">
+                                        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
                                             <table className="w-full text-left text-sm whitespace-nowrap">
-                                                <thead className="text-xs text-slate-400 uppercase bg-slate-950/80">
+                                                <thead className="font-display font-bold text-xs text-muted uppercase tracking-[0.08em] bg-surface">
                                                     <tr>
                                                         <th className="p-4 font-bold">Player details</th>
                                                         <th className="p-4 font-bold text-center">Score</th>
@@ -3268,7 +3268,7 @@ export const SuperAdmin: React.FC = () => {
                                                         <th className="p-4 font-bold text-center">Actions</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-slate-800">
+                                                <tbody className="divide-y divide-line font-body">
                                                     {viewingPoolEntries
                                                         .filter(e => {
                                                             if (!adminSearchEntry) return true;
@@ -3283,13 +3283,13 @@ export const SuperAdmin: React.FC = () => {
                                                             const isExpanded = expandedPicksEntryId === entry.id;
                                                             return (
                                                                 <React.Fragment key={entry.id}>
-                                                                    <tr className="hover:bg-slate-800/30 transition-colors">
+                                                                    <tr className="hover:bg-card transition-colors">
                                                                         <td className="p-4">
-                                                                            <div className="font-bold text-white">{entry.name || 'Unnamed Player'}</div>
-                                                                            <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                                                            <div className="font-bold text-[color:var(--text)]">{entry.name || 'Unnamed Player'}</div>
+                                                                            <div className="text-xs text-muted flex items-center gap-1.5 mt-0.5">
                                                                                 <span>{entry.email}</span>
-                                                                                <span className="text-slate-600">•</span>
-                                                                                <span className="font-mono text-slate-500">{entry.id}</span>
+                                                                                <span className="text-faint">•</span>
+                                                                                <span className="font-mono text-faint">{entry.id}</span>
                                                                             </div>
                                                                         </td>
                                                                         <td className="p-4 text-center">
@@ -3300,7 +3300,7 @@ export const SuperAdmin: React.FC = () => {
                                                                                     ...entryScoreOverrides,
                                                                                     [entry.id]: e.target.value
                                                                                 })}
-                                                                                className="w-16 bg-slate-950 border border-slate-700 rounded-lg p-1 text-center font-bold text-white focus:outline-none focus:border-indigo-500"
+                                                                                className="w-16 bg-card border border-line rounded-lg p-1 text-center font-bold text-[color:var(--text)] num focus:outline-none focus:border-navy-600"
                                                                             />
                                                                         </td>
                                                                         <td className="p-4 text-center">
@@ -3311,7 +3311,7 @@ export const SuperAdmin: React.FC = () => {
                                                                                     ...entryTiebreakerOverrides,
                                                                                     [entry.id]: e.target.value
                                                                                 })}
-                                                                                className="w-16 bg-slate-950 border border-slate-700 rounded-lg p-1 text-center text-white focus:outline-none focus:border-indigo-500"
+                                                                                className="w-16 bg-card border border-line rounded-lg p-1 text-center text-[color:var(--text)] num focus:outline-none focus:border-navy-600"
                                                                             />
                                                                         </td>
                                                                         <td className="p-4 text-center">
@@ -3322,13 +3322,13 @@ export const SuperAdmin: React.FC = () => {
                                                                                     ...entryPayoutOverrides,
                                                                                     [entry.id]: e.target.value
                                                                                 })}
-                                                                                className="w-20 bg-slate-950 border border-slate-700 rounded-lg p-1 text-center font-bold text-emerald-400 focus:outline-none focus:border-indigo-500"
+                                                                                className="w-20 bg-card border border-line rounded-lg p-1 text-center font-bold text-gold-700 dark:text-gold-400 num focus:outline-none focus:border-navy-600"
                                                                             />
                                                                         </td>
                                                                         <td className="p-4 text-center">
                                                                             <button
                                                                                 onClick={() => setExpandedPicksEntryId(isExpanded ? null : entry.id)}
-                                                                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 text-xs font-bold text-slate-300 transition-colors"
+                                                                                className="px-2.5 py-1.5 bg-card hover:bg-surface rounded-lg border border-line text-xs font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] transition-colors"
                                                                             >
                                                                                 {isExpanded ? 'Hide Picks' : `View Picks (${entry.picks ? Object.keys(entry.picks).length : 0})`}
                                                                             </button>
@@ -3336,10 +3336,10 @@ export const SuperAdmin: React.FC = () => {
                                                                         <td className="p-4 text-center">
                                                                             <button
                                                                                 onClick={() => handleToggleEntryPaidAdmin(entry.id, entry.paidStatus)}
-                                                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                                                                                className={`px-3 py-1.5 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em] border transition-all ${
                                                                                     entry.paidStatus === 'PAID'
-                                                                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                                                                                        : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                                                                        ? 'bg-[#E4F5EC] border-[#BEE7D0] text-[#0F7B4A]'
+                                                                                        : 'bg-[#FBEEDD] border-[#F2D6B0] text-[#B4530A]'
                                                                                 }`}
                                                                             >
                                                                                 {entry.paidStatus === 'PAID' ? 'PAID' : 'UNPAID'}
@@ -3350,14 +3350,14 @@ export const SuperAdmin: React.FC = () => {
                                                                                 <button
                                                                                     onClick={() => handleSaveEntryOverridesAdmin(entry.id)}
                                                                                     title="Save Changes"
-                                                                                    className="p-2 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-lg transition-colors"
+                                                                                    className="p-2 bg-navy-600/15 hover:bg-navy-600/25 text-navy-700 dark:text-gold-400 border border-navy-600/40 rounded-lg transition-colors"
                                                                                 >
                                                                                     <CheckCircle size={16} />
                                                                                 </button>
                                                                                 <button
                                                                                     onClick={() => handleDeleteEntryAdmin(entry.id, entry.name)}
                                                                                     title="Delete Entry"
-                                                                                    className="p-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-400 border border-rose-500/30 rounded-lg transition-colors"
+                                                                                    className="p-2 bg-brandred-600/10 hover:bg-brandred-600/20 text-brandred-500 border border-brandred-600/40 rounded-lg transition-colors"
                                                                                 >
                                                                                     <Trash2 size={16} />
                                                                                 </button>
@@ -3365,14 +3365,14 @@ export const SuperAdmin: React.FC = () => {
                                                                         </td>
                                                                     </tr>
                                                                     {isExpanded && (
-                                                                        <tr className="bg-slate-950/40">
-                                                                            <td colSpan={7} className="p-4 border-l border-r border-slate-800">
-                                                                                <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-                                                                                    <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                                                                                        <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Raw Picks Sheet</span>
-                                                                                        <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded-lg text-slate-400">JSON Format</span>
+                                                                        <tr className="bg-surface">
+                                                                            <td colSpan={7} className="p-4 border-l border-r border-line">
+                                                                                <div className="p-4 bg-card border border-line rounded-xl space-y-3">
+                                                                                    <div className="flex justify-between items-center border-b border-line pb-2">
+                                                                                        <span className="text-xs text-faint uppercase font-display font-bold tracking-[0.08em]">Raw Picks Sheet</span>
+                                                                                        <span className="text-[10px] bg-surface border border-line px-2 py-0.5 rounded-lg text-muted">JSON Format</span>
                                                                                     </div>
-                                                                                    <pre className="text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap max-h-40 leading-relaxed bg-slate-900/40 p-3 rounded-lg border border-slate-800/60">
+                                                                                    <pre className="text-xs text-[color:var(--text)] font-mono overflow-x-auto whitespace-pre-wrap max-h-40 leading-relaxed bg-surface p-3 rounded-lg border border-line">
                                                                                         {entry.picks ? JSON.stringify(entry.picks, null, 2) : 'No picks submitted yet.'}
                                                                                     </pre>
                                                                                 </div>
@@ -3384,7 +3384,7 @@ export const SuperAdmin: React.FC = () => {
                                                         })}
                                                     {viewingPoolEntries.length === 0 && (
                                                         <tr>
-                                                            <td colSpan={7} className="p-8 text-center text-slate-500">
+                                                            <td colSpan={7} className="p-8 text-center text-faint">
                                                                 No entries found in this pool.
                                                             </td>
                                                         </tr>
@@ -3396,19 +3396,19 @@ export const SuperAdmin: React.FC = () => {
                                 )}
 
                                 {modalTab === 'dangerous' && (
-                                    <div className="space-y-6 max-w-xl mx-auto bg-slate-800/20 p-6 rounded-xl border border-slate-700/50">
-                                        <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2 border-b border-rose-950/80 pb-2 text-rose-400">
-                                            <Shield size={20} className="text-rose-500 animate-pulse" /> Super Administrative Overrides
+                                    <div className="space-y-6 max-w-xl mx-auto bg-brandred-600/5 p-6 rounded-xl border border-brandred-600/40">
+                                        <h3 className="text-lg font-display font-bold uppercase tracking-[0.05em] mb-2 flex items-center gap-2 border-b border-brandred-600/30 pb-2 text-brandred-500">
+                                            <Shield size={20} className="text-brandred-500 animate-pulse" /> Super Administrative Overrides
                                         </h3>
                                         <div className="space-y-4">
-                                            <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                            <div className="p-4 bg-surface rounded-xl border border-line flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                                 <div>
-                                                    <h4 className="font-bold text-white text-sm">Synchronize Scores & Sync</h4>
-                                                    <p className="text-xs text-slate-500 mt-0.5">Force recalculating entries and pull results from ESPN.</p>
+                                                    <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-sm">Synchronize Scores & Sync</h4>
+                                                    <p className="text-xs text-faint mt-0.5">Force recalculating entries and pull results from ESPN.</p>
                                                 </div>
                                                 <button
                                                     onClick={() => handleFixScores(viewingPool as GameState)}
-                                                    className="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
+                                                    className="w-full sm:w-auto px-4 py-2.5 bg-navy-800 hover:bg-navy-700 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card flex items-center justify-center gap-1.5"
                                                 >
                                                     <RefreshCw size={14} />
                                                     Process ESPN Sync
@@ -3416,14 +3416,14 @@ export const SuperAdmin: React.FC = () => {
                                             </div>
 
                                             {viewingPool.type === 'BRACKET' && (
-                                                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                                <div className="p-4 bg-surface rounded-xl border border-line flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                                     <div>
-                                                        <h4 className="font-bold text-white text-sm">Force Re-Open Pool</h4>
-                                                        <p className="text-xs text-slate-500 mt-0.5">Change status back to OPEN to allow participants to edit picks.</p>
+                                                        <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-sm">Force Re-Open Pool</h4>
+                                                        <p className="text-xs text-faint mt-0.5">Change status back to OPEN to allow participants to edit picks.</p>
                                                     </div>
                                                     <button
                                                         onClick={() => handleForceReopenPool(viewingPool)}
-                                                        className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
+                                                        className="w-full sm:w-auto px-4 py-2.5 bg-navy-800 hover:bg-navy-700 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card flex items-center justify-center gap-1.5"
                                                     >
                                                         <Lock size={14} />
                                                         Force Re-Open
@@ -3432,41 +3432,41 @@ export const SuperAdmin: React.FC = () => {
                                             )}
 
                                             {viewingPool.type === 'BRACKET' && (
-                                                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                                <div className="p-4 bg-surface rounded-xl border border-line flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                                     <div>
-                                                        <h4 className="font-bold text-white text-sm">Close Pool Settings</h4>
-                                                        <p className="text-xs text-slate-500 mt-0.5">Lock pool and transition status directly to COMPLETED.</p>
+                                                        <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-sm">Close Pool Settings</h4>
+                                                        <p className="text-xs text-faint mt-0.5">Lock pool and transition status directly to COMPLETED.</p>
                                                     </div>
                                                     <button
                                                         onClick={() => { handleClosePool(viewingPool as unknown as Pool); setViewingPool(null); }}
-                                                        className="w-full sm:w-auto px-4 py-2.5 bg-rose-700 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-md"
+                                                        className="w-full sm:w-auto px-4 py-2.5 bg-brandred-600 hover:bg-brandred-500 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-red-cta"
                                                     >
                                                         Close Pool
                                                     </button>
                                                 </div>
                                             )}
 
-                                            <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                            <div className="p-4 bg-surface rounded-xl border border-line flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                                 <div>
-                                                    <h4 className="font-bold text-white text-sm">Manage Live Site Panel</h4>
-                                                    <p className="text-xs text-slate-500 mt-0.5">Open the host custom settings wizard panel directly.</p>
+                                                    <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-sm">Manage Live Site Panel</h4>
+                                                    <p className="text-xs text-faint mt-0.5">Open the host custom settings wizard panel directly.</p>
                                                 </div>
                                                 <button
                                                     onClick={() => window.location.href = `/admin/${viewingPool.id}`}
-                                                    className="w-full sm:w-auto px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-xs font-bold transition-all shadow-md text-center"
+                                                    className="w-full sm:w-auto px-4 py-2.5 bg-card hover:bg-page border border-line text-[color:var(--text)] rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card text-center"
                                                 >
                                                     Configure settings
                                                 </button>
                                             </div>
 
-                                            <div className="p-4 bg-rose-950/15 rounded-xl border border-rose-900/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                            <div className="p-4 bg-brandred-600/5 rounded-xl border border-brandred-600/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                                 <div>
-                                                    <h4 className="font-bold text-rose-400 text-sm">Destroy Pool and Contents</h4>
-                                                    <p className="text-xs text-rose-300/40 mt-0.5">Permanently delete pool configuration, entries, logs, and statistics.</p>
+                                                    <h4 className="font-display font-bold uppercase tracking-[0.05em] text-brandred-500 text-sm">Destroy Pool and Contents</h4>
+                                                    <p className="text-xs text-brandred-500/70 mt-0.5">Permanently delete pool configuration, entries, logs, and statistics.</p>
                                                 </div>
                                                 <button
                                                     onClick={() => { handleDeletePool(viewingPool.id); setViewingPool(null); }}
-                                                    className="w-full sm:w-auto px-4 py-2.5 bg-rose-900/40 border border-rose-700 hover:bg-rose-900/60 text-rose-200 rounded-xl text-xs font-bold transition-all shadow-md"
+                                                    className="w-full sm:w-auto px-4 py-2.5 bg-brandred-600 hover:bg-brandred-700 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-red-cta"
                                                 >
                                                     Super Delete Pool
                                                 </button>
@@ -3484,21 +3484,21 @@ export const SuperAdmin: React.FC = () => {
             {
                 editingUser && (
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-600 w-full max-w-md shadow-2xl">
-                            <h3 className="text-xl font-bold text-white mb-4">Edit User</h3>
+                        <div className="bg-card p-6 rounded-xl border border-line w-full max-w-md shadow-panel">
+                            <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4">Edit User</h3>
                             <div className="space-y-4 mb-6">
                                 <div>
-                                    <label className="block text-xs uppercase text-slate-400 font-bold mb-1">Name</label>
-                                    <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white" />
+                                    <label className="block text-xs uppercase text-muted font-display font-bold tracking-[0.08em] mb-1">Name</label>
+                                    <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-surface border border-line rounded p-2 font-body text-[color:var(--text)]" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs uppercase text-slate-400 font-bold mb-1">Email</label>
-                                    <input value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white" />
+                                    <label className="block text-xs uppercase text-muted font-display font-bold tracking-[0.08em] mb-1">Email</label>
+                                    <input value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full bg-surface border border-line rounded p-2 font-body text-[color:var(--text)]" />
                                 </div>
                             </div>
                             <div className="flex justify-end gap-3">
-                                <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-white font-bold text-sm">Cancel</button>
-                                <button onClick={saveUserChanges} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded font-bold text-sm">Save Changes</button>
+                                <button onClick={() => setEditingUser(null)} className="text-muted hover:text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] text-sm">Cancel</button>
+                                <button onClick={saveUserChanges} className="bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm shadow-red-cta">Save Changes</button>
                             </div>
                         </div>
                     </div>
@@ -3509,33 +3509,33 @@ export const SuperAdmin: React.FC = () => {
             {
                 viewingUser && (
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
-                            <div className="p-6 border-b border-slate-700 flex justify-between items-start bg-slate-950/50 rounded-t-2xl">
+                        <div className="bg-card border border-line rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-panel flex flex-col">
+                            <div className="p-6 border-b border-line flex justify-between items-start bg-surface rounded-t-2xl">
                                 <div>
-                                    <h2 className="text-3xl font-bold text-white mb-1">{viewingUser.name}</h2>
-                                    <p className="text-slate-400 flex items-center gap-2 text-sm">
-                                        <span className="bg-slate-800 px-2 py-0.5 rounded text-slate-300 border border-slate-700">ID: {viewingUser.id}</span>
-                                        <span className="text-slate-500">•</span>
+                                    <h2 className="text-3xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-1">{viewingUser.name}</h2>
+                                    <p className="text-muted font-body flex items-center gap-2 text-sm">
+                                        <span className="bg-card px-2 py-0.5 rounded text-[color:var(--text)] border border-line">ID: {viewingUser.id}</span>
+                                        <span className="text-faint">•</span>
                                         <span>{viewingUser.email}</span>
                                     </p>
                                 </div>
-                                <button onClick={() => setViewingUser(null)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors">
+                                <button onClick={() => setViewingUser(null)} className="p-2 hover:bg-surface rounded-lg text-muted hover:text-[color:var(--text)] transition-colors">
                                     <span className="sr-only">Close</span>
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                 </button>
                             </div>
 
                             <div className="p-6">
-                                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                                    <Activity size={20} className="text-indigo-400" /> Pools Managed by {viewingUser.name.split(' ')[0]}
+                                <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4 flex items-center gap-2">
+                                    <Activity size={20} className="text-gold-500" /> Pools Managed by {viewingUser.name.split(' ')[0]}
                                 </h3>
 
                                 {pools.filter(p => {
                                     const owner = p.type === 'BRACKET' ? (p as unknown as PoolLike).managerUid as string : (p as unknown as PoolLike).ownerId as string;
                                     return owner === viewingUser.id;
                                 }).length === 0 ? (
-                                    <div className="p-8 text-center bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
-                                        <p className="text-slate-500 font-medium">No pools found for this user.</p>
+                                    <div className="p-8 text-center bg-surface rounded-xl border border-dashed border-line">
+                                        <p className="text-faint font-medium">No pools found for this user.</p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3545,27 +3545,27 @@ export const SuperAdmin: React.FC = () => {
                                         }).map(pool => {
                                             const isBracket = pool.type === 'BRACKET';
                                             return (
-                                                <div key={pool.id} className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-indigo-500/50 transition-colors group">
+                                                <div key={pool.id} className="bg-card border border-line rounded-xl p-5 hover:border-gold-500/50 hover:-translate-y-1 hover:shadow-card-hover transition-all duration-150 group">
                                                     <div className="flex justify-between items-start mb-3">
                                                         <div>
-                                                            <h4 className="font-bold text-white text-lg group-hover:text-indigo-400 transition-colors">{pool.name}</h4>
-                                                            <p className="text-xs text-slate-400 uppercase font-bold mt-1">
+                                                            <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-lg group-hover:text-gold-600 dark:group-hover:text-gold-400 transition-colors">{pool.name}</h4>
+                                                            <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em] mt-1">
                                                                 {isBracket ? 'Tournament Bracket' : `${(pool as GameState).awayTeam} vs ${(pool as GameState).homeTeam}`}
                                                             </p>
                                                         </div>
-                                                        {!isBracket && (pool as GameState).charity?.enabled && <Heart size={16} className="text-rose-500 fill-rose-500" />}
+                                                        {!isBracket && (pool as GameState).charity?.enabled && <Heart size={16} className="text-brandred-500 fill-brandred-500" />}
                                                     </div>
 
-                                                    <div className="grid grid-cols-2 gap-2 text-sm text-slate-400 mb-4 bg-slate-900/50 p-3 rounded-lg">
+                                                    <div className="grid grid-cols-2 gap-2 text-sm text-muted mb-4 bg-surface border border-line p-3 rounded-lg">
                                                         {isBracket ? (
                                                             <>
-                                                                <div>Entries: <span className="text-white font-mono">{(pool as unknown as PoolLike).entryCount as number || 0}</span></div>
-                                                                <div>Status: <span className={(pool as unknown as PoolLike).status === 'LOCKED' ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"}>{(pool as unknown as PoolLike).status as string || 'OPEN'}</span></div>
+                                                                <div>Entries: <span className="text-[color:var(--text)] font-mono num">{(pool as unknown as PoolLike).entryCount as number || 0}</span></div>
+                                                                <div>Status: <span className={(pool as unknown as PoolLike).status === 'LOCKED' ? "text-brandred-500 font-bold" : "text-gold-600 dark:text-gold-400 font-bold"}>{(pool as unknown as PoolLike).status as string || 'OPEN'}</span></div>
                                                             </>
                                                         ) : (
                                                             <>
-                                                                <div>Squares: <span className="text-white font-mono">{(pool as GameState).squares.filter(s => s.owner).length}/100</span></div>
-                                                                <div>Status: <span className={(pool as GameState).isLocked ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"}>{(pool as GameState).isLocked ? 'LOCKED' : 'OPEN'}</span></div>
+                                                                <div>Squares: <span className="text-[color:var(--text)] font-mono num">{(pool as GameState).squares.filter(s => s.owner).length}/100</span></div>
+                                                                <div>Status: <span className={(pool as GameState).isLocked ? "text-brandred-500 font-bold" : "text-gold-600 dark:text-gold-400 font-bold"}>{(pool as GameState).isLocked ? 'LOCKED' : 'OPEN'}</span></div>
                                                             </>
                                                         )}
                                                     </div>
@@ -3576,14 +3576,14 @@ export const SuperAdmin: React.FC = () => {
                                                                 window.location.href = `/admin/${pool.id}`;
                                                                 setViewingUser(null);
                                                             }}
-                                                            className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded font-bold text-sm transition-colors text-center"
+                                                            className="flex-1 bg-brandred-600 hover:bg-brandred-500 text-white py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors text-center"
                                                         >
                                                             Manage Pool
                                                         </button>
                                                         <a
                                                             href={`#pool/${pool.id}`}
                                                             target="_blank"
-                                                            className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded font-bold text-sm transition-colors text-center"
+                                                            className="flex-1 bg-navy-800 hover:bg-navy-700 text-white py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors text-center"
                                                         >
                                                             {isBracket ? 'View Bracket' : 'View Grid'}
                                                         </a>
@@ -3610,15 +3610,15 @@ export const SuperAdmin: React.FC = () => {
                 activeTab === 'props' && (
                     <div className="space-y-6">
                         {/* Manage Categories Section */}
-                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                            <h3 className="text-xl font-bold mb-4">Manage Global Categories</h3>
+                        <div className="bg-card p-6 rounded-xl border border-line shadow-card">
+                            <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] mb-4">Manage Global Categories</h3>
                             <div className="flex flex-wrap gap-2 mb-4">
                                 {availableCategories.map(cat => (
-                                    <div key={cat} className="flex items-center gap-1 bg-slate-700 text-slate-200 px-3 py-1 rounded-full text-sm font-bold border border-slate-600">
+                                    <div key={cat} className="flex items-center gap-1 bg-surface text-[color:var(--text)] px-3 py-1 rounded-full text-sm font-display font-bold uppercase tracking-[0.05em] border border-line">
                                         <span>{cat}</span>
                                         <button
                                             onClick={() => handleRemoveCategory(cat)}
-                                            className="hover:text-rose-400 p-0.5 rounded-full transition-colors"
+                                            className="hover:text-brandred-500 p-0.5 rounded-full transition-colors"
                                             title="Remove Category"
                                         >
                                             <X size={12} />
@@ -3628,7 +3628,7 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                             <div className="flex gap-2">
                                 <input
-                                    className="bg-slate-900 border border-slate-600 p-2 rounded text-white text-sm"
+                                    className="bg-surface border border-line p-2 rounded font-body text-[color:var(--text)] text-sm"
                                     placeholder="New Category Name"
                                     value={newCategoryName}
                                     onChange={e => setNewCategoryName(e.target.value)}
@@ -3637,31 +3637,31 @@ export const SuperAdmin: React.FC = () => {
                                 <button
                                     onClick={handleAddCategory}
                                     disabled={!newCategoryName}
-                                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-4 py-2 rounded text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2"
                                 >
                                     <Plus size={16} /> Add
                                 </button>
                             </div>
                         </div>
 
-                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                            <h3 className="text-xl font-bold mb-4">{editingSeed ? 'Edit Seed Question' : 'Add New Seed Question'}</h3>
-                            <div className="grid gap-4 bg-slate-900/50 p-4 rounded-lg">
+                        <div className="bg-card p-6 rounded-xl border border-line shadow-card">
+                            <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] mb-4">{editingSeed ? 'Edit Seed Question' : 'Add New Seed Question'}</h3>
+                            <div className="grid gap-4 bg-surface border border-line p-4 rounded-lg">
                                 <input
-                                    className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
+                                    className="w-full bg-card border border-line p-2 rounded font-body text-[color:var(--text)]"
                                     placeholder="Question Text (e.g. Who wins the coin toss?)"
                                     value={seedText}
                                     onChange={e => setSeedText(e.target.value)}
                                 />
                                 <div className="grid grid-cols-2 gap-4">
                                     <input
-                                        className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
+                                        className="w-full bg-card border border-line p-2 rounded font-body text-[color:var(--text)]"
                                         placeholder="Option 1 (e.g. Heads)"
                                         value={seedOpt1}
                                         onChange={e => setSeedOpt1(e.target.value)}
                                     />
                                     <input
-                                        className="w-full bg-slate-800 border border-slate-700 p-2 rounded text-white"
+                                        className="w-full bg-card border border-line p-2 rounded font-body text-[color:var(--text)]"
                                         placeholder="Option 2 (e.g. Tails)"
                                         value={seedOpt2}
                                         onChange={e => setSeedOpt2(e.target.value)}
@@ -3669,15 +3669,15 @@ export const SuperAdmin: React.FC = () => {
                                 </div>
 
                                 <div>
-                                    <label className="text-xs text-slate-400 font-bold uppercase mb-2 block">Categories</label>
+                                    <label className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mb-2 block">Categories</label>
                                     <div className="flex flex-wrap gap-2">
                                         {availableCategories.map(cat => (
                                             <button
                                                 key={cat}
                                                 onClick={() => toggleCategory(cat)}
-                                                className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${seedCategories.includes(cat)
-                                                    ? 'bg-indigo-500 text-white border-indigo-400'
-                                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'
+                                                className={`px-3 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border ${seedCategories.includes(cat)
+                                                    ? 'bg-navy-800 text-white border-navy-700'
+                                                    : 'bg-card text-muted border-line hover:border-navy-600'
                                                     }`}
                                             >
                                                 {cat}
@@ -3689,7 +3689,7 @@ export const SuperAdmin: React.FC = () => {
                                     {editingSeed && (
                                         <button
                                             onClick={() => { setEditingSeed(null); setSeedText(''); setSeedOpt1(''); setSeedOpt2(''); }}
-                                            className="px-4 py-2 text-slate-400 hover:text-white"
+                                            className="px-4 py-2 text-muted hover:text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em]"
                                         >
                                             Cancel
                                         </button>
@@ -3697,7 +3697,7 @@ export const SuperAdmin: React.FC = () => {
                                     <button
                                         onClick={handleSaveSeed}
                                         disabled={!seedText || !seedOpt1 || !seedOpt2}
-                                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold"
+                                        className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-display font-bold uppercase tracking-[0.05em] shadow-red-cta"
                                     >
                                         {editingSeed ? 'Update Seed' : 'Add Seed'}
                                     </button>
@@ -3705,13 +3705,13 @@ export const SuperAdmin: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                            <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex flex-col md:flex-row gap-4 justify-between items-center">
+                        <div className="bg-card rounded-xl border border-line overflow-hidden">
+                            <div className="p-4 border-b border-line bg-surface flex flex-col md:flex-row gap-4 justify-between items-center">
                                 <div className="flex items-center gap-4">
-                                    <h3 className="font-bold">Seed Library ({propSeeds.length})</h3>
+                                    <h3 className="font-display font-bold uppercase tracking-[0.05em] num">Seed Library ({propSeeds.length})</h3>
                                     <button
                                         onClick={handleSeedNCAAProps}
-                                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded text-xs font-bold transition-colors shadow-lg shadow-emerald-500/20"
+                                        className="bg-navy-800 hover:bg-navy-700 text-white px-3 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors shadow-card"
                                     >
                                         Seed NCAA Props
                                     </button>
@@ -3719,7 +3719,7 @@ export const SuperAdmin: React.FC = () => {
                                 <div className="flex gap-2 text-xs overflow-x-auto max-w-full pb-2 md:pb-0">
                                     <button
                                         onClick={() => setSeedCategoryFilter('All')}
-                                        className={`px-3 py-1 rounded-full font-bold transition-colors ${seedCategoryFilter === 'All' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                                        className={`px-3 py-1 rounded-full font-display font-bold uppercase tracking-[0.05em] transition-colors ${seedCategoryFilter === 'All' ? 'bg-navy-800 text-white' : 'bg-surface border border-line text-muted hover:text-[color:var(--text)]'}`}
                                     >
                                         All
                                     </button>
@@ -3727,44 +3727,44 @@ export const SuperAdmin: React.FC = () => {
                                         <button
                                             key={cat}
                                             onClick={() => setSeedCategoryFilter(cat)}
-                                            className={`px-3 py-1 rounded-full font-bold transition-colors ${seedCategoryFilter === cat ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                                            className={`px-3 py-1 rounded-full font-display font-bold uppercase tracking-[0.05em] transition-colors ${seedCategoryFilter === cat ? 'bg-navy-800 text-white' : 'bg-surface border border-line text-muted hover:text-[color:var(--text)]'}`}
                                         >
                                             {cat}
                                         </button>
                                     ))}
                                 </div>
                             </div>
-                            <div className="divide-y divide-slate-700">
+                            <div className="divide-y divide-line">
                                 {propSeeds
                                     .filter(s => seedCategoryFilter === 'All' || s.categories?.includes(seedCategoryFilter) || s.category === seedCategoryFilter)
                                     .map(seed => (
-                                        <div key={seed.id} className="p-4 hover:bg-slate-700/20 flex justify-between items-center group">
+                                        <div key={seed.id} className="p-4 hover:bg-surface flex justify-between items-center group">
                                             <div>
-                                                <p className="font-medium text-white">{seed.text}</p>
-                                                <p className="text-sm text-slate-400 mb-1">{seed.options.join(' vs ')}</p>
+                                                <p className="font-medium text-[color:var(--text)]">{seed.text}</p>
+                                                <p className="text-sm text-muted mb-1">{seed.options.join(' vs ')}</p>
                                                 <div className="flex gap-1 flex-wrap">
                                                     {seed.categories?.map(c => (
-                                                        <span key={c} className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">
+                                                        <span key={c} className="text-[10px] uppercase font-display font-bold tracking-[0.08em] px-1.5 py-0.5 rounded bg-surface border border-line text-muted">
                                                             {c}
                                                         </span>
                                                     ))}
                                                     {!seed.categories && seed.category && (
-                                                        <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{seed.category}</span>
+                                                        <span className="text-[10px] uppercase font-display font-bold tracking-[0.08em] px-1.5 py-0.5 rounded bg-surface border border-line text-muted">{seed.category}</span>
                                                     )}
                                                 </div>
                                             </div>
                                             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => handleEditSeed(seed)} className="text-indigo-400 hover:text-indigo-300 p-2 bg-slate-800 rounded">
+                                                <button onClick={() => handleEditSeed(seed)} className="text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 p-2 bg-surface border border-line rounded">
                                                     <Settings size={16} />
                                                 </button>
-                                                <button onClick={() => handleDeleteSeed(seed.id)} className="text-rose-400 hover:text-rose-300 p-2 bg-slate-800 rounded">
+                                                <button onClick={() => handleDeleteSeed(seed.id)} className="text-brandred-500 hover:bg-brandred-600/10 p-2 bg-surface border border-line rounded">
                                                     <Trash2 size={16} />
                                                 </button>
                                             </div>
                                         </div>
                                     ))}
                                 {propSeeds.length === 0 && (
-                                    <div className="p-8 text-center text-slate-500">
+                                    <div className="p-8 text-center text-faint">
                                         No seed questions yet. Add one above.
                                     </div>
                                 )}
@@ -3777,18 +3777,18 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ PLAYOFFS TAB ============ */}
             {activeTab === 'playoffs' && (
                 <div className="space-y-6">
-                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                    <div className="bg-card p-6 rounded-xl border border-line shadow-card">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                             <div>
-                                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                                    <Trophy className="text-amber-500" /> Playoff Challenge Configuration
+                                <h2 className="text-2xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                    <Trophy className="text-gold-500" /> Playoff Challenge Configuration
                                 </h2>
-                                <p className="text-slate-400">Global configuration for teams, seeds, and elimination status.</p>
+                                <p className="text-muted font-body">Global configuration for teams, seeds, and elimination status.</p>
                             </div>
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => setShowResultsManager(true)}
-                                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2"
+                                    className="bg-navy-800 hover:bg-navy-700 text-white px-6 py-2 rounded-xl font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card flex items-center gap-2"
                                 >
                                     <Trophy size={16} /> Manage Results / Score
                                 </button>
@@ -3819,14 +3819,14 @@ export const SuperAdmin: React.FC = () => {
                                             setPlayoffTeams(MOCK as PlayoffTeam[]);
                                         }
                                     }}
-                                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                                    className="bg-surface hover:bg-card border border-line text-[color:var(--text)] px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors"
                                 >
                                     Reset Default Teams
                                 </button>
                                 <button
                                     onClick={handleSavePlayoffs}
                                     disabled={isSavingPlayoffs}
-                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-display font-bold uppercase tracking-[0.05em] transition-all shadow-red-cta"
                                 >
                                     {isSavingPlayoffs ? 'Saving...' : 'Save Global Config'}
                                 </button>
@@ -3846,7 +3846,7 @@ export const SuperAdmin: React.FC = () => {
                                             }
                                         }
                                     }}
-                                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2"
+                                    className="bg-navy-800 hover:bg-navy-700 text-white px-6 py-2 rounded-xl font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card flex items-center gap-2"
                                 >
                                     <Bot size={16} /> Force Sync
                                 </button>
@@ -3863,19 +3863,19 @@ export const SuperAdmin: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             {/* AFC Conference */}
                             <div className="space-y-6">
-                                <h3 className="text-xl font-black text-red-500 flex items-center justify-between border-b border-red-500/20 pb-2">
+                                <h3 className="text-xl font-display font-black uppercase text-brandred-500 flex items-center justify-between border-b border-brandred-600/20 pb-2">
                                     AFC CONFERENCE
-                                    <button onClick={() => addPlayoffTeam('AFC')} className="text-[10px] bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2 py-1 rounded border border-red-500/30">ADD TEAM</button>
+                                    <button onClick={() => addPlayoffTeam('AFC')} className="text-[10px] font-display font-bold tracking-[0.08em] bg-brandred-600/10 hover:bg-brandred-600/20 text-brandred-500 px-2 py-1 rounded border border-brandred-600/30">ADD TEAM</button>
                                 </h3>
                                 <div className="space-y-3">
                                     {playoffTeams.filter(t => t.conference === 'AFC').sort((a, b) => a.seed - b.seed).map((team) => {
                                         const overallIdx = playoffTeams.indexOf(team);
                                         const logo = getTeamLogo(team.id);
                                         return (
-                                            <div key={overallIdx} className={`p-4 rounded-xl border transition-all ${team.eliminated ? 'bg-slate-900/50 border-slate-800 opacity-50' : 'bg-slate-900 border-slate-700 shadow-lg'}`}>
+                                            <div key={overallIdx} className={`p-4 rounded-xl border transition-all ${team.eliminated ? 'bg-surface border-line opacity-50' : 'bg-surface border-line shadow-card'}`}>
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center p-1 border border-slate-700">
-                                                        {logo ? <img src={logo} alt={team.id} className="w-full h-full object-contain" /> : <div className="font-bold text-slate-500">{team.id || '?'}</div>}
+                                                    <div className="w-12 h-12 bg-card rounded-lg flex items-center justify-center p-1 border border-line">
+                                                        {logo ? <img src={logo} alt={team.id} className="w-full h-full object-contain" /> : <div className="font-bold text-faint">{team.id || '?'}</div>}
                                                     </div>
                                                     <div className="flex-1 grid grid-cols-2 gap-3">
                                                         <div className="col-span-2">
@@ -3885,7 +3885,7 @@ export const SuperAdmin: React.FC = () => {
                                                                     const t = Object.values(NFL_TEAMS).find(nt => nt.abbr === e.target.value);
                                                                     if (t) updatePlayoffTeam(overallIdx, { id: t.abbr, name: t.name });
                                                                 }}
-                                                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-bold text-sm"
+                                                                className="w-full bg-card border border-line rounded px-2 py-1.5 font-body text-[color:var(--text)] font-bold text-sm"
                                                             >
                                                                 <option value="">Select Team...</option>
                                                                 {Object.values(NFL_TEAMS).sort((a, b) => a.name.localeCompare(b.name)).map(nt => (
@@ -3894,14 +3894,14 @@ export const SuperAdmin: React.FC = () => {
                                                             </select>
                                                         </div>
                                                         <div>
-                                                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Seed</label>
+                                                            <label className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-1">Seed</label>
                                                             <input
                                                                 type="number"
                                                                 min="1"
                                                                 max="8"
                                                                 value={team.seed}
                                                                 onChange={(e) => updatePlayoffTeam(overallIdx, { seed: parseInt(e.target.value) })}
-                                                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white font-bold"
+                                                                className="w-full bg-card border border-line rounded px-2 py-1 text-[color:var(--text)] font-bold num"
                                                             />
                                                         </div>
                                                         <div className="flex items-center justify-end gap-4 pt-4">
@@ -3910,11 +3910,11 @@ export const SuperAdmin: React.FC = () => {
                                                                     type="checkbox"
                                                                     checked={team.eliminated}
                                                                     onChange={(e) => updatePlayoffTeam(overallIdx, { eliminated: e.target.checked })}
-                                                                    className="w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-950"
+                                                                    className="w-4 h-4 rounded border-line text-brandred-600 focus:ring-navy-600 bg-card"
                                                                 />
-                                                                <span className="text-xs font-bold text-slate-400">Eliminated</span>
+                                                                <span className="text-xs font-display font-bold uppercase tracking-[0.05em] text-muted">Eliminated</span>
                                                             </label>
-                                                            <button onClick={() => removePlayoffTeam(overallIdx)} className="text-rose-500 hover:text-rose-400 p-1"><Trash2 size={16} /></button>
+                                                            <button onClick={() => removePlayoffTeam(overallIdx)} className="text-brandred-500 hover:text-brandred-600 p-1"><Trash2 size={16} /></button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -3926,19 +3926,19 @@ export const SuperAdmin: React.FC = () => {
 
                             {/* NFC Conference */}
                             <div className="space-y-6">
-                                <h3 className="text-xl font-black text-blue-500 flex items-center justify-between border-b border-blue-500/20 pb-2">
+                                <h3 className="text-xl font-display font-black uppercase text-navy-600 dark:text-gold-400 flex items-center justify-between border-b border-navy-600/20 pb-2">
                                     NFC CONFERENCE
-                                    <button onClick={() => addPlayoffTeam('NFC')} className="text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 px-2 py-1 rounded border border-blue-500/30">ADD TEAM</button>
+                                    <button onClick={() => addPlayoffTeam('NFC')} className="text-[10px] font-display font-bold tracking-[0.08em] bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-gold-400 px-2 py-1 rounded border border-navy-600/30">ADD TEAM</button>
                                 </h3>
                                 <div className="space-y-3">
                                     {playoffTeams.filter(t => t.conference === 'NFC').sort((a, b) => a.seed - b.seed).map((team) => {
                                         const overallIdx = playoffTeams.indexOf(team);
                                         const logo = getTeamLogo(team.id);
                                         return (
-                                            <div key={overallIdx} className={`p-4 rounded-xl border transition-all ${team.eliminated ? 'bg-slate-900/50 border-slate-800 opacity-50' : 'bg-slate-900 border-slate-700 shadow-lg'}`}>
+                                            <div key={overallIdx} className={`p-4 rounded-xl border transition-all ${team.eliminated ? 'bg-surface border-line opacity-50' : 'bg-surface border-line shadow-card'}`}>
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center p-1 border border-slate-700">
-                                                        {logo ? <img src={logo} alt={team.id} className="w-full h-full object-contain" /> : <div className="font-bold text-slate-500">{team.id || '?'}</div>}
+                                                    <div className="w-12 h-12 bg-card rounded-lg flex items-center justify-center p-1 border border-line">
+                                                        {logo ? <img src={logo} alt={team.id} className="w-full h-full object-contain" /> : <div className="font-bold text-faint">{team.id || '?'}</div>}
                                                     </div>
                                                     <div className="flex-1 grid grid-cols-2 gap-3">
                                                         <div className="col-span-2">
@@ -3948,7 +3948,7 @@ export const SuperAdmin: React.FC = () => {
                                                                     const t = Object.values(NFL_TEAMS).find(nt => nt.abbr === e.target.value);
                                                                     if (t) updatePlayoffTeam(overallIdx, { id: t.abbr, name: t.name });
                                                                 }}
-                                                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-bold text-sm"
+                                                                className="w-full bg-card border border-line rounded px-2 py-1.5 font-body text-[color:var(--text)] font-bold text-sm"
                                                             >
                                                                 <option value="">Select Team...</option>
                                                                 {Object.values(NFL_TEAMS).sort((a, b) => a.name.localeCompare(b.name)).map(nt => (
@@ -3957,14 +3957,14 @@ export const SuperAdmin: React.FC = () => {
                                                             </select>
                                                         </div>
                                                         <div>
-                                                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Seed</label>
+                                                            <label className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-1">Seed</label>
                                                             <input
                                                                 type="number"
                                                                 min="1"
                                                                 max="8"
                                                                 value={team.seed}
                                                                 onChange={(e) => updatePlayoffTeam(overallIdx, { seed: parseInt(e.target.value) })}
-                                                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white font-bold"
+                                                                className="w-full bg-card border border-line rounded px-2 py-1 text-[color:var(--text)] font-bold num"
                                                             />
                                                         </div>
                                                         <div className="flex items-center justify-end gap-4 pt-4">
@@ -3973,11 +3973,11 @@ export const SuperAdmin: React.FC = () => {
                                                                     type="checkbox"
                                                                     checked={team.eliminated}
                                                                     onChange={(e) => updatePlayoffTeam(overallIdx, { eliminated: e.target.checked })}
-                                                                    className="w-4 h-4 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-slate-950"
+                                                                    className="w-4 h-4 rounded border-line text-brandred-600 focus:ring-navy-600 bg-card"
                                                                 />
-                                                                <span className="text-xs font-bold text-slate-400">Eliminated</span>
+                                                                <span className="text-xs font-display font-bold uppercase tracking-[0.05em] text-muted">Eliminated</span>
                                                             </label>
-                                                            <button onClick={() => removePlayoffTeam(overallIdx)} className="text-rose-500 hover:text-rose-400 p-1"><Trash2 size={16} /></button>
+                                                            <button onClick={() => removePlayoffTeam(overallIdx)} className="text-brandred-500 hover:text-brandred-600 p-1"><Trash2 size={16} /></button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -3989,9 +3989,9 @@ export const SuperAdmin: React.FC = () => {
                         </div>
 
                         {playoffTeams.length === 0 && (
-                            <div className="text-center p-12 bg-slate-900 rounded-2xl border border-dashed border-slate-700 mt-8">
-                                <Trophy size={48} className="text-slate-700 mx-auto mb-4" />
-                                <p className="text-slate-400">No teams configured yet. Reset to defaults or add teams manually.</p>
+                            <div className="text-center p-12 bg-surface rounded-2xl border border-dashed border-line mt-8">
+                                <Trophy size={48} className="text-faint mx-auto mb-4" />
+                                <p className="text-muted font-body">No teams configured yet. Reset to defaults or add teams manually.</p>
                             </div>
                         )}
                     </div>
@@ -4001,22 +4001,22 @@ export const SuperAdmin: React.FC = () => {
             {/* ============ NFL SCHEDULE TAB ============ */}
             {activeTab === 'nfl' && (
                 <div className="space-y-6">
-                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl">
+                    <div className="bg-card p-6 rounded-xl border border-line shadow-card shadow-xl">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="p-3 bg-indigo-500/20 rounded-xl text-indigo-400">
+                            <div className="p-3 bg-gold-500/15 rounded-xl text-gold-600 dark:text-gold-400">
                                 <Activity size={24} />
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold text-white">NFL Schedule Bulk Importer</h3>
-                                <p className="text-sm text-slate-400">Import weekly or seasonal game data from official ESPN feeds.</p>
+                                <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">NFL Schedule Bulk Importer</h3>
+                                <p className="text-sm text-muted font-body">Import weekly or seasonal game data from official ESPN feeds.</p>
                             </div>
                         </div>
 
                         {nflImportResult && (
                             <div className={`p-4 rounded-xl text-xs font-bold mb-6 flex gap-2 items-center ${
                                 nflImportResult.type === 'success'
-                                    ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-400'
-                                    : 'bg-rose-500/10 border border-rose-500/25 text-rose-400'
+                                    ? 'bg-[#0F7B4A]/10 border border-[#0F7B4A]/25 text-[#0F7B4A]'
+                                    : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-500'
                             }`}>
                                 {nflImportResult.type === 'success' ? <CheckCircle size={18} /> : <XCircle size={18} />}
                                 {nflImportResult.message}
@@ -4026,23 +4026,23 @@ export const SuperAdmin: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {/* Season Input */}
                             <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Season Year</label>
+                                <label className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">Season Year</label>
                                 <input
                                     type="text"
                                     value={nflSeason}
                                     onChange={(e) => setNflSeason(e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-indigo-500"
+                                    className="w-full bg-card border border-line rounded-xl px-4 py-2.5 font-body text-[color:var(--text)] font-bold text-sm focus:outline-none focus:border-navy-600"
                                     placeholder="e.g. 2026"
                                 />
                             </div>
 
                             {/* Season Type Selection */}
                             <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Season Type</label>
+                                <label className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">Season Type</label>
                                 <select
                                     value={nflSeasonType}
                                     onChange={(e) => setNflSeasonType(parseInt(e.target.value))}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-indigo-500"
+                                    className="w-full bg-card border border-line rounded-xl px-4 py-2.5 font-body text-[color:var(--text)] font-bold text-sm focus:outline-none focus:border-navy-600"
                                 >
                                     <option value={1}>Preseason</option>
                                     <option value={2}>Regular Season</option>
@@ -4052,11 +4052,11 @@ export const SuperAdmin: React.FC = () => {
 
                             {/* Weeks Filter */}
                             <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Weeks Filter</label>
+                                <label className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">Weeks Filter</label>
                                 <select
                                     value={nflWeeks}
                                     onChange={(e) => setNflWeeks(e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-indigo-500"
+                                    className="w-full bg-card border border-line rounded-xl px-4 py-2.5 font-body text-[color:var(--text)] font-bold text-sm focus:outline-none focus:border-navy-600"
                                 >
                                     <option value="all">All 18 Weeks (Regular)</option>
                                     <option value="specific">Specific Week Only</option>
@@ -4067,11 +4067,11 @@ export const SuperAdmin: React.FC = () => {
                         {/* Specific Week Selector */}
                         {nflWeeks === 'specific' && (
                             <div className="mt-6 max-w-xs">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Select Week</label>
+                                <label className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">Select Week</label>
                                 <select
                                     value={selectedNflWeek}
                                     onChange={(e) => setSelectedNflWeek(parseInt(e.target.value))}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-indigo-500"
+                                    className="w-full bg-card border border-line rounded-xl px-4 py-2.5 font-body text-[color:var(--text)] font-bold text-sm focus:outline-none focus:border-navy-600"
                                 >
                                     {Array.from({ length: 18 }, (_, i) => i + 1).map(w => (
                                         <option key={w} value={w}>Week {w}</option>
@@ -4084,7 +4084,7 @@ export const SuperAdmin: React.FC = () => {
                             <button
                                 onClick={handleImportNFLSchedule}
                                 disabled={isImportingNfl || !nflSeason}
-                                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold px-6 py-3 rounded-xl text-sm transition-all hover:scale-[1.02] shadow-lg shadow-indigo-600/15 flex items-center gap-2 cursor-pointer"
+                                className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-extrabold uppercase tracking-[0.05em] px-6 py-3 rounded-xl text-sm transition-all hover:-translate-y-px shadow-red-cta flex items-center gap-2 cursor-pointer"
                             >
                                 <RefreshCw size={16} className={isImportingNfl ? 'animate-spin' : ''} />
                                 {isImportingNfl ? 'Seeding games...' : 'Bulk Import ESPN NFL Schedule'}

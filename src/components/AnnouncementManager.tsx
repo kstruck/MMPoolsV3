@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { Send, Clock, CheckCircle, AlertCircle } from 'lucide-react'; // Using lucide-react as standard in this project
+import { Button } from './ui';
 import type { GameState, Announcement, User } from '../types';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase'; // Assuming centralized firebase export
@@ -72,51 +73,51 @@ export const AnnouncementManager: React.FC<AnnouncementManagerProps> = ({ pool, 
         <div className="space-y-8 animate-in fade-in duration-500">
 
             {/* COMPOSE SECTION */}
-            <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 shadow-lg">
-                <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-                    <Send size={20} className="text-indigo-400" />
+            <div className="bg-card rounded-xl border border-line p-6 shadow-card">
+                <h3 className="text-[color:var(--text)] font-display font-bold uppercase tracking-[0.02em] text-lg mb-4 flex items-center gap-2">
+                    <Send size={20} className="text-gold-500" />
                     New Announcement
                 </h3>
 
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Subject</label>
+                        <label className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Subject</label>
                         <input
                             type="text"
                             value={subject}
                             onChange={e => setSubject(e.target.value)}
                             placeholder="e.g. Q1 Winners Posted!"
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 transition-colors"
+                            className="w-full bg-surface border border-line rounded-lg px-4 py-2 font-body text-[color:var(--text)] outline-none focus:border-gold-500 transition-colors"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Message</label>
+                        <label className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Message</label>
                         <textarea
                             value={message}
                             onChange={e => setMessage(e.target.value)}
                             placeholder="Write your message here..."
                             rows={4}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 transition-colors resize-none"
+                            className="w-full bg-surface border border-line rounded-lg px-4 py-2 font-body text-[color:var(--text)] outline-none focus:border-gold-500 transition-colors resize-none"
                         />
                     </div>
 
                     <div className="flex items-center justify-between pt-2">
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs font-body text-muted">
                             This will be emailed to all participants and shown in the app.
                         </p>
-                        <button
+                        <Button
                             onClick={handleSend}
                             disabled={isSending || !subject || !message}
-                            className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/20"
+                            size="sm"
                         >
                             {isSending ? 'Sending...' : 'Post & Email'}
                             <Send size={16} />
-                        </button>
+                        </Button>
                     </div>
 
                     {feedback && (
-                        <div className={`p-3 rounded-lg border flex items-center gap-2 text-sm ${feedback.type === 'success' ? 'bg-emerald-900/20 border-emerald-500/30 text-emerald-400' : 'bg-rose-900/20 border-rose-500/30 text-rose-400'
+                        <div className={`p-3 rounded-lg border flex items-center gap-2 font-body text-sm ${feedback.type === 'success' ? 'bg-[#E4F5EC] border-[#BEE7D0] text-[#0F7B4A]' : 'bg-brandred-600/10 border-brandred-600/30 text-brandred-600'
                             }`}>
                             {feedback.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
                             {feedback.msg}
@@ -126,25 +127,25 @@ export const AnnouncementManager: React.FC<AnnouncementManagerProps> = ({ pool, 
             </div>
 
             {/* HISTORY SECTION */}
-            <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-6">
-                <h3 className="text-slate-400 font-bold text-sm uppercase mb-4 flex items-center gap-2">
+            <div className="bg-surface rounded-xl border border-line p-6">
+                <h3 className="text-muted font-display font-bold text-sm uppercase tracking-[0.08em] mb-4 flex items-center gap-2">
                     <Clock size={16} />
-                    History ({history.length})
+                    History (<span className="num">{history.length}</span>)
                 </h3>
 
                 <div className="space-y-3">
                     {history.length === 0 ? (
-                        <p className="text-slate-600 text-sm italic text-center py-8">No announcements yet.</p>
+                        <p className="text-faint text-sm italic text-center py-8">No announcements yet.</p>
                     ) : (
                         history.map(item => (
-                            <div key={item.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-800 hover:border-slate-700 transition-colors">
+                            <div key={item.id} className="bg-card rounded-lg p-4 border border-line hover:border-gold-500/40 transition-colors">
                                 <div className="flex justify-between items-start mb-2">
-                                    <h4 className="text-white font-bold">{item.subject}</h4>
-                                    <span className="text-xs text-slate-500">
+                                    <h4 className="text-[color:var(--text)] font-display font-bold uppercase tracking-[0.02em]">{item.subject}</h4>
+                                    <span className="text-xs text-faint num">
                                         {item.createdAt ? new Date((item.createdAt as any).seconds * 1000).toLocaleString() : 'Just now'}
                                     </span>
                                 </div>
-                                <p className="text-slate-400 text-sm whitespace-pre-wrap">{item.message}</p>
+                                <p className="text-muted font-body text-sm whitespace-pre-wrap">{item.message}</p>
                             </div>
                         ))
                     )}

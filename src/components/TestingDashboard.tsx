@@ -2,7 +2,7 @@ import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import {
     Bot, Play, CheckCircle, AlertTriangle,
-    Terminal, RefreshCw, ChevronRight, Activity, Bug, FileText, X
+    Terminal, RefreshCw, ChevronRight, Activity, Bug, FileText, X, Check
 } from 'lucide-react';
 import { TEST_SCENARIOS, type PoolType, type TestResult } from '../utils/testing/testingOrchestrator';
 import {
@@ -77,12 +77,12 @@ export const TestingDashboard: React.FC = () => {
 
     const renderOverview = () => (
         <div className="space-y-6">
-            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                    <Bot className="w-6 h-6 text-indigo-400" />
+            <div className="bg-card p-6 rounded-xl border border-line shadow-card">
+                <h2 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-4 flex items-center gap-2">
+                    <Bot className="w-6 h-6 text-gold-600 dark:text-gold-400" />
                     AI-Enhanced Testing Dashboard
                 </h2>
-                <p className="text-slate-300 mb-6">
+                <p className="text-muted font-body mb-6">
                     Use Gemini AI to intelligently generate test scenarios, validate logic, and create comprehensive reports for all pool types.
                 </p>
 
@@ -91,13 +91,13 @@ export const TestingDashboard: React.FC = () => {
                         <button
                             key={type}
                             onClick={() => setActiveTab(type as PoolType)}
-                            className="p-4 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg text-left transition-all group"
+                            className="p-4 bg-surface hover:bg-card border border-line hover:border-gold-500/40 rounded-lg text-left transition-all duration-150 group"
                         >
                             <div className="flex justify-between items-center mb-2">
-                                <span className="font-bold text-white">{type}</span>
-                                <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-white" />
+                                <span className="font-display font-bold uppercase text-[color:var(--text)]">{type}</span>
+                                <ChevronRight className="w-4 h-4 text-faint group-hover:text-gold-600 dark:group-hover:text-gold-400" />
                             </div>
-                            <div className="text-xs text-slate-400">
+                            <div className="text-xs text-muted font-body num">
                                 {(TEST_SCENARIOS[type as PoolType] || []).length} Preset Scenarios
                             </div>
                         </button>
@@ -110,10 +110,10 @@ export const TestingDashboard: React.FC = () => {
     const renderPoolTest = () => (
         <div className="space-y-6">
             {/* AI Input Section */}
-            <div className="bg-slate-800 p-6 rounded-xl border border-indigo-500/20 shadow-lg shadow-indigo-500/5">
+            <div className="bg-card p-6 rounded-xl border border-line shadow-card">
                 <div className="flex items-center gap-2 mb-4">
-                    <Bot className={`w-5 h-5 text-indigo-400 ${isGenerating ? 'animate-pulse' : ''}`} />
-                    <h3 className="font-bold text-white">AI Scenario Generator</h3>
+                    <Bot className={`w-5 h-5 text-gold-600 dark:text-gold-400 ${isGenerating ? 'animate-pulse' : ''}`} />
+                    <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">AI Scenario Generator</h3>
                 </div>
 
                 <div className="flex gap-4 mb-4">
@@ -121,23 +121,23 @@ export const TestingDashboard: React.FC = () => {
                         value={aiPrompt}
                         onChange={(e) => setAiPrompt(e.target.value)}
                         placeholder={`Describe a test scenario (e.g., "Create a ${activeTab} pool where everyone picks mostly chalk but one user picks a massive upset...")`}
-                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-4 text-white resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-h-[100px]"
+                        className="flex-1 bg-surface border border-line rounded-lg p-4 text-[color:var(--text)] font-body resize-none focus:ring-2 focus:ring-navy-600 focus:border-transparent min-h-[100px]"
                     />
                 </div>
 
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <span className="text-slate-400 text-sm">Mode:</span>
-                        <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+                        <span className="text-muted font-body text-sm">Mode:</span>
+                        <div className="flex bg-surface rounded-lg p-1 border border-line">
                             <button
                                 onClick={() => setTestMode('dry-run')}
-                                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${testMode === 'dry-run' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                className={`px-3 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 ${testMode === 'dry-run' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'}`}
                             >
                                 Dry Run
                             </button>
                             <button
                                 onClick={() => setTestMode('actual')}
-                                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${testMode === 'actual' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                className={`px-3 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 ${testMode === 'actual' ? 'bg-brandred-600 text-white' : 'text-muted hover:text-[color:var(--text)]'}`}
                             >
                                 Actual
                             </button>
@@ -147,9 +147,9 @@ export const TestingDashboard: React.FC = () => {
                     <button
                         onClick={handleRunTest}
                         disabled={isRunning || !aiPrompt.trim()}
-                        className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all ${isRunning
-                            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                        className={`px-6 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 ${isRunning
+                            ? 'bg-surface border border-line text-faint cursor-not-allowed'
+                            : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta hover:-translate-y-px'
                             }`}
                     >
                         {isRunning ? (
@@ -171,7 +171,7 @@ export const TestingDashboard: React.FC = () => {
                         <button
                             key={i}
                             onClick={() => setAiPrompt(s)}
-                            className="text-xs px-3 py-1 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-full text-indigo-300 transition-colors"
+                            className="text-xs font-body px-3 py-1 bg-surface hover:bg-card border border-line hover:border-gold-500/40 rounded-full text-gold-700 dark:text-gold-400 transition-colors duration-150"
                         >
                             {s}
                         </button>
@@ -180,16 +180,16 @@ export const TestingDashboard: React.FC = () => {
 
                 {/* Scenario Details (if generated) */}
                 {currentScenario && (
-                    <div className="mt-6 p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                    <div className="mt-6 p-4 bg-surface rounded-lg border border-line">
                         <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-bold text-white text-sm flex items-center gap-2">
-                                <Bot className="w-3 h-3 text-indigo-400" />
+                            <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-sm flex items-center gap-2">
+                                <Bot className="w-3 h-3 text-gold-600 dark:text-gold-400" />
                                 Generated Scenario: {currentScenario.scenarioName}
                             </h4>
-                            <span className="text-xs text-slate-400">{(currentScenario.testUsers || []).length} Users • {currentScenario.poolType}</span>
+                            <span className="text-xs text-muted font-body num">{(currentScenario.testUsers || []).length} Users • {currentScenario.poolType}</span>
                         </div>
-                        <p className="text-xs text-slate-400 italic mb-3">"{currentScenario.description}"</p>
-                        <div className="bg-black p-3 rounded border border-slate-800 font-mono text-xs text-green-400 overflow-x-auto">
+                        <p className="text-xs text-muted font-body italic mb-3">"{currentScenario.description}"</p>
+                        <div className="bg-navy-950 p-3 rounded border border-[rgba(230,206,150,0.16)] font-mono text-xs text-gold-300 overflow-x-auto num">
                             {JSON.stringify(currentScenario, null, 2)}
                         </div>
                     </div>
@@ -200,21 +200,21 @@ export const TestingDashboard: React.FC = () => {
             {(currentResult || isRunning) && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Left: Execution Log */}
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                        <div className="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
-                            <h3 className="font-bold text-white flex items-center gap-2">
-                                <Terminal className="w-4 h-4 text-slate-400" />
+                    <div className="bg-card rounded-xl border border-line shadow-card overflow-hidden">
+                        <div className="p-4 bg-surface border-b border-line flex justify-between items-center">
+                            <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                <Terminal className="w-4 h-4 text-muted" />
                                 Execution Log
                             </h3>
                             {currentResult && (
-                                <span className={`text-xs px-2 py-1 rounded font-bold ${currentResult.status === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                <span className={`text-xs px-2 py-1 rounded font-display font-bold uppercase tracking-[0.08em] ${currentResult.status === 'success' ? 'bg-[#E4F5EC] text-[#0F7B4A] border border-[#BEE7D0]' : 'bg-brandred-600/5 text-brandred-600 border border-brandred-600/40'}`}>
                                     {currentResult.status.toUpperCase()}
                                 </span>
                             )}
                         </div>
                         <div className="p-4 h-[400px] overflow-y-auto space-y-2 font-mono text-sm">
                             {!currentResult && isRunning && (
-                                <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4">
+                                <div className="flex flex-col items-center justify-center h-full text-faint gap-4">
                                     <RefreshCw className="w-8 h-8 animate-spin" />
                                     <p>Orchestrating test with AI...</p>
                                 </div>
@@ -222,11 +222,11 @@ export const TestingDashboard: React.FC = () => {
 
                             {(Array.isArray(currentResult?.steps) ? currentResult.steps : []).map((step, i) => (
                                 <div key={i} className="flex gap-2">
-                                    <span className={step.status === 'success' ? 'text-green-500' : 'text-red-500'}>
-                                        {step.status === 'success' ? '✓' : '✗'}
+                                    <span className={step.status === 'success' ? 'text-[#0F7B4A]' : 'text-brandred-600'}>
+                                        {step.status === 'success' ? <Check className="w-3.5 h-3.5 mt-0.5" /> : <X className="w-3.5 h-3.5 mt-0.5" />}
                                     </span>
-                                    <span className="text-slate-300">{step.step}:</span>
-                                    <span className="text-slate-400">{step.message}</span>
+                                    <span className="text-[color:var(--text)]">{step.step}:</span>
+                                    <span className="text-muted">{step.message}</span>
                                 </div>
                             ))}
                         </div>
@@ -235,10 +235,10 @@ export const TestingDashboard: React.FC = () => {
                     {/* Right: AI Analysis */}
                     <div className="space-y-6">
                         {/* Validation */}
-                        <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                            <div className="p-4 bg-slate-900 border-b border-slate-700">
-                                <h3 className="font-bold text-white flex items-center gap-2">
-                                    <Activity className="w-4 h-4 text-indigo-400" />
+                        <div className="bg-card rounded-xl border border-line shadow-card overflow-hidden">
+                            <div className="p-4 bg-surface border-b border-line">
+                                <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                    <Activity className="w-4 h-4 text-gold-600 dark:text-gold-400" />
                                     AI Validation
                                 </h3>
                             </div>
@@ -246,18 +246,18 @@ export const TestingDashboard: React.FC = () => {
                                 {validationResult ? (
                                     <div>
                                         <div className="flex items-center gap-4 mb-4">
-                                            <div className={`p-3 rounded-full ${validationResult.passed ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+                                            <div className={`p-3 rounded-full ${validationResult.passed ? 'bg-[#0F7B4A]/10' : 'bg-brandred-600/10'}`}>
                                                 {validationResult.passed ? (
-                                                    <CheckCircle className={`w-6 h-6 ${validationResult.passed ? 'text-green-400' : 'text-red-400'}`} />
+                                                    <CheckCircle className={`w-6 h-6 ${validationResult.passed ? 'text-[#0F7B4A]' : 'text-brandred-600'}`} />
                                                 ) : (
-                                                    <AlertTriangle className="w-6 h-6 text-red-400" />
+                                                    <AlertTriangle className="w-6 h-6 text-brandred-600" />
                                                 )}
                                             </div>
                                             <div>
-                                                <div className="text-lg font-bold text-white">
+                                                <div className="text-lg font-display font-bold uppercase text-[color:var(--text)]">
                                                     {validationResult.passed ? 'Validation Passed' : 'Issues Detected'}
                                                 </div>
-                                                <div className="text-sm text-slate-400">
+                                                <div className="text-sm text-muted font-body num">
                                                     Confidence Score: {validationResult.confidence}%
                                                 </div>
                                             </div>
@@ -265,11 +265,11 @@ export const TestingDashboard: React.FC = () => {
 
                                         <div className="space-y-2">
                                             {(Array.isArray(validationResult.findings) ? validationResult.findings : []).map((f, i) => (
-                                                <div key={i} className={`p-3 rounded-lg text-sm border ${f.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-300' :
-                                                    f.type === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-300' :
-                                                        'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                                <div key={i} className={`p-3 rounded-lg text-sm font-body border ${f.type === 'success' ? 'bg-[#0F7B4A]/10 border-[#0F7B4A]/30 text-[#0F7B4A]' :
+                                                    f.type === 'error' ? 'bg-brandred-600/5 border-brandred-600/40 text-brandred-600' :
+                                                        'bg-gold-500/10 border-gold-500/40 text-gold-700 dark:text-gold-400'
                                                     }`}>
-                                                    <div className="font-bold mb-1 flex items-center gap-2">
+                                                    <div className="font-display font-bold uppercase tracking-[0.05em] mb-1 flex items-center gap-2">
                                                         {f.type === 'success' && <CheckCircle className="w-3 h-3" />}
                                                         {f.type === 'error' && <Bug className="w-3 h-3" />}
                                                         {f.message}
@@ -284,7 +284,7 @@ export const TestingDashboard: React.FC = () => {
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="text-center text-slate-500 py-8">
+                                    <div className="text-center text-faint font-body py-8">
                                         Validation pending completion...
                                     </div>
                                 )}
@@ -293,19 +293,19 @@ export const TestingDashboard: React.FC = () => {
 
                         {/* AI Report */}
                         {report && (
-                            <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                                <div className="p-4 bg-slate-900 border-b border-slate-700">
-                                    <h3 className="font-bold text-white flex items-center gap-2">
-                                        <FileText className="w-4 h-4 text-purple-400" />
+                            <div className="bg-card rounded-xl border border-line shadow-card overflow-hidden">
+                                <div className="p-4 bg-surface border-b border-line">
+                                    <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                        <FileText className="w-4 h-4 text-gold-600 dark:text-gold-400" />
                                         AI Report
                                     </h3>
                                 </div>
-                                <div className="p-4 text-slate-300 text-sm prose prose-invert max-w-none">
+                                <div className="p-4 text-muted font-body text-sm prose dark:prose-invert max-w-none">
                                     <ReactMarkdown>
                                         {`### ${report.executiveSummary || 'Report Generated'}\n\n**Key Findings**\n${(Array.isArray(report.keyFindings) ? report.keyFindings : []).map(k => `- ${k}`).join('\n')}`}
                                     </ReactMarkdown>
                                     <button
-                                        className="mt-4 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-white transition-colors"
+                                        className="mt-4 w-full py-2 bg-navy-800 hover:bg-navy-700 rounded text-xs font-display font-bold uppercase tracking-[0.05em] text-white transition-colors duration-150"
                                         onClick={() => setShowFullReport(true)}
                                     >
                                         View Full Report
@@ -326,9 +326,9 @@ export const TestingDashboard: React.FC = () => {
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab as any)}
-                        className={`px-4 py-2 rounded-lg font-bold text-sm whitespace-nowrap transition-all ${activeTab === tab
-                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white border border-slate-700'
+                        className={`px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm whitespace-nowrap transition-all duration-150 ${activeTab === tab
+                            ? 'bg-brandred-600 text-white shadow-red-cta'
+                            : 'bg-card text-muted hover:bg-surface hover:text-[color:var(--text)] border border-line'
                             }`}
                     >
                         {tab.replace('_', ' ')}
@@ -354,28 +354,28 @@ export const TestingDashboard: React.FC = () => {
 const ReportModal = ({ isOpen, onClose, report }: { isOpen: boolean; onClose: () => void; report: any }) => {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="bg-slate-800 w-full max-w-4xl max-h-[90vh] rounded-2xl border border-slate-700 shadow-2xl flex flex-col">
-                <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-900/50 rounded-t-2xl">
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                        <FileText className="w-6 h-6 text-purple-400" />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm">
+            <div className="bg-card w-full max-w-4xl max-h-[90vh] rounded-2xl border border-line shadow-panel flex flex-col">
+                <div className="p-6 border-b border-line flex justify-between items-center bg-surface rounded-t-2xl">
+                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                        <FileText className="w-6 h-6 text-gold-600 dark:text-gold-400" />
                         Full AI Analysis
                     </h3>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-full transition-colors">
-                        <X className="w-5 h-5 text-slate-400" />
+                    <button onClick={onClose} className="p-2 hover:bg-card rounded-full transition-colors duration-150">
+                        <X className="w-5 h-5 text-muted" />
                     </button>
                 </div>
-                <div className="p-6 overflow-y-auto flex-1 text-slate-300 prose prose-invert max-w-none">
+                <div className="p-6 overflow-y-auto flex-1 text-muted font-body prose dark:prose-invert max-w-none">
                     <ReactMarkdown>{report.detailedResults || "No details provided."}</ReactMarkdown>
 
-                    <hr className="border-slate-700 my-6" />
-                    <h4 className="text-white font-bold mb-2">Technical Data</h4>
-                    <pre className="bg-black p-4 rounded-lg text-xs font-mono text-green-400 overflow-x-auto">
+                    <hr className="border-line my-6" />
+                    <h4 className="text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] mb-2">Technical Data</h4>
+                    <pre className="bg-navy-950 p-4 rounded-lg text-xs font-mono text-gold-300 border border-[rgba(230,206,150,0.16)] overflow-x-auto num">
                         {JSON.stringify(report, null, 2)}
                     </pre>
                 </div>
-                <div className="p-6 border-t border-slate-700 bg-slate-900/30 rounded-b-2xl flex justify-end">
-                    <button onClick={onClose} className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors">
+                <div className="p-6 border-t border-line bg-surface rounded-b-2xl flex justify-end">
+                    <button onClick={onClose} className="px-6 py-2 bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-colors duration-150">
                         Close
                     </button>
                 </div>

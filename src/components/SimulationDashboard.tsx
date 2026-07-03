@@ -131,27 +131,27 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
 
     if (!selectedPoolId) {
         return (
-            <div className="fixed inset-0 bg-slate-950 z-50 overflow-auto p-8">
+            <div className="fixed inset-0 bg-page z-50 overflow-auto p-8">
                 <div className="max-w-4xl mx-auto">
                     <div className="flex justify-between items-center mb-8">
-                        <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                            <Activity className="text-emerald-500" /> Simulation Dashboard <span className="text-xs bg-slate-800 text-emerald-400 px-2 py-0.5 rounded-full">v2.1</span>
+                        <h1 className="text-3xl font-display font-extrabold uppercase leading-none text-[color:var(--text)] flex items-center gap-3">
+                            <Activity className="text-gold-600 dark:text-gold-400" /> Simulation Dashboard <span className="text-xs font-display font-bold bg-card border border-line text-gold-700 dark:text-gold-400 px-2 py-0.5 rounded-full num">v2.1</span>
                         </h1>
-                        <button onClick={onClose} className="text-slate-400 hover:text-white font-bold">Close</button>
+                        <button onClick={onClose} className="text-muted hover:text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150">Close</button>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                        <h2 className="text-xl font-bold text-white mb-4">Select a Pool to Simulate</h2>
+                    <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                        <h2 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-4">Select a Pool to Simulate</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {validPools.map(p => (
                                 <button
                                     key={p.id}
                                     onClick={() => setSelectedPoolId(p.id)}
-                                    className="p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-left transition-colors group"
+                                    className="p-4 bg-surface hover:bg-card border border-line hover:border-gold-500/40 rounded-lg text-left transition-all duration-150 group"
                                 >
-                                    <div className="font-bold text-white group-hover:text-emerald-400">{p.name}</div>
-                                    <div className="text-xs text-slate-500 font-mono mt-1">{p.id}</div>
-                                    <div className="text-xs text-slate-400 mt-2">
+                                    <div className="font-display font-bold uppercase text-[color:var(--text)] group-hover:text-gold-700 dark:group-hover:text-gold-400">{p.name}</div>
+                                    <div className="text-xs text-faint font-mono mt-1">{p.id}</div>
+                                    <div className="text-xs text-muted font-body mt-2 num">
                                         {(p as GameState).squares.filter((s: Square) => s.owner).length}/100 Filled • {(p as GameState).isLocked ? 'LOCKED' : 'OPEN'}
                                     </div>
                                 </button>
@@ -164,21 +164,21 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
     }
 
     return (
-        <div className="fixed inset-0 bg-slate-950 z-50 overflow-auto flex flex-col">
+        <div className="fixed inset-0 bg-page z-50 overflow-auto flex flex-col">
             {/* Header */}
-            <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-10 shadow-lg">
+            <div className="bg-surface border-b border-line p-4 sticky top-0 z-10 shadow-panel">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
                     <div className="flex items-center gap-4">
-                        <button onClick={() => setSelectedPoolId('')} className="text-indigo-400 hover:text-white font-bold text-sm">← Back</button>
-                        <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                            Simulating: <span className="text-emerald-400">{selectedPool?.name}</span>
+                        <button onClick={() => setSelectedPoolId('')} className="text-gold-700 dark:text-gold-400 hover:text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors duration-150">← Back</button>
+                        <h1 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                            Simulating: <span className="text-gold-700 dark:text-gold-400">{selectedPool?.name}</span>
                         </h1>
                     </div>
                     <div className="flex items-center gap-4">
-                        <div className="text-xs font-mono text-slate-400">
-                            {simStatus && <span className="bg-slate-800 px-2 py-1 rounded text-amber-400 animate-pulse">{simStatus}</span>}
+                        <div className="text-xs font-mono text-muted">
+                            {simStatus && <span className="bg-card border border-line px-2 py-1 rounded text-gold-700 dark:text-gold-400 animate-pulse">{simStatus}</span>}
                         </div>
-                        <button onClick={onClose} className="text-slate-400 hover:text-white font-bold">Exit Dashboard</button>
+                        <button onClick={onClose} className="text-muted hover:text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150">Exit Dashboard</button>
                     </div>
                 </div>
             </div>
@@ -188,39 +188,39 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                 {/* LEFT COL: Config & Grid */}
                 <div className="space-y-6">
                     {/* Rules */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                        <h3 className="text-sm font-bold text-slate-400 uppercase mb-4 flex items-center gap-2"><Settings size={16} /> Rules Config</h3>
+                    <div className="bg-card border border-line rounded-xl p-5 shadow-card">
+                        <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.12em] mb-4 flex items-center gap-2"><Settings size={16} /> Rules Config</h3>
                         <div className="space-y-3">
-                            <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-800 rounded">
-                                <span className="text-white font-medium">Every Score Pays</span>
+                            <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-surface rounded">
+                                <span className="text-[color:var(--text)] font-body font-medium">Every Score Pays</span>
                                 <input
                                     type="checkbox"
                                     checked={selectedPool?.ruleVariations?.scoreChangePayout || false}
                                     onChange={(e) => toggleRule('scoreChangePayout', e.target.checked)}
-                                    className="w-5 h-5 accent-emerald-500 rounded"
+                                    className="w-5 h-5 accent-gold-500 rounded"
                                 />
                             </label>
-                            <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-800 rounded">
-                                <span className="text-white font-medium">Rollover (Unclaimed Wins)</span>
+                            <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-surface rounded">
+                                <span className="text-[color:var(--text)] font-body font-medium">Rollover (Unclaimed Wins)</span>
                                 <input
                                     type="checkbox"
                                     checked={selectedPool?.ruleVariations?.quarterlyRollover || false}
                                     onChange={(e) => toggleRule('rollover', e.target.checked)}
-                                    className="w-5 h-5 accent-emerald-500 rounded"
+                                    className="w-5 h-5 accent-gold-500 rounded"
                                 />
                             </label>
-                            <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-800 rounded">
-                                <span className="text-white font-medium">Reverse Winners</span>
+                            <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-surface rounded">
+                                <span className="text-[color:var(--text)] font-body font-medium">Reverse Winners</span>
                                 <input
                                     type="checkbox"
                                     checked={selectedPool?.ruleVariations?.reverseWinners || false}
                                     onChange={(e) => toggleRule('reverseWinners', e.target.checked)}
-                                    className="w-5 h-5 accent-emerald-500 rounded"
+                                    className="w-5 h-5 accent-gold-500 rounded"
                                 />
                             </label>
-                            <div className="flex items-center justify-between p-2 mt-2 bg-slate-800/50 rounded pointer-events-none opacity-50">
-                                <span className="text-slate-400 text-sm">Current Numbers</span>
-                                <span className="text-xs font-mono text-slate-500">
+                            <div className="flex items-center justify-between p-2 mt-2 bg-surface rounded pointer-events-none opacity-50">
+                                <span className="text-muted font-body text-sm">Current Numbers</span>
+                                <span className="text-xs font-mono text-faint num">
                                     {selectedPool?.numberSets === 4 ? 'Quarterly' : 'Single Set'}
                                 </span>
                             </div>
@@ -228,13 +228,13 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                     </div>
 
                     {/* Grid Filler */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                        <h3 className="text-sm font-bold text-slate-400 uppercase mb-4 flex items-center gap-2"><Users size={16} /> Grid Population</h3>
+                    <div className="bg-card border border-line rounded-xl p-5 shadow-card">
+                        <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.12em] mb-4 flex items-center gap-2"><Users size={16} /> Grid Population</h3>
                         <div className="space-y-4">
                             <div>
                                 <div className="flex justify-between text-sm mb-2">
-                                    <span className="text-white">Leave Empty Squares</span>
-                                    <span className="font-bold text-emerald-400">{blanksToLeave}</span>
+                                    <span className="text-[color:var(--text)] font-body">Leave Empty Squares</span>
+                                    <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">{blanksToLeave}</span>
                                 </div>
                                 <input
                                     type="range"
@@ -242,17 +242,17 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                                     max="50"
                                     value={blanksToLeave}
                                     onChange={(e) => setBlanksToLeave(parseInt(e.target.value))}
-                                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                                    className="w-full h-2 bg-line rounded-lg appearance-none cursor-pointer accent-gold-500"
                                 />
                             </div>
                             <button
                                 onClick={() => handleAction(`Filling Grid (leave ${blanksToLeave})`, () => fillGridWithBlanks(selectedPoolId, blanksToLeave))}
                                 disabled={isLoading}
-                                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                className="w-full bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-2 rounded-lg transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2"
                             >
                                 <Users size={18} /> Fill Grid
                             </button>
-                            <div className="text-center text-xs text-slate-500 mt-2">
+                            <div className="text-center text-xs text-faint font-body mt-2 num">
                                 Current Fill: {selectedPool?.squares.filter(s => s.owner).length}/100
                             </div>
                         </div>
@@ -260,43 +260,43 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                 </div>
 
                 {/* MIDDLE COL: Scenario Runner */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col">
-                    <h3 className="text-sm font-bold text-slate-400 uppercase mb-4 flex items-center gap-2"><Play size={16} /> Game Scenario Runner</h3>
+                <div className="bg-card border border-line rounded-xl p-6 shadow-card flex flex-col">
+                    <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.12em] mb-4 flex items-center gap-2"><Play size={16} /> Game Scenario Runner</h3>
 
                     <div className="flex-1 space-y-4">
                         {/* Status Display */}
-                        <div className="bg-black/40 rounded-xl p-4 border border-slate-700 font-mono text-center mb-6">
-                            <div className="text-xs text-slate-500 uppercase tracking-widest mb-1">Game Status</div>
-                            <div className="text-2xl font-bold text-white mb-2">
+                        <div className="bg-navy-950 rounded-xl p-4 border border-[rgba(230,206,150,0.16)] text-center mb-6">
+                            <div className="text-xs font-display font-bold text-[#9FB0CC] uppercase tracking-[0.16em] mb-1">Game Status</div>
+                            <div className="text-2xl font-display font-bold uppercase text-[#EDF1F8] mb-2 num">
                                 {selectedPool?.scores?.gameStatus === 'pre' ? 'PRE-GAME' :
                                     selectedPool?.scores?.gameStatus === 'post' ? 'FINAL' :
                                         `Q${selectedPool?.scores?.period || '-'} • ${selectedPool?.scores?.clock || '--'}`}
                             </div>
-                            <div className="flex justify-center items-center gap-8 text-xl font-bold">
-                                <div className="text-indigo-400">HOME {selectedPool?.scores?.current?.home || 0}</div>
-                                <div className="text-slate-600">vs</div>
-                                <div className="text-rose-400">AWAY {selectedPool?.scores?.current?.away || 0}</div>
+                            <div className="flex justify-center items-center gap-8 text-xl font-display font-bold num">
+                                <div className="text-gold-400">HOME {selectedPool?.scores?.current?.home || 0}</div>
+                                <div className="text-[#9FB0CC]">vs</div>
+                                <div className="text-brandred-500">AWAY {selectedPool?.scores?.current?.away || 0}</div>
                             </div>
                         </div>
 
                         {/* Controls */}
                         <div className="grid grid-cols-2 gap-3">
-                            <button onClick={() => runSimStep('START')} className="bg-emerald-600 hover:bg-emerald-500 p-3 rounded font-bold text-white">Start Game</button>
-                            <button onClick={() => runSimStep('RESET')} className="bg-slate-700 hover:bg-slate-600 p-3 rounded font-bold text-slate-300">Reset</button>
+                            <button onClick={() => runSimStep('START')} className="bg-brandred-600 hover:bg-brandred-500 p-3 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-all duration-150 hover:-translate-y-px shadow-red-cta">Start Game</button>
+                            <button onClick={() => runSimStep('RESET')} className="border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-[color:var(--line)] dark:text-[color:var(--text)] dark:hover:bg-white/10 dark:hover:text-white p-3 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150">Reset</button>
 
-                            <div className="col-span-2 text-xs text-slate-500 font-bold uppercase mt-2">Score Events</div>
-                            <button onClick={() => runSimStep('HOME+7')} className="w-full bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold transition-all">Home TD (+7)</button>
-                            <button onClick={() => runSimStep('AWAY+7')} className="w-full bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold transition-all">Away TD (+7)</button>
-                            <button onClick={() => runSimStep('HOME+3')} className="w-full bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold transition-all">Home FG (+3)</button>
-                            <button onClick={() => runSimStep('AWAY+3')} className="w-full bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold transition-all">Away FG (+3)</button>
-                            <button onClick={() => runSimStep('HOME+2')} className="w-full bg-slate-800 hover:bg-slate-700 border border-indigo-500/30 text-indigo-400 p-2 rounded font-bold transition-all">Home 2-Pt (+2)</button>
-                            <button onClick={() => runSimStep('AWAY+2')} className="w-full bg-slate-800 hover:bg-slate-700 border border-rose-500/30 text-rose-400 p-2 rounded font-bold transition-all">Away 2-Pt (+2)</button>
+                            <div className="col-span-2 text-xs text-faint font-display font-bold uppercase tracking-[0.08em] mt-2">Score Events</div>
+                            <button onClick={() => runSimStep('HOME+7')} className="w-full bg-surface hover:bg-card border border-navy-600/40 text-navy-700 dark:text-gold-400 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Home TD (+7)</button>
+                            <button onClick={() => runSimStep('AWAY+7')} className="w-full bg-surface hover:bg-card border border-brandred-600/40 text-brandred-600 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Away TD (+7)</button>
+                            <button onClick={() => runSimStep('HOME+3')} className="w-full bg-surface hover:bg-card border border-navy-600/40 text-navy-700 dark:text-gold-400 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Home FG (+3)</button>
+                            <button onClick={() => runSimStep('AWAY+3')} className="w-full bg-surface hover:bg-card border border-brandred-600/40 text-brandred-600 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Away FG (+3)</button>
+                            <button onClick={() => runSimStep('HOME+2')} className="w-full bg-surface hover:bg-card border border-navy-600/40 text-navy-700 dark:text-gold-400 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Home 2-Pt (+2)</button>
+                            <button onClick={() => runSimStep('AWAY+2')} className="w-full bg-surface hover:bg-card border border-brandred-600/40 text-brandred-600 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Away 2-Pt (+2)</button>
 
-                            <div className="col-span-2 text-xs text-slate-500 font-bold uppercase mt-2">Progresion</div>
-                            <button onClick={() => runSimStep('END_Q1')} className="bg-slate-700 hover:bg-slate-600 p-2 rounded font-bold text-white">End Q1</button>
-                            <button onClick={() => runSimStep('END_HALF')} className="bg-slate-700 hover:bg-slate-600 p-2 rounded font-bold text-white">End Half</button>
-                            <button onClick={() => runSimStep('END_Q3')} className="bg-slate-700 hover:bg-slate-600 p-2 rounded font-bold text-white">End Q3</button>
-                            <button onClick={() => runSimStep('FINAL')} className="bg-amber-600 hover:bg-amber-500 p-2 rounded font-bold text-white col-span-2">End Game (Final)</button>
+                            <div className="col-span-2 text-xs text-faint font-display font-bold uppercase tracking-[0.08em] mt-2">Progresion</div>
+                            <button onClick={() => runSimStep('END_Q1')} className="bg-navy-800 hover:bg-navy-700 p-2 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-all duration-150">End Q1</button>
+                            <button onClick={() => runSimStep('END_HALF')} className="bg-navy-800 hover:bg-navy-700 p-2 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-all duration-150">End Half</button>
+                            <button onClick={() => runSimStep('END_Q3')} className="bg-navy-800 hover:bg-navy-700 p-2 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-all duration-150">End Q3</button>
+                            <button onClick={() => runSimStep('FINAL')} className="bg-gold-foil text-navy-900 hover:brightness-105 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 col-span-2">End Game (Final)</button>
                         </div>
                     </div>
                 </div>
@@ -306,19 +306,19 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                     <AuditLogViewer poolId={selectedPoolId} />
 
                     {/* Mini Winners Table */}
-                    <div className="mt-4 bg-slate-900 border border-slate-800 rounded-xl p-4 flex-1 flex flex-col min-h-[200px]">
-                        <h3 className="text-sm font-bold text-slate-400 uppercase mb-2 flex items-center gap-2"><Trophy size={16} /> Calculated Winners</h3>
+                    <div className="mt-4 bg-card border border-line rounded-xl p-4 shadow-card flex-1 flex flex-col min-h-[200px]">
+                        <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.12em] mb-2 flex items-center gap-2"><Trophy size={16} /> Calculated Winners</h3>
                         <div className="overflow-y-auto flex-1 text-xs space-y-2">
-                            {winners.length === 0 && <div className="text-slate-500 italic p-2 text-center">No winners computed yet.</div>}
+                            {winners.length === 0 && <div className="text-faint font-body italic p-2 text-center">No winners computed yet.</div>}
                             {winners.map((w, i) => (
-                                <div key={i} className="bg-slate-800 p-2 rounded border border-slate-700/50 flex justify-between items-center hover:bg-slate-700 transition">
+                                <div key={i} className="bg-surface p-2 rounded border border-line flex justify-between items-center hover:border-gold-500/40 transition-colors duration-150">
                                     <div>
-                                        <div className="font-bold text-emerald-400">{w.owner}</div>
-                                        <div className="text-[10px] text-slate-400">{w.description || w.period} • {w.homeDigit}-{w.awayDigit}</div>
+                                        <div className="font-display font-bold uppercase text-gold-700 dark:text-gold-400">{w.owner}</div>
+                                        <div className="text-[10px] text-muted font-body num">{w.description || w.period} • {w.homeDigit}-{w.awayDigit}</div>
                                     </div>
                                     <div className="text-right">
-                                        <div className="font-bold text-white">${w.amount}</div>
-                                        {w.isReverse && <div className="text-[10px] text-indigo-400">Reverse</div>}
+                                        <div className="font-display font-bold text-gold-700 dark:text-gold-400 num">${w.amount}</div>
+                                        {w.isReverse && <div className="text-[10px] font-body text-navy-600 dark:text-[#9FB0CC]">Reverse</div>}
                                     </div>
                                 </div>
                             ))}
@@ -330,4 +330,3 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
         </div>
     );
 };
-
