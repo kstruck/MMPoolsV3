@@ -650,6 +650,16 @@ export const dbService = {
         });
     },
 
+    // Platform revenue rollup (T14) — admin_stats/revenue, SUPER_ADMIN read.
+    subscribeToRevenueStats: (callback: (rev: Record<string, unknown> | null) => void, onError?: (error: Error) => void) => {
+        return onSnapshot(doc(db, "admin_stats", "revenue"), (snap) => {
+            callback(snap.exists() ? snap.data() : null);
+        }, (error) => {
+            logger.error("Revenue Stats Subscription Error:", error);
+            if (onError) onError(error);
+        });
+    },
+
     // Admin Audit Log reader (T7). Most-recent admin actions across the platform.
     subscribeToAdminAudit: (callback: (entries: Record<string, unknown>[]) => void, onError?: (error: Error) => void, max = 100) => {
         const q = query(collection(db, "admin_audit"), orderBy("at", "desc"), limit(max));

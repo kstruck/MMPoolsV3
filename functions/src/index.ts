@@ -55,6 +55,9 @@ export { getServerTime } from "./serverTime";
 // --- ADMIN HEALTH (real Super-Admin Overview vitals; replaces fake status card) ---
 export { getAdminHealthSnapshot } from "./adminHealth";
 
+// --- REVENUE AGGREGATES (platform revenue from billingCharges → admin_stats/revenue) ---
+export { aggregateRevenueDaily, recomputeRevenue } from "./revenueAggregates";
+
 // --- EMAIL PREFERENCES (unsubscribe compliance + category preferences) ---
 export { emailUnsubscribe } from "./emailUnsubscribeHttp";
 export { manageEmailPrefs } from "./emailPrefsPage";

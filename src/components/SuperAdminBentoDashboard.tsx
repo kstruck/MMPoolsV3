@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { GlobalStats } from '../services/dbService';
 import {
   Trophy,
@@ -18,6 +18,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import { useToast } from './ui/Toast';
 import { getUserMessage } from '../utils/errorMessages';
+import { dbService } from '../services/dbService';
 
 const BRAND = {
   emeraldGlow: 'rgba(16, 185, 129, 0.15)',
@@ -50,6 +51,13 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
   const [health, setHealth] = useState<HealthSnapshot | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [isProbing, setIsProbing] = useState(false);
+  const [revenue, setRevenue] = useState<{ totalRevenue?: number; last30dRevenue?: number } | null>(null);
+
+  // Platform revenue (Stripe income) — distinct from prize volume (GMV) below.
+  useEffect(() => {
+    const unsub = dbService.subscribeToRevenueStats((r) => setRevenue(r as { totalRevenue?: number } | null));
+    return unsub;
+  }, []);
 
   const runHealthCheck = useCallback(async () => {
     setIsProbing(true);
@@ -105,9 +113,23 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
             </div>
             <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl relative overflow-hidden group hover:border-purple-500/35 transition-colors">
               <div className="absolute top-3 right-3 p-1.5 rounded-lg bg-purple-500/10 text-purple-400"><Coins size={16} /></div>
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Total Revenue</span>
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1" title="Total prize money across all pools — player money, not platform income.">Prize Volume (GMV)</span>
               <span className="text-2xl font-black text-white font-mono leading-none">${(stats?.totalRevenue || 0).toLocaleString()}</span>
             </div>
+          </div>
+
+          {/* Platform Revenue — real Stripe income (admin_stats/revenue), distinct from GMV above. */}
+          <div className="bg-gradient-to-r from-indigo-950/40 to-slate-950/60 border border-indigo-500/25 p-5 rounded-2xl flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-indigo-500/25 border border-indigo-500/40 rounded-xl text-indigo-300"><Coins size={20} /></div>
+              <div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Platform Revenue</span>
+                <span className="text-xl font-black text-indigo-300 font-mono">${(revenue?.totalRevenue || 0).toLocaleString()}</span>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-indigo-300 bg-indigo-400/10 px-3 py-1 rounded-full uppercase tracking-wider">
+              ${(revenue?.last30dRevenue || 0).toLocaleString()} / 30d
+            </span>
           </div>
 
           <div className="bg-gradient-to-r from-emerald-950/30 to-slate-950/60 border border-emerald-500/20 p-5 rounded-2xl flex items-center justify-between"
