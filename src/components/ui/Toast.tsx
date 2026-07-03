@@ -38,9 +38,9 @@ export const useToast = (): ToastContextValue => {
 export const useConfirm = () => useToast().confirm;
 
 const KIND_STYLES: Record<ToastKind, { box: string; Icon: typeof Info }> = {
-    success: { box: 'border-emerald-500/40 bg-emerald-950/95 text-emerald-200', Icon: CheckCircle2 },
-    error: { box: 'border-rose-500/40 bg-rose-950/95 text-rose-200', Icon: AlertCircle },
-    info: { box: 'border-indigo-500/40 bg-indigo-950/95 text-indigo-200', Icon: Info },
+    success: { box: 'border-[#BEE7D0]/40 bg-[#0F3D28]/95 text-[#BEE7D0]', Icon: CheckCircle2 },
+    error: { box: 'border-brandred-500/50 bg-[#3A1210]/95 text-[#F5C6C3]', Icon: AlertCircle },
+    info: { box: 'border-gold-500/40 bg-navy-900/95 text-gold-300', Icon: Info },
 };
 
 let nextId = 1;
@@ -145,26 +145,26 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby="confirm-title"
-                            className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
+                            className="w-full max-w-sm rounded-xl border border-line bg-card p-6 shadow-panel"
                             onClick={e => e.stopPropagation()}
                         >
-                            <h2 id="confirm-title" className="text-lg font-black text-white mb-2">
+                            <h2 id="confirm-title" className="font-display font-bold uppercase text-lg text-[color:var(--text)] mb-2">
                                 {confirmState.title}
                             </h2>
-                            <div className="text-sm text-slate-300 mb-6">{confirmState.message}</div>
+                            <div className="font-body text-sm text-muted mb-6">{confirmState.message}</div>
                             <div className="flex gap-3 justify-end">
                                 <button
                                     onClick={() => resolveConfirm(false)}
-                                    className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-300 bg-slate-800 hover:bg-slate-700"
+                                    className="px-4 py-2.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-sm border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-[color:var(--line)] dark:text-[color:var(--text)] dark:hover:bg-white/10 dark:hover:text-white transition-colors"
                                 >
                                     {confirmState.cancelLabel ?? 'Cancel'}
                                 </button>
                                 <button
                                     ref={confirmButtonRef}
                                     onClick={() => resolveConfirm(true)}
-                                    className={`px-4 py-2.5 rounded-xl text-sm font-bold text-white ${confirmState.danger
-                                        ? 'bg-rose-600 hover:bg-rose-500'
-                                        : 'bg-indigo-600 hover:bg-indigo-500'}`}
+                                    className={`px-4 py-2.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-sm text-white transition-colors ${confirmState.danger
+                                        ? 'bg-brandred-600 hover:bg-brandred-500'
+                                        : 'bg-navy-800 hover:bg-navy-700'}`}
                                 >
                                     {confirmState.confirmLabel ?? 'Confirm'}
                                 </button>

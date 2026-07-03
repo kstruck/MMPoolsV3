@@ -22,7 +22,7 @@ export const OfflineBanner: React.FC = () => {
     if (online) return null;
 
     return (
-        <div role="alert" className="sticky top-0 z-[90] bg-amber-600 text-slate-950 text-center text-xs font-black py-2 px-4 flex items-center justify-center gap-2">
+        <div role="alert" className="sticky top-0 z-[90] bg-gold-600 text-navy-950 text-center text-xs font-display font-bold uppercase tracking-[0.05em] py-2 px-4 flex items-center justify-center gap-2">
             <WifiOff size={14} aria-hidden="true" />
             You're offline — picks and changes won't save until you reconnect.
         </div>
