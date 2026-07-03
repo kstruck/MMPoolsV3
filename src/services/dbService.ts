@@ -650,6 +650,17 @@ export const dbService = {
         });
     },
 
+    // Admin Audit Log reader (T7). Most-recent admin actions across the platform.
+    subscribeToAdminAudit: (callback: (entries: Record<string, unknown>[]) => void, onError?: (error: Error) => void, max = 100) => {
+        const q = query(collection(db, "admin_audit"), orderBy("at", "desc"), limit(max));
+        return onSnapshot(q, (snapshot) => {
+            callback(snapshot.docs.map(d => ({ ...d.data(), id: d.id })));
+        }, (error) => {
+            logger.error("Admin Audit Subscription Error:", error);
+            if (onError) onError(error);
+        });
+    },
+
     subscribeToPool: (identifier: string, callback: (pool: Pool | null) => void, onError?: (error: Error) => void) => {
         const isLikelyDocId = identifier.length === 20;
         if (isLikelyDocId) {

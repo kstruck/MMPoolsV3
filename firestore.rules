@@ -278,6 +278,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ADMIN AUDIT LOG (T7) — forensic trail of admin actions, keyed by actor.
+    // Written exclusively by Cloud Functions (writeAdminAudit); read by admins.
+    match /admin_audit/{entryId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
     // TOURNAMENTS (March Madness Data)
     match /tournaments/{tournamentId} {
       allow read: if true;

@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { writeAdminAudit } from "./lib/adminAudit";
 
 export const backfillPools = onCall(async (request) => {
     if (!request.auth || request.auth.token.role !== 'SUPER_ADMIN') {
@@ -93,6 +94,16 @@ export const backfillPools = onCall(async (request) => {
     if (batchCount > 0) {
         await batch.commit();
     }
+
+    await writeAdminAudit({
+        actorUid: request.auth.uid,
+        actorEmail: request.auth.token.email as string | undefined,
+        action: "BACKFILL_RUN",
+        targetType: "collection",
+        targetId: "pools",
+        metadata: { updatedCount },
+        status: "success",
+    });
 
     return { success: true, updatedCount };
 });

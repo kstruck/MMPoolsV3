@@ -894,6 +894,9 @@ export interface PoolTheme {
   grid: ThemeGrid;
   branding?: ThemeBranding;
   previewImage?: string;     // Auto-generated or uploaded
+  // Pool types this theme is offered for (T13). Absent/empty => all types,
+  // so existing (March-Madness-era) themes keep showing everywhere.
+  appliesTo?: PoolType[];
 }
 
 // --- SYSTEM TYPES ---
