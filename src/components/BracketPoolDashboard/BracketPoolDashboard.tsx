@@ -2144,6 +2144,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             {/* Pool Share Modal */}
             {showShareModal && (
                 <PoolShareModal
+                    poolId={pool.id}
                     poolName={pool.name}
                     poolSlug={pool.slug}
                     onClose={() => setShowShareModal(false)}

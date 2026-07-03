@@ -2,14 +2,17 @@ import { logger } from '../../utils/logger';
 import React, { useEffect, useRef } from 'react';
 import { Share2, Twitter, Facebook, MessageCircle, Link as LinkIcon, LogOut, Instagram } from 'lucide-react';
 import { useToast } from '../ui/Toast';
+import { InviteByEmail } from '../InviteByEmail';
 
 interface ShareModalProps {
     isOpen: boolean;
     onClose: () => void;
     shareUrl: string;
+    /** When set (commissioner context), shows the bulk "Invite by email" section. */
+    poolId?: string;
 }
 
-export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUrl }) => {
+export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUrl, poolId }) => {
     const dialogRef = useRef<HTMLDivElement>(null);
     const toast = useToast();
 
@@ -128,6 +131,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
                         <LinkIcon size={16} />
                     </button>
                 </div>
+
+                {/* Bulk email invites — commissioner-only (backend re-checks permission) */}
+                {poolId && (
+                    <div className="mt-6">
+                        <InviteByEmail poolId={poolId} />
+                    </div>
+                )}
             </div>
         </div>
     );

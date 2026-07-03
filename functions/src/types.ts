@@ -270,7 +270,10 @@ export type AuditEventType =
     | 'NOTIFICATION_SENT'
     | 'SURVIVOR_REBUY'
     | 'SURVIVOR_AUTO_STRIKE'
-    | 'SCHEDULE_FLEX';
+    | 'SCHEDULE_FLEX'
+    | 'DEADLINE_EXTENDED'
+    | 'PROXY_PICK_SUBMITTED'
+    | 'POOL_CANCELED';
 
 export interface AuditLogEvent {
     id: string;

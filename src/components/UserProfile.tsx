@@ -7,7 +7,7 @@ import { authService } from '../services/authService';
 import { useToast } from './ui/Toast';
 import { getUserMessage } from '../utils/errorMessages';
 
-import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon, Edit2 } from 'lucide-react';
+import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon, Edit2, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -267,6 +267,35 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                     <button onClick={() => navigate('/participant')} className="bg-slate-700 hover:bg-slate-600 text-white px-5 py-2 rounded-lg font-bold text-sm transition-colors border border-slate-600">
                         View Entries
                     </button>
+                </div>
+
+                {/* Email Preferences (informational — the control surface is the tokenized link in email footers) */}
+                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+                    <h3 className="text-slate-500 text-xs font-bold uppercase mb-4 tracking-wider flex items-center gap-2">
+                        <Mail size={14} /> Email Preferences
+                    </h3>
+                    <p className="text-slate-400 text-sm mb-4">
+                        You control which emails we send you, by category:
+                    </p>
+                    <ul className="space-y-2 mb-4">
+                        <li className="text-sm text-slate-300">
+                            <span className="font-bold text-white">Reminders</span>
+                            <span className="text-slate-400"> — pool lock countdowns, pick deadlines, and payment reminders.</span>
+                        </li>
+                        <li className="text-sm text-slate-300">
+                            <span className="font-bold text-white">Results</span>
+                            <span className="text-slate-400"> — winner announcements, recaps, and post-game summaries.</span>
+                        </li>
+                        <li className="text-sm text-slate-300">
+                            <span className="font-bold text-white">Announcements</span>
+                            <span className="text-slate-400"> — commissioner broadcasts, waitlist openings, and invites.</span>
+                        </li>
+                    </ul>
+                    <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-xs text-slate-400 leading-relaxed">
+                        To change these (or unsubscribe from everything), open the <span className="text-slate-300 font-bold">Unsubscribe / email preferences</span> link
+                        in the footer of any email we've sent you. That link is personalized and secure, so it works without logging in.
+                        Transactional emails (receipts, security notices) are always delivered.
+                    </div>
                 </div>
 
                 {/* Main Form */}

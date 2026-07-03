@@ -19,6 +19,18 @@ import * as crypto from "crypto";
  * The HTTP endpoint lives in emailUnsubscribeHttp.ts.
  */
 
+/** Non-transactional mail categories a recipient can opt out of individually. */
+export const EMAIL_CATEGORIES = ["reminders", "results", "announcements"] as const;
+export type EmailCategory = typeof EMAIL_CATEGORIES[number];
+export type EmailCategoryPrefs = Partial<Record<EmailCategory, boolean>>;
+
+export interface EmailPrefs {
+    /** True = block everything non-transactional (Phase-1 unsubscribe-all). */
+    optedOutAll: boolean;
+    /** Per-category prefs; a category set to false = opted out of that category. */
+    categories: EmailCategoryPrefs;
+}
+
 const SECRET_DOC = "config/internal";
 let cachedSecret: string | null = null;
 
@@ -49,13 +61,32 @@ export async function buildUnsubUrl(db: admin.firestore.Firestore, email: string
     const secret = await getUnsubSecret(db);
     const token = makeUnsubToken(email, secret);
     const project = process.env.GCLOUD_PROJECT;
-    const base = `https://us-central1-${project}.cloudfunctions.net/emailUnsubscribe`;
+    // Footer link lands on the preference center (manageEmailPrefs), which
+    // includes an "unsubscribe from all" option. The legacy emailUnsubscribe
+    // endpoint stays deployed so links in already-sent emails keep working.
+    const base = `https://us-central1-${project}.cloudfunctions.net/manageEmailPrefs`;
     return `${base}?e=${encodeURIComponent(email.trim().toLowerCase())}&t=${token}`;
 }
 
 export async function isOptedOut(db: admin.firestore.Firestore, email: string): Promise<boolean> {
     const snap = await db.collection("email_optouts").doc(emailHash(email)).get();
-    return snap.exists;
+    if (!snap.exists) return false;
+    // Phase-1 shape ({ email, optedOutAt } with no categories map) means
+    // "block everything non-transactional". A doc that carries a categories
+    // map holds per-category prefs only and must NOT trigger the all-block.
+    return !snap.data()?.categories;
+}
+
+/**
+ * Full preference read: unsubscribe-all flag + per-category prefs.
+ * A missing doc means fully subscribed. false in categories = opted out.
+ */
+export async function getPrefs(db: admin.firestore.Firestore, email: string): Promise<EmailPrefs> {
+    const snap = await db.collection("email_optouts").doc(emailHash(email)).get();
+    if (!snap.exists) return { optedOutAll: false, categories: {} };
+    const data = snap.data() ?? {};
+    const categories = (data.categories ?? {}) as EmailCategoryPrefs;
+    return { optedOutAll: !data.categories, categories };
 }
 
 /** Constant-time token comparison — exported for the HTTP endpoint. */

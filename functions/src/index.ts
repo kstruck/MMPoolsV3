@@ -52,6 +52,13 @@ export { creditReferralOnPayment, generateReferralToken, resolveReferralToken } 
 // --- SERVER TIME (client clock-drift correction for countdown/lock UI) ---
 export { getServerTime } from "./serverTime";
 
-// --- EMAIL PREFERENCES (unsubscribe compliance) ---
+// --- EMAIL PREFERENCES (unsubscribe compliance + category preferences) ---
 export { emailUnsubscribe } from "./emailUnsubscribeHttp";
+export { manageEmailPrefs } from "./emailPrefsPage";
+
+// --- COMMISSIONER EXCEPTION TOOLS (audited mid-season corrections) ---
+export { extendWeekDeadline, proxyPick, cancelPool } from "./poolExceptions";
+
+// --- POOL INVITES (bulk email invites) ---
+export { sendPoolInvites } from "./invites";
 

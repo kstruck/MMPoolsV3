@@ -174,7 +174,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
                 checkNameAvailable={(name) => !pools.some(p => p.name === name && p.id !== currentPool.id)}
                 currentUser={user!}
             />
-            <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
+            <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} poolId={currentPool.id} />
             <Footer />
         </div>
     );

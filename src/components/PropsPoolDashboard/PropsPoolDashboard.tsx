@@ -340,6 +340,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                 isOpen={showShareModal}
                 onClose={() => setShowShareModal(false)}
                 shareUrl={`${window.location.origin}/#pool/${pool.id}`}
+                poolId={(isManager || isAdmin) ? pool.id : undefined}
             />
         </div>
         </BillingGate>

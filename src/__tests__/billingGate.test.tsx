@@ -391,7 +391,7 @@ describe('BillingGate — locked state', () => {
       </BillingGate>
     );
 
-    expect(screen.getByText(/awaiting payment from the commissioner/i)).toBeTruthy();
+    expect(screen.getByText(/paused while the commissioner completes payment/i)).toBeTruthy();
     expect(screen.getByText(/please contact your pool commissioner/i)).toBeTruthy();
   });
 

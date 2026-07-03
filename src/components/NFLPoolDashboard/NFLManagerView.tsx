@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Settings, DollarSign, CheckCircle, XCircle, Users, Activity,
-  Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing
+  Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing,
+  ChevronDown, ChevronUp, Clock, UserCog, Ban
 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
@@ -79,6 +80,19 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   // Margin-specific
   const [marginPayoutMode, setMarginPayoutMode] = useState<string>(settings.payoutMode ?? 'SEASON');
+
+  // ---- Exceptions (commissioner tools) state ----
+  const [exceptionsOpen, setExceptionsOpen] = useState(false);
+  const [extendMinutes, setExtendMinutes] = useState<number>(60);
+  const [extendReason, setExtendReason] = useState('');
+  const [isExtending, setIsExtending] = useState(false);
+  const [proxyTargetUid, setProxyTargetUid] = useState('');
+  const [proxyTeam, setProxyTeam] = useState('');
+  const [proxyWeek, setProxyWeek] = useState<number>(week);
+  const [proxyReason, setProxyReason] = useState('');
+  const [isProxying, setIsProxying] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCanceling, setIsCanceling] = useState(false);
 
   // Force weekly lock when confidence mode is on
   useEffect(() => {
@@ -242,6 +256,113 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       setIsSavingSettings(false);
     }
   };
+
+  // --- Exception handlers ---
+  const reasonIsValid = (r: string) => r.trim().length >= 3 && r.trim().length <= 200;
+
+  const handleExtendDeadline = async () => {
+    if (!reasonIsValid(extendReason)) {
+      toast.error('Please provide a reason (3–200 characters).');
+      return;
+    }
+    if (!extendMinutes || extendMinutes < 1 || extendMinutes > 1440) {
+      toast.error('Extension must be between 1 and 1440 minutes (24 hours).');
+      return;
+    }
+    const ok = await toast.confirm({
+      title: `Extend Week ${week} deadline?`,
+      message: `The pick deadline moves ${extendMinutes} minute(s) past the normal lock and every member is emailed the new time. Reason: "${extendReason.trim()}"`,
+      confirmLabel: 'Extend Deadline'
+    });
+    if (!ok) return;
+    setIsExtending(true);
+    try {
+      const res = await dbService.extendWeekDeadline(pool.id, week, extendMinutes, extendReason.trim());
+      toast.success(`Deadline extended to ${new Date(res.newLockTime).toLocaleString()} — emailed ${res.emailed} member(s).`);
+      setExtendReason('');
+    } catch (err) {
+      logger.error('Failed to extend week deadline:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setIsExtending(false);
+    }
+  };
+
+  const handleProxyPick = async () => {
+    if (!proxyTargetUid) {
+      toast.error('Select a member to pick for.');
+      return;
+    }
+    if (!proxyTeam) {
+      toast.error('Select a team.');
+      return;
+    }
+    if (!reasonIsValid(proxyReason)) {
+      toast.error('Please provide a reason (3–200 characters).');
+      return;
+    }
+    const targetEntry = entries.find(e => targetUidOf(e) === proxyTargetUid);
+    const ok = await toast.confirm({
+      title: 'Submit pick on their behalf?',
+      message: `Week ${proxyWeek}: ${proxyTeam} for ${targetEntry?.userName || 'this member'}. This is recorded in the pool audit log with your name and reason.`,
+      confirmLabel: 'Submit Proxy Pick'
+    });
+    if (!ok) return;
+    setIsProxying(true);
+    try {
+      await dbService.proxyPick(pool.id, proxyWeek, proxyTargetUid, { [proxyWeek]: proxyTeam }, proxyReason.trim());
+      toast.success(`Proxy pick saved: ${proxyTeam} (Week ${proxyWeek}) for ${targetEntry?.userName || 'member'}.`);
+      setProxyTeam('');
+      setProxyReason('');
+    } catch (err) {
+      logger.error('Failed to submit proxy pick:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setIsProxying(false);
+    }
+  };
+
+  const handleCancelPool = async () => {
+    if (!reasonIsValid(cancelReason)) {
+      toast.error('Please provide a reason (3–200 characters).');
+      return;
+    }
+    const first = await toast.confirm({
+      title: 'Cancel this pool?',
+      message: `"${pool.name}" will be marked CANCELED and every member will be emailed the reason plus who to contact about dues already paid.`,
+      confirmLabel: 'Continue',
+      danger: true
+    });
+    if (!first) return;
+    const second = await toast.confirm({
+      title: 'Are you absolutely sure?',
+      message: 'This cannot be undone from the dashboard. The pool will stop being playable for all members.',
+      confirmLabel: 'Yes, Cancel Pool',
+      danger: true
+    });
+    if (!second) return;
+    setIsCanceling(true);
+    try {
+      const res = await dbService.cancelPool(pool.id, cancelReason.trim());
+      toast.success(`Pool canceled. Emailed ${res.emailed} member(s).`);
+      setCancelReason('');
+    } catch (err) {
+      logger.error('Failed to cancel pool:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setIsCanceling(false);
+    }
+  };
+
+  // Teams playing in the proxy target week (for survivor/margin proxy picks)
+  const proxyWeekTeams = useMemo(() => {
+    const teams = new Set<string>();
+    games.filter(g => g.week === proxyWeek).forEach(g => {
+      if (g.homeTeam?.abbreviation) teams.add(g.homeTeam.abbreviation);
+      if (g.awayTeam?.abbreviation) teams.add(g.awayTeam.abbreviation);
+    });
+    return [...teams].sort();
+  }, [games, proxyWeek]);
 
   const branding = castPool.branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';
@@ -838,6 +959,195 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════
+           SECTION: COMMISSIONER EXCEPTIONS
+           Sanctioned tools for the messy real-world cases (member in
+           hospital, mis-set deadline, dead pool) — every action is
+           audited and members are notified.
+      ═══════════════════════════════════════════ */}
+      <div className="bg-slate-900/40 border border-amber-900/40 rounded-3xl backdrop-blur-sm overflow-hidden">
+        <button
+          onClick={() => setExceptionsOpen(o => !o)}
+          className="w-full p-5 flex justify-between items-center bg-slate-900/20 hover:bg-slate-900/40 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={14} className="text-amber-400" />
+            <h4 className="text-xs font-black text-slate-300 uppercase tracking-widest">Exceptions — Commissioner Tools</h4>
+          </div>
+          {exceptionsOpen ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+        </button>
+
+        {exceptionsOpen && (
+          <div className="p-6 space-y-6 border-t border-slate-800">
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              For the rare cases a season throws at you. Every action here is written to the pool audit log
+              with your name and reason, and members are emailed — no silent changes.
+            </p>
+
+            {/* ── Extend Week Deadline ── */}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Clock size={14} className="text-indigo-400" />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Extend Week {week} Deadline</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Extra Minutes (max 1440)</label>
+                  <input
+                    type="number"
+                    value={extendMinutes}
+                    min={1}
+                    max={1440}
+                    onChange={e => setExtendMinutes(Math.max(1, Math.min(1440, parseInt(e.target.value) || 1)))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Reason (emailed to members)</label>
+                  <input
+                    type="text"
+                    value={extendReason}
+                    onChange={e => setExtendReason(e.target.value)}
+                    maxLength={200}
+                    placeholder="e.g. Deadline was mis-set — several members were locked out"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <p className="text-[10px] text-amber-400/80 leading-relaxed max-w-md">
+                  Note: the extension takes effect immediately for commissioner proxy picks; member
+                  self-submitted picks honoring the extension is rolling out separately.
+                </p>
+                <button
+                  onClick={handleExtendDeadline}
+                  disabled={isExtending}
+                  className="min-h-[44px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold px-6 rounded-2xl flex items-center gap-2 transition-all cursor-pointer text-xs"
+                >
+                  <Clock size={13} />
+                  {isExtending ? 'Extending...' : 'Extend Deadline'}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Proxy Pick ── */}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <UserCog size={14} className="text-indigo-400" />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enter a Pick for a Member</p>
+              </div>
+              {type === 'NFL_PICKEM' ? (
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Pick'em proxy entry isn't available in the dashboard yet (a full week of game-by-game picks
+                  is too error-prone to enter here). Survivor and Margin pools can proxy below; for pick'em,
+                  contact support.
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Member</label>
+                      <select
+                        value={proxyTargetUid}
+                        onChange={e => setProxyTargetUid(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                      >
+                        <option value="">Select member...</option>
+                        {entries.map(entry => (
+                          <option key={entry.id} value={targetUidOf(entry)}>{entry.userName || entry.id}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Week</label>
+                      <input
+                        type="number"
+                        value={proxyWeek}
+                        min={1}
+                        max={23}
+                        onChange={e => setProxyWeek(Math.max(1, Math.min(23, parseInt(e.target.value) || 1)))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Team</label>
+                      <select
+                        value={proxyTeam}
+                        onChange={e => setProxyTeam(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                      >
+                        <option value="">Select team...</option>
+                        {proxyWeekTeams.map(team => (
+                          <option key={team} value={team}>{team}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Reason (audited)</label>
+                      <input
+                        type="text"
+                        value={proxyReason}
+                        onChange={e => setProxyReason(e.target.value)}
+                        maxLength={200}
+                        placeholder="e.g. Member in hospital, texted me their pick"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <p className="text-[10px] text-slate-500 leading-relaxed max-w-md">
+                      Proxy picks respect the real deadline — if the week is locked, extend the deadline first.
+                      Teams already used by the member this season are rejected.
+                    </p>
+                    <button
+                      onClick={handleProxyPick}
+                      disabled={isProxying}
+                      className="min-h-[44px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold px-6 rounded-2xl flex items-center gap-2 transition-all cursor-pointer text-xs"
+                    >
+                      <UserCog size={13} />
+                      {isProxying ? 'Submitting...' : 'Submit Proxy Pick'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* ── Cancel Pool ── */}
+            <div className="bg-rose-500/5 border border-rose-900/40 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Ban size={14} className="text-rose-400" />
+                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Cancel Pool</p>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Marks the pool as canceled and emails every member the reason plus who to contact about dues
+                already paid. This cannot be undone from the dashboard.
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">Reason (emailed to members)</label>
+                <input
+                  type="text"
+                  value={cancelReason}
+                  onChange={e => setCancelReason(e.target.value)}
+                  maxLength={200}
+                  placeholder="e.g. Not enough members joined to run the season"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
+                />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleCancelPool}
+                  disabled={isCanceling}
+                  className="min-h-[44px] bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-extrabold px-6 rounded-2xl flex items-center gap-2 transition-all cursor-pointer text-xs"
+                >
+                  <Ban size={13} />
+                  {isCanceling ? 'Canceling...' : 'Cancel Pool...'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

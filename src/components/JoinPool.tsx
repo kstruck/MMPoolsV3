@@ -8,6 +8,7 @@ import { getUserMessage } from '../utils/errorMessages';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User, Pool } from '../types';
+import { PayoutsPanel } from './PayoutsPanel';
 
 interface JoinPoolProps {
   user: User | null;
@@ -171,6 +172,16 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                 </span>
               </div>
             </div>
+
+            {/* Prize summary — what winning actually pays, before you commit */}
+            {((castPool?.settings?.entryFee ?? 0) > 0 ||
+              (castPool?.settings?.payouts?.places?.length ?? 0) > 0 ||
+              (pool.type === 'SQUARES' && (castPool?.costPerSquare ?? 0) > 0)) && (
+              <div className="mb-8 bg-slate-900/50 p-4 border border-slate-800 rounded-2xl">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Prizes</h4>
+                <PayoutsPanel pool={pool} compact />
+              </div>
+            )}
 
             {/* Rules preview list */}
             <div className="space-y-4 mb-8 border-b border-slate-900 pb-8">

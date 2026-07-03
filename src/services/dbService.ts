@@ -1088,6 +1088,51 @@ export const dbService = {
         }
     },
 
+    /** Commissioner exception: extend a week's pick deadline by extraMinutes (capped at 24h server-side). Emails all members. */
+    extendWeekDeadline: async (poolId: string, week: number, extraMinutes: number, reason: string): Promise<{ success: boolean; newLockTime: number; emailed: number }> => {
+        try {
+            const fn = httpsCallable<{ poolId: string; week: number; extraMinutes: number; reason: string }, { success: boolean; newLockTime: number; emailed: number }>(functions, 'extendWeekDeadline');
+            const result = await fn({ poolId, week, extraMinutes, reason });
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'extendWeekDeadline', poolId, week, extraMinutes }
+            });
+            throw error;
+        }
+    },
+
+    /** Commissioner exception: submit picks on behalf of a member. Picks shape matches submitNFLPicks (pick'em: gameId->team; survivor/margin: { [week]: team }). */
+    proxyPick: async (poolId: string, week: number, targetUid: string, picks: Record<string | number, string>, reason: string): Promise<{ success: boolean }> => {
+        try {
+            const fn = httpsCallable<{ poolId: string; week: number; targetUid: string; picks: Record<string | number, string>; reason: string }, { success: boolean }>(functions, 'proxyPick');
+            const result = await fn({ poolId, week, targetUid, picks, reason });
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'proxyPick', poolId, week, targetUid }
+            });
+            throw error;
+        }
+    },
+
+    /** Commissioner exception: cancel a pool (status -> CANCELED). Emails all members with the reason and dues contact. */
+    cancelPool: async (poolId: string, reason: string): Promise<{ success: boolean; emailed: number }> => {
+        try {
+            const fn = httpsCallable<{ poolId: string; reason: string }, { success: boolean; emailed: number }>(functions, 'cancelPool');
+            const result = await fn({ poolId, reason });
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'cancelPool', poolId }
+            });
+            throw error;
+        }
+    },
+
     importNFLSchedule: async (data: { season: string; seasonType: number; weeks?: number[] }): Promise<{ success: boolean; importedCount: number }> => {
         try {
             const importNFLScheduleFn = httpsCallable<{ season: string; seasonType: number; weeks?: number[] }, { success: boolean; importedCount: number }>(functions, 'importNFLSchedule');

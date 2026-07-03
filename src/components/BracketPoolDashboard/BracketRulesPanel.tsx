@@ -1,7 +1,8 @@
 import React from 'react';
-import { HelpCircle, Award, Zap, Scale, DollarSign } from 'lucide-react';
+import { HelpCircle, Award, Zap, Scale } from 'lucide-react';
 import type { BracketPool, Tournament } from '../../types';
 import { getPointsForRound, getRoundLabel } from './bracketScoring';
+import { PayoutsPanel } from '../PayoutsPanel';
 
 interface BracketRulesPanelProps {
     pool: BracketPool;
@@ -47,9 +48,7 @@ export const BracketRulesPanel: React.FC<BracketRulesPanelProps> = ({ pool, tour
     const entryFee = settings.entryFee ?? 0;
     const payoutPlaces = settings.payouts?.places || [];
     const charity = settings.charity;
-
-    const rankLabel = (rank: number) =>
-        rank === 1 ? '1st Place' : rank === 2 ? '2nd Place' : rank === 3 ? '3rd Place' : `${rank}th Place`;
+    const hasPrizeInfo = entryFee > 0 || payoutPlaces.length > 0 || Boolean(charity?.enabled);
 
     return (
         <div className="max-w-4xl mx-auto space-y-8">
@@ -143,34 +142,15 @@ export const BracketRulesPanel: React.FC<BracketRulesPanelProps> = ({ pool, tour
                     </div>
                 </div>
 
-                {/* Card 3: Entry fee & payouts (only if there is a fee or configured payouts) */}
-                {(entryFee > 0 || payoutPlaces.length > 0) && (
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm space-y-4 md:col-span-2">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                            <DollarSign size={14} className="text-emerald-400" /> Entry Fee & Payouts
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-300">
-                            <ul className="space-y-3">
-                                {entryFee > 0 && (
-                                    <li className="flex justify-between border-b border-slate-800/60 pb-2">
-                                        <span className="font-bold">Entry Fee:</span>
-                                        <span className="text-white font-black font-mono">${entryFee} per bracket</span>
-                                    </li>
-                                )}
-                                {payoutPlaces.map((p, i) => (
-                                    <li key={i} className="flex justify-between border-b border-slate-800/60 pb-2">
-                                        <span className="font-bold">{rankLabel(p.rank)}:</span>
-                                        <span className="text-emerald-400 font-extrabold font-mono">{p.percentage}% of the pot</span>
-                                    </li>
-                                ))}
-                                {charity?.enabled && (
-                                    <li className="flex justify-between border-b border-slate-800/60 pb-2">
-                                        <span className="font-bold">Charity{charity.name ? ` (${charity.name})` : ''}:</span>
-                                        <span className="text-indigo-400 font-extrabold font-mono">{charity.percentage}% of the pot</span>
-                                    </li>
-                                )}
-                            </ul>
-                            <div className="space-y-2">
+                {/* Card 3: Prizes (shared payout transparency panel) + payment info */}
+                {hasPrizeInfo && (
+                    <>
+                        <PayoutsPanel pool={pool} />
+                        {(settings.paymentInstructions || settings.lockUnpaid) && (
+                            <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm space-y-3 text-xs text-slate-300">
+                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                    How to Pay
+                                </h4>
                                 {settings.paymentInstructions && (
                                     <div className="flex flex-col gap-1">
                                         <span className="font-bold">Payment Instructions:</span>
@@ -186,8 +166,8 @@ export const BracketRulesPanel: React.FC<BracketRulesPanelProps> = ({ pool, tour
                                     </p>
                                 )}
                             </div>
-                        </div>
-                    </div>
+                        )}
+                    </>
                 )}
             </div>
         </div>

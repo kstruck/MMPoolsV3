@@ -17,6 +17,7 @@ import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
 import { WeekChecklist } from './WeekChecklist';
+import { PaymentsPanel } from '../PaymentsPanel';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -35,7 +36,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 }) => {
   const castPool = pool as any;
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'picks' | 'standings' | 'recaps' | 'rules' | 'manager'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'picks' | 'standings' | 'recaps' | 'rules' | 'payments' | 'manager'>('dashboard');
 
   // Estimate current NFL Week based on date (standard season calculations)
   const getEstimatedNFLWeek = (): number => {
@@ -296,6 +297,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           >
             Rules & Rulesets
           </button>
+          {user && (
+            <button
+              onClick={() => setActiveTab('payments')}
+              className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
+                activeTab === 'payments'
+                  ? 'text-white border-blue-500 font-black'
+                  : 'text-slate-500 hover:text-slate-400 border-transparent'
+              }`}
+              style={activeTab === 'payments' ? { borderBottomColor: accentHex } : {}}
+            >
+              Payments
+            </button>
+          )}
         </div>
 
         {/* Tab View Routers */}
@@ -518,6 +532,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               {/* TAB 4: RULES */}
               {activeTab === 'rules' && (
                 <NFLPoolRules pool={pool} />
+              )}
+
+              {/* TAB 5: PAYMENTS — member money view (status, pot, ledger) */}
+              {activeTab === 'payments' && user && (
+                <PaymentsPanel pool={pool} user={user} entries={entries} />
               )}
 
               {/* TAB 5: COMMISSIONER */}

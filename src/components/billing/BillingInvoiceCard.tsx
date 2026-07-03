@@ -112,6 +112,21 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     };
     const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
     const [checkoutError, setCheckoutError] = useState<string | null>(null);
+    const [checkoutCancelled, setCheckoutCancelled] = useState(false);
+
+    // Detect a cancelled/abandoned Stripe Checkout. The server (createCheckoutSession)
+    // appends `payment=cancelled` to the cancelUrl we pass (window.location.href),
+    // so returning here without completing payment lands with that query param.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('payment') === 'cancelled') {
+            setCheckoutCancelled(true);
+            // Clean the param so a refresh doesn't re-show the notice
+            params.delete('payment');
+            const cleaned = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash}`;
+            window.history.replaceState({}, '', cleaned);
+        }
+    }, []);
     const [managerProfile, setManagerProfile] = useState<any>(null);
     const [activeFreePoolsCount, setActiveFreePoolsCount] = useState(0);
     const [useCredit, setUseCredit] = useState(false);
@@ -364,6 +379,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
 
         setIsCheckoutLoading(true);
         setCheckoutError(null);
+        setCheckoutCancelled(false);
 
         try {
             const response = await dbService.createCheckoutSession({
@@ -441,6 +457,19 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                     Multi-Pool Bundle & Save
                 </button>
             </div>
+
+            {/* Cancelled / abandoned checkout notice (shown on both tabs) */}
+            {checkoutCancelled && (
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/25 rounded-xl flex items-start gap-2.5 animate-in fade-in duration-300">
+                    <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-left">
+                        <strong className="text-amber-300 block font-bold">Checkout wasn't completed</strong>
+                        <p className="text-slate-300 leading-relaxed mt-0.5">
+                            No charge was made. If checkout doesn't complete, you can retry anytime — your pool stays in its current state until payment succeeds. Just use the payment button below when you're ready.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {activePaymentTab === 'single' ? (
                 <div className="space-y-6 animate-in fade-in duration-300">

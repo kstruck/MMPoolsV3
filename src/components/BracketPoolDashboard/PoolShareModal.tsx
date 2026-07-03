@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, Link } from 'lucide-react';
+import { InviteByEmail } from '../InviteByEmail';
 
 interface PoolShareModalProps {
+    poolId: string;
     poolName: string;
     poolSlug: string;
     onClose: () => void;
@@ -46,7 +48,7 @@ const InstagramIcon = () => (
     </svg>
 );
 
-export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolName, poolSlug, onClose }) => {
+export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName, poolSlug, onClose }) => {
     const [copied, setCopied] = useState(false);
     const poolUrl = `${window.location.origin}/pool/${poolSlug}`;
     const shareText = `Join my bracket pool: ${poolName}! Make your picks here 🏆`;
@@ -114,7 +116,7 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolName, poolSl
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl animate-in zoom-in-95">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-800">
                     <div>
@@ -194,6 +196,9 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolName, poolSl
                             Instagram: link will be copied — paste it into your Story or bio link.
                         </p>
                     </div>
+
+                    {/* Bulk email invites */}
+                    <InviteByEmail poolId={poolId} />
                 </div>
             </div>
         </div>
