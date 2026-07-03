@@ -6,6 +6,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import { getPoolTypeName } from '../utils/poolUtils';
+import { Badge } from './ui';
 
 interface BrowsePoolsProps {
     user: User | null;
@@ -123,15 +124,15 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
     }, [pools, searchTerm, selectedLeague, filterCharity, filterPrice, filterStatus, filterType]);
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+        <div className="min-h-screen bg-page text-[color:var(--text)] font-body">
             <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
 
             <main className="max-w-7xl mx-auto p-4 md:p-8 mt-6">
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-6 border-b border-slate-800 pb-8">
+                <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-6 border-b border-line pb-8">
                     <div>
-                        <h2 className="text-4xl font-extrabold text-white mb-2 tracking-tight">Public Pools</h2>
-                        <p className="text-slate-400 max-w-xl">
+                        <h2 className="font-display font-extrabold uppercase text-4xl md:text-5xl leading-[0.9] text-[color:var(--text)] mb-2">Public Pools</h2>
+                        <p className="text-muted max-w-xl font-body">
                             Join public pools — NFL survivor, pick'em, squares, March Madness brackets, and more.
                         </p>
                     </div>
@@ -142,20 +143,20 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                     <div className="space-y-6">
                         {/* Search */}
                         <div className="relative">
-                            <Search className="absolute left-3 top-3 text-slate-500" size={18} aria-hidden="true" />
+                            <Search className="absolute left-3 top-3 text-faint" size={18} aria-hidden="true" />
                             <input
                                 type="text"
                                 aria-label="Search pools by name or team"
                                 placeholder="Search pools, teams..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full bg-slate-900/50 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                                className="w-full bg-page border-[1.5px] border-line rounded-md py-2.5 pl-10 pr-4 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint focus:outline-none focus:border-navy-600 focus:bg-surface transition-colors"
                             />
                         </div>
 
                         {/* Pool Type Filter */}
-                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <div className="bg-card border border-line rounded-xl p-4 shadow-card">
+                            <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-3 flex items-center gap-2">
                                 <Trophy size={14} /> Pool Type
                             </h3>
                             <div className="flex flex-col gap-2">
@@ -169,9 +170,9 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     <button
                                         key={type.id}
                                         onClick={() => setFilterType(type.id as any)}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all flex justify-between items-center ${filterType === type.id
-                                            ? 'bg-indigo-600 text-white'
-                                            : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex justify-between items-center ${filterType === type.id
+                                            ? 'bg-navy-800 text-white'
+                                            : 'text-muted hover:bg-surface hover:text-[color:var(--text)]'
                                             }`}
                                     >
                                         <span>{type.label}</span>
@@ -181,8 +182,8 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                         </div>
 
                         {/* Status Filter */}
-                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <div className="bg-card border border-line rounded-xl p-4 shadow-card">
+                            <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-3 flex items-center gap-2">
                                 <Activity size={14} /> Game Status
                             </h3>
                             <div className="flex flex-col gap-2">
@@ -195,9 +196,9 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     <button
                                         key={status.id}
                                         onClick={() => setFilterStatus(status.id as any)}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${filterStatus === status.id
-                                            ? 'bg-indigo-600 text-white'
-                                            : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex items-center gap-2 ${filterStatus === status.id
+                                            ? 'bg-navy-800 text-white'
+                                            : 'text-muted hover:bg-surface hover:text-[color:var(--text)]'
                                             }`}
                                     >
                                         {status.icon}
@@ -208,8 +209,8 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                         </div>
 
                         {/* Sport Filter */}
-                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <div className="bg-card border border-line rounded-xl p-4 shadow-card">
+                            <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-3 flex items-center gap-2">
                                 <Trophy size={14} /> Sport / League
                             </h3>
                             <div className="flex flex-col gap-2">
@@ -225,23 +226,23 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                         key={sport.id}
                                         onClick={() => sport.active && setSelectedLeague(sport.id)}
                                         disabled={!sport.active}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all flex justify-between items-center ${!sport.active
-                                            ? 'opacity-40 cursor-not-allowed text-slate-500 hover:bg-transparent'
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex justify-between items-center ${!sport.active
+                                            ? 'opacity-40 cursor-not-allowed text-faint hover:bg-transparent'
                                             : selectedLeague === sport.id
-                                                ? 'bg-indigo-600 text-white'
-                                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                                ? 'bg-navy-800 text-white'
+                                                : 'text-muted hover:bg-surface hover:text-[color:var(--text)]'
                                             }`}
                                     >
                                         <span>{sport.label}</span>
-                                        {!sport.active && <span className="text-[10px] uppercase font-bold bg-slate-800 px-1.5 py-0.5 rounded">Soon</span>}
+                                        {!sport.active && <span className="text-[10px] uppercase font-display font-bold tracking-[0.08em] bg-surface border border-line text-faint px-1.5 py-0.5 rounded">Soon</span>}
                                     </button>
                                 ))}
                             </div>
                         </div>
 
                         {/* Price Filter */}
-                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <div className="bg-card border border-line rounded-xl p-4 shadow-card">
+                            <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-3 flex items-center gap-2">
                                 <DollarSign size={14} /> Entry Cost
                             </h3>
                             <div className="flex flex-wrap gap-2">
@@ -254,7 +255,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     <button
                                         key={price.id}
                                         onClick={() => setFilterPrice(price.id as any)}
-                                        className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-all ${filterPrice === price.id ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'}`}
+                                        className={`text-xs px-3 py-1.5 rounded-lg border font-display font-bold uppercase tracking-[0.05em] num transition-all duration-150 ${filterPrice === price.id ? 'bg-gold-500/15 border-gold-500 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-muted hover:border-navy-600'}`}
                                     >
                                         {price.label}
                                     </button>
@@ -263,13 +264,13 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                         </div>
 
                         {/* Toggles */}
-                        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                        <div className="bg-card border border-line rounded-xl p-4 shadow-card">
                             <label className="flex items-center justify-between cursor-pointer group">
                                 <div className="flex items-center gap-3">
-                                    <div className={`p-1.5 rounded-lg transition-colors ${filterCharity ? 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-500'}`}><Heart size={16} className={filterCharity ? "fill-white" : ""} /></div>
-                                    <span className={`text-sm font-medium ${filterCharity ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`}>Charity Pools Only</span>
+                                    <div className={`p-1.5 rounded-lg transition-colors ${filterCharity ? 'bg-gold-foil text-navy-950' : 'bg-surface text-faint'}`}><Heart size={16} className={filterCharity ? "fill-navy-950" : ""} /></div>
+                                    <span className={`text-sm font-display font-bold uppercase tracking-[0.05em] ${filterCharity ? 'text-[color:var(--text)]' : 'text-muted group-hover:text-[color:var(--text)]'}`}>Charity Pools Only</span>
                                 </div>
-                                <div className={`w-10 h-5 rounded-full relative transition-colors ${filterCharity ? 'bg-rose-500' : 'bg-slate-700'}`} onClick={() => setFilterCharity(!filterCharity)}>
+                                <div className={`w-10 h-5 rounded-full relative transition-colors ${filterCharity ? 'bg-navy-800 dark:bg-gold-600' : 'bg-line'}`} onClick={() => setFilterCharity(!filterCharity)}>
                                     <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${filterCharity ? 'left-6' : 'left-1'}`} />
                                 </div>
                             </label>
@@ -334,64 +335,64 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                 return (
                                     <div key={pool.id}
                                         onClick={() => window.location.href = `/pool/${pool.id}`}
-                                        className="group bg-slate-900/50 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 rounded-xl p-5 cursor-pointer transition-all relative overflow-hidden flex flex-col"
+                                        className="group bg-card border border-line hover:border-gold-500 rounded-2xl p-5 cursor-pointer transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover relative overflow-hidden flex flex-col"
                                     >
                                         {charityEnabled && (
                                             <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
-                                                <Heart size={100} className="fill-rose-500 text-rose-500" />
+                                                <Heart size={100} className="fill-gold-500 text-gold-500" />
                                             </div>
                                         )}
 
                                         <div className="flex justify-between items-start mb-4 relative z-10">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-lg font-bold group-hover:scale-105 transition-transform ${isBracket ? 'bg-amber-900/20 border-amber-500/30 text-amber-500' : 'bg-slate-800 border-slate-700 text-indigo-400'}`}>
+                                                <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-lg font-display font-bold group-hover:scale-105 transition-transform ${isBracket ? 'bg-gold-500/15 border-gold-500/40 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-navy-700 dark:text-[#9FB0CC]'}`}>
                                                     {isBracket ? <Trophy size={20} /> : pool.name.substring(0, 2).toUpperCase()}
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1 flex items-center gap-2">
+                                                    <h3 className="text-lg font-display font-bold uppercase leading-tight text-[color:var(--text)] group-hover:text-gold-700 dark:group-hover:text-gold-400 transition-colors line-clamp-1 flex items-center gap-2">
                                                         {pool.name}
                                                     </h3>
-                                                    <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
-                                                        {isBracket ? <span className="text-amber-500">March Madness Bracket</span> : <span>{getPoolTypeName(pool as GameState)}</span>}
-                                                        {charityEnabled && <span className="text-rose-400 flex items-center gap-1">• <Heart size={10} className="fill-rose-400" /> Charity</span>}
+                                                    <div className="flex items-center gap-2 text-xs text-muted font-body font-medium">
+                                                        {isBracket ? <span className="text-gold-700 dark:text-gold-400">March Madness Bracket</span> : <span>{getPoolTypeName(pool as GameState)}</span>}
+                                                        {charityEnabled && <span className="text-gold-700 dark:text-gold-400 flex items-center gap-1">• <Heart size={10} className="fill-gold-500 text-gold-500" /> Charity</span>}
                                                     </div>
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <span className="block text-xl font-bold text-emerald-400 font-mono">${cost}</span>
-                                                <span className="text-[10px] text-slate-500 uppercase font-bold">{isBracket ? 'Entry Fee' : 'Per Square'}</span>
+                                                <span className="block text-xl font-display font-bold text-gold-700 dark:text-gold-400 num">${cost}</span>
+                                                <span className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em]">{isBracket ? 'Entry Fee' : 'Per Square'}</span>
                                             </div>
                                         </div>
 
                                         {/* Matchup */}
-                                        <div className="bg-black/30 rounded-lg p-3 border border-slate-800/50 mb-4 flex items-center justify-between relative z-10">
+                                        <div className="bg-surface rounded-lg p-3 border border-line mb-4 flex items-center justify-between relative z-10">
                                             <div className="flex items-center gap-2">
                                                 {awayLogo && <img src={awayLogo} alt={`${awayTeam} logo`} className="w-6 h-6 object-contain opacity-80" />}
-                                                <span className="text-sm font-bold text-slate-300">{awayTeam}</span>
+                                                <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{awayTeam}</span>
                                             </div>
-                                            <span className="text-xs text-slate-600 font-bold uppercase">VS</span>
+                                            <span className="text-xs text-faint font-display font-bold uppercase">VS</span>
                                             <div className="flex items-center gap-2">
-                                                <span className="text-sm font-bold text-slate-300">{homeTeam}</span>
+                                                <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{homeTeam}</span>
                                                 {homeLogo && <img src={homeLogo} alt={`${homeTeam} logo`} className="w-6 h-6 object-contain opacity-80" />}
                                             </div>
                                         </div>
 
                                         {/* Progress & Meta */}
-                                        <div className="flex items-center justify-between text-xs font-medium text-slate-400 relative z-10">
+                                        <div className="flex items-center justify-between text-xs font-body font-medium text-muted relative z-10">
                                             <div className="flex items-center gap-4">
                                                 <div className="flex items-center gap-1.5">
-                                                    <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }}></div>
+                                                    <div className="w-20 h-1.5 bg-line rounded-full overflow-hidden">
+                                                        <div className="h-full bg-gold-foil rounded-full transition-all" style={{ width: `${pct}%` }}></div>
                                                     </div>
-                                                    <span>{(isBracket || pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') ? `${filled} Entries` : `${100 - filled} Left`}</span>
+                                                    <span className="num">{(isBracket || pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') ? `${filled} Entries` : `${100 - filled} Left`}</span>
                                                 </div>
                                             </div>
 
                                             <div className="flex items-center gap-2">
                                                 {!isLocked ? (
-                                                    <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Open</span>
+                                                    <Badge status="open" />
                                                 ) : (
-                                                    <span className="text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Locked</span>
+                                                    <Badge status="locked" />
                                                 )}
                                             </div>
                                         </div>

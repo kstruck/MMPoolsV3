@@ -8,16 +8,16 @@ import { isSuperAdmin } from '../utils/auth';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
-import { 
-  LayoutGrid, 
-  User as UserIcon, 
-  Search, 
-  ChevronRight, 
-  Loader, 
-  Calendar, 
-  Shield, 
-  DollarSign, 
-  Trophy, 
+import {
+  LayoutGrid,
+  User as UserIcon,
+  Search,
+  ChevronRight,
+  Loader,
+  Calendar,
+  Shield,
+  DollarSign,
+  Trophy,
   TrendingUp,
   Activity,
   AlertTriangle,
@@ -25,26 +25,27 @@ import {
   CheckCircle,
   Crown
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  PieChart, 
-  Pie, 
-  Cell 
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { GlobalStandingsCard } from './Dashboards/GlobalStandingsCard';
 import { GlobalCommissionerDashboard } from './Dashboards/GlobalCommissionerDashboard';
+import { Badge, Button } from './ui';
 
 const BRAND = {
-  emeraldGlow: 'rgba(16, 185, 129, 0.15)',
-  amberGlow: 'rgba(245, 158, 11, 0.15)',
-  indigoGlow: 'rgba(99, 102, 241, 0.15)',
+  emeraldGlow: 'rgba(201, 168, 103, 0.15)',
+  amberGlow: 'rgba(196, 52, 46, 0.12)',
+  indigoGlow: 'rgba(36, 80, 127, 0.15)',
 };
 
 interface ParticipantDashboardProps {
@@ -270,10 +271,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 const pPool = pool as unknown as PlayoffPool;
                 const entries = pPool.entries ? Object.values(pPool.entries) : [];
                 const myEntries = entries.filter(e => e.userId === user.id);
-                totalSquares += myEntries.length; 
+                totalSquares += myEntries.length;
             } else if (pool.type === 'BRACKET') {
                 const counts = bracketEntryCounts[pool.id] || 0;
-                totalSquares += counts; 
+                totalSquares += counts;
             }
         });
 
@@ -300,16 +301,16 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         });
 
         const data = [
-            { name: 'Squares', value: squares, color: '#FF6600' },
-            { name: 'Brackets', value: MMbrackets, color: '#3B82F6' },
-            { name: 'NFL Playoffs', value: playoffs, color: '#8B5CF6' },
-            { name: 'NFL Pickem/Margin', value: nfl, color: '#10B981' }
+            { name: 'Squares', value: squares, color: '#C9A867' },
+            { name: 'Brackets', value: MMbrackets, color: '#24507F' },
+            { name: 'NFL Playoffs', value: playoffs, color: '#8C6D33' },
+            { name: 'NFL Pickem/Margin', value: nfl, color: '#1A3B62' }
         ].filter(item => item.value > 0);
 
         if (data.length === 0) {
             return [
-                { name: 'Active Squares', value: 2, color: '#FF6600' },
-                { name: 'NFL Pools', value: 1, color: '#10B981' }
+                { name: 'Active Squares', value: 2, color: '#C9A867' },
+                { name: 'NFL Pools', value: 1, color: '#1A3B62' }
             ];
         }
         return data;
@@ -399,81 +400,81 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const getStatusBadge = (pool: Pool) => {
         const tabStatus = getPoolTabStatus(pool);
 
-        if (tabStatus === 'completed') return <span className="bg-slate-700 text-slate-350 text-[10px] px-2.5 py-0.5 rounded-full uppercase font-extrabold tracking-wider">Completed</span>;
-        if (tabStatus === 'live') return <span className="bg-rose-500 text-white text-[10px] px-2.5 py-0.5 rounded-full uppercase font-extrabold tracking-wider animate-pulse">Live Now</span>;
-        return <span className="bg-emerald-500 text-white text-[10px] px-2.5 py-0.5 rounded-full uppercase font-extrabold tracking-wider">Open</span>;
+        if (tabStatus === 'completed') return <Badge status="locked">Completed</Badge>;
+        if (tabStatus === 'live') return <Badge status="live">Live Now</Badge>;
+        return <Badge status="open">Open</Badge>;
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-orange-500 selection:text-white">
+        <div className="min-h-screen bg-page text-[color:var(--text)] font-body flex flex-col selection:bg-gold-500 selection:text-navy-950">
             <Header user={user} onOpenAuth={() => { }} onLogout={onLogout} onCreatePool={onCreatePool} />
 
             <main className="flex-grow max-w-7xl mx-auto w-full p-4 md:p-8">
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4 border-b border-slate-800/80 pb-6">
+                <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4 border-b border-line pb-6">
                     <div>
-                        <h2 className="text-3xl font-black text-white flex items-center gap-3">
-                            <LayoutGrid className="text-orange-500" /> My Roster Hub
+                        <h2 className="text-3xl font-display font-extrabold uppercase leading-[0.9] text-[color:var(--text)] flex items-center gap-3">
+                            <LayoutGrid className="text-gold-600 dark:text-gold-400" /> My Roster Hub
                         </h2>
-                        <p className="text-slate-400 text-sm mt-1">Manage and track all your active pool entries, scores, and winnings across the site.</p>
+                        <p className="text-muted text-sm mt-1 font-body">Manage and track all your active pool entries, scores, and winnings across the site.</p>
                     </div>
 
                     {/* Search Bar */}
                     <div className="relative w-full md:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" size={16} />
                         <input
                             type="text"
                             placeholder="Search active pools..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white focus:ring-1 focus:ring-orange-500 focus:outline-none placeholder:text-slate-650 font-semibold"
+                            className="w-full bg-page border-[1.5px] border-line rounded-md pl-9 pr-4 py-2.5 text-xs text-[color:var(--text)] focus:border-navy-600 focus:bg-surface focus:outline-none placeholder:text-faint font-body font-semibold transition-colors"
                         />
                     </div>
                 </div>
 
                 {/* Lifetime Stats Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group hover:border-indigo-500/30 transition-all duration-300">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shadow-lg group-hover:scale-105 transition-all">
+                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
+                        <div className="w-10 h-10 rounded-xl bg-navy-600/10 dark:bg-navy-600/30 border border-navy-600/20 text-navy-700 dark:text-[#9FB0CC] flex items-center justify-center group-hover:scale-105 transition-all">
                             <LayoutGrid size={20} />
                         </div>
                         <div>
-                            <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest leading-none mb-1.5">Pools Entered</p>
-                            <p className="text-2xl font-black text-white font-mono leading-none">{lifetimeStats.totalPools}</p>
+                            <p className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] leading-none mb-1.5">Pools Entered</p>
+                            <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalPools}</p>
                         </div>
                     </div>
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group hover:border-orange-500/30 transition-all duration-300">
-                        <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 flex items-center justify-center shadow-lg group-hover:scale-105 transition-all">
+                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
+                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center group-hover:scale-105 transition-all">
                             <TrendingUp size={20} />
                         </div>
                         <div>
-                            <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest leading-none mb-1.5">Active entries</p>
-                            <p className="text-2xl font-black text-white font-mono leading-none">{lifetimeStats.totalSquares}</p>
+                            <p className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] leading-none mb-1.5">Active entries</p>
+                            <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalSquares}</p>
                         </div>
                     </div>
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-300">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-lg group-hover:scale-105 transition-all">
-                            <Trophy size={20} className="fill-emerald-500/5" />
+                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
+                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center group-hover:scale-105 transition-all">
+                            <Trophy size={20} />
                         </div>
                         <div>
-                            <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest leading-none mb-1.5">Prize payouts</p>
-                            <p className="text-2xl font-black text-white font-mono leading-none">{lifetimeStats.totalWins}</p>
+                            <p className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] leading-none mb-1.5">Prize payouts</p>
+                            <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalWins}</p>
                         </div>
                     </div>
-                    <div className="bg-gradient-to-br from-emerald-950/20 to-slate-900/40 border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300"
+                    <div className="bg-card border border-gold-500/40 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/60 transition-all duration-150"
                          style={{ boxShadow: `0 4px 15px ${BRAND.emeraldGlow}` }}>
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-lg group-hover:scale-105 transition-all">
+                        <div className="w-10 h-10 rounded-xl bg-gold-foil text-navy-950 flex items-center justify-center group-hover:scale-105 transition-all">
                             <DollarSign size={20} />
                         </div>
                         <div>
-                            <p className="text-[10px] text-emerald-400 uppercase font-black tracking-widest leading-none mb-1.5">Net winnings</p>
-                            <p className="text-2xl font-black text-emerald-400 font-mono leading-none">${lifetimeStats.totalWinnings.toLocaleString()}</p>
+                            <p className="text-[10px] text-gold-700 dark:text-gold-400 uppercase font-display font-bold tracking-[0.08em] leading-none mb-1.5">Net winnings</p>
+                            <p className="text-2xl font-display font-bold text-gold-700 dark:text-gold-400 num leading-none">${lifetimeStats.totalWinnings.toLocaleString()}</p>
                         </div>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex items-center gap-2 mb-6 border-b border-slate-800 overflow-x-auto">
+                <div className="flex items-center gap-2 mb-6 border-b border-line overflow-x-auto">
                     {[
                         { id: 'insights', label: 'Empire Overview', icon: Activity },
                         ...(myPools.filter(p => p.ownerId === user.id || p.managerUid === user.id).length > 0 ? [{ id: 'commissioner', label: 'Commissioner Hub', icon: Crown }] : []),
@@ -485,15 +486,15 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`px-4 py-3.5 text-xs font-black uppercase tracking-wider border-b-2 transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id
-                                ? 'border-orange-500 text-white'
-                                : 'border-transparent text-slate-500 hover:text-slate-300'
+                            className={`px-4 py-3.5 text-xs font-display font-bold uppercase tracking-[0.08em] border-b-2 transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id
+                                ? 'border-gold-500 text-[color:var(--text)]'
+                                : 'border-transparent text-muted hover:text-[color:var(--text)]'
                                 }`}
                         >
-                            {tab.icon && <tab.icon size={13} className={activeTab === tab.id ? 'text-orange-500' : 'text-slate-500'} />}
+                            {tab.icon && <tab.icon size={13} className={activeTab === tab.id ? 'text-gold-600 dark:text-gold-400' : 'text-faint'} />}
                             {tab.label}
                             {tab.count !== undefined && (
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${activeTab === tab.id ? 'bg-orange-500/20 text-orange-400' : 'bg-slate-900 text-slate-600'}`}>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-display font-bold num ${activeTab === tab.id ? 'bg-gold-500/15 text-gold-700 dark:text-gold-400' : 'bg-surface text-faint'}`}>
                                     {tab.count}
                                 </span>
                             )}
@@ -504,60 +505,60 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 {/* Content Grid based on active tab */}
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center py-20">
-                        <Loader className="animate-spin text-orange-500 mb-4" size={32} />
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Loading active roster...</p>
+                        <Loader className="animate-spin text-gold-500 mb-4" size={32} />
+                        <p className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em]">Loading active roster...</p>
                     </div>
                 ) : activeTab === 'commissioner' ? (
                     <GlobalCommissionerDashboard user={user} managedPools={myPools.filter(p => p.ownerId === user.id || p.managerUid === user.id)} />
                 ) : activeTab === 'insights' ? (
                     /* INSIGHTS TAB - PREMIUM RECHARTS DASHBOARD */
                     <div className="space-y-8 animate-in fade-in duration-300">
-                        
+
                         {/* Lock Warning Banner */}
                         {earliestLock && (
-                          <div className="bg-gradient-to-r from-amber-500/10 to-indigo-600/10 border border-amber-500/30 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden"
+                          <div className="bg-brandred-600/5 border border-brandred-600/30 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden"
                                style={{ boxShadow: `0 4px 20px ${BRAND.amberGlow}` }}>
                             <div className="flex items-center gap-3">
-                              <div className="p-3 bg-amber-500/15 border border-amber-500/25 rounded-2xl text-amber-400 animate-pulse">
+                              <div className="p-3 bg-brandred-600/10 border border-brandred-600/25 rounded-2xl text-brandred-600 animate-pulse">
                                 <AlertTriangle size={20} />
                               </div>
                               <div>
-                                <h4 className="text-sm font-black text-white uppercase tracking-wide">Picks Locking Impending</h4>
-                                <p className="text-slate-400 text-xs mt-0.5">
-                                  Your entries in <span className="text-white font-extrabold">"{earliestLock.pool.name}"</span> locks at {new Date(earliestLock.time).toLocaleString([], { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' })}.
+                                <h4 className="text-sm font-display font-bold text-[color:var(--text)] uppercase tracking-[0.05em]">Picks Locking Impending</h4>
+                                <p className="text-muted text-xs mt-0.5 font-body">
+                                  Your entries in <span className="text-[color:var(--text)] font-extrabold">"{earliestLock.pool.name}"</span> locks at {new Date(earliestLock.time).toLocaleString([], { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' })}.
                                 </p>
                               </div>
                             </div>
-                            
-                            <button 
+
+                            <Button
+                              variant="primary"
+                              size="sm"
                               onClick={() => navigate(`/pool/${(earliestLock.pool as any).slug || earliestLock.pool.id}`)}
-                              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-widest py-3 px-6 rounded-2xl transition-all hover:scale-105 active:scale-95 shadow-lg shadow-amber-400/15"
                             >
                               Lock In Picks
-                            </button>
+                            </Button>
                           </div>
                         )}
 
                         {/* Global Standings Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {Array.from(new Set(myPools.filter(p => p.type !== 'SQUARES' && p.type !== 'PROPS').map(p => p.type))).map(type => (
-                                <GlobalStandingsCard 
-                                    key={type} 
-                                    user={user} 
-                                    poolType={type as PoolType} 
-                                    poolTypeName={type.replace('NFL_', '').replace('_', ' ')} 
+                                <GlobalStandingsCard
+                                    key={type}
+                                    user={user}
+                                    poolType={type as PoolType}
+                                    poolTypeName={type.replace('NFL_', '').replace('_', ' ')}
                                 />
                             ))}
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                            
+
                             {/* Cumulative Earnings AreaChart */}
-                            <div className="lg:col-span-3 bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative flex flex-col justify-between"
-                                 style={{ boxShadow: `inset 0 0 20px rgba(16, 185, 129, 0.04), 0 10px 40px rgba(0,0,0,0.5)` }}>
+                            <div className="lg:col-span-3 bg-card border border-line rounded-3xl p-6 shadow-card relative flex flex-col justify-between">
                                 <div>
-                                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">Lifetime Winnings Trend</h3>
-                                    <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Cumulative payout progression by month</p>
+                                    <h3 className="text-sm font-display font-bold text-muted uppercase tracking-[0.16em] mb-1">Lifetime Winnings Trend</h3>
+                                    <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Cumulative payout progression by month</p>
                                 </div>
 
                                 <div className="h-56 w-full mt-6">
@@ -565,29 +566,28 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                         <AreaChart data={cumulativeEarningsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                             <defs>
                                                 <linearGradient id="colorEarnings" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.25}/>
-                                                    <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                                                    <stop offset="5%" stopColor="#C9A867" stopOpacity={0.25}/>
+                                                    <stop offset="95%" stopColor="#C9A867" stopOpacity={0}/>
                                                 </linearGradient>
                                             </defs>
-                                            <XAxis dataKey="month" stroke="#475569" fontSize={9} fontWeight="bold" />
-                                            <YAxis stroke="#475569" fontSize={9} fontWeight="bold" />
-                                            <Tooltip 
-                                                contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: '12px' }}
-                                                itemStyle={{ fontSize: '11px', fontWeight: 'black', color: '#10B981' }}
-                                                labelStyle={{ fontSize: '9px', fontWeight: '900', color: '#64748b', textTransform: 'uppercase' }}
+                                            <XAxis dataKey="month" stroke="#7C8698" fontSize={9} fontWeight="bold" />
+                                            <YAxis stroke="#7C8698" fontSize={9} fontWeight="bold" />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px' }}
+                                                itemStyle={{ fontSize: '11px', fontWeight: 'black', color: '#D9BC80' }}
+                                                labelStyle={{ fontSize: '9px', fontWeight: '900', color: '#9FB0CC', textTransform: 'uppercase' }}
                                             />
-                                            <Area type="monotone" dataKey="Earnings" stroke="#10B981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorEarnings)" />
+                                            <Area type="monotone" dataKey="Earnings" stroke="#C9A867" strokeWidth={2.5} fillOpacity={1} fill="url(#colorEarnings)" />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
                             </div>
 
                             {/* Participation Split Pie Chart */}
-                            <div className="lg:col-span-2 bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative flex flex-col justify-between"
-                                 style={{ boxShadow: `inset 0 0 20px rgba(59, 130, 246, 0.04), 0 10px 40px rgba(0,0,0,0.5)` }}>
+                            <div className="lg:col-span-2 bg-card border border-line rounded-3xl p-6 shadow-card relative flex flex-col justify-between">
                                 <div>
-                                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">Roster Distribution</h3>
-                                    <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Active participation by pool category</p>
+                                    <h3 className="text-sm font-display font-bold text-muted uppercase tracking-[0.16em] mb-1">Roster Distribution</h3>
+                                    <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Active participation by pool category</p>
                                 </div>
 
                                 <div className="h-48 w-full mt-6 relative flex items-center justify-center">
@@ -606,21 +606,21 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                     <Cell key={`cell-${index}`} fill={entry.color} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: '12px', fontSize: '10px' }} />
+                                            <Tooltip contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px', fontSize: '10px' }} />
                                         </PieChart>
                                     </ResponsiveContainer>
 
                                     <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
-                                        <span className="text-2xl font-black text-white leading-none font-mono">{myPools.length}</span>
-                                        <span className="text-[7px] font-black text-slate-500 uppercase tracking-widest mt-0.5">Total Pools</span>
+                                        <span className="text-2xl font-display font-bold text-[color:var(--text)] leading-none num">{myPools.length}</span>
+                                        <span className="text-[7px] font-display font-bold text-muted uppercase tracking-[0.08em] mt-0.5">Total Pools</span>
                                     </div>
                                 </div>
 
-                                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-4 text-[9px] font-black uppercase tracking-wider">
+                                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-4 text-[9px] font-display font-bold uppercase tracking-[0.08em]">
                                     {poolTypeSplitData.map((entry, idx) => (
                                         <div key={idx} className="flex items-center gap-1.5" style={{ color: entry.color }}>
                                             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
-                                            {entry.name} ({entry.value})
+                                            {entry.name} (<span className="num">{entry.value}</span>)
                                         </div>
                                     ))}
                                 </div>
@@ -631,18 +631,18 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         {/* Additional Metrics Bento Box */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {[
-                                { title: 'Projected Buy-In Total', value: `$${projectedPotEarnings.cost}`, desc: 'Combined fee cost of active entries', icon: Coins, color: 'text-indigo-400' },
-                                { title: 'Dues Cleared / Paid', value: `$${projectedPotEarnings.paid}`, desc: 'Total payments marked cleared by commissioner', icon: CheckCircle, color: 'text-emerald-400' },
-                                { title: 'Platform Loyalty Tier', value: userLoyaltyTier.name, desc: userLoyaltyTier.description, icon: Shield, color: 'text-orange-500' }
+                                { title: 'Projected Buy-In Total', value: `$${projectedPotEarnings.cost}`, desc: 'Combined fee cost of active entries', icon: Coins, color: 'text-navy-700 dark:text-[#9FB0CC]' },
+                                { title: 'Dues Cleared / Paid', value: `$${projectedPotEarnings.paid}`, desc: 'Total payments marked cleared by commissioner', icon: CheckCircle, color: 'text-[#0F7B4A]' },
+                                { title: 'Platform Loyalty Tier', value: userLoyaltyTier.name, desc: userLoyaltyTier.description, icon: Shield, color: 'text-gold-700 dark:text-gold-400' }
                             ].map((card, i) => (
-                                <div key={i} className="bg-slate-900/40 border border-slate-800 rounded-3xl p-5 flex items-start gap-4">
-                                    <div className={`p-3 bg-slate-950/60 border border-slate-800 rounded-2xl ${card.color}`}>
+                                <div key={i} className="bg-card border border-line rounded-3xl p-5 shadow-card flex items-start gap-4">
+                                    <div className={`p-3 bg-surface border border-line rounded-2xl ${card.color}`}>
                                         <card.icon size={18} />
                                     </div>
                                     <div>
-                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">{card.title}</span>
-                                        <span className="text-sm font-black text-white block mb-0.5">{card.value}</span>
-                                        <span className="text-[9px] text-slate-500 leading-normal block">{card.desc}</span>
+                                        <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-0.5">{card.title}</span>
+                                        <span className="text-sm font-display font-bold text-[color:var(--text)] num block mb-0.5">{card.value}</span>
+                                        <span className="text-[9px] text-muted leading-normal block font-body">{card.desc}</span>
                                     </div>
                                 </div>
                             ))}
@@ -650,49 +650,50 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     </div>
                 ) : filteredPools.length === 0 ? (
                     /* EMPTY STATES — a blank grid is a dead end, especially for brand-new users */
-                    <div className="max-w-lg mx-auto bg-slate-900/40 border border-slate-800 rounded-3xl p-10 text-center">
+                    <div className="max-w-lg mx-auto bg-card border border-line rounded-3xl p-10 text-center shadow-card">
                         {myPools.length === 0 ? (
                             <>
-                                <Trophy className="w-14 h-14 mx-auto mb-4 text-slate-600" aria-hidden="true" />
-                                <h3 className="text-xl font-black text-white mb-2">No pools yet</h3>
-                                <p className="text-sm text-slate-400 mb-8">
+                                <Trophy className="w-14 h-14 mx-auto mb-4 text-faint" aria-hidden="true" />
+                                <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">No pools yet</h3>
+                                <p className="text-sm text-muted mb-8 font-body">
                                     Join a pool with an invite link from a friend, browse public pools, or start your own.
                                 </p>
                                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                                    <button
+                                    <Button
+                                        variant="primary"
                                         onClick={() => navigate('/browse')}
-                                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-6 py-3 rounded-2xl transition-all"
                                     >
                                         Browse Public Pools
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
                                         onClick={() => navigate('/create-pool')}
-                                        className="bg-slate-800 hover:bg-slate-700 text-white font-extrabold px-6 py-3 rounded-2xl border border-slate-700 transition-all"
                                     >
                                         Create a Pool
-                                    </button>
+                                    </Button>
                                 </div>
-                                <p className="text-xs text-slate-500 mt-6">
+                                <p className="text-xs text-muted mt-6 font-body">
                                     Have an invite link? Just open it — you'll be dropped straight into the pool.
                                 </p>
                             </>
                         ) : (
                             <>
-                                <h3 className="text-lg font-black text-white mb-2">
+                                <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-2">
                                     {searchQuery ? `No pools match "${searchQuery}"` : 'Nothing in this tab'}
                                 </h3>
-                                <p className="text-sm text-slate-400 mb-6">
+                                <p className="text-sm text-muted mb-6 font-body">
                                     {searchQuery
                                         ? 'Try a different name, or clear the search to see all your pools.'
                                         : 'Your pools are under a different status tab.'}
                                 </p>
                                 {searchQuery && (
-                                    <button
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
                                         onClick={() => setSearchQuery('')}
-                                        className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-5 py-2.5 rounded-xl border border-slate-700 transition-all"
                                     >
                                         Clear search
-                                    </button>
+                                    </Button>
                                 )}
                             </>
                         )}
@@ -730,41 +731,41 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 <div
                                     key={pool.id}
                                     onClick={() => navigate(`/pool/${(pool as BracketPool).slug || (pool as GameState).urlSlug || pool.id}`)}
-                                    className="group bg-slate-900/40 border border-slate-800 hover:border-orange-500/50 hover:bg-slate-900 rounded-3xl p-5 transition-all cursor-pointer relative overflow-hidden backdrop-blur-sm flex flex-col justify-between"
+                                    className="group bg-card border border-line hover:border-gold-500 rounded-3xl p-5 transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover cursor-pointer relative overflow-hidden flex flex-col justify-between"
                                 >
                                     <div>
                                         <div className="flex justify-between items-start mb-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="flex -space-x-3 isolate">
-                                                    <div className="w-10 h-10 rounded-full bg-slate-900 border-2 border-slate-700 flex items-center justify-center overflow-hidden relative z-10 shadow-md">
+                                                    <div className="w-10 h-10 rounded-full bg-surface border-2 border-line flex items-center justify-center overflow-hidden relative z-10 shadow-md">
                                                         {((pool as GameState).awayTeamLogo || getTeamLogo((pool as GameState).awayTeam)) ? (
                                                             <img src={(pool as GameState).awayTeamLogo || getTeamLogo((pool as GameState).awayTeam) || ''} alt="Away" className="w-full h-full object-contain p-0.5" />
                                                         ) : (
-                                                            <Shield className="text-slate-600" size={16} />
+                                                            <Shield className="text-faint" size={16} />
                                                         )}
                                                     </div>
-                                                    <div className="w-10 h-10 rounded-full bg-slate-900 border-2 border-slate-700 flex items-center justify-center overflow-hidden relative z-0 shadow-md">
+                                                    <div className="w-10 h-10 rounded-full bg-surface border-2 border-line flex items-center justify-center overflow-hidden relative z-0 shadow-md">
                                                         {((pool as GameState).homeTeamLogo || getTeamLogo((pool as GameState).homeTeam)) ? (
                                                             <img src={(pool as GameState).homeTeamLogo || getTeamLogo((pool as GameState).homeTeam) || ''} alt="Home" className="w-full h-full object-contain p-0.5" />
                                                         ) : (
-                                                            <Shield className="text-slate-600" size={16} />
+                                                            <Shield className="text-faint" size={16} />
                                                         )}
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <h3 className="font-extrabold text-white group-hover:text-orange-500 transition-colors line-clamp-1 text-sm uppercase">{pool.name}</h3>
+                                                    <h3 className="font-display font-bold text-[color:var(--text)] group-hover:text-gold-700 dark:group-hover:text-gold-400 transition-colors line-clamp-1 text-sm uppercase">{pool.name}</h3>
                                                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                         {getStatusBadge(pool)}
-                                                        <span className="text-[10px] text-slate-500 font-black font-mono">{costDisplay}</span>
+                                                        <span className="text-[10px] text-muted font-display font-bold num">{costDisplay}</span>
                                                     </div>
                                                     {pendingByPool[pool.id] && (
-                                                        <div className="flex items-center gap-1 mt-1.5 bg-amber-500/10 border border-amber-500/40 text-amber-400 text-[10px] font-black px-2 py-0.5 rounded-full w-fit">
+                                                        <div className="flex items-center gap-1 mt-1.5 bg-brandred-600/10 border border-brandred-600/40 text-brandred-600 text-[10px] font-display font-bold px-2 py-0.5 rounded-full w-fit">
                                                             <AlertTriangle size={10} aria-hidden="true" />
                                                             Week {pendingByPool[pool.id].dueWeek} picks due · {formatDeadline(pendingByPool[pool.id].deadline)}
                                                         </div>
                                                     )}
                                                     {(pool as GameState).scores?.startTime && (
-                                                        <div className="text-[9px] text-slate-500 mt-1 font-bold flex items-center gap-1 uppercase">
+                                                        <div className="text-[9px] text-faint mt-1 font-display font-bold flex items-center gap-1 uppercase num">
                                                             <Calendar size={10} />
                                                             {new Date((pool as GameState).scores.startTime!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                                         </div>
@@ -775,13 +776,13 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
                                         <div className="space-y-2 mb-4">
                                             <div className="flex justify-between text-[11px] font-bold">
-                                                <span className="text-slate-550">{isSquares ? 'Your Squares' : 'Your Entries'}</span>
-                                                <span className="text-white font-black">{userEntryCount}</span>
+                                                <span className="text-muted font-body">{isSquares ? 'Your Squares' : 'Your Entries'}</span>
+                                                <span className="text-[color:var(--text)] font-display font-bold num">{userEntryCount}</span>
                                             </div>
                                             {isSquares && (
-                                                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                                <div className="h-1.5 w-full bg-line rounded-full overflow-hidden">
                                                     <div
-                                                        className="h-full bg-orange-500 transition-all duration-500"
+                                                        className="h-full bg-gold-foil transition-all duration-500"
                                                         style={{ width: `${percentFull}%` }}
                                                     />
                                                 </div>
@@ -789,9 +790,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between text-[10px] text-slate-600 border-t border-slate-800/60 pt-3 mt-auto font-bold uppercase">
+                                    <div className="flex items-center justify-between text-[10px] text-faint border-t border-line pt-3 mt-auto font-display font-bold uppercase tracking-[0.05em]">
                                         <span className="flex items-center gap-1"><UserIcon size={10} /> Host: {pool.managerName || 'Unknown'}</span>
-                                        <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1 text-orange-500 font-black">
+                                        <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1 text-gold-700 dark:text-gold-400 font-display font-bold">
                                             View Dashboard <ChevronRight size={10} />
                                         </span>
                                     </div>
