@@ -42,6 +42,12 @@ jobs:
       - name: Test
         run: npm test
 
+      # REQUIRED: Cloud Functions unit tests (billing/coupon/referral) — these
+      # were previously never run anywhere. vitest resolves from the root install.
+      - name: Test functions
+        run: npm test
+        working-directory: functions
+
   # Validate the nginx config used by the Docker/Coolify production deploy.
   # A syntax error here would fail the container start, so gate it on every PR.
   nginx-validate:
