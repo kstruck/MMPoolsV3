@@ -40,6 +40,8 @@ const AdminRoute = React.lazy(() => import('./components/routes/AdminRoute').the
 // Lazy-loaded wizards
 const BracketWizard = React.lazy(() => import('./components/BracketWizard/BracketWizard').then(m => ({ default: m.BracketWizard })));
 const PlayoffWizard = React.lazy(() => import('./components/PlayoffPool/PlayoffWizard').then(m => ({ default: m.PlayoffWizard })));
+// TEMP: unified-wizard framework smoke test (delete before merge)
+const WizardPreview = React.lazy(() => import('./components/wizard/__preview__/WizardPreview').then(m => ({ default: m.WizardPreview })));
 const PropsWizard = React.lazy(() => import('./components/PropsWizard/PropsWizard').then(m => ({ default: m.PropsWizard })));
 const SetupWizard = React.lazy(() => import('./components/SetupWizard').then(m => ({ default: m.SetupWizard })));
 const NFLPoolWizard = React.lazy(() => import('./components/NFLPoolWizard/NFLPoolWizard').then(m => ({ default: m.NFLPoolWizard })));
@@ -262,6 +264,9 @@ const App: React.FC = () => {
             />
           } />
           <Route path="/custom-sports" element={<Navigate to="/" replace />} />
+
+          {/* TEMP: unified-wizard framework smoke test (delete before merge) */}
+          <Route path="/__wizard_preview" element={<WizardPreview />} />
 
           {/* Global Pages */}
           <Route path="/pricing" element={<PricingPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />

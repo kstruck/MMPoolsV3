@@ -4,6 +4,7 @@ export { useWizardDraft } from './useWizardDraft';
 export { Field, TextField, NumberField, TextAreaField, CheckboxField } from './fields';
 export { StepBasics } from './steps/StepBasics';
 export { StepFeeAndPayment } from './steps/StepFeeAndPayment';
+export { StepPayouts } from './steps/StepPayouts';
 export { StepBranding } from './steps/StepBranding';
 export { StepReminders } from './steps/StepReminders';
 export { StepReview } from './steps/StepReview';
