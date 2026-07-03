@@ -1,0 +1,40 @@
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { writeAdminAudit } from "./lib/adminAudit";
+
+/**
+ * logAdminAction (T7) — lets the consolidated Operations panel record an
+ * admin_audit entry after invoking an operation whose own callable doesn't
+ * yet write one. SUPER_ADMIN only; the client cannot write admin_audit
+ * directly (rules: write:false), so this is the audited path.
+ *
+ * This is a convenience trail (client-reported action name/result summary),
+ * NOT an authorization boundary — the underlying op callables enforce their
+ * own SUPER_ADMIN checks.
+ */
+export const logAdminAction = onCall(async (request) => {
+  if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
+    throw new HttpsError("permission-denied", "Only Super Admin can log admin actions.");
+  }
+  const { action, targetType, targetId, metadata, status, error } = request.data as {
+    action?: string;
+    targetType?: string;
+    targetId?: string;
+    metadata?: Record<string, unknown>;
+    status?: "success" | "error";
+    error?: string;
+  };
+  if (!action || typeof action !== "string") {
+    throw new HttpsError("invalid-argument", "action is required.");
+  }
+  await writeAdminAudit({
+    actorUid: request.auth.uid,
+    actorEmail: request.auth.token.email as string | undefined,
+    action,
+    targetType,
+    targetId,
+    metadata,
+    status: status === "error" ? "error" : "success",
+    error,
+  });
+  return { success: true };
+});

@@ -55,6 +55,9 @@ export { getServerTime } from "./serverTime";
 // --- ADMIN HEALTH (real Super-Admin Overview vitals; replaces fake status card) ---
 export { getAdminHealthSnapshot } from "./adminHealth";
 
+// --- ADMIN OPS (audit trail for the consolidated Operations panel) ---
+export { logAdminAction } from "./adminOps";
+
 // --- REVENUE AGGREGATES (platform revenue from billingCharges → admin_stats/revenue) ---
 export { aggregateRevenueDaily, recomputeRevenue } from "./revenueAggregates";
 

@@ -660,6 +660,16 @@ export const dbService = {
         });
     },
 
+    // Record an admin_audit entry for an Operations-panel action (T7).
+    logAdminAction: async (entry: { action: string; targetType?: string; targetId?: string; metadata?: Record<string, unknown>; status?: 'success' | 'error'; error?: string }): Promise<void> => {
+        try {
+            const fn = httpsCallable<typeof entry, { success: boolean }>(functions, 'logAdminAction');
+            await fn(entry);
+        } catch (err) {
+            logger.warn('logAdminAction failed (non-fatal):', err);
+        }
+    },
+
     // Admin Audit Log reader (T7). Most-recent admin actions across the platform.
     subscribeToAdminAudit: (callback: (entries: Record<string, unknown>[]) => void, onError?: (error: Error) => void, max = 100) => {
         const q = query(collection(db, "admin_audit"), orderBy("at", "desc"), limit(max));
