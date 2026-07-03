@@ -22,6 +22,7 @@ import { BracketComparison } from './BracketComparison';
 import { PoolShareModal } from './PoolShareModal';
 import { PoolAnalytics } from './PoolAnalytics';
 import { BracketAwards } from './BracketAwards';
+import { ChampionBanner } from './ChampionBanner';
 import { ChalkComparison } from './ChalkComparison';
 import { ReportsTab } from './ReportsTab';
 import { BracketRulesPanel } from './BracketRulesPanel';
@@ -634,6 +635,17 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4">
+
+                {/* Champion Banner — the payoff moment. Renders only when the
+                    season is decided; visible on every tab. */}
+                {!loading && (
+                    <ChampionBanner
+                        pool={pool}
+                        entries={entries}
+                        tournament={tournament}
+                        currentUserId={user?.id}
+                    />
+                )}
 
                 {/* Commissioner Message Banner */}
                 {pool.commissionerMessage && (

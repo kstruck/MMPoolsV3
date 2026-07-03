@@ -37,6 +37,9 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
 
             if (!isPublic) return false;
 
+            // Canceled pools never show in public discovery
+            if ((p as any).status === 'CANCELED') return false;
+
             // Type Filter
             if (filterType !== 'all') {
                 if (filterType === 'squares' && !isSquares) return false;

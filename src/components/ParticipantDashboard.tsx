@@ -23,7 +23,8 @@ import {
   AlertTriangle,
   Coins,
   CheckCircle,
-  Crown
+  Crown,
+  RotateCcw
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -703,6 +704,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         {filteredPools.map(pool => {
                             const isSquares = pool.type === 'SQUARES';
                             const isPlayoff = pool.type === 'NFL_PLAYOFFS';
+                            // Season-to-season retention: completed NFL season pools the user
+                            // commissions can be re-run via the wizard, pre-seeded (?cloneFrom=)
+                            const canRerun =
+                                (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') &&
+                                (pool.ownerId === user.id || pool.managerUid === user.id) &&
+                                getPoolTabStatus(pool) === 'completed';
 
                             let userEntryCount = 0;
                             let percentFull = 0;
@@ -789,6 +796,14 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                         </div>
                                     </div>
 
+                                    {canRerun && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); navigate(`/nfl-wizard?type=${pool.type}&cloneFrom=${pool.id}`); }}
+                                            className="flex items-center justify-center gap-1.5 text-[10px] font-black uppercase text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl py-2 mb-3 transition-colors"
+                                        >
+                                            <RotateCcw size={11} /> Re-run for Next Season
+                                        </button>
+                                    )}
                                     <div className="flex items-center justify-between text-[10px] text-slate-600 border-t border-slate-800/60 pt-3 mt-auto font-bold uppercase">
                                         <span className="flex items-center gap-1"><UserIcon size={10} /> Host: {pool.managerName || 'Unknown'}</span>
                                         <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1 text-orange-500 font-black">
