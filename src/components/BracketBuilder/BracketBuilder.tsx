@@ -4,7 +4,7 @@ import { MatchNode } from './MatchNode';
 import { RegionTabs } from './RegionTabs';
 import { ESPNBracket } from './ESPNBracket';
 import { TeamDataContext } from './teamDataContext';
-import { ChevronRight, ChevronLeft, Trophy, Star, Dices, Wand2, LayoutGrid, List } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Trophy, Star, Dices, Wand2, LayoutGrid, List, Smartphone, Monitor } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 
 interface BracketBuilderProps {
@@ -211,53 +211,53 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
     return (
         <div className="flex flex-col h-full w-full">
             {/* Header */}
-            <div className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 pt-3 pb-2">
+            <div className="sticky top-0 z-10 bg-surface backdrop-blur border-b border-line px-4 pt-3 pb-2">
                 <div className="flex justify-between items-center gap-3">
                     {/* Left: Quick pick tools */}
                     {!readOnly && (
-                        <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
+                        <div className="flex items-center gap-1 bg-card p-1 rounded-lg border border-line">
                             <button
                                 onClick={() => handleQuickPick('favorites')}
-                                className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+                                className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-display font-bold uppercase tracking-[0.05em] text-muted hover:text-[color:var(--text)] hover:bg-page rounded transition-colors flex items-center gap-1"
                                 title="Fill bracket with top seeds"
                             >
-                                <Star size={12} className="text-amber-400" /> <span className="hidden sm:inline">Favorites</span>
+                                <Star size={12} className="text-gold-500" /> <span className="hidden sm:inline">Favorites</span>
                             </button>
                             <button
                                 onClick={() => handleQuickPick('random')}
-                                className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+                                className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-display font-bold uppercase tracking-[0.05em] text-muted hover:text-[color:var(--text)] hover:bg-page rounded transition-colors flex items-center gap-1"
                                 title="Fill bracket randomly"
                             >
-                                <Dices size={12} className="text-indigo-400" /> <span className="hidden sm:inline">Random</span>
+                                <Dices size={12} className="text-gold-500" /> <span className="hidden sm:inline">Random</span>
                             </button>
                             <button
                                 onClick={() => handleQuickPick('smart')}
-                                className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+                                className="px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-display font-bold uppercase tracking-[0.05em] text-muted hover:text-[color:var(--text)] hover:bg-page rounded transition-colors flex items-center gap-1"
                                 title="Finish remaining games"
                             >
-                                <Wand2 size={12} className="text-emerald-400" /> <span className="hidden sm:inline">Finish</span>
+                                <Wand2 size={12} className="text-gold-500" /> <span className="hidden sm:inline">Finish</span>
                             </button>
                         </div>
                     )}
 
                     {/* Center: Progress */}
-                    <div className="text-xs text-slate-400 font-mono whitespace-nowrap hidden sm:block">
+                    <div className="text-xs text-muted num whitespace-nowrap hidden sm:block">
                         {totalPicks} / {totalGames} picks
                     </div>
 
                     {/* Right: View toggle — always visible; Regions default/recommended on mobile */}
-                    <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg border border-slate-700">
+                    <div className="flex items-center gap-1 bg-card p-1 rounded-lg border border-line">
                         <button
                             onClick={() => setView('tabs')}
                             title="Region-by-Region (recommended for mobile)"
-                            className={`px-2 sm:px-3 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'tabs' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                            className={`px-2 sm:px-3 py-1.5 rounded text-[10px] font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1 transition-colors ${view === 'tabs' ? 'bg-gold-foil text-navy-900' : 'text-muted hover:text-[color:var(--text)] hover:bg-page'}`}
                         >
                             <List size={11} /> Regions
                         </button>
                         <button
                             onClick={() => setView('espn')}
                             title="Full Bracket (ESPN-style, best on desktop)"
-                            className={`px-2 sm:px-3 py-1.5 rounded text-[10px] font-semibold flex items-center gap-1 transition-colors ${view === 'espn' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                            className={`px-2 sm:px-3 py-1.5 rounded text-[10px] font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1 transition-colors ${view === 'espn' ? 'bg-gold-foil text-navy-900' : 'text-muted hover:text-[color:var(--text)] hover:bg-page'}`}
                         >
                             <LayoutGrid size={11} /> Full
                         </button>
@@ -266,14 +266,14 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 
                 {/* Mobile context banner — tells users which mode they're in */}
                 {isMobile && view === 'tabs' && (
-                    <div className="mt-2 px-3 py-1.5 bg-indigo-950/70 border border-indigo-700/40 rounded-lg text-[10px] text-indigo-300 flex items-center gap-1.5">
-                        <span>📱</span>
+                    <div className="mt-2 px-3 py-1.5 bg-card border border-line rounded-lg text-[10px] text-muted flex items-center gap-1.5">
+                        <Smartphone size={12} className="shrink-0 text-gold-500" />
                         <span><strong>Region mode</strong> — pick one region at a time. Great for phones! Tap <strong>Full</strong> if you prefer the complete bracket view.</span>
                     </div>
                 )}
                 {isMobile && view === 'espn' && (
-                    <div className="mt-2 px-3 py-1.5 bg-amber-950/70 border border-amber-700/40 rounded-lg text-[10px] text-amber-300 flex items-center gap-1.5">
-                        <span>🖥️</span>
+                    <div className="mt-2 px-3 py-1.5 bg-gold-500/10 border border-gold-500/30 rounded-lg text-[10px] text-gold-700 dark:text-gold-300 flex items-center gap-1.5">
+                        <Monitor size={12} className="shrink-0 text-gold-500" />
                         <span>Full bracket is best on a <strong>desktop or tablet</strong>. Tap <strong>Regions</strong> for easier phone picking.</span>
                     </div>
                 )}
@@ -336,11 +336,11 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
 
             {/* Footer Navigation — only in tabs view */}
             {!readOnly && view === 'tabs' && (
-                <div className="p-4 border-t border-slate-800 flex justify-between bg-slate-900/50 backdrop-blur">
+                <div className="p-4 border-t border-line flex justify-between bg-surface backdrop-blur">
                     <button
                         onClick={handlePrevRegion}
                         disabled={activeRegion === 'East'}
-                        className="px-4 py-2 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 flex items-center gap-2"
+                        className="px-4 py-2 text-muted hover:text-[color:var(--text)] disabled:opacity-30 disabled:hover:text-muted flex items-center gap-2 font-display font-bold uppercase tracking-[0.05em]"
                     >
                         <ChevronLeft className="w-4 h-4" /> Previous Region
                     </button>
@@ -348,7 +348,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                     <button
                         onClick={handleNextRegion}
                         disabled={activeRegion === 'FF'}
-                        className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium flex items-center gap-2 shadow-lg shadow-indigo-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-6 py-2 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px"
                     >
                         Next Region <ChevronRight className="w-4 h-4" />
                     </button>
@@ -464,7 +464,7 @@ const RegionBracket: React.FC<{ regionName: string; align?: 'left' | 'right'; el
                         />
                     );
                 })()}
-                <div className="mt-4 text-center text-xs text-slate-500 uppercase tracking-widest font-bold">Region<br />Champion</div>
+                <div className="mt-4 text-center text-xs text-muted uppercase tracking-widest font-display font-bold">Region<br />Champion</div>
             </div>
         </div>
     );
@@ -492,11 +492,11 @@ const FinalFourBracket: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<
 
     return (
         <div className="flex flex-col items-center justify-center h-full gap-8 min-h-[400px]">
-            <h3 className="text-2xl font-bold text-amber-500 tracking-widest uppercase mb-4">Final Four</h3>
+            <h3 className="text-2xl font-display font-bold text-gold-500 tracking-widest uppercase mb-4">Final Four</h3>
 
             <div className="flex gap-8 items-center">
                 <div className="flex flex-col items-center gap-2">
-                    <div className="text-xs text-slate-400">East vs West</div>
+                    <div className="text-xs text-muted">East vs West</div>
                     <MatchNode
                         game={f4Game1}
                         picks={picks}
@@ -511,8 +511,8 @@ const FinalFourBracket: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<
                 </div>
 
                 <div className="flex flex-col items-center transform scale-125 z-10">
-                    <div className="text-amber-400 font-bold mb-2 text-lg">NATIONAL CHAMPIONSHIP</div>
-                    <Trophy className="w-8 h-8 text-amber-500 mb-4 animate-pulse" />
+                    <div className="text-gold-500 font-display font-bold uppercase mb-2 text-lg">NATIONAL CHAMPIONSHIP</div>
+                    <Trophy className="w-8 h-8 text-gold-500 mb-4 animate-pulse" />
                     <MatchNode
                         game={champGame}
                         picks={picks}
@@ -528,7 +528,7 @@ const FinalFourBracket: React.FC<BracketBuilderProps & { eliminatedTeamIds: Set<
                 </div>
 
                 <div className="flex flex-col items-center gap-2">
-                    <div className="text-xs text-slate-400">South vs Midwest</div>
+                    <div className="text-xs text-muted">South vs Midwest</div>
                     <MatchNode
                         game={f4Game2}
                         picks={picks}
