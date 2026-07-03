@@ -58,6 +58,18 @@ export function TextAreaField(props: { name: string; label: string; placeholder?
   );
 }
 
+export function SelectField(props: { name: string; label: string; options: { value: string; label: string }[]; hint?: string }) {
+  const { name, label, options, hint } = props;
+  const { register, formState: { errors } } = useFormContext();
+  return (
+    <Field label={label} htmlFor={name} error={errorAt(errors, name)} hint={hint}>
+      <select id={name} className={inputCls} {...register(name)}>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </Field>
+  );
+}
+
 export function CheckboxField(props: { name: string; label: string }) {
   const { name, label } = props;
   const { register } = useFormContext();
