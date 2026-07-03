@@ -3,6 +3,13 @@ import { writeAuditEvent } from './audit';
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { assertPoolCreationAllowed } from './lib/systemGuards';
+import { isPoolType, type PoolType } from './shared/poolTypes';
+import {
+    validateCreateInput,
+    assertNotBanned,
+    freeBilling,
+    writePoolCreationSideEffects,
+} from './lib/poolCreation';
 
 // Helper to determine if user can manage pool
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
@@ -65,6 +72,18 @@ export const createPool = onCall(async (request) => {
             throw new HttpsError('invalid-argument', 'Missing required field: costPerSquare');
         }
 
+        // Resolve + validate the pool type against the shared CreatePoolInput
+        // schema (gate: throws on invalid; original payload is still persisted).
+        const rawType = data.type || 'SQUARES';
+        if (!isPoolType(rawType)) {
+            throw new HttpsError('invalid-argument', `Unknown pool type: ${rawType}`);
+        }
+        const poolType: PoolType = rawType;
+        validateCreateInput(poolType, data);
+
+        const claimRole = request.auth.token.role as string | undefined;
+        assertNotBanned(claimRole, undefined);
+
         const poolsRef = db.collection('pools');
         const userRef = db.collection('users').doc(uid);
 
@@ -85,6 +104,7 @@ export const createPool = onCall(async (request) => {
             status: 'DRAFT',
             isLocked: false,
             isPublic: data.isPublic !== undefined ? data.isPublic : true, // Explicitly set for rules
+            billing: freeBilling(), // free plan, no auto-lock (server-authoritative)
         };
 
         // Initialize Squares-specific data
@@ -104,31 +124,36 @@ export const createPool = onCall(async (request) => {
         if (newPool.gameId === undefined) delete newPool.gameId;
         if (newPool.startTime === undefined) delete newPool.startTime;
 
-        // Transaction
+        // Transaction: create pool + uniform side-effect bundle (managedPools,
+        // POOL_CREATED activity, role upgrade) + pool audit — all atomic.
         await db.runTransaction(async (t) => {
             const userDoc = await t.get(userRef);
             if (!userDoc.exists) {
                 throw new HttpsError('not-found', 'User profile not found.');
             }
 
-            const userData = userDoc.data();
-            const currentRole = userData?.role || 'PARTICIPANT';
+            const currentRole = userDoc.data()?.role as string | undefined;
+            assertNotBanned(claimRole, currentRole);
 
-            // 1. Create Pool
             t.set(poolRef, newPool);
 
-            // 2. Upgrade Role if needed
-            if (currentRole === 'PARTICIPANT') {
-                t.update(userRef, { role: 'POOL_MANAGER' });
-            }
-
-            // 3. Write Manager Index
-            const indexRef = userRef.collection('managedPools').doc(poolId);
-            t.set(indexRef, {
+            writePoolCreationSideEffects(t, {
+                uid,
                 poolId,
-                createdAt: now,
-                name: newPool.name
+                poolName: newPool.name,
+                poolType,
+                nowMs: now.toMillis(),
+                currentRole,
             });
+
+            await writeAuditEvent({
+                poolId,
+                type: 'POOL_CREATED',
+                message: `Pool "${newPool.name}" (${poolType}) created by ${uid}`,
+                severity: 'INFO',
+                actor: { uid, role: 'ADMIN', label: 'Host' },
+                payload: { type: poolType },
+            }, t);
         });
 
         return { success: true, poolId };

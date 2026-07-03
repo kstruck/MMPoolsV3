@@ -2,7 +2,7 @@
     "name": "functions",
     "scripts": {
         "build": "node scripts/copy-shared.mjs && tsc",
-        "test": "vitest run",
+        "test": "node scripts/copy-shared.mjs && vitest run",
         "serve": "npm run build && firebase emulators:start --only functions",
         "shell": "npm run build && firebase functions:shell",
         "start": "npm run shell",

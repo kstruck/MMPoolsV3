@@ -5,6 +5,13 @@ import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields } from "./poolOps";
 import { assertPoolCreationAllowed, assertNotMaintenance } from "./lib/systemGuards";
+import { isPoolType, type PoolType } from "./shared/poolTypes";
+import {
+  validateCreateInput,
+  assertNotBanned,
+  freeBilling,
+  writePoolCreationSideEffects,
+} from "./lib/poolCreation";
 import {
   NFLGame,
   NFLPickemPool,
@@ -51,6 +58,12 @@ export const createNFLPool = onCall(async (request) => {
       throw new HttpsError('invalid-argument', 'Missing required fields: name, season.');
     }
 
+    // Shared validation gate + ban check (poolType already narrowed above).
+    const poolType: PoolType = isPoolType(type) ? type : 'NFL_PICKEM';
+    validateCreateInput(poolType, data);
+    const claimRole = request.auth.token.role as string | undefined;
+    assertNotBanned(claimRole, undefined);
+
     const poolRef = db.collection('pools').doc();
     const poolId = poolRef.id;
     const now = Date.now();
@@ -65,7 +78,8 @@ export const createNFLPool = onCall(async (request) => {
       updatedAt: now,
       status: 'OPEN',
       isLocked: false,
-      participantIds: [uid]
+      participantIds: [uid],
+      billing: freeBilling(), // free plan, no auto-lock (server-authoritative)
     };
 
     const userRef = db.collection('users').doc(uid);
@@ -76,32 +90,19 @@ export const createNFLPool = onCall(async (request) => {
         throw new HttpsError('not-found', 'User profile not found.');
       }
 
-      const userData = userDoc.data();
-      const currentRole = userData?.role || 'PARTICIPANT';
+      const currentRole = userDoc.data()?.role as string | undefined;
+      assertNotBanned(claimRole, currentRole);
 
-      // 1. Write the pool document
       transaction.set(poolRef, newPool);
 
-      // 2. Upgrade role to POOL_MANAGER if they are a standard participant
-      if (currentRole === 'PARTICIPANT') {
-        transaction.update(userRef, { role: 'POOL_MANAGER' });
-      }
-
-      // 3. Write Manager Index mapping
-      transaction.set(userRef.collection('managedPools').doc(poolId), {
+      // managedPools + participations + POOL_CREATED activity + role upgrade
+      writePoolCreationSideEffects(transaction, {
+        uid,
         poolId,
-        createdAt: now,
-        name: newPool.name,
-        type: newPool.type
-      });
-
-      // 4. Write User Participation mapping
-      transaction.set(userRef.collection('participations').doc(poolId), {
-        poolId,
-        joinedAt: now,
-        name: newPool.name,
-        type: newPool.type,
-        role: 'MANAGER'
+        poolName: newPool.name,
+        poolType,
+        nowMs: now,
+        currentRole,
       });
     });
 
