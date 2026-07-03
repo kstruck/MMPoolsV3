@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BillingGate } from '../billing';
-import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone } from 'lucide-react';
+import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
 
@@ -15,6 +15,7 @@ import { PickDistribution } from './PickDistribution';
 import { NFLUserBentoDashboard } from './NFLUserBentoDashboard';
 import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
+import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
@@ -135,33 +136,33 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   };
 
   const branding = castPool.branding || {};
-  const accentHex = branding.secondaryColor || '#6366f1';
+  const accentHex = branding.secondaryColor || '#C9A867';
 
   return (
     <BillingGate pool={pool as any} isCommissioner={isManager}>
     <div
-      className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20 relative transition-colors duration-500"
-      style={{ backgroundColor: branding.bgColor || '#020617' }}
+      className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 relative transition-colors duration-500"
+      style={{ backgroundColor: branding.bgColor || undefined }}
     >
       {/* Pool Header Bar */}
       <div className="max-w-7xl mx-auto px-4 pt-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/40 p-6 border border-slate-800 rounded-3xl backdrop-blur-sm">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 border border-line rounded-xl shadow-card">
           <div>
             <div className="flex items-center gap-3 mb-1">
               {branding.logoUrl && (
                 <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
               )}
-              <h1 className="text-3xl font-black text-white leading-none">{pool.name}</h1>
+              <h1 className="font-display font-extrabold uppercase text-3xl text-[color:var(--text)] leading-none">{pool.name}</h1>
             </div>
-            <p className="text-slate-400 text-sm font-semibold mt-1.5 flex items-center gap-2 flex-wrap">
+            <p className="text-muted font-body text-sm font-semibold mt-1.5 flex items-center gap-2 flex-wrap">
               <span className="flex items-center gap-1.5 flex-wrap">
-                Host: <strong className="text-white font-black">{pool.managerName || 'Host'}</strong>
+                Host: <strong className="text-[color:var(--text)] font-bold">{pool.managerName || 'Host'}</strong>
                 {castPool.contactMethod !== 'none' && (
                   <span className="flex items-center gap-1.5 ml-1 inline-flex">
                     {(castPool.contactMethod === 'email' || castPool.contactMethod === 'both' || !castPool.contactMethod) && pool.contactEmail && (
                       <a
                         href={`mailto:${pool.contactEmail}`}
-                        className="p-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-navy-800/5 hover:bg-navy-800/10 text-navy-700 dark:bg-gold-400/10 dark:hover:bg-gold-400/20 dark:text-gold-400 border border-line rounded-sm transition-all duration-150 hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Email Host: ${pool.contactEmail}`}
                       >
                         <Mail size={12} />
@@ -170,7 +171,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     {(castPool.contactMethod === 'phone' || castPool.contactMethod === 'both') && castPool.contactPhone && (
                       <a
                         href={`tel:${castPool.contactPhone}`}
-                        className="p-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-navy-800/5 hover:bg-navy-800/10 text-navy-700 dark:bg-gold-400/10 dark:hover:bg-gold-400/20 dark:text-gold-400 border border-line rounded-sm transition-all duration-150 hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Call/SMS Host: ${castPool.contactPhone}`}
                       >
                         <Phone size={12} />
@@ -179,8 +180,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   </span>
                 )}
               </span>
-              <span className="text-slate-700">•</span>
-              <span className="text-blue-400 uppercase font-black text-xs">
+              <span className="text-faint">•</span>
+              <span className="text-navy-700 dark:text-gold-400 uppercase font-display font-bold text-[12px] tracking-[0.08em]">
                 {pool.type === 'NFL_PICKEM' ? 'Weekly Pick\'em' :
                  pool.type === 'NFL_SURVIVOR' ? 'Survivor Pool' : 'Margin Pool'}
               </span>
@@ -189,15 +190,15 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
           <div className="flex gap-2.5 items-center flex-wrap">
             {/* Week Selector */}
-            <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-2xl px-3 py-1.5">
-              <Calendar size={16} className="text-slate-500" />
+            <div className="flex items-center gap-2 bg-page border-[1.5px] border-line rounded-md px-3 py-1.5">
+              <Calendar size={16} className="text-muted" />
               <select
                 value={selectedWeek}
                 onChange={e => setSelectedWeek(parseInt(e.target.value))}
-                className="bg-transparent focus:outline-none text-sm text-white font-bold cursor-pointer"
+                className="bg-transparent focus:outline-none font-body text-sm text-[color:var(--text)] font-bold cursor-pointer"
               >
                 {Array.from({ length: Number(castPool.seasonType) === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
-                  <option key={w} value={w} className="bg-slate-950">
+                  <option key={w} value={w} className="bg-card text-[color:var(--text)]">
                     {Number(castPool.seasonType) === 1
                       ? w === 1
                         ? 'HOF Weekend'
@@ -208,20 +209,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               </select>
             </div>
 
-            <button
-              onClick={handleShare}
-              className="bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 hover:text-white px-4 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5"
-            >
+            <Button variant="ghost" size="sm" onClick={handleShare}>
               <Share2 size={13} /> Invite Link
-            </button>
+            </Button>
 
             {isManager && (
-              <button
-                onClick={() => setActiveTab('manager')}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5"
-              >
+              <Button variant="secondary" size="sm" onClick={() => setActiveTab('manager')}>
                 <Settings size={13} /> Commissioner
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -241,13 +236,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
         )}
 
         {/* Global tab routing headers */}
-        <div className="flex border-b border-slate-800/80 mt-8 mb-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
+        <div className="flex border-b border-line mt-8 mb-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
+            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
               activeTab === 'dashboard'
-                ? 'text-white border-blue-500 font-black'
-                : 'text-slate-500 hover:text-slate-400 border-transparent'
+                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                : 'text-muted hover:text-[color:var(--text)] border-transparent'
             }`}
             style={activeTab === 'dashboard' ? { borderBottomColor: accentHex } : {}}
           >
@@ -255,10 +250,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('picks')}
-            className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
+            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
               activeTab === 'picks'
-                ? 'text-white border-blue-500 font-black'
-                : 'text-slate-500 hover:text-slate-400 border-transparent'
+                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                : 'text-muted hover:text-[color:var(--text)] border-transparent'
             }`}
             style={activeTab === 'picks' ? { borderBottomColor: accentHex } : {}}
           >
@@ -266,10 +261,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('standings')}
-            className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
+            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
               activeTab === 'standings'
-                ? 'text-white border-blue-500 font-black'
-                : 'text-slate-500 hover:text-slate-400 border-transparent'
+                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                : 'text-muted hover:text-[color:var(--text)] border-transparent'
             }`}
             style={activeTab === 'standings' ? { borderBottomColor: accentHex } : {}}
           >
@@ -277,10 +272,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('recaps')}
-            className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
+            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
               activeTab === 'recaps'
-                ? 'text-white border-blue-500 font-black'
-                : 'text-slate-500 hover:text-slate-400 border-transparent'
+                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                : 'text-muted hover:text-[color:var(--text)] border-transparent'
             }`}
             style={activeTab === 'recaps' ? { borderBottomColor: accentHex } : {}}
           >
@@ -288,10 +283,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('rules')}
-            className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
+            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
               activeTab === 'rules'
-                ? 'text-white border-blue-500 font-black'
-                : 'text-slate-500 hover:text-slate-400 border-transparent'
+                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                : 'text-muted hover:text-[color:var(--text)] border-transparent'
             }`}
             style={activeTab === 'rules' ? { borderBottomColor: accentHex } : {}}
           >
@@ -300,10 +295,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           {user && (
             <button
               onClick={() => setActiveTab('payments')}
-              className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
+              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
                 activeTab === 'payments'
-                  ? 'text-white border-blue-500 font-black'
-                  : 'text-slate-500 hover:text-slate-400 border-transparent'
+                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
               }`}
               style={activeTab === 'payments' ? { borderBottomColor: accentHex } : {}}
             >
@@ -316,8 +311,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
         <div className="space-y-6">
           {isLoading ? (
             <div className="text-center py-16">
-              <div className="animate-spin text-blue-500 w-10 h-10 border-4 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-slate-500 font-bold">Synchronizing game feeds...</p>
+              <div className="animate-spin w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-muted font-body font-bold">Synchronizing game feeds...</p>
             </div>
           ) : (
             <>
@@ -351,18 +346,15 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               {activeTab === 'picks' && (
                 <>
                   {!user ? (
-                    <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 text-center max-w-md mx-auto my-12">
-                      <Lock size={40} className="text-slate-600 mx-auto mb-3" />
-                      <h3 className="text-xl font-bold text-white mb-2">Member Authentication Required</h3>
-                      <p className="text-slate-400 text-sm mb-6">
+                    <div className="bg-card border border-line rounded-xl shadow-card p-8 text-center max-w-md mx-auto my-12">
+                      <Lock size={40} className="text-faint mx-auto mb-3" />
+                      <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-2">Member Authentication Required</h3>
+                      <p className="font-body text-muted text-sm mb-6">
                         You must sign in or register to submit or review pick sheets in this pool.
                       </p>
-                      <button
-                        onClick={onOpenAuth}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-6 py-3 rounded-xl text-sm transition-all"
-                      >
+                      <Button onClick={onOpenAuth}>
                         Sign In / Register
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -405,40 +397,40 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
                       {/* Right column: Quick overview/stats */}
                       <div className="space-y-6">
-                        <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm">
-                          <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">
+                        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                          <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-4">
                             Week {selectedWeek} Lock Status
                           </h3>
 
                           <div className="space-y-4">
                             <div className="flex items-center gap-3">
                               {isWeekLocked ? (
-                                <div className="p-2.5 bg-red-500/10 rounded-xl text-red-400 border border-red-500/20">
+                                <div className="p-2.5 bg-cream rounded-md text-muted border border-line">
                                   <Lock size={18} />
                                 </div>
                               ) : (
-                                <div className="p-2.5 bg-green-500/10 rounded-xl text-green-400 border border-green-500/20 animate-pulse">
+                                <div className="p-2.5 bg-[#E5EDF6] rounded-md text-[#142A4C] border border-[#CBDCEC] animate-pulse">
                                   <Calendar size={18} />
                                 </div>
                               )}
                               <div>
-                                <h4 className="text-sm font-bold text-white">
+                                <h4 className="font-display font-bold uppercase text-sm text-[color:var(--text)]">
                                   {isWeekLocked ? 'Selections Locked' : 'Picks are Open'}
                                 </h4>
-                                <p className="text-[10px] text-slate-500">
-                                  {isWeekLocked 
-                                    ? 'Host is syncing game outcomes.' 
+                                <p className="font-body text-[11px] text-muted">
+                                  {isWeekLocked
+                                    ? 'Host is syncing game outcomes.'
                                     : 'Make changes before kickoff.'}
                                 </p>
                               </div>
                             </div>
 
                             {earliestGame && !isWeekLocked && (
-                              <div className="bg-slate-950 p-3 rounded-2xl text-center border border-slate-800">
-                                <span className="text-[10px] text-slate-500 font-extrabold uppercase block mb-1">
+                              <div className="bg-page p-3 rounded-lg text-center border border-line">
+                                <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted block mb-1">
                                   Locks in
                                 </span>
-                                <span className="text-amber-400 font-mono font-bold text-sm">
+                                <span className="text-gold-600 dark:text-gold-400 num font-bold text-sm">
                                   {new Date(earliestGame.startTime).toLocaleString()}
                                 </span>
                               </div>
@@ -476,39 +468,39 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
                   )}
                   {recaps.length === 0 ? (
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-8 text-center backdrop-blur-sm">
-                      <FileText size={40} className="text-slate-600 mx-auto mb-3" />
-                      <h4 className="text-sm font-bold text-slate-300">No Weekly Recaps Available</h4>
-                      <p className="text-xs text-slate-500 mt-1">
+                    <div className="bg-card border border-line rounded-xl p-8 text-center shadow-card">
+                      <FileText size={40} className="text-faint mx-auto mb-3" />
+                      <h4 className="font-display font-bold uppercase text-sm text-[color:var(--text)]">No Weekly Recaps Available</h4>
+                      <p className="font-body text-[13px] text-muted mt-1">
                         Recaps will compile automatically after commissioner scores active weeks.
                       </p>
                     </div>
                   ) : (
                     recaps.map(recap => (
-                      <div key={recap.id} className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm space-y-4">
-                        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                          <h4 className="text-lg font-black text-white flex items-center gap-2">
-                            🏆 Week {recap.week} Recap Summary
+                      <div key={recap.id} className="bg-card border border-line rounded-xl p-6 shadow-card space-y-4">
+                        <div className="flex justify-between items-center border-b border-line pb-3">
+                          <h4 className="font-display font-bold uppercase text-lg text-[color:var(--text)] flex items-center gap-2">
+                            <Trophy size={18} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> Week {recap.week} Recap Summary
                           </h4>
-                          <span className="text-[10px] text-slate-500 font-bold font-mono">
+                          <span className="text-[11px] text-muted font-bold num">
                             {new Date(recap.createdAt).toLocaleDateString()}
                           </span>
                         </div>
 
-                        <div className="space-y-3.5 text-sm">
+                        <div className="space-y-3.5 font-body text-sm">
                           {recap.sharpOfWeek && (
-                            <div className="flex justify-between items-center border-b border-slate-800/40 pb-2">
-                              <span className="text-slate-400 font-bold">🎯 Sharp of the Week:</span>
-                              <span className="text-white font-extrabold">
+                            <div className="flex justify-between items-center border-b border-line pb-2">
+                              <span className="text-muted font-bold flex items-center gap-1.5"><Target size={13} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> Sharp of the Week:</span>
+                              <span className="text-[color:var(--text)] font-display font-bold num">
                                 {recap.sharpOfWeek.userName} ({recap.sharpOfWeek.score} pts)
                               </span>
                             </div>
                           )}
 
                           {recap.closestTiebreaker && (
-                            <div className="flex justify-between items-center border-b border-slate-800/40 pb-2">
-                              <span className="text-slate-400 font-bold">⏱️ Closest Tiebreaker:</span>
-                              <span className="text-white font-extrabold">
+                            <div className="flex justify-between items-center border-b border-line pb-2">
+                              <span className="text-muted font-bold flex items-center gap-1.5"><Timer size={13} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> Closest Tiebreaker:</span>
+                              <span className="text-[color:var(--text)] font-display font-bold num">
                                 {recap.closestTiebreaker.userName} (diff: {recap.closestTiebreaker.diff})
                               </span>
                             </div>
@@ -516,8 +508,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
 
                           {recap.attritionCount !== undefined && (
                             <div className="flex justify-between items-center">
-                              <span className="text-slate-400 font-bold">🔥 Survivor Attrition Remaining:</span>
-                              <span className="text-red-400 font-black">
+                              <span className="text-muted font-bold flex items-center gap-1.5"><Flame size={13} className="text-brandred-600" aria-hidden="true" /> Survivor Attrition Remaining:</span>
+                              <span className="text-brandred-600 font-display font-bold num">
                                 {recap.attritionCount} Players Alive
                               </span>
                             </div>
