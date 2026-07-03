@@ -385,9 +385,11 @@ _**Model guidance (approved by Kevin 2026-07-03):** T1, T3, T4, T5, T7, T9, T10,
 - Deps: none.
 
 **T14 — Monetization: revenue reporting**
-- Objective: real revenue aggregates in Monetization tab.
-- Files: new scheduled `functions/src/revenueAggregates.ts` (daily rollup from `pools/*/payments` ledger + Stripe records → `stats/revenue`), read-only panel section in `SuperAdminBillingPanel.tsx` (or its decomposed successor).
-- Acceptance: totals reconcile with ledger sum on a seeded emulator dataset; Overview "Total Revenue" reads the same source.
-- Deps: none.
+- Objective: real PLATFORM revenue aggregates in the Monetization tab + honest Overview.
+- **Premise correction (found during execution 2026-07-03, confirmed w/ Kevin):** the original spec said "rollup from `pools/*/payments` ledger" — but that path is the Entry-Fee DUES ledger (`writeLedgerEvent`, member→commissioner GMV), NOT platform income. Platform revenue is Stripe billing. And `stats/global.totalRevenue` is currently `totalAllTimePrizes` (GMV) — mislabeled (`statsTrigger.ts:151` "treat Revenue as Prizes for now"). Bundle sales (`buy_3`/`unlimited_1yr`) store their charge amount nowhere in Firestore, so summing `pools.billing.pricePaid` alone undercounts.
+- **Decided design (Kevin, 2026-07-03):** (a) Record every Stripe charge to a top-level `billingCharges` collection from the webhook (pool + bundle branches, and mock paths): `{userId, kind:'pool'|'bundle', poolId?, bundleType?, tier?, amount, couponCode?, stripeSessionId, at}`; rules read SUPER_ADMIN / write:false; idempotent per `stripeSessionId`. (b) Aggregate → `stats/revenue` (`{totalRevenue, last30d, byKind, updatedAt}`) via a scheduled rollup + on-write. (c) Overview: SPLIT into two cards — "Platform Revenue" (`stats/revenue`, real Stripe income) and "Prize Volume / GMV" (`stats/global.totalPrizes`, relabeled).
+- Files: `functions/src/stripe.ts` (write billingCharges on all grant paths), new `functions/src/revenueAggregates.ts` (scheduled), pure reducer + test, `firestore.rules` + `firestore.indexes.json` (billingCharges), `src/services/dbService.ts` (subscribe stats/revenue), `SuperAdminBentoDashboard.tsx` (split cards), `SuperAdminBillingPanel.tsx` (revenue section).
+- Acceptance: aggregate equals sum of seeded `billingCharges` (unit test on the pure reducer); Overview shows Platform Revenue ≠ Prize Volume; bundle charges included.
+- Deps: none. (Reconciles with Stripe via `amount_total`, already stored per charge.)
 
 _Suggested order: T1 → T4 → T3 → T2 → T7 → T5 → T6 → T10 → T9 → T8 → T11 → T12 → T14 → T13._
