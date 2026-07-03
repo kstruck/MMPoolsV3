@@ -2,8 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   MARCH MELEE POOLS — DESIGN TOKENS (v3)
+   Light theme default; `.dark` on <html> flips
+   content surfaces. Nav/hero/footer stay navy.
+   ============================================ */
+:root {
+  /* Brand — constant across themes */
+  --navy-950: #0B1526;
+  --navy-900: #0E1C34;
+  --navy-800: #142A4C; /* primary */
+  --navy-700: #1A3B62;
+  --navy-600: #24507F;
+
+  --gold-700: #8C6D33;
+  --gold-600: #B78F4A;
+  --gold-500: #C9A867;
+  --gold-400: #D9BC80;
+  --gold-300: #E6CE96;
+  --gold-grad: linear-gradient(180deg, #EBD49B 0%, #C9A867 45%, #A98038 100%);
+
+  --red-700: #9E241F;
+  --red-600: #C4342E; /* primary CTA / live */
+  --red-500: #DA463F;
+
+  /* Themed surfaces — LIGHT (default) */
+  --page: #F7F4EE;
+  --surface: #FFFFFF;
+  --card: #FFFFFF;
+  --text: #131B2B;
+  --text-muted: #5C6678;
+  --faint: #8B93A3;
+  --line: #E7E3D9;
+
+  /* Type */
+  --font-display: 'Saira Condensed', system-ui, sans-serif;
+  --font-body: 'Barlow', system-ui, sans-serif;
+}
+
+.dark {
+  --page: #0B1526;
+  --surface: #0E1C34;
+  --card: #152747;
+  --text: #EDF1F8;
+  --text-muted: #9FB0CC;
+  --faint: #7C8BA6;
+  --line: rgba(230, 206, 150, 0.16);
+}
+
 body {
-  font-family: 'Inter', sans-serif;
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--red-600);
+  color: #fff;
 }
 
 /* Custom Scrollbar */
