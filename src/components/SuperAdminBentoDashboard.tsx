@@ -14,6 +14,7 @@ import {
   Play,
   Heart
 } from 'lucide-react';
+import { useToast } from './ui/Toast';
 
 const BRAND = {
   navy: '#0A192F',
@@ -35,6 +36,7 @@ interface SuperAdminBentoDashboardProps {
 }
 
 export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> = ({ stats }) => {
+  const toast = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [testingStatus, setTestingStatus] = useState<'idle' | 'running' | 'success'>('idle');
   const [securityScanStatus, setSecurityScanStatus] = useState<'idle' | 'scanning' | 'clean'>('idle');
@@ -47,7 +49,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
     setIsRefreshing(true);
     setTimeout(() => {
       setIsRefreshing(false);
-      alert('Global Platform stats fully synchronized with Firestore Collections.');
+      toast.success('Global Platform stats fully synchronized with Firestore Collections.');
     }, 800);
   };
 
@@ -55,12 +57,16 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
     setTestingStatus('running');
     setTimeout(() => {
       setTestingStatus('success');
-      alert('Vitest Suite Completed! 42 tests passed, 0 failed. Coverage: 92.4%.');
+      toast.success('Vitest Suite Completed! 42 tests passed, 0 failed. Coverage: 92.4%.');
     }, 1500);
   };
 
-  const handleTriggerBackfill = () => {
-    if (!window.confirm("Execute Collection Backfill & Database Schema Migration? This triggers 12,000 document writes across pools.")) return;
+  const handleTriggerBackfill = async () => {
+    const ok = await toast.confirm({
+      title: 'Execute Collection Backfill & Database Schema Migration?',
+      message: 'This triggers 12,000 document writes across pools.',
+    });
+    if (!ok) return;
     setBackfillLogs(prev => [
       `[${new Date().toLocaleTimeString()}] Migrating collections batch #1... DONE`,
       `[${new Date().toLocaleTimeString()}] Scanning pool participant references... DONE`,
@@ -72,7 +78,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
     setSecurityScanStatus('scanning');
     setTimeout(() => {
       setSecurityScanStatus('clean');
-      alert('Security scanner audit completed successfully! 0 high vulnerabilities detected.');
+      toast.success('Security scanner audit completed successfully! 0 high vulnerabilities detected.');
     }, 1200);
   };
 
@@ -309,7 +315,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
               </button>
 
               <button
-                onClick={() => alert('Platform Cache Buckets purged successfully.')}
+                onClick={() => toast.success('Platform Cache Buckets purged successfully.')}
                 className="w-full bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 font-extrabold text-xs uppercase tracking-wider py-4 rounded-xl transition-all"
               >
                 Clear Database Cache

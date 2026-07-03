@@ -7,6 +7,8 @@ import {
 import type { Pool, User } from '../types';
 import { Users, Database, Clock, Calendar, RefreshCw } from 'lucide-react';
 import { dbService } from '../services/dbService';
+import { useToast } from './ui/Toast';
+import { getUserMessage } from '../utils/errorMessages';
 
 interface AdminStatsDashboardProps {
     pools: Pool[];
@@ -26,20 +28,22 @@ const getTimestamp = (createdAt: any): number => {
 
 export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools, users }) => {
     const [isRecalculating, setIsRecalculating] = useState(false);
+    const toast = useToast();
 
     const handleRecalculate = async () => {
-        if (!confirm("Recalculate Global Stats? This will scan all locked pools and update the global totals.")) return;
+        const ok = await toast.confirm({ title: 'Recalculate Global Stats?', message: 'This will scan all locked pools and update the global totals.', confirmLabel: 'Recalculate' });
+        if (!ok) return;
         setIsRecalculating(true);
         try {
             const result = await dbService.recalculateGlobalStats();
             if (result.success) {
-                alert(`Success! Updated Stats:\nPrizes: $${result.totalPrizes}\nDonated: $${result.totalDonated}`);
+                toast.success(`Success! Updated Stats:\nPrizes: $${result.totalPrizes}\nDonated: $${result.totalDonated}`);
             } else {
-                alert(`Failed: ${result.message}`);
+                toast.error(`Failed: ${result.message}`);
             }
         } catch (error: any) {
             logger.error("Recalc failed", error);
-            alert(`Error: ${error.message}`);
+            toast.error(getUserMessage(error, 'Failed to recalculate stats. Please try again.'));
         } finally {
             setIsRecalculating(false);
         }

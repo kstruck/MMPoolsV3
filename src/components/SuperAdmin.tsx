@@ -20,6 +20,8 @@ import { SuperAdminBentoDashboard } from './SuperAdminBentoDashboard';
 import { simulatePoolGame, seedTestTournament, simulateRound, resetTournament } from '../utils/simulationUtils';
 import { SuperAdminBillingPanel } from './admin/SuperAdminBillingPanel';
 import { SuperAdminNFLSpreads } from './admin/SuperAdminNFLSpreads';
+import { useToast } from './ui/Toast';
+import { getUserMessage } from '../utils/errorMessages';
 
 type SystemLog = {
     timestamp?: { toDate?: () => Date } | number | string;
@@ -33,6 +35,7 @@ type PoolLike = { [key: string]: unknown };
 
 export const SuperAdmin: React.FC = () => {
     const navigate = useNavigate();
+    const toast = useToast();
     // --- STATE ---
     const [pools, setPools] = useState<Pool[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -136,10 +139,10 @@ export const SuperAdmin: React.FC = () => {
             
             await updateDoc(poolRef, updates);
             setViewingPool(prev => prev ? { ...prev, ...updates, name: adminPoolName } : null);
-            alert('Pool settings saved successfully by Admin override!');
+            toast.success('Pool settings saved successfully by Admin override!');
         } catch (err: unknown) {
             logger.error("Failed to save admin settings override", err);
-            alert("Failed to save pool settings: " + (err instanceof Error ? err.message : String(err)));
+            toast.error(getUserMessage(err, "Failed to save pool settings."));
         }
     };
 
@@ -155,13 +158,18 @@ export const SuperAdmin: React.FC = () => {
             setViewingPoolEntries(prev => prev.map(entry => entry.id === entryId ? { ...entry, paidStatus: newStatus } : entry));
         } catch (err: unknown) {
             logger.error("Failed to toggle payment status", err);
-            alert("Error: " + (err instanceof Error ? err.message : String(err)));
+            toast.error(getUserMessage(err, "Failed to toggle payment status."));
         }
     };
 
     const handleDeleteEntryAdmin = async (entryId: string, name: string) => {
         if (!viewingPool) return;
-        if (!confirm(`Are you absolutely sure you want to delete ${name}'s entry from this pool?\n\nThis will remove their picks permanently. This action cannot be undone!`)) return;
+        const ok = await toast.confirm({
+            title: `Delete ${name}'s entry from this pool?`,
+            message: 'This will remove their picks permanently. This action cannot be undone!',
+            danger: true,
+        });
+        if (!ok) return;
         try {
             const entryRef = doc(db, 'pools', viewingPool.id, 'entries', entryId);
             await deleteDoc(entryRef);
@@ -174,10 +182,10 @@ export const SuperAdmin: React.FC = () => {
                 await updateDoc(poolRef, { entryCount: newCount });
                 setViewingPool(prev => prev ? { ...prev, entryCount: newCount } as any : null);
             }
-            alert('Entry successfully deleted.');
+            toast.success('Entry successfully deleted.');
         } catch (err: unknown) {
             logger.error("Failed to delete entry", err);
-            alert("Error deleting entry: " + (err instanceof Error ? err.message : String(err)));
+            toast.error(getUserMessage(err, "Error deleting entry."));
         }
     };
 
@@ -204,10 +212,10 @@ export const SuperAdmin: React.FC = () => {
 
             await updateDoc(entryRef, updates);
             setViewingPoolEntries(prev => prev.map(entry => entry.id === entryId ? { ...entry, ...updates } : entry));
-            alert('Participant overrides successfully saved!');
+            toast.success('Participant overrides successfully saved!');
         } catch (err: unknown) {
             logger.error("Failed to save entry overrides", err);
-            alert("Error: " + (err instanceof Error ? err.message : String(err)));
+            toast.error(getUserMessage(err, "Failed to save entry overrides."));
         }
     };
 
@@ -232,9 +240,9 @@ export const SuperAdmin: React.FC = () => {
     const handleSaveTiers = async () => {
         try {
             await settingsService.update({ loyaltyTiers: editingTiers });
-            alert('Loyalty tiers configuration updated successfully!');
+            toast.success('Loyalty tiers configuration updated successfully!');
         } catch (e: any) {
-            alert('Failed to save loyalty tiers: ' + e.message);
+            toast.error(getUserMessage(e, 'Failed to save loyalty tiers.'));
         }
     };
 
@@ -435,8 +443,14 @@ export const SuperAdmin: React.FC = () => {
         setNewCategoryName('');
     };
 
-    const handleRemoveCategory = (cat: string) => {
-        if (!settings || !confirm(`Delete category "${cat}"? This won't remove it from existing questions.`)) return;
+    const handleRemoveCategory = async (cat: string) => {
+        if (!settings) return;
+        const ok = await toast.confirm({
+            title: `Delete category "${cat}"?`,
+            message: "This won't remove it from existing questions.",
+            danger: true,
+        });
+        if (!ok) return;
         const currentCats = settings.propCategories || [];
         settingsService.update({
             propCategories: currentCats.filter(c => c !== cat)
@@ -444,7 +458,11 @@ export const SuperAdmin: React.FC = () => {
     };
 
     const handleSeedNCAAProps = async () => {
-        if (!confirm('Seed NCAA March Madness props into the library?')) return;
+        const okSeed = await toast.confirm({
+            title: 'Seed NCAA props?',
+            message: 'Seed NCAA March Madness props into the library?',
+        });
+        if (!okSeed) return;
 
         const ncaaProps = [
             { text: "Who will win the National Championship?", options: ["Favorite", "Field"], categories: ["NCAA"] },
@@ -482,7 +500,7 @@ export const SuperAdmin: React.FC = () => {
             }
         }
 
-        alert(`Seeded ${added} NCAA props!`);
+        toast.success(`Seeded ${added} NCAA props!`);
     };
 
 
@@ -522,10 +540,10 @@ export const SuperAdmin: React.FC = () => {
         setIsSavingPlayoffs(true);
         try {
             await dbService.savePlayoffConfig(playoffTeams);
-            alert("Playoff configuration saved!");
+            toast.success("Playoff configuration saved!");
         } catch (error) {
             logger.error(error);
-            alert("Failed to save playoff config.");
+            toast.error("Failed to save playoff config.");
         } finally {
             setIsSavingPlayoffs(false);
         }
@@ -556,55 +574,79 @@ export const SuperAdmin: React.FC = () => {
     };
 
     const handleDeleteSeed = async (id: string) => {
-        if (confirm('Delete this seed question?')) {
+        const ok = await toast.confirm({
+            title: 'Delete this seed question?',
+            message: 'This will remove the seed question from the library.',
+            danger: true,
+        });
+        if (ok) {
             await dbService.deletePropSeed(id);
         }
     };
 
     const handleDeletePool = async (id: string) => {
-        if (confirm('Create: Super Delete Pool?')) {
+        const ok = await toast.confirm({
+            title: 'Super Delete Pool?',
+            message: 'This will permanently delete this pool.',
+            danger: true,
+        });
+        if (ok) {
             await dbService.deletePool(id);
         }
     };
 
     const handleClosePool = async (pool: Pool) => {
-        if (!confirm(`Close "${pool.name}"?\n\nThis will mark the pool as COMPLETED, removing it from the "Live" section on participants' My Entries page. This cannot be easily undone.`)) return;
+        const ok = await toast.confirm({
+            title: `Close "${pool.name}"?`,
+            message: 'This will mark the pool as COMPLETED, removing it from the "Live" section on participants\' My Entries page. This cannot be easily undone.',
+            danger: true,
+        });
+        if (!ok) return;
         try {
             await dbService.updateBracketPool(pool.id, { status: 'COMPLETED' });
-            alert(`"${pool.name}" has been closed and marked as Completed.`);
+            toast.success(`"${pool.name}" has been closed and marked as Completed.`);
         } catch (e: unknown) {
             logger.error('Close pool error:', e);
-            alert('Error closing pool: ' + (e instanceof Error ? e.message : String(e)));
+            toast.error(getUserMessage(e, 'Error closing pool.'));
         }
     };
 
     const handleReinitBig12Tournament = async () => {
-        if (!confirm('Re-initialize big12-2026 tournament with CORRECT 2026 seeds?\n\nThis will overwrite the current tournament skeleton in Firestore with the real ESPN seedings. Do this now to fix the bracket structure.')) return;
+        const ok = await toast.confirm({
+            title: 'Re-initialize big12-2026 tournament with CORRECT 2026 seeds?',
+            message: 'This will overwrite the current tournament skeleton in Firestore with the real ESPN seedings. Do this now to fix the bracket structure.',
+            danger: true,
+        });
+        if (!ok) return;
         try {
             const functions = getFunctions();
             const initFn = httpsCallable(functions, 'initializeBig12TournamentHttp');
             const result = await initFn({ tournamentId: 'big12-2026', overwrite: true });
-            alert('✅ Big 12 tournament re-initialized successfully! The next sync (within 10 min) will pull live game results from ESPN.');
+            toast.success('✅ Big 12 tournament re-initialized successfully! The next sync (within 10 min) will pull live game results from ESPN.');
             logger.info('Big12 reinit result:', result);
         } catch (e: unknown) {
             logger.error('Reinit failed:', e);
-            alert('Error re-initializing tournament: ' + (e instanceof Error ? e.message : String(e)));
+            toast.error(getUserMessage(e, 'Error re-initializing tournament.'));
         }
     };
 
     const [isScoringBrackets, setIsScoringBrackets] = React.useState(false);
     const handleScoreBracketEntries = async () => {
-        if (!confirm('Score all locked bracket entries now?\n\nThis will recalculate scores for every participant in every locked bracket pool.')) return;
+        const ok = await toast.confirm({
+            title: 'Score all locked bracket entries now?',
+            message: 'This will recalculate scores for every participant in every locked bracket pool.',
+        });
+        if (!ok) return;
         setIsScoringBrackets(true);
         try {
             const functions = getFunctions();
             const scoreFn = httpsCallable(functions, 'scoreBracketEntries');
             const result = await scoreFn({});
             const data = result.data as { message?: string; scored?: number };
-            alert(`✅ ${data?.message ?? 'Scoring complete!'} (${data?.scored ?? '?'} pools scored)`);
+            toast.success(`✅ ${data?.message ?? 'Scoring complete!'} (${data?.scored ?? '?'} pools scored)`);
         } catch (e: unknown) {
             logger.error('Score bracket entries failed:', e);
-            alert('Error scoring brackets: ' + (e instanceof Error ? e.message : String(e)));
+            toast.error(getUserMessage(e, 'Error scoring brackets.'));
         } finally {
             setIsScoringBrackets(false);
         }
@@ -613,45 +655,58 @@ export const SuperAdmin: React.FC = () => {
 
     const handleForceReopenPool = async (pool: Pool) => {
         if (pool.type !== 'BRACKET') {
-            alert('Force Re-Open only applies to bracket pools.');
+            toast.info('Force Re-Open only applies to bracket pools.');
             return;
         }
-        if (!confirm(`Re-open "${pool.name}"?\n\nThis will set the status back to OPEN, allowing participants to edit and re-submit their brackets. You will need to manually close/lock it again when ready.`)) return;
+        const ok = await toast.confirm({
+            title: `Re-open "${pool.name}"?`,
+            message: 'This will set the status back to OPEN, allowing participants to edit and re-submit their brackets. You will need to manually close/lock it again when ready.',
+        });
+        if (!ok) return;
         try {
             await dbService.updateBracketPool(pool.id, { status: 'OPEN', lockedAt: null });
-            alert(`✅ "${pool.name}" is now OPEN. Participants can edit and re-submit their brackets.`);
+            toast.success(`✅ "${pool.name}" is now OPEN. Participants can edit and re-submit their brackets.`);
             setViewingPool(null);
         } catch (e: unknown) {
             logger.error('Force reopen error:', e);
-            alert('Error re-opening pool: ' + (e instanceof Error ? e.message : String(e)));
+            toast.error(getUserMessage(e, 'Error re-opening pool.'));
         }
     };
 
 
     const handleDeleteUser = async (user: User) => {
-        if (confirm(`Are you sure you want to COMPLETELY DELETE user ${user.name}?\n\nThis will remove their Login Account AND Database Profile.\nThis action cannot be undone.`)) {
+        const ok = await toast.confirm({
+            title: `COMPLETELY DELETE user ${user.name}?`,
+            message: 'This will remove their Login Account AND Database Profile. This action cannot be undone.',
+            danger: true,
+        });
+        if (ok) {
             try {
                 await dbService.deleteUserAccount(user.id);
-                // Also try to delete from Firestore directly just in case the cloud function didn't catch edge cases or if we want faster UI feedback, 
+                // Also try to delete from Firestore directly just in case the cloud function didn't catch edge cases or if we want faster UI feedback,
                 // but the cloud function does it. We'll just refresh.
                 fetchUsers();
-                alert(`User ${user.name} deleted successfully.`);
+                toast.success(`User ${user.name} deleted successfully.`);
             } catch (e: unknown) {
                 logger.error("Delete failed", e);
-                alert("Error deleting user: " + (e instanceof Error ? e.message : String(e)));
+                toast.error(getUserMessage(e, "Error deleting user."));
             }
         }
     };
 
     const handleResetPassword = async (user: User) => {
         if (!user.email) return;
-        if (confirm(`Send a Password Reset email to ${user.email}?`)) {
+        const ok = await toast.confirm({
+            title: 'Send Password Reset email?',
+            message: `Send a Password Reset email to ${user.email}?`,
+        });
+        if (ok) {
             try {
                 await dbService.sendAdminPasswordReset(user.email);
-                alert(`Reset email sent to ${user.email}`);
+                toast.success(`Reset email sent to ${user.email}`);
             } catch (e: unknown) {
                 logger.error("Reset failed", e);
-                alert("Error sending reset email: " + (e instanceof Error ? e.message : String(e)));
+                toast.error(getUserMessage(e, "Error sending reset email."));
             }
         }
     };
@@ -673,7 +728,7 @@ export const SuperAdmin: React.FC = () => {
             setEditingUser(null);
             fetchUsers();
         } catch {
-            alert('Failed to update user');
+            toast.error('Failed to update user');
         }
     };
 
@@ -682,7 +737,10 @@ export const SuperAdmin: React.FC = () => {
     // Pool Edit/View State
 
     const handleRunSim = async (pool: GameState) => {
-        const confirmSim = confirm(`Run simulation for ${pool.name} ? This will advance the game state.`);
+        const confirmSim = await toast.confirm({
+            title: `Run simulation for ${pool.name}?`,
+            message: 'This will advance the game state.',
+        });
         if (!confirmSim) return;
         try {
             // Imported statically
@@ -705,7 +763,7 @@ export const SuperAdmin: React.FC = () => {
                     'scores.gameStatus': 'pre',
                     'scores.startTime': new Date().toISOString()
                 } as Record<string, unknown>);
-                alert('Sim: Pool Locked. Open Sim again to start Game.');
+                toast.info('Sim: Pool Locked. Open Sim again to start Game.');
                 return;
             }
 
@@ -793,7 +851,12 @@ export const SuperAdmin: React.FC = () => {
                 }
             } else if (scores.gameStatus === 'post') {
                 // Reset
-                if (confirm('Reset Pool to Pre-Game?')) {
+                const okReset = await toast.confirm({
+                    title: 'Reset Pool to Pre-Game?',
+                    message: 'This will reset all scores and unlock the pool.',
+                    danger: true,
+                });
+                if (okReset) {
                     await dbService.updatePool(pool.id, {
                         isLocked: false,
                         lockGrid: false,
@@ -801,7 +864,7 @@ export const SuperAdmin: React.FC = () => {
                         axisNumbers: null,
                         quarterlyNumbers: null
                     } as Record<string, unknown>);
-                    alert('Pool Reset');
+                    toast.success('Pool Reset');
                     return;
                 }
                 return;
@@ -810,30 +873,33 @@ export const SuperAdmin: React.FC = () => {
             if (actionDescription) {
                 // Call Cloud Function
                 await simulatePoolGame(pool.id, nextState);
-                alert(`Simulated: ${actionDescription} `);
+                toast.success(`Simulated: ${actionDescription} `);
             }
 
         } catch (e: unknown) {
             logger.error(e);
-            alert('Sim Failed: ' + (e instanceof Error ? e.message : String(e)));
+            toast.error(getUserMessage(e, 'Sim Failed.'));
         }
     };
 
     // Fix Scores Handler
     const handleFixScores = async (pool: GameState) => {
-        const confirmFix = confirm(`Reprocess scores for "${pool.name}" ? This will fetch the latest scores from ESPN, backfill missing history, and recalculate payouts.`);
+        const confirmFix = await toast.confirm({
+            title: `Reprocess scores for "${pool.name}"?`,
+            message: 'This will fetch the latest scores from ESPN, backfill missing history, and recalculate payouts.',
+        });
         if (!confirmFix) return;
 
         try {
             await dbService.fixPoolScores(pool.id);
-            alert('Score fix initiated successfully. Check system logs for details.');
+            toast.success('Score fix initiated successfully. Check system logs for details.');
             // Refresh logs if on system tab
             if (activeTab === 'system') {
                 dbService.getSystemLogs().then(setSystemLogs).catch(logger.error);
             }
         } catch (error: unknown) {
             logger.error('Fix Score Error:', error);
-            alert(`Failed to fix scores: ${error instanceof Error ? error.message : String(error)} `);
+            toast.error(getUserMessage(error, 'Failed to fix scores.'));
         }
     };
 
@@ -843,16 +909,20 @@ export const SuperAdmin: React.FC = () => {
     const [isInitializingBigEast, setIsInitializingBigEast] = useState(false);
 
     const handleInitBigEast = async () => {
-        if (!confirm('Initialize the Big East Tournament data? This will seed all teams and games into Firestore. Run this once before the tournament starts.')) return;
+        const ok = await toast.confirm({
+            title: 'Initialize the Big East Tournament data?',
+            message: 'This will seed all teams and games into Firestore. Run this once before the tournament starts.',
+        });
+        if (!ok) return;
         setIsInitializingBigEast(true);
         try {
             const functions = getFunctions();
             const initFn = httpsCallable(functions, 'initializeBigEastTournamentHttp');
             const result = await initFn({}) as { data?: { tournamentId?: string } };
-            alert(`✅ Big East Tournament initialized!\nTournament ID: ${result.data?.tournamentId || 'N/A'}`);
+            toast.success(`✅ Big East Tournament initialized! Tournament ID: ${result.data?.tournamentId || 'N/A'}`);
         } catch (err: unknown) {
             logger.error('Big East init error:', err);
-            alert(`❌ Failed to initialize Big East Tournament:\n${err instanceof Error ? err.message : String(err)}`);
+            toast.error(getUserMessage(err, '❌ Failed to initialize Big East Tournament.'));
         } finally {
             setIsInitializingBigEast(false);
         }
@@ -860,14 +930,20 @@ export const SuperAdmin: React.FC = () => {
 
     // Fix Participant IDs Handler
     const handleFixParticipantIds = async () => {
-        const dryRun = !confirm(`Run Backfill for Participant IDs? \n\nOK = Run LIVE (Writes to DB) \nCancel = DRY RUN (Logs Only)`);
+        const runLive = await toast.confirm({
+            title: 'Run Backfill for Participant IDs?',
+            message: 'Confirm = Run LIVE (Writes to DB). Cancel = DRY RUN (Logs Only).',
+            confirmLabel: 'Run LIVE',
+            cancelLabel: 'Dry Run',
+        });
+        const dryRun = !runLive;
 
         try {
             const result = await dbService.fixParticipantIds(dryRun);
-            alert(`Participant ID Backfill Complete (${dryRun ? 'DRY RUN' : 'LIVE'}): \nProcessed: ${result.processed} pools \nUpdated: ${result.updated} pools`);
+            toast.success(`Participant ID Backfill Complete (${dryRun ? 'DRY RUN' : 'LIVE'}): Processed: ${result.processed} pools, Updated: ${result.updated} pools`);
         } catch (error: unknown) {
             logger.error('Fix Participant IDs Error:', error);
-            alert(`Failed to fix participant IDs: ${error instanceof Error ? error.message : String(error)}`);
+            toast.error(getUserMessage(error, 'Failed to fix participant IDs.'));
         }
     };
 
@@ -1370,12 +1446,17 @@ export const SuperAdmin: React.FC = () => {
                                                                     <button
                                                                         onClick={async (e) => {
                                                                             e.stopPropagation();
-                                                                            if (!window.confirm(`Are you sure you want to LOCK "${pool.name}"? This will prevent further entries.`)) return;
+                                                                            const ok = await toast.confirm({
+                                                                                title: `LOCK "${pool.name}"?`,
+                                                                                message: 'This will prevent further entries.',
+                                                                                danger: true,
+                                                                            });
+                                                                            if (!ok) return;
                                                                             try {
                                                                                 await dbService.lockPool(pool.id);
-                                                                                alert("Pool Locked");
+                                                                                toast.success("Pool Locked");
                                                                                 // Ideally refresh pools
-                                                                            } catch (e: unknown) { alert("Error: " + (e instanceof Error ? e.message : String(e))); }
+                                                                            } catch (e: unknown) { toast.error(getUserMessage(e, "Failed to lock pool.")); }
                                                                         }}
                                                                         className="text-rose-400 hover:text-rose-300 text-xs font-bold border border-rose-500/30 px-2 py-1 rounded flex items-center gap-1"
                                                                         title="Lock Pool"
@@ -1417,13 +1498,17 @@ export const SuperAdmin: React.FC = () => {
                             <div className="flex gap-2">
                                 <button
                                     onClick={async () => {
-                                        if (confirm('Force sync all users from Auth to DB?')) {
+                                        const ok = await toast.confirm({
+                                            title: 'Force sync all users?',
+                                            message: 'Force sync all users from Auth to DB?',
+                                        });
+                                        if (ok) {
                                             try {
                                                 const res = await dbService.syncAllUsers();
-                                                alert(`Synced ${res.count} users.`);
+                                                toast.success(`Synced ${res.count} users.`);
                                                 fetchUsers();
                                             } catch (e: unknown) {
-                                                alert("Sync failed: " + (e instanceof Error ? e.message : String(e)));
+                                                toast.error(getUserMessage(e, "Sync failed."));
                                             }
                                         }
                                     }}
@@ -1434,12 +1519,17 @@ export const SuperAdmin: React.FC = () => {
                                 {/* Admin Actions */}
                                 <button
                                     onClick={async () => {
-                                        if (confirm("Recalculate GLOBAL PRIZE STATS? This will scan all locked pools and reset the total prize counter.")) {
+                                        const ok = await toast.confirm({
+                                            title: 'Recalculate GLOBAL PRIZE STATS?',
+                                            message: 'This will scan all locked pools and reset the total prize counter.',
+                                            danger: true,
+                                        });
+                                        if (ok) {
                                             try {
                                                 const res = await dbService.recalculateGlobalStats();
-                                                alert(res.message + " Total: $" + res.totalPrizes);
+                                                toast.success(res.message + " Total: $" + res.totalPrizes);
                                             } catch (e) {
-                                                alert("Error: " + e);
+                                                toast.error(getUserMessage(e, "Failed to recalculate stats."));
                                             }
                                         }
                                     }}
@@ -1780,7 +1870,7 @@ export const SuperAdmin: React.FC = () => {
                                         }
                                         const emails = list.map((u: User) => u.email).join(', ');
                                         navigator.clipboard.writeText(emails);
-                                        alert(`Copied ${list.length} emails to clipboard!`);
+                                        toast.success(`Copied ${list.length} emails to clipboard!`);
                                     }}
                                     className="text-xs bg-slate-850 hover:bg-slate-805 text-slate-300 font-bold px-4 py-2.5 rounded-xl border border-slate-700 transition-all flex items-center gap-1.5"
                                 >
@@ -1821,7 +1911,7 @@ export const SuperAdmin: React.FC = () => {
                                 <button
                                     onClick={() => {
                                         if (selectedMarketingTier === 'all') {
-                                            alert('Please select a specific tier from the dropdown to run bulk promo actions.');
+                                            toast.info('Please select a specific tier from the dropdown to run bulk promo actions.');
                                             return;
                                         }
                                         setPromoBulkTier(selectedMarketingTier);
@@ -1926,7 +2016,7 @@ export const SuperAdmin: React.FC = () => {
                                                         <button
                                                             onClick={() => {
                                                                 navigator.clipboard.writeText(u.email);
-                                                                alert('Email copied to clipboard!');
+                                                                toast.success('Email copied to clipboard!');
                                                             }}
                                                             className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-750 transition-all"
                                                             title="Copy Email"
@@ -2043,14 +2133,14 @@ export const SuperAdmin: React.FC = () => {
                                     <button
                                         onClick={async () => {
                                             if (!promoSubject || !promoMessage || (promoType === 'coupon' && !promoCoupon)) {
-                                                alert('Please fill out all promo fields.');
+                                                toast.info('Please fill out all promo fields.');
                                                 return;
                                             }
                                             setIsSendingPromo(true);
                                             // Simulate API delay
                                             await new Promise(r => setTimeout(r, 1200));
                                             setIsSendingPromo(false);
-                                            alert(`Campaign successfully simulated!\n\nDetails:\n- Target: ${promoBulkTier ? activeTiers.find((t: LoyaltyTier) => t.id === promoBulkTier)?.name + ' Tier' : promoUser?.name}\n- Type: ${promoType.toUpperCase()}\n- Code: ${promoType === 'coupon' ? promoCoupon : 'N/A'}\n- Message: ${promoMessage}`);
+                                            toast.success(`Campaign successfully simulated! Target: ${promoBulkTier ? activeTiers.find((t: LoyaltyTier) => t.id === promoBulkTier)?.name + ' Tier' : promoUser?.name} - Type: ${promoType.toUpperCase()} - Code: ${promoType === 'coupon' ? promoCoupon : 'N/A'} - Message: ${promoMessage}`);
                                             setPromoUser(null);
                                             setPromoBulkTier(null);
                                         }}
@@ -2109,7 +2199,7 @@ export const SuperAdmin: React.FC = () => {
                                             createdBy: 'SYSTEM'
                                         });
                                     }
-                                    alert(`Seeded ${PRESET_THEMES.length} preset themes!`);
+                                    toast.success(`Seeded ${PRESET_THEMES.length} preset themes!`);
                                 }}
                                 className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg font-bold"
                             >
@@ -2224,7 +2314,12 @@ export const SuperAdmin: React.FC = () => {
                                         </button>
                                         <button
                                             onClick={async () => {
-                                                if (confirm(`Delete theme "${theme.name}" ? `)) {
+                                                const ok = await toast.confirm({
+                                                    title: `Delete theme "${theme.name}"?`,
+                                                    message: 'This will permanently delete this theme.',
+                                                    danger: true,
+                                                });
+                                                if (ok) {
                                                     await dbService.deleteTheme(theme.id);
                                                 }
                                             }}
@@ -2535,13 +2630,17 @@ export const SuperAdmin: React.FC = () => {
 
                                     <button
                                         onClick={async () => {
-                                            if (confirm('Run Retroactive Score Fix? This will scan all active pools and repair missing score events.')) {
+                                            const ok = await toast.confirm({
+                                                title: 'Run Retroactive Score Fix?',
+                                                message: 'This will scan all active pools and repair missing score events.',
+                                            });
+                                            if (ok) {
                                                 try {
                                                     if (dbService.fixPoolScores) {
                                                         await dbService.fixPoolScores();
-                                                        alert('Fix Complete.');
+                                                        toast.success('Fix Complete.');
                                                     }
-                                                } catch { alert('Fix Failed'); }
+                                                } catch { toast.error('Fix Failed'); }
                                             }
                                         }}
                                         className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded text-white transition-colors font-bold"
@@ -2746,13 +2845,18 @@ export const SuperAdmin: React.FC = () => {
                                 <div className="flex flex-col gap-2">
                                     <button
                                         onClick={async () => {
-                                            if (!confirm("Overwrite 'tournaments/2025' with test data? This will RESET all current brackets.")) return;
+                                            const ok = await toast.confirm({
+                                                title: "Overwrite 'tournaments/2025' with test data?",
+                                                message: 'This will RESET all current brackets.',
+                                                danger: true,
+                                            });
+                                            if (!ok) return;
                                             try {
                                                 // Imported statically
                                                 await seedTestTournament(2025);
-                                                alert("Tournament seeded successfully.");
+                                                toast.success("Tournament seeded successfully.");
                                             } catch (e: unknown) {
-                                                alert("Error: " + (e instanceof Error ? e.message : String(e)));
+                                                toast.error(getUserMessage(e, "Failed to seed tournament."));
                                             }
                                         }}
                                         className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold text-sm transition-colors text-left"
@@ -2767,14 +2871,18 @@ export const SuperAdmin: React.FC = () => {
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
                                         onClick={async () => {
-                                            if (!confirm("Simulate scores for current round?")) return;
+                                            const ok = await toast.confirm({
+                                                title: 'Simulate scores?',
+                                                message: 'Simulate scores for current round?',
+                                            });
+                                            if (!ok) return;
                                             try {
                                                 // Imported statically
                                                 const res = await simulateRound(2025);
-                                                alert(res);
+                                                toast.success(res);
                                             } catch (e: unknown) {
                                                 logger.error(e);
-                                                alert("Error: " + (e instanceof Error ? e.message : String(e)));
+                                                toast.error(getUserMessage(e, "Failed to simulate round."));
                                             }
                                         }}
                                         className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors"
@@ -2783,13 +2891,18 @@ export const SuperAdmin: React.FC = () => {
                                     </button>
                                     <button
                                         onClick={async () => {
-                                            if (!confirm("RESET tournament scores?")) return;
+                                            const ok = await toast.confirm({
+                                                title: 'RESET tournament scores?',
+                                                message: 'This will reset all tournament scores.',
+                                                danger: true,
+                                            });
+                                            if (!ok) return;
                                             try {
                                                 // Imported statically
                                                 await resetTournament(2025);
-                                                alert("Tournament reset.");
+                                                toast.success("Tournament reset.");
                                             } catch (e: unknown) {
-                                                alert("Error: " + (e instanceof Error ? e.message : String(e)));
+                                                toast.error(getUserMessage(e, "Failed to reset tournament."));
                                             }
                                         }}
                                         className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors"
@@ -2932,17 +3045,21 @@ export const SuperAdmin: React.FC = () => {
                                     {(viewingPool.type === 'NFL_PLAYOFFS' || viewingPool.type === 'BRACKET') && (
                                         <button
                                             onClick={async () => {
-                                                if (!confirm(`Update Max Entries to 50 for pool: ${viewingPool.name}?`)) return;
+                                                const ok = await toast.confirm({
+                                                    title: 'Update Max Entries?',
+                                                    message: `Update Max Entries to 50 for pool: ${viewingPool.name}?`,
+                                                });
+                                                if (!ok) return;
                                                 try {
                                                     const poolRef = doc(db, 'pools', viewingPool.id);
                                                     await updateDoc(poolRef, {
                                                         'settings.maxEntriesPerUser': 50,
                                                         'settings.maxEntriesTotal': 500
                                                     });
-                                                    alert('Success: Max entries updated to 50!');
+                                                    toast.success('Success: Max entries updated to 50!');
                                                 } catch (err: unknown) {
                                                     logger.error(err);
-                                                    alert('Error: ' + (err instanceof Error ? err.message : String(err)));
+                                                    toast.error(getUserMessage(err, 'Failed to update max entries.'));
                                                 }
                                             }}
                                             className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/50 rounded-lg text-xs font-bold transition-all"
@@ -3676,8 +3793,13 @@ export const SuperAdmin: React.FC = () => {
                                     <Trophy size={16} /> Manage Results / Score
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        if (confirm("Reset to 2024-25 NFL Playoff Teams?")) {
+                                    onClick={async () => {
+                                        const ok = await toast.confirm({
+                                            title: 'Reset Default Teams?',
+                                            message: 'Reset to 2024-25 NFL Playoff Teams?',
+                                            danger: true,
+                                        });
+                                        if (ok) {
                                             const MOCK = [
                                                 { id: 'KC', name: 'Kansas City Chiefs', conference: 'AFC', seed: 1, eliminated: false },
                                                 { id: 'BUF', name: 'Buffalo Bills', conference: 'AFC', seed: 2, eliminated: false },
@@ -3710,13 +3832,17 @@ export const SuperAdmin: React.FC = () => {
                                 </button>
                                 <button
                                     onClick={async () => {
-                                        if (confirm("Force Sync global config to all Playoff Pools? This is useful if elimination status is out of sync.")) {
+                                        const ok = await toast.confirm({
+                                            title: 'Force Sync global config to all Playoff Pools?',
+                                            message: 'This is useful if elimination status is out of sync.',
+                                        });
+                                        if (ok) {
                                             try {
                                                 const res = await dbService.syncPlayoffPools();
-                                                alert(res.message);
+                                                toast.success(res.message);
                                             } catch (e: unknown) {
                                                 logger.error(e);
-                                                alert("Sync Failed: " + (e instanceof Error ? e.message : String(e)));
+                                                toast.error(getUserMessage(e, "Sync Failed."));
                                             }
                                         }
                                     }}

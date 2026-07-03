@@ -7,6 +7,8 @@ import type { User, BillingConfig } from '../../types';
 import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
 import { db } from '../../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { useToast } from '../ui/Toast';
+import { getUserMessage } from '../../utils/errorMessages';
 
 interface NFLPoolWizardProps {
   user: User;
@@ -17,6 +19,7 @@ interface NFLPoolWizardProps {
 export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, onCancel }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const toast = useToast();
   const poolType = (searchParams.get('type') || 'NFL_PICKEM') as 'NFL_PICKEM' | 'NFL_SURVIVOR' | 'NFL_MARGIN';
 
   const [billingConfig, setBillingConfig] = useState<BillingConfig | null>(null);
@@ -229,7 +232,7 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
       onComplete();
     } catch (err: any) {
       logger.error('Failed to create NFL pool:', err);
-      alert(`Failed to create pool: ${err.message || 'Unknown error'}`);
+      toast.error(getUserMessage(err, 'Failed to create pool. Please try again.'));
       setIsCreating(false);
     }
   };

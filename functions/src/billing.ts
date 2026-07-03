@@ -4,9 +4,27 @@ import * as admin from "firebase-admin";
 import { Pool, PoolBilling, Coupon, BillingConfig } from "./types";
 import { HttpsError } from "firebase-functions/v2/https";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
-import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
+import { sendEmail } from "./reminders";
 
 const db = admin.firestore();
+
+/**
+ * Resolves the commissioner's email for a pool: prefers the explicit
+ * contactEmail, then falls back to users/{ownerId || managerUid}.email.
+ * Returns null (never throws) when no email can be found.
+ */
+async function resolveCommissionerEmail(poolData: FirebaseFirestore.DocumentData): Promise<string | null> {
+    if (poolData.contactEmail) return poolData.contactEmail as string;
+    const commissionerUid = poolData.ownerId || poolData.managerUid;
+    if (!commissionerUid) return null;
+    try {
+        const userDoc = await db.collection("users").doc(commissionerUid).get();
+        return userDoc.exists ? (userDoc.data()?.email ?? null) : null;
+    } catch {
+        return null;
+    }
+}
 
 // =============================================================================
 // 1. enforceBillingStatus — Daily Scheduled Job
@@ -34,6 +52,13 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
 
     for (const doc of expiredTrials.docs) {
         try {
+            const poolData = doc.data();
+            // Dedupe guard: only proceed if the status is actually transitioning.
+            // The query above only matches status == "trial", so after this write
+            // the pool can never re-match on a later scheduler tick — the status
+            // change itself is the send-once mechanism.
+            if (poolData.billing?.status !== "trial") continue;
+
             const poolRef = db.collection("pools").doc(doc.id);
             await poolRef.update({
                 "billing.status": "grace_period" as PoolBilling["status"],
@@ -41,6 +66,32 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
             });
             trialToGraceCount++;
             console.log(`[BillingEnforce] Pool ${doc.id}: trial → grace_period (ends ${new Date(now + gracePeriodMs).toISOString()})`);
+
+            // --- Commissioner warning email (transactional; sent only on transition) ---
+            try {
+                const commissionerEmail = await resolveCommissionerEmail(poolData);
+                if (commissionerEmail) {
+                    const poolName = poolData.name || "Your pool";
+                    const poolUrl = `${BASE_URL}/pool/${doc.id}`;
+                    const subject = `Action needed: ${poolName} pool locks in ${gracePeriodDays} day${gracePeriodDays !== 1 ? "s" : ""}`;
+                    const body = `
+                        <p>Hi there,</p>
+                        <p>The free trial for your pool <strong>${escapeHtml(poolName)}</strong> has ended. Your pool is now in a grace period.</p>
+                        <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 16px; margin: 20px 0; color: #92400e; font-family: sans-serif;">
+                            <p style="margin: 0; font-weight: bold; font-size: 16px;">⏳ ${gracePeriodDays} day${gracePeriodDays !== 1 ? "s" : ""} remaining before your pool locks</p>
+                            <p style="margin: 4px 0 0 0; font-size: 13px;">Complete payment before the grace period ends to keep the pool open for everyone. Your members' picks and standings are safe either way.</p>
+                        </div>
+                        <p>Complete payment now to avoid any interruption for your participants.</p>
+                    `;
+                    const html = renderEmailHtml("Grace Period Started", body, poolUrl, "Complete Payment");
+                    await sendEmail(db, commissionerEmail, subject, html, { transactional: true, poolId: doc.id, reason: "billing_grace_period" });
+                    console.log(`[BillingEnforce] Grace-period warning email queued for pool ${doc.id} to ${commissionerEmail}`);
+                } else {
+                    console.log(`[BillingEnforce] No commissioner email found for pool ${doc.id}; skipping grace-period email`);
+                }
+            } catch (emailErr) {
+                console.error(`[BillingEnforce] Failed to send grace-period email for pool ${doc.id}:`, emailErr);
+            }
         } catch (err) {
             console.error(`[BillingEnforce] Error transitioning pool ${doc.id} to grace_period:`, err);
         }
@@ -54,12 +105,44 @@ export const enforceBillingStatus = functions.scheduler.onSchedule("every day 03
 
     for (const doc of expiredGrace.docs) {
         try {
+            const poolData = doc.data();
+            // Dedupe guard: same transition-only mechanism as above — the query
+            // only matches status == "grace_period", so the write below prevents
+            // this pool from matching (and re-emailing) on future ticks.
+            if (poolData.billing?.status !== "grace_period") continue;
+
             const poolRef = db.collection("pools").doc(doc.id);
             await poolRef.update({
                 "billing.status": "locked" as PoolBilling["status"],
             });
             graceToLockedCount++;
             console.log(`[BillingEnforce] Pool ${doc.id}: grace_period → locked`);
+
+            // --- Commissioner lock notification (transactional; sent only on transition) ---
+            try {
+                const commissionerEmail = await resolveCommissionerEmail(poolData);
+                if (commissionerEmail) {
+                    const poolName = poolData.name || "Your pool";
+                    const poolUrl = `${BASE_URL}/pool/${doc.id}`;
+                    const subject = `${poolName} is locked — complete payment to restore access`;
+                    const body = `
+                        <p>Hi there,</p>
+                        <p>The grace period for your pool <strong>${escapeHtml(poolName)}</strong> has ended and the pool is now locked.</p>
+                        <div style="background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 12px; padding: 16px; margin: 20px 0; color: #991b1b; font-family: sans-serif;">
+                            <p style="margin: 0; font-weight: bold; font-size: 16px;">🔒 Pool Locked</p>
+                            <p style="margin: 4px 0 0 0; font-size: 13px;">Participants can still view standings and picks, but the pool is paused until payment is completed. Nothing is lost — everything unlocks automatically once you pay.</p>
+                        </div>
+                        <p>Complete payment to instantly restore full access for your entire pool.</p>
+                    `;
+                    const html = renderEmailHtml("Pool Locked", body, poolUrl, "Complete Payment");
+                    await sendEmail(db, commissionerEmail, subject, html, { transactional: true, poolId: doc.id, reason: "billing_locked" });
+                    console.log(`[BillingEnforce] Locked notification email queued for pool ${doc.id} to ${commissionerEmail}`);
+                } else {
+                    console.log(`[BillingEnforce] No commissioner email found for pool ${doc.id}; skipping locked email`);
+                }
+            } catch (emailErr) {
+                console.error(`[BillingEnforce] Failed to send locked email for pool ${doc.id}:`, emailErr);
+            }
         } catch (err) {
             console.error(`[BillingEnforce] Error transitioning pool ${doc.id} to locked:`, err);
         }
@@ -284,11 +367,8 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
             <p>To accept more players and unlock your pool instantly, please upgrade to a Premium plan.</p>
         `;
         const html = renderEmailHtml('Pool Entries Locked!', body, `${BASE_URL}/pricing`, 'Upgrade to Premium');
-        
-        await db.collection('mail').add({
-            to: managerEmail,
-            message: { subject, html }
-        });
+
+        await sendEmail(db, managerEmail, subject, html);
 
         updates["billing.notified10"] = true;
         updates["billing.notified8"] = true; // Mark 8 as true too
@@ -308,11 +388,8 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
             <p>Upgrade to a Premium plan now to ensure your participants have a seamless, uninterrupted onboarding experience!</p>
         `;
         const html = renderEmailHtml('Approaching Free Limit!', body, `${BASE_URL}/pricing`, 'Upgrade to Premium');
-        
-        await db.collection('mail').add({
-            to: managerEmail,
-            message: { subject, html }
-        });
+
+        await sendEmail(db, managerEmail, subject, html);
 
         updates["billing.notified8"] = true;
         console.log(`[onPoolParticipantChange] Approaching limit (8/10) email queued for pool ${poolId} to manager ${managerEmail}`);

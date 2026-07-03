@@ -1,12 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Settings, DollarSign, CheckCircle, XCircle, Users, Activity,
-  Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck
+  Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing,
+  ChevronDown, ChevronUp, Clock, UserCog, Ban
 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
+import { getUserMessage } from '../../utils/errorMessages';
 import { logger } from '../../utils/logger';
 import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
+import { useToast } from '../ui/Toast';
+import { now as serverNow } from '../../utils/serverClock';
 
 interface NFLManagerViewProps {
   pool: Pool;
@@ -25,8 +29,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   user,
   onSelectTab = () => {}
 }) => {
+  const toast = useToast();
   const [isScoring, setIsScoring] = useState(false);
   const [isSavingPayment, setIsSavingPayment] = useState<string | null>(null);
+  const [remindingUid, setRemindingUid] = useState<string | null>(null);
+  const [bulkReminding, setBulkReminding] = useState<'PICKS' | 'PAYMENT' | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [settingsFeedback, setSettingsFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -40,7 +47,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // Regular managers can only edit before Week 1 starts (Sep 10, 2026).
   // SuperAdmins can ALWAYS edit.
   const seasonStartMs = new Date('2026-09-10T00:00:00-06:00').getTime();
-  const isPreSeason = Date.now() < seasonStartMs;
+  const isPreSeason = serverNow() < seasonStartMs;
   const canEditSettings = isSuperAdmin || isPreSeason;
 
   // ---- Local settings state (initialized from pool) ----
@@ -74,6 +81,19 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // Margin-specific
   const [marginPayoutMode, setMarginPayoutMode] = useState<string>(settings.payoutMode ?? 'SEASON');
 
+  // ---- Exceptions (commissioner tools) state ----
+  const [exceptionsOpen, setExceptionsOpen] = useState(false);
+  const [extendMinutes, setExtendMinutes] = useState<number>(60);
+  const [extendReason, setExtendReason] = useState('');
+  const [isExtending, setIsExtending] = useState(false);
+  const [proxyTargetUid, setProxyTargetUid] = useState('');
+  const [proxyTeam, setProxyTeam] = useState('');
+  const [proxyWeek, setProxyWeek] = useState<number>(week);
+  const [proxyReason, setProxyReason] = useState('');
+  const [isProxying, setIsProxying] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCanceling, setIsCanceling] = useState(false);
+
   // Force weekly lock when confidence mode is on
   useEffect(() => {
     if (confidenceMode) setLockMode('WEEKLY');
@@ -88,9 +108,72 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const totalGamesCount = weeklyGames.length;
   const isWeekFullyFinal = totalGamesCount > 0 && finalGamesCount === totalGamesCount;
 
+  // --- Roster status ---
+  // Entry doc id == owner uid for NFL pools, but prefer ownerUid when present.
+  const targetUidOf = (entry: any): string => entry.ownerUid || entry.id;
+
+  // Picked-current-week: pick'em = every current-week game picked;
+  // survivor/margin = picks keyed by week number.
+  const pickedMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const entry of entries) {
+      const picks = entry.picks || {};
+      if (type === 'NFL_PICKEM') {
+        map[entry.id] = weeklyGames.length > 0 && weeklyGames.every(g => !!picks[g.id]);
+      } else {
+        map[entry.id] = !!picks[week];
+      }
+    }
+    return map;
+  }, [entries, weeklyGames, week, type]);
+
+  const unpickedCount = useMemo(() => entries.filter(e => !pickedMap[e.id]).length, [entries, pickedMap]);
+  const unpaidCount = useMemo(() => entries.filter(e => e.paidStatus !== 'PAID').length, [entries]);
+
   // --- Handlers ---
+  const handleRemindOne = async (entry: any, kind: 'PICKS' | 'PAYMENT') => {
+    const uid = targetUidOf(entry);
+    setRemindingUid(uid);
+    try {
+      const { sent, skipped } = await dbService.sendManualReminder(pool.id, [uid], kind);
+      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+    } catch (err) {
+      logger.error('Failed to send manual reminder:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setRemindingUid(null);
+    }
+  };
+
+  const handleRemindBulk = async (kind: 'PICKS' | 'PAYMENT') => {
+    const targets = (kind === 'PICKS'
+      ? entries.filter(e => !pickedMap[e.id])
+      : entries.filter(e => e.paidStatus !== 'PAID')
+    ).map(targetUidOf);
+    if (targets.length === 0) {
+      toast.info(kind === 'PICKS' ? 'Everyone has picked this week.' : 'Everyone has paid.');
+      return;
+    }
+    setBulkReminding(kind);
+    try {
+      const { sent, skipped } = await dbService.sendManualReminder(pool.id, targets, kind);
+      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+    } catch (err) {
+      logger.error('Failed to send bulk reminders:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setBulkReminding(null);
+    }
+  };
+
   const handleScoreWeek = async () => {
-    if (!window.confirm(`Score Week ${week} now? This will lock results and generate a recap.`)) return;
+    const ok = await toast.confirm({
+      title: `Score Week ${week}?`,
+      message: 'This will lock results and generate a recap.',
+      confirmLabel: 'Score Week',
+      danger: true
+    });
+    if (!ok) return;
     setIsScoring(true);
     setFeedback(null);
     try {
@@ -173,6 +256,113 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       setIsSavingSettings(false);
     }
   };
+
+  // --- Exception handlers ---
+  const reasonIsValid = (r: string) => r.trim().length >= 3 && r.trim().length <= 200;
+
+  const handleExtendDeadline = async () => {
+    if (!reasonIsValid(extendReason)) {
+      toast.error('Please provide a reason (3–200 characters).');
+      return;
+    }
+    if (!extendMinutes || extendMinutes < 1 || extendMinutes > 1440) {
+      toast.error('Extension must be between 1 and 1440 minutes (24 hours).');
+      return;
+    }
+    const ok = await toast.confirm({
+      title: `Extend Week ${week} deadline?`,
+      message: `The pick deadline moves ${extendMinutes} minute(s) past the normal lock and every member is emailed the new time. Reason: "${extendReason.trim()}"`,
+      confirmLabel: 'Extend Deadline'
+    });
+    if (!ok) return;
+    setIsExtending(true);
+    try {
+      const res = await dbService.extendWeekDeadline(pool.id, week, extendMinutes, extendReason.trim());
+      toast.success(`Deadline extended to ${new Date(res.newLockTime).toLocaleString()} — emailed ${res.emailed} member(s).`);
+      setExtendReason('');
+    } catch (err) {
+      logger.error('Failed to extend week deadline:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setIsExtending(false);
+    }
+  };
+
+  const handleProxyPick = async () => {
+    if (!proxyTargetUid) {
+      toast.error('Select a member to pick for.');
+      return;
+    }
+    if (!proxyTeam) {
+      toast.error('Select a team.');
+      return;
+    }
+    if (!reasonIsValid(proxyReason)) {
+      toast.error('Please provide a reason (3–200 characters).');
+      return;
+    }
+    const targetEntry = entries.find(e => targetUidOf(e) === proxyTargetUid);
+    const ok = await toast.confirm({
+      title: 'Submit pick on their behalf?',
+      message: `Week ${proxyWeek}: ${proxyTeam} for ${targetEntry?.userName || 'this member'}. This is recorded in the pool audit log with your name and reason.`,
+      confirmLabel: 'Submit Proxy Pick'
+    });
+    if (!ok) return;
+    setIsProxying(true);
+    try {
+      await dbService.proxyPick(pool.id, proxyWeek, proxyTargetUid, { [proxyWeek]: proxyTeam }, proxyReason.trim());
+      toast.success(`Proxy pick saved: ${proxyTeam} (Week ${proxyWeek}) for ${targetEntry?.userName || 'member'}.`);
+      setProxyTeam('');
+      setProxyReason('');
+    } catch (err) {
+      logger.error('Failed to submit proxy pick:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setIsProxying(false);
+    }
+  };
+
+  const handleCancelPool = async () => {
+    if (!reasonIsValid(cancelReason)) {
+      toast.error('Please provide a reason (3–200 characters).');
+      return;
+    }
+    const first = await toast.confirm({
+      title: 'Cancel this pool?',
+      message: `"${pool.name}" will be marked CANCELED and every member will be emailed the reason plus who to contact about dues already paid.`,
+      confirmLabel: 'Continue',
+      danger: true
+    });
+    if (!first) return;
+    const second = await toast.confirm({
+      title: 'Are you absolutely sure?',
+      message: 'This cannot be undone from the dashboard. The pool will stop being playable for all members.',
+      confirmLabel: 'Yes, Cancel Pool',
+      danger: true
+    });
+    if (!second) return;
+    setIsCanceling(true);
+    try {
+      const res = await dbService.cancelPool(pool.id, cancelReason.trim());
+      toast.success(`Pool canceled. Emailed ${res.emailed} member(s).`);
+      setCancelReason('');
+    } catch (err) {
+      logger.error('Failed to cancel pool:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setIsCanceling(false);
+    }
+  };
+
+  // Teams playing in the proxy target week (for survivor/margin proxy picks)
+  const proxyWeekTeams = useMemo(() => {
+    const teams = new Set<string>();
+    games.filter(g => g.week === proxyWeek).forEach(g => {
+      if (g.homeTeam?.abbreviation) teams.add(g.homeTeam.abbreviation);
+      if (g.awayTeam?.abbreviation) teams.add(g.awayTeam.abbreviation);
+    });
+    return [...teams].sort();
+  }, [games, proxyWeek]);
 
   const branding = castPool.branding || {};
   const primaryAccent = branding.secondaryColor || '#6366f1';
@@ -644,13 +834,33 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         {/* Participant Roster + Payment Tracker */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-sm">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/10">
-              <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Users size={14} className="text-indigo-400" /> Member Roster & Payments
-              </h4>
-              <span className="text-[10px] text-slate-500 font-bold bg-slate-950 px-2 py-0.5 border border-slate-800 rounded-full">
-                {entries.length} members
-              </span>
+            <div className="p-5 border-b border-slate-800 bg-slate-900/10 space-y-3">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Users size={14} className="text-indigo-400" /> Member Roster & Payments
+                </h4>
+                <span className="text-[10px] text-slate-500 font-bold bg-slate-950 px-2 py-0.5 border border-slate-800 rounded-full">
+                  {entries.length} members
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleRemindBulk('PICKS')}
+                  disabled={bulkReminding !== null || unpickedCount === 0}
+                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider bg-orange-500/10 border border-orange-500/25 text-orange-400 hover:bg-orange-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  <BellRing size={12} />
+                  {bulkReminding === 'PICKS' ? 'Sending...' : `Remind all unpicked (${unpickedCount})`}
+                </button>
+                <button
+                  onClick={() => handleRemindBulk('PAYMENT')}
+                  disabled={bulkReminding !== null || unpaidCount === 0}
+                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-500/10 border border-amber-500/25 text-amber-400 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  <DollarSign size={12} />
+                  {bulkReminding === 'PAYMENT' ? 'Sending...' : `Remind all unpaid (${unpaidCount})`}
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -668,7 +878,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     {type === 'NFL_MARGIN' && (
                       <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-right">Margin Score</th>
                     )}
+                    <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-center">Wk {week} Picks</th>
                     <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-right w-36">Payment</th>
+                    <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-right w-32">Remind</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/50">
@@ -698,6 +910,18 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                         </td>
                       )}
 
+                      <td className="py-3.5 px-5 text-center">
+                        {pickedMap[entry.id] ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                            <CheckCircle size={10} /> Picked
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                            <XCircle size={10} /> Missing
+                          </span>
+                        )}
+                      </td>
+
                       <td className="py-3.5 px-5 text-right">
                         <button
                           onClick={() => handleTogglePayment(entry.id, entry.paidStatus)}
@@ -712,6 +936,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                           {isSavingPayment === entry.id ? 'Saving...' : entry.paidStatus || 'UNPAID'}
                         </button>
                       </td>
+
+                      <td className="py-3.5 px-5 text-right">
+                        <button
+                          onClick={() => handleRemindOne(entry, !pickedMap[entry.id] ? 'PICKS' : 'PAYMENT')}
+                          disabled={
+                            remindingUid !== null ||
+                            bulkReminding !== null ||
+                            (pickedMap[entry.id] && entry.paidStatus === 'PAID')
+                          }
+                          title={!pickedMap[entry.id] ? 'Email a picks reminder' : entry.paidStatus !== 'PAID' ? 'Email a payment reminder' : 'Picked and paid — nothing to remind'}
+                          className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        >
+                          <BellRing size={10} />
+                          {remindingUid === targetUidOf(entry) ? 'Sending...' : 'Remind'}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -719,6 +959,195 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════
+           SECTION: COMMISSIONER EXCEPTIONS
+           Sanctioned tools for the messy real-world cases (member in
+           hospital, mis-set deadline, dead pool) — every action is
+           audited and members are notified.
+      ═══════════════════════════════════════════ */}
+      <div className="bg-slate-900/40 border border-amber-900/40 rounded-3xl backdrop-blur-sm overflow-hidden">
+        <button
+          onClick={() => setExceptionsOpen(o => !o)}
+          className="w-full p-5 flex justify-between items-center bg-slate-900/20 hover:bg-slate-900/40 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={14} className="text-amber-400" />
+            <h4 className="text-xs font-black text-slate-300 uppercase tracking-widest">Exceptions — Commissioner Tools</h4>
+          </div>
+          {exceptionsOpen ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+        </button>
+
+        {exceptionsOpen && (
+          <div className="p-6 space-y-6 border-t border-slate-800">
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              For the rare cases a season throws at you. Every action here is written to the pool audit log
+              with your name and reason, and members are emailed — no silent changes.
+            </p>
+
+            {/* ── Extend Week Deadline ── */}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Clock size={14} className="text-indigo-400" />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Extend Week {week} Deadline</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Extra Minutes (max 1440)</label>
+                  <input
+                    type="number"
+                    value={extendMinutes}
+                    min={1}
+                    max={1440}
+                    onChange={e => setExtendMinutes(Math.max(1, Math.min(1440, parseInt(e.target.value) || 1)))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Reason (emailed to members)</label>
+                  <input
+                    type="text"
+                    value={extendReason}
+                    onChange={e => setExtendReason(e.target.value)}
+                    maxLength={200}
+                    placeholder="e.g. Deadline was mis-set — several members were locked out"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <p className="text-[10px] text-amber-400/80 leading-relaxed max-w-md">
+                  Note: the extension takes effect immediately for commissioner proxy picks; member
+                  self-submitted picks honoring the extension is rolling out separately.
+                </p>
+                <button
+                  onClick={handleExtendDeadline}
+                  disabled={isExtending}
+                  className="min-h-[44px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold px-6 rounded-2xl flex items-center gap-2 transition-all cursor-pointer text-xs"
+                >
+                  <Clock size={13} />
+                  {isExtending ? 'Extending...' : 'Extend Deadline'}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Proxy Pick ── */}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <UserCog size={14} className="text-indigo-400" />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enter a Pick for a Member</p>
+              </div>
+              {type === 'NFL_PICKEM' ? (
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Pick'em proxy entry isn't available in the dashboard yet (a full week of game-by-game picks
+                  is too error-prone to enter here). Survivor and Margin pools can proxy below; for pick'em,
+                  contact support.
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Member</label>
+                      <select
+                        value={proxyTargetUid}
+                        onChange={e => setProxyTargetUid(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                      >
+                        <option value="">Select member...</option>
+                        {entries.map(entry => (
+                          <option key={entry.id} value={targetUidOf(entry)}>{entry.userName || entry.id}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Week</label>
+                      <input
+                        type="number"
+                        value={proxyWeek}
+                        min={1}
+                        max={23}
+                        onChange={e => setProxyWeek(Math.max(1, Math.min(23, parseInt(e.target.value) || 1)))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Team</label>
+                      <select
+                        value={proxyTeam}
+                        onChange={e => setProxyTeam(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                      >
+                        <option value="">Select team...</option>
+                        {proxyWeekTeams.map(team => (
+                          <option key={team} value={team}>{team}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Reason (audited)</label>
+                      <input
+                        type="text"
+                        value={proxyReason}
+                        onChange={e => setProxyReason(e.target.value)}
+                        maxLength={200}
+                        placeholder="e.g. Member in hospital, texted me their pick"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <p className="text-[10px] text-slate-500 leading-relaxed max-w-md">
+                      Proxy picks respect the real deadline — if the week is locked, extend the deadline first.
+                      Teams already used by the member this season are rejected.
+                    </p>
+                    <button
+                      onClick={handleProxyPick}
+                      disabled={isProxying}
+                      className="min-h-[44px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold px-6 rounded-2xl flex items-center gap-2 transition-all cursor-pointer text-xs"
+                    >
+                      <UserCog size={13} />
+                      {isProxying ? 'Submitting...' : 'Submit Proxy Pick'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* ── Cancel Pool ── */}
+            <div className="bg-rose-500/5 border border-rose-900/40 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Ban size={14} className="text-rose-400" />
+                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Cancel Pool</p>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Marks the pool as canceled and emails every member the reason plus who to contact about dues
+                already paid. This cannot be undone from the dashboard.
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">Reason (emailed to members)</label>
+                <input
+                  type="text"
+                  value={cancelReason}
+                  onChange={e => setCancelReason(e.target.value)}
+                  maxLength={200}
+                  placeholder="e.g. Not enough members joined to run the season"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
+                />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleCancelPool}
+                  disabled={isCanceling}
+                  className="min-h-[44px] bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-extrabold px-6 rounded-2xl flex items-center gap-2 transition-all cursor-pointer text-xs"
+                >
+                  <Ban size={13} />
+                  {isCanceling ? 'Canceling...' : 'Cancel Pool...'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

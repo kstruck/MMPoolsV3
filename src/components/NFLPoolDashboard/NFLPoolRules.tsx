@@ -1,6 +1,7 @@
 import React from 'react';
 import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap } from 'lucide-react';
 import type { Pool } from '../../types';
+import { PayoutsPanel } from '../PayoutsPanel';
 
 interface NFLPoolRulesProps {
   pool: Pool;
@@ -50,13 +51,6 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool }) => {
             <li className="flex justify-between border-b border-slate-800/60 pb-2">
               <span className="font-bold">Entry Fee:</span>
               <span className="text-white font-black font-mono">${entryFee}</span>
-            </li>
-            <li className="flex justify-between border-b border-slate-800/60 pb-2">
-              <span className="font-bold">Payout Structure:</span>
-              <span className="text-white font-black uppercase text-[10px] tracking-wider">
-                {settings.payoutMode === 'SEASON' ? 'Season Standings' :
-                 settings.payoutMode === 'WEEKLY' ? 'Weekly Sharp payouts' : 'Season + Weekly Hybrid'}
-              </span>
             </li>
             <li className="flex flex-col gap-1">
               <span className="font-bold">Payment Instructions:</span>
@@ -226,6 +220,11 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool }) => {
             </div>
           </div>
         )}
+
+        {/* Prizes: shared payout transparency panel (fee, pot math, per-place amounts) */}
+        <div className="md:col-span-2">
+          <PayoutsPanel pool={pool} />
+        </div>
 
       </div>
     </div>

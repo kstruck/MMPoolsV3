@@ -1,6 +1,7 @@
 import React from 'react';
 import type { GameState } from '../types';
 import { Sparkles, Trash2, Settings } from 'lucide-react';
+import { useToast } from './ui/Toast';
 
 interface WizardStepBrandingProps {
     gameState: GameState;
@@ -10,13 +11,14 @@ interface WizardStepBrandingProps {
 }
 
 export const WizardStepBranding: React.FC<WizardStepBrandingProps> = ({ gameState, updateConfig, onBack, onNext }) => {
+    const toast = useToast();
 
     // Simplified Theme Logic vs AdminPanel
     const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             if (file.size > 2 * 1024 * 1024) {
-                alert("File too large. Max 2MB.");
+                toast.error("File too large. Max 2MB.");
                 return;
             }
             const reader = new FileReader();

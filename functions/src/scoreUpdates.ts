@@ -1059,6 +1059,24 @@ async function finalizeEventPayouts(
     }
 };
 
+// Cheap heartbeat doc so the frontend can show standings freshness.
+// One write per sync cycle; a failure here must never break the sync itself.
+const writeSyncStatus = async (
+    db: admin.firestore.Firestore,
+    status: 'ok' | 'error',
+    detail?: string
+) => {
+    try {
+        await db.doc('system/scoreSync').set({
+            lastSyncAt: Date.now(),
+            status,
+            ...(detail ? { detail } : {})
+        });
+    } catch (e) {
+        console.error('[Sync] Failed to write system/scoreSync status doc:', e);
+    }
+};
+
 export const syncGameStatus = onSchedule({
     schedule: "every 1 minutes",
     timeoutSeconds: 120,
@@ -1096,6 +1114,7 @@ export const syncGameStatus = onSchedule({
 
         if (allPools.length === 0) {
             console.log(`[Sync] No active or recently completed pools found. Skipping score sync cycle.`);
+            await writeSyncStatus(db, 'ok', 'No active pools to sync');
             return;
         }
 
@@ -1216,6 +1235,14 @@ export const syncGameStatus = onSchedule({
             durationMs: Date.now() - startTime
         });
 
+        // 4. Heartbeat: surfaces silent ESPN fetch failures (the `return null`
+        // paths in fetchESPNScores) that would otherwise leave stale standings.
+        await writeSyncStatus(
+            db,
+            errorCount > 0 ? 'error' : 'ok',
+            errorCount > 0 ? `${errorCount} of ${allPools.length} pool(s) failed to sync (ESPN fetch or processing error)` : undefined
+        );
+
     } catch (globalError: any) {
         console.error("Critical Sync Failure:", globalError);
         await db.collection('system_logs').add({
@@ -1225,6 +1252,7 @@ export const syncGameStatus = onSchedule({
             message: globalError.message || 'Unknown error',
             durationMs: Date.now() - startTime
         });
+        await writeSyncStatus(db, 'error', `Sync cycle failed: ${globalError.message || 'unknown error'}`);
     }
 });
 

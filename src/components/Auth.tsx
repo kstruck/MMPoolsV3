@@ -5,7 +5,7 @@ import { authService } from '../services/authService';
 import { Mail, Lock, User, ArrowRight, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface AuthProps {
-  onLogin: () => void;
+  onLogin: (result?: { isNewUser?: boolean }) => void;
   defaultIsRegistering?: boolean;
 }
 
@@ -38,16 +38,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
 
       if (isRegistering) {
         await authService.register(formData.name, formData.email, formData.password);
-        setSuccessMsg("Account created! Verify your email to unlock all features.");
-        // Optional: Keep them on screen to read message? 
-        // Or onLogin() will redirect them.
-        // Let's delay redirection slightly or show a banner in the App instead.
-        // For now, let's just proceed to onLogin() which starts the session.
-        // The App header will show "Verify Email" if we implement that.
+        onLogin({ isNewUser: true });
       } else {
         await authService.login(formData.email, formData.password);
+        onLogin();
       }
-      onLogin();
     } catch (err: any) {
       logger.error("Auth error", err);
       // Map common Firebase errors to readable messages

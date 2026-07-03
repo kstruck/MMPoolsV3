@@ -118,10 +118,20 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
         teamName = teamName.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
     }
 
+    const ariaState = [
+        seed ? `${seed} seed` : null,
+        isPicked ? 'your pick' : null,
+        pickStatus === 'correct' ? 'correct' : pickStatus === 'incorrect' ? 'incorrect' : null,
+        isWinner ? 'won this game' : null,
+        isEliminated ? 'eliminated' : null,
+    ].filter(Boolean).join(', ');
+
     return (
         <button
             onClick={onClick}
             disabled={disabled}
+            aria-label={teamId ? `${teamName}${ariaState ? ` — ${ariaState}` : ''}` : 'To be determined'}
+            aria-pressed={isPicked}
             className={`
                 w-full px-1 sm:px-2 h-9 flex items-center justify-between transition-colors text-left relative overflow-hidden
                 ${isPicked

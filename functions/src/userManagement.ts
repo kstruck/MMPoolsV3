@@ -2,6 +2,7 @@ import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { renderEmailHtml } from "./emailStyles";
 import { courierAuthToken, sendCourierSMS } from "./notifications/smsService";
+import { sendEmail } from "./reminders";
 
 
 
@@ -98,16 +99,7 @@ export const sendAdminPasswordReset = functions.https.onCall(async (request) => 
         const fullHtml = renderEmailHtml("Password Reset", bodyHtml, link, "Reset Password");
 
         // 4. Queue Email (Write to 'mail' collection)
-        await db.collection("mail").add({
-            to: email,
-            message: {
-                subject: subject,
-                text: bodyText,
-                html: fullHtml
-            },
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            type: "PASSWORD_RESET"
-        });
+        await sendEmail(db, email, subject, fullHtml, { type: "PASSWORD_RESET", transactional: true });
 
         return { success: true, message: "Reset email queued." };
 

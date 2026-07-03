@@ -40,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
         <>
             {user && !user.emailVerified && user.provider === 'password' && (
                 <div className="bg-amber-500 text-white text-xs font-bold text-center py-1 flex justify-center items-center gap-2">
-                    <span>Please verify your email address to access all features. Check your inbox.</span>
+                    <span>Verify your email to secure your account — check your inbox for the link.</span>
                     {resendStatus === 'sent' ? (
                         <span className="flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded text-white">
                             <CheckCircle size={12} /> Sent!

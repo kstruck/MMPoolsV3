@@ -147,8 +147,8 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800/80 bg-slate-950/20">
-                <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 w-16">Rank</th>
-                <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Player</th>
+                <th className="sticky left-0 z-10 bg-slate-950 py-4 px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 w-16">Rank</th>
+                <th className="sticky left-16 z-10 bg-slate-950 py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Player</th>
                 
                 {/* Custom Pool Columns */}
                 {type === 'NFL_PICKEM' && (
@@ -191,10 +191,10 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     }`}
                   >
                     {/* Rank */}
-                    <td className="py-4 px-6 font-bold">{renderRankBadge(index)}</td>
+                    <td className="sticky left-0 z-10 bg-slate-900 py-4 px-3 font-bold">{renderRankBadge(index)}</td>
 
                     {/* Username */}
-                    <td className="py-4 px-6 font-extrabold text-white text-sm">
+                    <td className="sticky left-16 z-10 bg-slate-900 py-4 px-6 font-extrabold text-white text-sm">
                       {entry.userName}
                       {isMyEntry && (
                         <span className="ml-1.5 text-[8px] font-black tracking-widest text-indigo-400 uppercase bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded">

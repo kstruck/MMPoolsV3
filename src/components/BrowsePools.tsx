@@ -132,7 +132,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                     <div>
                         <h2 className="text-4xl font-extrabold text-white mb-2 tracking-tight">Public Pools</h2>
                         <p className="text-slate-400 max-w-xl">
-                            Join active Super Bowl squares pools and March Madness brackets.
+                            Join public pools — NFL survivor, pick'em, squares, March Madness brackets, and more.
                         </p>
                     </div>
                 </div>
@@ -142,9 +142,10 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                     <div className="space-y-6">
                         {/* Search */}
                         <div className="relative">
-                            <Search className="absolute left-3 top-3 text-slate-500" size={18} />
+                            <Search className="absolute left-3 top-3 text-slate-500" size={18} aria-hidden="true" />
                             <input
                                 type="text"
+                                aria-label="Search pools by name or team"
                                 placeholder="Search pools, teams..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -365,13 +366,13 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                         {/* Matchup */}
                                         <div className="bg-black/30 rounded-lg p-3 border border-slate-800/50 mb-4 flex items-center justify-between relative z-10">
                                             <div className="flex items-center gap-2">
-                                                {awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain opacity-80" />}
+                                                {awayLogo && <img src={awayLogo} alt={`${awayTeam} logo`} className="w-6 h-6 object-contain opacity-80" />}
                                                 <span className="text-sm font-bold text-slate-300">{awayTeam}</span>
                                             </div>
                                             <span className="text-xs text-slate-600 font-bold uppercase">VS</span>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-bold text-slate-300">{homeTeam}</span>
-                                                {homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain opacity-80" />}
+                                                {homeLogo && <img src={homeLogo} alt={`${homeTeam} logo`} className="w-6 h-6 object-contain opacity-80" />}
                                             </div>
                                         </div>
 

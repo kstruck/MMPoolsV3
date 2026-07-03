@@ -4,6 +4,7 @@ import { Plus, Trash2, Edit2, Check, Save, ChevronDown, ChevronUp, Search, Filte
 import { dbService } from '../../services/dbService';
 import type { PropQuestion, PropsPool, PropCard, PropSeed } from '../../types';
 import { PropStats } from './PropStats';
+import { useToast } from '../ui/Toast';
 
 interface PropsManagerProps {
     gameState: PropsPool;
@@ -13,6 +14,7 @@ interface PropsManagerProps {
 }
 
 export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateConfig, allCards, isWizardMode }) => {
+    const toast = useToast();
     // Local state for form management
     const [questions, setQuestions] = useState<PropQuestion[]>(gameState.props?.questions || []);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -116,8 +118,13 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
         }
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Are you sure you want to delete this question?')) {
+    const handleDelete = async (id: string) => {
+        const ok = await toast.confirm({
+            title: 'Delete this question?',
+            message: 'Are you sure you want to delete this question?',
+            danger: true,
+        });
+        if (ok) {
             setQuestions(questions.filter(q => q.id !== id));
         }
     };

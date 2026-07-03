@@ -22,7 +22,7 @@ const getDaysRemaining = (endsAt?: number): number => {
  * - `free` / `active` → children only, no banner
  * - `trial` → children + subtle gradient countdown banner
  * - `grace_period` → children + prominent pulsing amber warning
- * - `locked` → blurred children behind a glassmorphism lockout overlay
+ * - `locked` → children rendered read-only (visible, non-interactive) with a lock modal overlaid
  * - undefined billing → treated as 'free'
  */
 export const BillingGate: React.FC<BillingGateProps> = ({
@@ -369,7 +369,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
               >
                 {isCommissioner
                   ? 'Complete payment to avoid losing access for your entire pool.'
-                  : 'The pool commissioner needs to complete payment to maintain access.'}
+                  : 'The pool commissioner needs to complete payment to maintain access. Your picks are unaffected.'}
               </p>
             </div>
           </div>
@@ -411,23 +411,17 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     );
   }
 
-  // ─── LOCKED — FULL LOCKOUT OVERLAY ─────────────────────────
+  // ─── LOCKED — READ-ONLY CONTENT + LOCK MODAL OVERLAY ──────
+  // Children stay VISIBLE (standings/picks remain readable) but are
+  // non-interactive; the lock modal floats above without hiding them.
   return (
     <div style={{ position: 'relative', minHeight: '400px' }}>
-      {/* Blurred children backdrop */}
-      <div
-        style={{
-          filter: 'blur(8px)',
-          pointerEvents: 'none',
-          userSelect: 'none',
-          opacity: 0.45,
-        }}
-        aria-hidden="true"
-      >
+      {/* Read-only children: visible but not interactive */}
+      <div className="pointer-events-none select-none opacity-60">
         {children}
       </div>
 
-      {/* Glassmorphism lockout overlay */}
+      {/* Lock modal overlay — container is click-through so content shows */}
       <AnimatePresence>
         <motion.div
           initial={{ opacity: 0 }}
@@ -438,11 +432,11 @@ export const BillingGate: React.FC<BillingGateProps> = ({
             position: 'absolute',
             inset: 0,
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
+            paddingTop: '48px',
             zIndex: 50,
-            background: 'rgba(2,6,23,0.6)',
-            backdropFilter: 'blur(4px)',
+            pointerEvents: 'none',
           }}
         >
           <motion.div
@@ -450,7 +444,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
             style={{
-              background: 'rgba(15,23,42,0.85)',
+              pointerEvents: 'auto',
+              background: 'rgba(15,23,42,0.92)',
               backdropFilter: 'blur(24px)',
               border: '1px solid rgba(51,65,85,0.5)',
               borderRadius: '24px',
@@ -506,7 +501,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
             >
               {isCommissioner
                 ? 'Your pool has been locked. Please complete payment to restore access.'
-                : 'This pool is awaiting payment from the commissioner.'}
+                : 'This pool is paused while the commissioner completes payment. Your picks and standings are safe and will unlock automatically.'}
             </p>
 
             {/* CTA */}

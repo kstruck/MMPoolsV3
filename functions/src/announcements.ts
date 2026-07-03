@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { Announcement, GameState } from './types';
 import { renderEmailHtml, BASE_URL } from './emailStyles';
 import { getSquareEmails } from './squarePrivate';
+import { sendEmail } from './reminders';
 
 /**
  * Triggered when a new announcement is added to a pool.
@@ -62,13 +63,7 @@ export const onAnnouncementCreated = functions.firestore
         );
 
         const emailPromises = recipientList.map(email => {
-            return db.collection('mail').add({
-                to: email,
-                message: {
-                    subject: `[${pool.name}] ${announcement.subject}`,
-                    html: emailHtml,
-                }
-            });
+            return sendEmail(db, email, `[${pool.name}] ${announcement.subject}`, emailHtml);
         });
 
         await Promise.all(emailPromises);

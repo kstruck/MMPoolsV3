@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAuditEvent } from "./audit";
 import { checkBillingAccess } from "./billing";
+import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields } from "./poolOps";
 import {
   NFLGame,
@@ -199,7 +200,7 @@ export const submitNFLPicks = onCall(async (request) => {
   
   // deep clean input
   const data = JSON.parse(JSON.stringify(request.data || {}));
-  const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
+  const { poolId, week, picks, confidence, tiebreakerPrediction, requestId } = data;
 
   if (!poolId || !week || !picks) {
     throw new HttpsError('invalid-argument', 'Missing poolId, week, or picks.');
@@ -242,10 +243,23 @@ export const submitNFLPicks = onCall(async (request) => {
 
   // 2. Determine lock context
   const lockBufferMs = (pool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
-  
+
+  // Commissioner deadline extension (extendWeekDeadline callable) overrides the
+  // computed week lock; per-game locks below also respect it as a floor.
+  const weekLockOverride: number | undefined = pool.settings?.weekLockOverrides?.[week];
+
   // Check if first game of the week has kicked off
   const earliestGameTime = Math.min(...games.map(g => g.startTime));
-  const weekLocked = now >= (earliestGameTime - lockBufferMs);
+  const computedWeekLock = earliestGameTime - lockBufferMs;
+  const effectiveWeekLock = weekLockOverride !== undefined ? Math.max(weekLockOverride, computedWeekLock) : computedWeekLock;
+  const weekLocked = now >= effectiveWeekLock;
+
+  // A game is locked at its own kickoff (minus buffer), unless the commissioner
+  // extended this week's deadline past that time
+  const gameLockTime = (game: NFLGame): number => {
+    const base = game.startTime - lockBufferMs;
+    return weekLockOverride !== undefined ? Math.max(base, weekLockOverride) : base;
+  };
 
   // Write variables inside transactions
   const entryRef = poolRef.collection('entries').doc(uid);
@@ -253,6 +267,12 @@ export const submitNFLPicks = onCall(async (request) => {
   await db.runTransaction(async (transaction) => {
     const entrySnap = await transaction.get(entryRef);
     const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+
+    // Idempotency: a retried submit (client resend after a lost response) whose
+    // requestId already landed is a no-op success, not a duplicate write
+    if (requestId && existingEntry?.lastRequestId === requestId) {
+      return;
+    }
 
     // --- LOCK CHECKS & POOL SPECIFIC VALIDATIONS ---
 
@@ -304,7 +324,7 @@ export const submitNFLPicks = onCall(async (request) => {
         paidStatus: existingEntry?.paidStatus ?? 'UNPAID'
       };
 
-      transaction.set(entryRef, pickemEntry, { merge: true });
+      transaction.set(entryRef, { ...pickemEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
 
     } else if (type === 'NFL_SURVIVOR') {
       const survivorEntry = (existingEntry as SurvivorEntry) || {
@@ -359,7 +379,7 @@ export const submitNFLPicks = onCall(async (request) => {
       survivorEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
       survivorEntry.submittedAt = now;
 
-      transaction.set(entryRef, survivorEntry, { merge: true });
+      transaction.set(entryRef, { ...survivorEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
 
     } else if (type === 'NFL_MARGIN') {
       const marginEntry = (existingEntry as MarginEntry) || {
@@ -410,7 +430,7 @@ export const submitNFLPicks = onCall(async (request) => {
       marginEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
       marginEntry.submittedAt = now;
 
-      transaction.set(entryRef, marginEntry, { merge: true });
+      transaction.set(entryRef, { ...marginEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
     }
   });
 
@@ -485,6 +505,18 @@ export const executeSurvivorRebuy = onCall(async (request) => {
     severity: 'INFO',
     actor: { uid, role: 'USER', label: 'Participant' },
     payload: { week }
+  });
+
+  // Money event: rebuy adds dues owed to the commissioner — record it where
+  // the member can see it, with amount and timestamp
+  const rebuyAmount = settings.rebuyCost ?? settings.entryFee ?? undefined;
+  await writeLedgerEvent(db, poolId, {
+    type: 'REBUY_DUE',
+    uid,
+    entryId: uid,
+    amount: typeof rebuyAmount === 'number' ? rebuyAmount : undefined,
+    note: `Survivor rebuy (week ${week})`,
+    actorUid: uid,
   });
 
   return { success: true };

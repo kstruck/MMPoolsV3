@@ -24,6 +24,7 @@ import { PoolAnalytics } from './PoolAnalytics';
 import { BracketAwards } from './BracketAwards';
 import { ChalkComparison } from './ChalkComparison';
 import { ReportsTab } from './ReportsTab';
+import { BracketRulesPanel } from './BracketRulesPanel';
 import { LiveScoreTicker } from './LiveScoreTicker';
 import { EliminationTracker } from './EliminationTracker';
 import { BracketCountdown } from './BracketCountdown';
@@ -31,8 +32,9 @@ import { AICommissioner } from '../AICommissioner';
 import { BanterBoard } from './BanterBoard';
 import { PaymentLedger } from './PaymentLedger';
 import { ExportControls } from './ExportControls';
+import { useToast } from '../ui/Toast';
 
-type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager' | 'ledger';
+type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'rules' | 'manager' | 'ledger';
 type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'chalk' | 'analytics' | 'insights';
 
 interface BracketPoolDashboardProps {
@@ -44,6 +46,7 @@ interface BracketPoolDashboardProps {
 
 export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool, user, onBack }) => {
     const [searchParams, setSearchParams] = useSearchParams();
+    const toast = useToast();
 
     // Replace local state with URL params to enable correct browser back-button behavior
     const activeTab = (searchParams.get('tab') as DashboardTab) || 'dashboard';
@@ -178,11 +181,11 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     const handleViewEntry = useCallback((entry: BracketEntry) => {
         if (entry.ownerUid !== user?.id && !isManager && !shouldShowBrackets) {
-            alert("This bracket is hidden until the pool is locked.");
+            toast.info("This bracket is hidden until the pool is locked.");
             return;
         }
         setViewingEntry(entry);
-    }, [user?.id, isManager, shouldShowBrackets]);
+    }, [user?.id, isManager, shouldShowBrackets, toast]);
 
     // Subscribe to bracket entries
     useEffect(() => {
@@ -272,9 +275,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     // Pool locking handlers
     const handleLockNow = useCallback(async () => {
-        if (!window.confirm('Are you sure you want to lock the pool now? No more brackets can be submitted after locking.')) {
-            return;
-        }
+        const ok = await toast.confirm({
+            title: 'Lock pool now?',
+            message: 'No more brackets can be submitted after locking.',
+            confirmLabel: 'Lock pool',
+            danger: true
+        });
+        if (!ok) return;
         setSavingSettings(true);
         try {
             await dbService.updateBracketPool(pool.id, { status: 'LOCKED' });
@@ -286,7 +293,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         } finally {
             setSavingSettings(false);
         }
-    }, [pool.id]);
+    }, [pool.id, toast]);
 
     const handleSaveLockAt = useCallback(async () => {
         if (!editLockAt) {
@@ -430,11 +437,11 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 const body = encodeURIComponent(`Please complete and submit your bracket entry for ${pool.name} before the pool locks.\n\nLink: ${window.location.origin}/pool/${pool.slug}`);
                 window.location.href = `mailto:?bcc=${bcc}&subject=${subject}&body=${body}`;
             } else {
-                alert("No users found with incomplete entries.");
+                toast.info("No users found with incomplete entries.");
             }
         } catch (e) {
             console.error("Failed to fetch users", e);
-            alert("Failed to fetch user emails.");
+            toast.error("Failed to fetch user emails.");
         } finally {
             setSendingEmail(false);
         }
@@ -451,9 +458,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     // Delete a user's entry
     const handleDeleteEntry = useCallback(async (entry: BracketEntry) => {
-        if (!confirm(`Are you sure you want to delete "${entry.name}"? This action cannot be undone.`)) {
-            return;
-        }
+        const ok = await toast.confirm({
+            title: 'Delete entry?',
+            message: `Are you sure you want to delete "${entry.name}"? This action cannot be undone.`,
+            confirmLabel: 'Delete',
+            danger: true
+        });
+        if (!ok) return;
 
         setError(null);
         try {
@@ -464,7 +475,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'An error occurred while deleting');
         }
-    }, [pool.id]);
+    }, [pool.id, toast]);
 
     // Create a new bracket entry
     const handleCreateEntry = useCallback(async (customName?: string) => {
@@ -643,6 +654,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         { id: 'entries' as DashboardTab, label: 'All Entries', icon: Users },
                         { id: 'brackets' as DashboardTab, label: 'Brackets', icon: GitBranch },
                         { id: 'reports' as DashboardTab, label: 'Reports', icon: FileText },
+                        { id: 'rules' as DashboardTab, label: 'Rules', icon: ClipboardList },
                         { id: 'ledger' as DashboardTab, label: 'Payment Ledger', icon: CreditCard, hidden: !isManager },
                         { id: 'manager' as DashboardTab, label: '⚙️ Settings', icon: ShieldCheck, hidden: !isManager },
                     ].map(tab => !tab.hidden && (
@@ -1266,6 +1278,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 {!loading && activeTab === 'reports' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4">
                         <ReportsTab entries={entries} tournament={tournament} pool={pool} />
+                    </div>
+                )}
+
+                {/* Rules Tab — visible to all members */}
+                {!loading && activeTab === 'rules' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4">
+                        <BracketRulesPanel pool={pool} tournament={tournament} />
                     </div>
                 )}
 
@@ -2125,6 +2144,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             {/* Pool Share Modal */}
             {showShareModal && (
                 <PoolShareModal
+                    poolId={pool.id}
                     poolName={pool.name}
                     poolSlug={pool.slug}
                     onClose={() => setShowShareModal(false)}

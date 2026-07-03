@@ -1,0 +1,393 @@
+import * as admin from "firebase-admin";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
+import { writeAuditEvent } from "./audit";
+import { sendEmail } from "./reminders";
+import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
+import { User } from "./types";
+import { NFLGame, SurvivorEntry, MarginEntry } from "./nflPoolTypes";
+
+// Commissioner exception tools (UX overhaul Phase 3.6).
+// Real seasons have exceptions — a member in the hospital, a mis-set deadline,
+// a pool that needs to die. These callables give commissioners a sanctioned,
+// audited path instead of routing around the app via Firestore surgery.
+//
+// All three: onCall + auth + assertPoolOwnerOrSuperAdmin + audit event.
+
+const MAX_EXTRA_MINUTES = 24 * 60; // cap extensions at 24 hours
+
+const assertReason = (reason: unknown): string => {
+    if (typeof reason !== "string" || reason.trim().length < 3 || reason.trim().length > 200) {
+        throw new HttpsError("invalid-argument", "A reason (3-200 characters) is required.");
+    }
+    return reason.trim();
+};
+
+const loadPoolAndAssertManager = async (
+    db: admin.firestore.Firestore,
+    poolId: unknown,
+    uid: string,
+    role?: string
+) => {
+    if (!poolId || typeof poolId !== "string") {
+        throw new HttpsError("invalid-argument", "poolId is required.");
+    }
+    const poolRef = db.collection("pools").doc(poolId);
+    const poolSnap = await poolRef.get();
+    if (!poolSnap.exists) {
+        throw new HttpsError("not-found", "Pool not found.");
+    }
+    const pool = { id: poolSnap.id, ...poolSnap.data() } as any;
+    assertPoolOwnerOrSuperAdmin(pool, uid, role);
+    return { poolRef, pool };
+};
+
+/** Fetch the week's games the same way submitNFLPicks does. */
+const loadWeekGames = async (
+    db: admin.firestore.Firestore,
+    pool: any,
+    week: number
+): Promise<NFLGame[]> => {
+    const gamesSnap = await db.collection("nfl_games")
+        .where("season", "==", pool.season)
+        .where("seasonType", "==", Number(pool.seasonType || 2))
+        .where("week", "==", week)
+        .get();
+    const games = gamesSnap.docs.map((d) => d.data() as NFLGame);
+    if (games.length === 0) {
+        throw new HttpsError("not-found", `No NFL games found for week ${week}.`);
+    }
+    return games;
+};
+
+/** Resolve unique member emails: entries ownerUid -> users/{uid}.email (same as manualReminders.ts). */
+const resolveMemberEmails = async (
+    db: admin.firestore.Firestore,
+    poolRef: admin.firestore.DocumentReference
+): Promise<string[]> => {
+    const entriesSnap = await poolRef.collection("entries").get();
+    const seenUids = new Set<string>();
+    const emails = new Set<string>();
+    for (const doc of entriesSnap.docs) {
+        const targetUid = (doc.data().ownerUid as string) || doc.id;
+        if (seenUids.has(targetUid)) continue;
+        seenUids.add(targetUid);
+        const userDoc = await db.collection("users").doc(targetUid).get();
+        const email = userDoc.exists ? (userDoc.data() as User).email : undefined;
+        if (email) emails.add(email);
+    }
+    return [...emails];
+};
+
+const formatLockTime = (epochMs: number): string => {
+    return new Date(epochMs).toLocaleString("en-US", {
+        timeZone: "America/New_York",
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    }) + " ET";
+};
+
+// ============ 1. EXTEND WEEK DEADLINE ============
+// NFL pools compute lock from game startTimes + lockBufferMinutes, so an
+// extension is a per-pool override: settings.weekLockOverrides.{week} = new
+// lock time in epoch ms.
+//
+// KNOWN CAVEAT (schema-first): submitNFLPicks in nflPools.ts does NOT read
+// weekLockOverrides yet. A follow-up change to nflPools.ts is required before
+// member-facing pick submission honors extensions. proxyPick below DOES honor
+// the override.
+export const extendWeekDeadline = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+
+    const { poolId, week, extraMinutes } = (request.data || {}) as any;
+    const reason = assertReason(request.data?.reason);
+
+    const weekNum = Number(week);
+    if (!Number.isInteger(weekNum) || weekNum < 1 || weekNum > 23) {
+        throw new HttpsError("invalid-argument", "week must be an integer between 1 and 23.");
+    }
+    const extraMin = Number(extraMinutes);
+    if (!Number.isFinite(extraMin) || extraMin <= 0) {
+        throw new HttpsError("invalid-argument", "extraMinutes must be a positive number.");
+    }
+    if (extraMin > MAX_EXTRA_MINUTES) {
+        throw new HttpsError("invalid-argument", `extraMinutes cannot exceed ${MAX_EXTRA_MINUTES} (24 hours).`);
+    }
+
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth.token.role as string | undefined);
+
+    const games = await loadWeekGames(db, pool, weekNum);
+    const lockBufferMs = (pool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
+    const earliestGameTime = Math.min(...games.map((g) => g.startTime));
+    const baseLockTime = earliestGameTime - lockBufferMs;
+    const newLockTime = baseLockTime + extraMin * 60000;
+
+    await poolRef.update({
+        [`settings.weekLockOverrides.${weekNum}`]: newLockTime,
+    });
+
+    await writeAuditEvent({
+        poolId: pool.id,
+        type: "DEADLINE_EXTENDED",
+        message: `Commissioner extended Week ${weekNum} deadline by ${extraMin} minutes (new lock: ${formatLockTime(newLockTime)}). Reason: ${reason}`,
+        severity: "WARNING",
+        actor: { uid, role: "ADMIN", label: "Commissioner" },
+        payload: { week: weekNum, extraMinutes: extraMin, baseLockTime, newLockTime, reason },
+    });
+
+    // Email all members
+    const poolName = pool.name || "Your pool";
+    const subject = `Deadline extended: ${poolName} Week ${weekNum}`;
+    const body = `
+        <p>Hi,</p>
+        <p>The commissioner has extended the Week ${weekNum} pick deadline for <strong>${escapeHtml(poolName)}</strong>.</p>
+        <p><strong>New deadline:</strong> ${escapeHtml(formatLockTime(newLockTime))}</p>
+        <p><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+    `;
+    const html = renderEmailHtml("Deadline Extended", body, `${BASE_URL}/pool/${pool.id}`, "Open Pool");
+    const emails = await resolveMemberEmails(db, poolRef);
+    let emailed = 0;
+    for (const email of emails) {
+        await sendEmail(db, email, subject, html, { poolId: pool.id, reason: "deadline_extended" });
+        emailed++;
+    }
+
+    return { success: true, newLockTime, emailed };
+});
+
+// ============ 2. PROXY PICK ============
+// Commissioner enters picks on behalf of a member (e.g. member in hospital).
+// Mirrors submitNFLPicks validation minimally per pool type; respects real
+// deadlines UNLESS the week has a settings.weekLockOverrides entry.
+// Writes proxySubmittedBy + proxyReason onto the entry so standings stay honest.
+export const proxyPick = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+
+    const data = JSON.parse(JSON.stringify(request.data || {}));
+    const { poolId, week, targetUid, picks } = data;
+    const reason = assertReason(data.reason);
+
+    const weekNum = Number(week);
+    if (!Number.isInteger(weekNum) || weekNum < 1 || weekNum > 23) {
+        throw new HttpsError("invalid-argument", "week must be an integer between 1 and 23.");
+    }
+    if (!targetUid || typeof targetUid !== "string") {
+        throw new HttpsError("invalid-argument", "targetUid is required.");
+    }
+    if (!picks || typeof picks !== "object") {
+        throw new HttpsError("invalid-argument", "picks is required.");
+    }
+
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth.token.role as string | undefined);
+    const type = pool.type;
+    if (type !== "NFL_PICKEM" && type !== "NFL_SURVIVOR" && type !== "NFL_MARGIN") {
+        throw new HttpsError("failed-precondition", "Proxy picks are only supported for NFL pools.");
+    }
+
+    // Target must be a pool member (participant or existing entry).
+    const entryRef = poolRef.collection("entries").doc(targetUid);
+    const isParticipant = Array.isArray(pool.participantIds) && pool.participantIds.includes(targetUid);
+    const preEntrySnap = await entryRef.get();
+    if (!isParticipant && !preEntrySnap.exists) {
+        throw new HttpsError("failed-precondition", "Target user is not a member of this pool.");
+    }
+
+    const games = await loadWeekGames(db, pool, weekNum);
+    const now = Date.now();
+    const lockBufferMs = (pool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
+    const earliestGameTime = Math.min(...games.map((g) => g.startTime));
+
+    // Deadline override: if the commissioner extended this week, locks are
+    // measured against the override instead of kickoff - buffer.
+    const rawOverride = pool.settings?.weekLockOverrides?.[weekNum]
+        ?? pool.settings?.weekLockOverrides?.[String(weekNum)];
+    const override = typeof rawOverride === "number" ? rawOverride : undefined;
+
+    const weekLockAt = override ?? (earliestGameTime - lockBufferMs);
+    const weekLocked = now >= weekLockAt;
+    const gameLockAt = (g: NFLGame) => override ?? (g.startTime - lockBufferMs);
+
+    // Resolve display name for entry creation
+    const targetUserDoc = await db.collection("users").doc(targetUid).get();
+    const targetName = targetUserDoc.exists ? ((targetUserDoc.data() as User).name || "Participant") : "Participant";
+
+    await db.runTransaction(async (transaction) => {
+        const entrySnap = await transaction.get(entryRef);
+        const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+
+        if (type === "NFL_PICKEM") {
+            const settings = pool.settings || {};
+            const weeklyLockMode = settings.confidenceMode || settings.lockMode === "WEEKLY";
+
+            // Validate each pick: game must exist this week, team must be playing in it.
+            for (const [gameId, pickedTeam] of Object.entries(picks as Record<string, string>)) {
+                const game = games.find((g) => g.id === gameId);
+                if (!game) {
+                    throw new HttpsError("invalid-argument", `Game ${gameId} not found in week ${weekNum}.`);
+                }
+                if (pickedTeam !== game.homeTeam.abbreviation && pickedTeam !== game.awayTeam.abbreviation) {
+                    throw new HttpsError("invalid-argument", `${pickedTeam} is not playing in game ${gameId}.`);
+                }
+                if (weeklyLockMode) {
+                    if (weekLocked) {
+                        throw new HttpsError("failed-precondition", "WEEK_LOCKED: This week is locked. Extend the deadline first if an exception is warranted.");
+                    }
+                } else {
+                    const isGameLocked = now >= gameLockAt(game);
+                    const oldPick = existingEntry?.picks?.[gameId];
+                    if (isGameLocked && oldPick !== pickedTeam) {
+                        throw new HttpsError("failed-precondition", `GAME_LOCKED: Game ${gameId} is locked. Extend the deadline first if an exception is warranted.`);
+                    }
+                }
+            }
+
+            transaction.set(entryRef, {
+                id: targetUid,
+                poolId: pool.id,
+                ownerUid: targetUid,
+                userName: existingEntry?.userName || targetName,
+                picks: { ...(existingEntry?.picks || {}), ...picks },
+                totalScore: existingEntry?.totalScore ?? 0,
+                submittedAt: now,
+                paidStatus: existingEntry?.paidStatus ?? "UNPAID",
+                proxySubmittedBy: uid,
+                proxyReason: reason,
+            }, { merge: true });
+
+        } else {
+            // NFL_SURVIVOR / NFL_MARGIN: single team keyed by week
+            const teamPicked = (picks as Record<string, string>)[weekNum] ?? (picks as Record<string, string>)[String(weekNum)];
+            if (!teamPicked || typeof teamPicked !== "string") {
+                throw new HttpsError("invalid-argument", `Missing team selection for week ${weekNum} (picks must be keyed by week).`);
+            }
+
+            const entry: any = existingEntry || (type === "NFL_SURVIVOR"
+                ? {
+                    id: targetUid, poolId: pool.id, ownerUid: targetUid, userName: targetName,
+                    status: "ALIVE", strikesUsed: 0, rebuysUsed: 0, usedTeams: [], picks: {},
+                    exemptWeeks: [], submittedAt: now, paidStatus: "UNPAID",
+                } as SurvivorEntry
+                : {
+                    id: targetUid, poolId: pool.id, ownerUid: targetUid, userName: targetName,
+                    picks: {}, usedTeams: [], weeklyScores: {}, seasonTotal: 0,
+                    negativeBurden: 0, positiveWeeks: 0, bestWeek: 0, submittedAt: now, paidStatus: "UNPAID",
+                } as MarginEntry);
+
+            if (type === "NFL_SURVIVOR" && entry.status === "ELIMINATED") {
+                throw new HttpsError("failed-precondition", "ELIMINATED: Eliminated players cannot receive proxy picks.");
+            }
+
+            const oldPick = entry.picks?.[weekNum];
+            const usedTeams: string[] = entry.usedTeams || [];
+
+            // Reject teams already used this season (excluding this week's current pick).
+            if (teamPicked !== oldPick && usedTeams.includes(teamPicked)) {
+                throw new HttpsError("invalid-argument", `TEAM_ALREADY_USED: ${targetName} has already used the ${teamPicked} this season.`);
+            }
+
+            // Team must actually be playing this week.
+            const game = games.find((g) => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
+            if (!game) {
+                throw new HttpsError("invalid-argument", `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${weekNum}.`);
+            }
+
+            // Lock checks (respecting the override).
+            const isWeeklyLock = pool.settings?.lockMode === "WEEKLY";
+            if (isWeeklyLock && weekLocked) {
+                throw new HttpsError("failed-precondition", "WEEK_LOCKED: This week is locked. Extend the deadline first if an exception is warranted.");
+            }
+            const isGameLocked = now >= gameLockAt(game);
+            if (!isWeeklyLock && isGameLocked && oldPick !== teamPicked) {
+                throw new HttpsError("failed-precondition", `GAME_LOCKED: The game for ${teamPicked} has already locked. Extend the deadline first if an exception is warranted.`);
+            }
+
+            const oldUsed = usedTeams.filter((t: string) => t !== oldPick);
+            transaction.set(entryRef, {
+                ...entry,
+                picks: { ...(entry.picks || {}), [weekNum]: teamPicked },
+                usedTeams: [...new Set([...oldUsed, teamPicked])],
+                submittedAt: now,
+                proxySubmittedBy: uid,
+                proxyReason: reason,
+            }, { merge: true });
+        }
+    });
+
+    await writeAuditEvent({
+        poolId: pool.id,
+        type: "PROXY_PICK_SUBMITTED",
+        message: `Commissioner submitted Week ${weekNum} picks on behalf of ${targetName} (${targetUid}). Reason: ${reason}`,
+        severity: "WARNING",
+        actor: { uid, role: "ADMIN", label: "Commissioner" },
+        payload: { targetUid, week: weekNum, picks, reason },
+    });
+
+    return { success: true };
+});
+
+// ============ 3. CANCEL POOL ============
+// Kills a dead pool cleanly: status -> CANCELED, audit trail, member email
+// including who to contact about dues already paid.
+export const cancelPool = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+
+    const { poolId } = (request.data || {}) as any;
+    const reason = assertReason(request.data?.reason);
+
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth.token.role as string | undefined);
+
+    if (pool.status === "CANCELED") {
+        throw new HttpsError("failed-precondition", "This pool has already been canceled.");
+    }
+
+    const now = Date.now();
+    await poolRef.update({
+        status: "CANCELED",
+        cancelledAt: now,
+        cancelReason: reason,
+    });
+
+    await writeAuditEvent({
+        poolId: pool.id,
+        type: "POOL_CANCELED",
+        message: `Pool "${pool.name}" was canceled by the commissioner. Reason: ${reason}`,
+        severity: "CRITICAL",
+        actor: { uid, role: "ADMIN", label: "Commissioner" },
+        payload: { reason, previousStatus: pool.status ?? null },
+    });
+
+    // Email all members
+    const poolName = pool.name || "Your pool";
+    const managerName = pool.managerName || "the pool commissioner";
+    const subject = `${poolName} has been canceled by the commissioner`;
+    const body = `
+        <p>Hi,</p>
+        <p><strong>${escapeHtml(poolName)}</strong> has been canceled by the commissioner.</p>
+        <p><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+        <p>Contact ${escapeHtml(managerName)} about any dues already paid.</p>
+    `;
+    const html = renderEmailHtml("Pool Canceled", body);
+    const emails = await resolveMemberEmails(db, poolRef);
+    let emailed = 0;
+    for (const email of emails) {
+        await sendEmail(db, email, subject, html, { poolId: pool.id, reason: "pool_canceled" });
+        emailed++;
+    }
+
+    return { success: true, emailed };
+});

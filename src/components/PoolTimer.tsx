@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { now as serverNow, syncServerClock } from '../utils/serverClock';
+import { formatDeadline } from '../utils/formatTime';
 
 interface PoolTimerProps {
     targetDate?: string | number;
@@ -10,8 +12,7 @@ export const PoolTimer: React.FC<PoolTimerProps> = ({ targetDate, gameStatus, is
     const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(() => {
         if (!targetDate || gameStatus === 'in' || gameStatus === 'post') return null;
         const target = new Date(targetDate).getTime();
-        const now = Date.now();
-        const diff = target - now;
+        const diff = target - serverNow();
         if (diff <= 0) return { d: 0, h: 0, m: 0, s: 0 };
         return {
             d: Math.floor(diff / (1000 * 60 * 60 * 24)),
@@ -26,10 +27,10 @@ export const PoolTimer: React.FC<PoolTimerProps> = ({ targetDate, gameStatus, is
             return;
         }
 
+        void syncServerClock();
         const target = new Date(targetDate).getTime();
         const update = () => {
-            const now = Date.now();
-            const diff = target - now;
+            const diff = target - serverNow();
             if (diff <= 0) {
                 setTimeLeft({ d: 0, h: 0, m: 0, s: 0 });
                 return;
@@ -78,7 +79,9 @@ export const PoolTimer: React.FC<PoolTimerProps> = ({ targetDate, gameStatus, is
             <span>{timeLeft.h.toString().padStart(2, '0')}h </span>
             <span>{timeLeft.m.toString().padStart(2, '0')}m </span>
             <span>{timeLeft.s.toString().padStart(2, '0')}s</span>
-            <p className="text-[10px] text-slate-500 font-sans uppercase tracking-widest mt-1">Time Until Kickoff</p>
+            <p className="text-[10px] text-slate-500 font-sans uppercase tracking-widest mt-1">
+                Kickoff · {formatDeadline(new Date(targetDate).getTime())}
+            </p>
         </div>
     );
 };

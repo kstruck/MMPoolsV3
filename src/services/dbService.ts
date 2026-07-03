@@ -26,6 +26,13 @@ import { errorHandler, ErrorSeverity } from "./errorHandler";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 
+/** Heartbeat written by the scheduled ESPN score sync (functions/src/scoreUpdates.ts) */
+export interface ScoreSyncStatus {
+    lastSyncAt: number;
+    status: 'ok' | 'error';
+    detail?: string;
+}
+
 /** Global statistics tracked across all pools */
 export interface GlobalStats {
     totalPools: number;
@@ -60,6 +67,16 @@ export const dbService = {
         }, (err) => {
             logger.error("Global Stats Subscription Error:", err);
             if (onError) onError(err);
+        });
+    },
+
+    /** Subscribe to the server score-sync heartbeat (system/scoreSync, world-readable). */
+    subscribeToScoreSyncStatus: (callback: (status: ScoreSyncStatus | null) => void) => {
+        return onSnapshot(doc(db, 'system', 'scoreSync'), (snap) => {
+            callback(snap.exists() ? snap.data() as ScoreSyncStatus : null);
+        }, (error) => {
+            logger.error('[dbService] subscribeToScoreSyncStatus error:', error);
+            callback(null);
         });
     },
 
@@ -1016,7 +1033,7 @@ export const dbService = {
         }
     },
 
-    submitNFLPicks: async (data: { poolId: string; week: number; picks: Record<string, string>; confidence?: Record<string, number>; tiebreakerPrediction?: number }): Promise<void> => {
+    submitNFLPicks: async (data: { poolId: string; week: number; picks: Record<string, string>; confidence?: Record<string, number>; tiebreakerPrediction?: number; requestId?: string }): Promise<void> => {
         try {
             const submitNFLPicksFn = httpsCallable(functions, 'submitNFLPicks');
             await submitNFLPicksFn(data);
@@ -1051,6 +1068,66 @@ export const dbService = {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.HIGH,
                 context: { operation: 'scoreNFLWeek', poolId, week }
+            });
+            throw error;
+        }
+    },
+
+    /** Commissioner nudge: email specific members (or all entries when targetUids is omitted) a picks/payment reminder. */
+    sendManualReminder: async (poolId: string, targetUids: string[] | undefined, kind: 'PICKS' | 'PAYMENT'): Promise<{ sent: number; skipped: number }> => {
+        try {
+            const sendManualReminderFn = httpsCallable<{ poolId: string; targetUids?: string[]; kind: 'PICKS' | 'PAYMENT' }, { sent: number; skipped: number }>(functions, 'sendManualReminder');
+            const result = await sendManualReminderFn({ poolId, targetUids, kind });
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'sendManualReminder', poolId, kind }
+            });
+            throw error;
+        }
+    },
+
+    /** Commissioner exception: extend a week's pick deadline by extraMinutes (capped at 24h server-side). Emails all members. */
+    extendWeekDeadline: async (poolId: string, week: number, extraMinutes: number, reason: string): Promise<{ success: boolean; newLockTime: number; emailed: number }> => {
+        try {
+            const fn = httpsCallable<{ poolId: string; week: number; extraMinutes: number; reason: string }, { success: boolean; newLockTime: number; emailed: number }>(functions, 'extendWeekDeadline');
+            const result = await fn({ poolId, week, extraMinutes, reason });
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'extendWeekDeadline', poolId, week, extraMinutes }
+            });
+            throw error;
+        }
+    },
+
+    /** Commissioner exception: submit picks on behalf of a member. Picks shape matches submitNFLPicks (pick'em: gameId->team; survivor/margin: { [week]: team }). */
+    proxyPick: async (poolId: string, week: number, targetUid: string, picks: Record<string | number, string>, reason: string): Promise<{ success: boolean }> => {
+        try {
+            const fn = httpsCallable<{ poolId: string; week: number; targetUid: string; picks: Record<string | number, string>; reason: string }, { success: boolean }>(functions, 'proxyPick');
+            const result = await fn({ poolId, week, targetUid, picks, reason });
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'proxyPick', poolId, week, targetUid }
+            });
+            throw error;
+        }
+    },
+
+    /** Commissioner exception: cancel a pool (status -> CANCELED). Emails all members with the reason and dues contact. */
+    cancelPool: async (poolId: string, reason: string): Promise<{ success: boolean; emailed: number }> => {
+        try {
+            const fn = httpsCallable<{ poolId: string; reason: string }, { success: boolean; emailed: number }>(functions, 'cancelPool');
+            const result = await fn({ poolId, reason });
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'cancelPool', poolId }
             });
             throw error;
         }

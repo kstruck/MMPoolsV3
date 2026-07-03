@@ -3,6 +3,19 @@ import React, { useRef, useEffect, useState } from 'react';
 import type { BracketEntry, BracketPool, Tournament } from '../../types';
 import { Trophy, Medal, AlertCircle, ArrowUp, ArrowDown } from 'lucide-react';
 import { calculateEntryMaxScore, getEliminatedTeams } from '../../utils/bracketScoring';
+import { dbService, type ScoreSyncStatus } from '../../services/dbService';
+
+// Consider the sync stale if the heartbeat is older than 3 minutes (server writes every minute)
+const SYNC_STALE_MS = 3 * 60 * 1000;
+
+const formatRelativeTime = (ms: number): string => {
+    const seconds = Math.max(0, Math.floor(ms / 1000));
+    if (seconds < 60) return 'less than a minute';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours} hour${hours === 1 ? '' : 's'}`;
+};
 
 interface StandingsTableProps {
     entries: BracketEntry[];
@@ -99,6 +112,23 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
         prevRanksRef.current = newRanks;
     }, [entriesWithStats]); // Only run when sorted list changes
 
+    // Score sync freshness: subscribe to the heartbeat doc written by the server sync
+    const [syncStatus, setSyncStatus] = useState<ScoreSyncStatus | null>(null);
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        const unsub = dbService.subscribeToScoreSyncStatus(setSyncStatus);
+        return () => unsub();
+    }, []);
+
+    // Tick every 30s so the relative timestamp / staleness check stays current
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 30000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const syncDelayed = syncStatus !== null &&
+        (syncStatus.status === 'error' || now - syncStatus.lastSyncAt > SYNC_STALE_MS);
 
     if (entries.length === 0) {
         return (
@@ -122,6 +152,9 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
             )}
 
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                {/* Horizontal scroll on narrow phones (375px) instead of truncating */}
+                <div className="overflow-x-auto">
+                    <div className="min-w-[420px]">
                 {/* Header */}
                 <div className="grid grid-cols-12 gap-4 p-4 bg-slate-950 border-b border-slate-800 font-bold text-slate-400 text-sm uppercase tracking-wider">
                     <div className="col-span-2 md:col-span-1 text-center">Rank</div>
@@ -191,7 +224,23 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
                         );
                     })}
                 </div>
+                    </div>
+                </div>
             </div>
+
+            {/* Score sync freshness stamp */}
+            {syncStatus && (
+                syncDelayed ? (
+                    <div className="flex items-center gap-1.5 px-2 text-xs text-amber-400">
+                        <AlertCircle size={12} className="shrink-0" />
+                        <span>Score sync delayed — standings may lag</span>
+                    </div>
+                ) : (
+                    <div className="px-2 text-xs text-slate-500">
+                        Scores updated {formatRelativeTime(now - syncStatus.lastSyncAt)} ago
+                    </div>
+                )
+            )}
         </div>
     );
 };

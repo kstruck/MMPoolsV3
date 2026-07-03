@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { BarChart2, Lock, Eye } from 'lucide-react';
+import { now as serverNow } from '../../utils/serverClock';
 import type { Pool, NFLGame } from '../../types';
 
 interface PickDistributionProps {
@@ -23,7 +24,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   const isGameLocked = (game: NFLGame): boolean => {
     if (isWeekLocked) return true;
     const bufferMs = lockBufferMinutes * 60 * 1000;
-    return Date.now() >= (game.startTime - bufferMs);
+    return serverNow() >= (game.startTime - bufferMs);
   };
 
   // Compile pick distribution statistics

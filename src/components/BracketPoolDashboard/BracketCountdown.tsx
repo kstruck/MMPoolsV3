@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Lock, AlertTriangle } from 'lucide-react';
+import { now as serverNow, syncServerClock } from '../../utils/serverClock';
+import { formatDeadline } from '../../utils/formatTime';
 
 interface BracketCountdownProps {
     lockAt: number; // Unix timestamp in ms
 }
 
 export const BracketCountdown: React.FC<BracketCountdownProps> = ({ lockAt }) => {
-    const [now, setNow] = useState(() => Date.now());
+    const [now, setNow] = useState(() => serverNow());
 
     useEffect(() => {
-        const interval = setInterval(() => setNow(Date.now()), 1000);
+        void syncServerClock();
+        const interval = setInterval(() => setNow(serverNow()), 1000);
         return () => clearInterval(interval);
     }, []);
 
@@ -61,6 +64,9 @@ export const BracketCountdown: React.FC<BracketCountdownProps> = ({ lockAt }) =>
                 <TimeUnit value={minutes} label="m" color={numColor} />
                 <TimeUnit value={seconds} label="s" color={numColor} />
             </div>
+            <span className="hidden sm:inline text-[10px] font-bold text-slate-500">
+                {formatDeadline(lockAt)}
+            </span>
         </div>
     );
 };

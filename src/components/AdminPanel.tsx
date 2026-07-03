@@ -31,6 +31,7 @@ import Hammer from 'lucide-react/dist/esm/icons/hammer';
 
 import { fetchGameScore } from '../services/scoreService';
 import { AnnouncementManager } from './AnnouncementManager';
+import { useToast } from './ui/Toast';
 
 import { PropGradingDashboard } from './Props/PropGradingDashboard';
 import { PoolStatistics } from './PoolStatistics';
@@ -72,6 +73,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Updated Tab Order and Default
   const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats' | 'props' | 'grading'>('settings');
+
+  const toast = useToast();
 
   const [wizardStep, setWizardStep] = useState(1);
   const TOTAL_STEPS = 9;
@@ -295,13 +298,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     // Security: Validate file type to prevent SVG/JS injection via logo upload
     const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
     if (!ALLOWED_TYPES.includes(file.type)) {
-      alert('Invalid file type. Please upload a JPEG, PNG, WebP, or GIF image.');
+      toast.error('Invalid file type. Please upload a JPEG, PNG, WebP, or GIF image.');
       e.target.value = ''; // Reset the input so the same file can't be resubmitted
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) { // 2MB Limit
-      alert("Logo file is too large! Max size is 2MB.");
+      toast.error("Logo file is too large! Max size is 2MB.");
       return;
     }
 
@@ -413,7 +416,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const [isFixing, setIsFixing] = useState(false);
   const handleFixSync = async () => {
-    if (!window.confirm("This will reset the score events and force a full re-sync from ESPN. Use this ONLY if scores are stuck or missing. Continue?")) return;
+    const ok = await toast.confirm({ title: 'Reset & Re-Sync Scores?', message: 'This will reset the score events and force a full re-sync from ESPN. Use this ONLY if scores are stuck or missing.', confirmLabel: 'Re-Sync', danger: true });
+    if (!ok) return;
     setIsFixing(true);
     setFetchStatus({ type: 'neutral', msg: 'Repairing...' });
     try {

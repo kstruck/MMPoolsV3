@@ -35,6 +35,7 @@ export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring
 // --- NFL POOLS FUNCTIONS ---
 export { syncNFLScoresJob, importNFLSchedule } from "./nflSchedule";
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
+export { sendManualReminder } from "./manualReminders";
 
 // --- BILLING & MONETIZATION ---
 export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolParticipantChange } from "./billing";
@@ -47,4 +48,17 @@ export { joinPreview } from "./joinPreview";
 
 // --- REFERRAL SYSTEM ---
 export { creditReferralOnPayment, generateReferralToken, resolveReferralToken } from "./referral";
+
+// --- SERVER TIME (client clock-drift correction for countdown/lock UI) ---
+export { getServerTime } from "./serverTime";
+
+// --- EMAIL PREFERENCES (unsubscribe compliance + category preferences) ---
+export { emailUnsubscribe } from "./emailUnsubscribeHttp";
+export { manageEmailPrefs } from "./emailPrefsPage";
+
+// --- COMMISSIONER EXCEPTION TOOLS (audited mid-season corrections) ---
+export { extendWeekDeadline, proxyPick, cancelPool } from "./poolExceptions";
+
+// --- POOL INVITES (bulk email invites) ---
+export { sendPoolInvites } from "./invites";
 

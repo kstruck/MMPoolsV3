@@ -8,6 +8,8 @@ import { Footer } from './components/Footer';
 import { LandingPage } from './components/LandingPage';
 import { RouteSEO } from './components/RouteSEO';
 import { AuthModal } from './components/modals';
+import { OfflineBanner } from './components/ui/OfflineBanner';
+import { useToast } from './components/ui/Toast';
 
 // Lazy-loaded route components (loaded on demand)
 const GamedaySquaresLanding = React.lazy(() => import('./components/GamedaySquaresLanding').then(m => ({ default: m.GamedaySquaresLanding })));
@@ -117,6 +119,7 @@ const LegacyHashHandler = () => {
 
 const App: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   // Global State
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -199,6 +202,7 @@ const App: React.FC = () => {
     <>
       <LegacyHashHandler />
       <RouteSEO />
+      <OfflineBanner />
       <Suspense fallback={<RouteLoader />}>
         <Routes>
           {/* Landing / Home */}
@@ -427,7 +431,24 @@ const App: React.FC = () => {
         </Routes>
       </Suspense>
 
-      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} initialMode={authMode} />
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        initialMode={authMode}
+        onAuthenticated={(result) => {
+          const path = window.location.pathname;
+          if (result?.isNewUser) {
+            toast.success('Account created! Check your email for a verification link.');
+            // Join/pool pages handle their own post-auth continuation (auto-join) —
+            // don't yank a fresh signup away from the pool they came to join
+            if (!path.startsWith('/join') && !path.startsWith('/pool')) {
+              navigate('/participant');
+            }
+          } else {
+            toast.success('Welcome back!');
+          }
+        }}
+      />
     </>
   );
 };

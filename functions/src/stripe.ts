@@ -1,18 +1,21 @@
-// TODO: Run 'npm install stripe' in functions/ before deploying
-// TODO: Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in Firebase environment config
+// Set the secrets before deploy:
+//   firebase functions:secrets:set STRIPE_SECRET_KEY
+//   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
 
 import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
-import { defineString } from "firebase-functions/params";
+import { defineSecret } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
 
 import Stripe from "stripe";
 
 const db = admin.firestore();
 
-// --- Stripe Config Params ---
-const stripeSecretKey = defineString("STRIPE_SECRET_KEY");
-const stripeWebhookSecret = defineString("STRIPE_WEBHOOK_SECRET");
+// --- Stripe Config Secrets (Secret Manager, not plain config) ---
+// defineSecret keeps the value out of the deployed config; it must be bound to
+// each function that reads it via `secrets: [...]` (below) or .value() throws.
+const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
+const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 
 // Stripe will be initialized at function invocation time
 let stripeInstance: any = null;
@@ -39,7 +42,7 @@ function getStripe() {
 //    Creates a Stripe Checkout Session for one-time pool payment or packages/bundles
 // =============================================================================
 
-export const createCheckoutSession = functions.https.onCall({ cors: true }, async (request) => {
+export const createCheckoutSession = functions.https.onCall({ cors: true, secrets: [stripeSecretKey] }, async (request) => {
     // --- Auth Check ---
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "You must be signed in to create a checkout session.");
@@ -443,7 +446,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true }, asyn
 //    Receives and processes Stripe webhook events
 // =============================================================================
 
-export const handleStripeWebhook = functions.https.onRequest(async (req, res) => {
+export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeSecretKey, stripeWebhookSecret] }, async (req, res) => {
     if (req.method !== "POST") {
         res.status(405).send("Method Not Allowed");
         return;

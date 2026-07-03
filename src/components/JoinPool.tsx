@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn, Mail, Phone } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { logger } from '../utils/logger';
+import { useToast } from './ui/Toast';
+import { getUserMessage } from '../utils/errorMessages';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User, Pool } from '../types';
+import { PayoutsPanel } from './PayoutsPanel';
 
 interface JoinPoolProps {
   user: User | null;
@@ -21,7 +24,11 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
   const [pool, setPool] = useState<Pool | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
+  const toast = useToast();
+  const autoJoinFiredRef = useRef(false);
   const castPool = pool as any;
+
+  const pendingJoinKey = `pendingJoin:${poolId}`;
 
   // Subscribe to pool configurations
   useEffect(() => {
@@ -39,8 +46,10 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
     return () => unsub();
   }, [poolId]);
 
-  const handleJoin = async () => {
+  const handleJoin = useCallback(async () => {
     if (!user) {
+      // Remember the intent so signing in/up completes the join automatically
+      try { sessionStorage.setItem(pendingJoinKey, '1'); } catch { /* storage unavailable */ }
       onOpenAuth();
       return;
     }
@@ -51,16 +60,30 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
       // Execute transaction via our secure backend
       await dbService.joinNFLPool(poolId);
       logger.log(`Successfully joined pool ${poolId}`);
+      toast.success(`You're in! Welcome to ${pool?.name ?? 'the pool'}.`);
       navigate(`/pool/${poolId}`);
     } catch (err: any) {
       logger.error('Failed to join pool:', err);
-      alert(`Failed to join pool: ${err.message || 'Unknown error'}`);
+      toast.error(getUserMessage(err, 'Failed to join the pool. Please try again or contact the commissioner.'));
     } finally {
       setIsJoining(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, poolId, pool?.name, navigate, onOpenAuth]);
 
   const isAlreadyMember = user && pool?.participantIds?.includes(user.id);
+
+  // Invite-link intent survives the auth modal: once the user is signed in,
+  // finish the join they already asked for instead of making them click again
+  useEffect(() => {
+    if (!user || !pool || isAlreadyMember || autoJoinFiredRef.current) return;
+    let pending = false;
+    try { pending = sessionStorage.getItem(pendingJoinKey) === '1'; } catch { /* storage unavailable */ }
+    if (!pending) return;
+    autoJoinFiredRef.current = true;
+    try { sessionStorage.removeItem(pendingJoinKey); } catch { /* storage unavailable */ }
+    void handleJoin();
+  }, [user, pool, isAlreadyMember, pendingJoinKey, handleJoin]);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col">
@@ -149,6 +172,16 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                 </span>
               </div>
             </div>
+
+            {/* Prize summary — what winning actually pays, before you commit */}
+            {((castPool?.settings?.entryFee ?? 0) > 0 ||
+              (castPool?.settings?.payouts?.places?.length ?? 0) > 0 ||
+              (pool.type === 'SQUARES' && (castPool?.costPerSquare ?? 0) > 0)) && (
+              <div className="mb-8 bg-slate-900/50 p-4 border border-slate-800 rounded-2xl">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Prizes</h4>
+                <PayoutsPanel pool={pool} compact />
+              </div>
+            )}
 
             {/* Rules preview list */}
             <div className="space-y-4 mb-8 border-b border-slate-900 pb-8">
@@ -248,7 +281,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
               </button>
             ) : !user ? (
               <button
-                onClick={onOpenAuth}
+                onClick={handleJoin}
                 className="w-full bg-slate-800 hover:bg-slate-700 text-white font-extrabold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 shadow-xl border border-slate-700 transition-all hover:scale-[1.02]"
               >
                 <LogIn size={18} /> Sign In to Join Pool

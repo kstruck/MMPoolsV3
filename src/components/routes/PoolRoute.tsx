@@ -24,6 +24,7 @@ import { getTeamLogo } from '../../constants';
 import { calculateQuarterlyPayouts } from '../../utils/payouts';
 import { isSuperAdmin, isPoolManager } from '../../utils/auth';
 import { logger } from '../../utils/logger';
+import { useToast } from '../ui/Toast';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner } from '../../types';
 
 interface PoolRouteProps {
@@ -45,6 +46,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 }) => {
     const navigate = useNavigate();
     const { id } = useParams();
+    const toast = useToast();
 
     // Find pool logic
     // Find pool logic
@@ -183,7 +185,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                             const identifier = pool.slug || pool.id;
                             const url = `${window.location.origin}/pool/${identifier}`;
                             navigator.clipboard.writeText(url);
-                            alert("Link copied!");
+                            toast.success("Link copied to clipboard!");
                         }}
                     />
                 </div>

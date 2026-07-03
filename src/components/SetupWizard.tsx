@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { logger } from '../utils/logger';
+import { useToast } from './ui/Toast';
 
 import type { GameState, PoolTheme } from "../types";
 import type { User } from '../types';
@@ -29,6 +30,7 @@ interface SetupWizardProps {
 
 export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBack }) => {
     const navigate = useNavigate();
+    const toast = useToast();
     const [step, setStep] = useState(1);
     const TOTAL_STEPS = 9;
     logger.log('[SetupWizard] Initialized - Version 1.1 (9 Steps, New Defaults)');
@@ -226,7 +228,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
         const file = e.target.files?.[0];
         if (!file) return;
         if (file.size > 2 * 1024 * 1024) {
-            alert("Logo file is too large! Max size is 2MB.");
+            toast.error("Logo file is too large! Max size is 2MB.");
             return;
         }
         const reader = new FileReader();
@@ -269,7 +271,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
             onComplete();
         } catch (error) {
             logger.error("Failed to create pool", error);
-            alert("Failed to create pool. Please try again.");
+            toast.error("Failed to create pool. Please try again.");
             setIsCreating(false);
         }
     };

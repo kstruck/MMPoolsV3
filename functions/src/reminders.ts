@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry, BracketPool, User, BracketEntry } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
+import { isOptedOut, buildUnsubUrl, getPrefs, EmailCategory } from "./emailPrefs";
 import { sendCourierSMS } from "./notifications/smsService";
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 
@@ -14,6 +15,8 @@ import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 
 /**
  * Sends an email by writing to the /mail collection (triggered by EmailJS or other service).
+ * Honors unsubscribe opt-outs and injects the per-recipient unsubscribe link
+ * (templates carry a {{UNSUB_URL}} placeholder in the footer).
  */
 export async function sendEmail(db: admin.firestore.Firestore, to: string, subject: string, html: string, context?: Record<string, unknown>) {
     if (!to || !to.includes('@')) {
@@ -22,11 +25,37 @@ export async function sendEmail(db: admin.firestore.Firestore, to: string, subje
     }
 
     try {
+        // Opt-out check + unsubscribe link. Fail-open: if this infra is ever
+        // unavailable, deadline/payment emails still go out — a broken
+        // unsubscribe store must never silently suppress critical mail.
+        let unsubUrl: string | null = null;
+        try {
+            // Transactional mail (password resets, payment receipts) is exempt from
+            // marketing opt-out — flag via context.transactional
+            if (!context?.transactional && await isOptedOut(db, to)) {
+                console.log(`Skipping email to ${to}: recipient has unsubscribed`);
+                return;
+            }
+            // Per-category opt-out (senders tag mail via context.category).
+            const category = context?.category as EmailCategory | undefined;
+            if (!context?.transactional && category) {
+                const prefs = await getPrefs(db, to);
+                if (prefs.categories[category] === false) {
+                    console.log(`Skipping email to ${to}: opted out of '${category}' emails`);
+                    return;
+                }
+            }
+            unsubUrl = await buildUnsubUrl(db, to);
+        } catch (prefError) {
+            console.warn("Unsubscribe infra unavailable — sending without opt-out check:", prefError);
+        }
+        const finalHtml = unsubUrl ? html.replace(/\{\{UNSUB_URL\}\}/g, unsubUrl) : html;
+
         await db.collection("mail").add({
             to,
             message: {
                 subject,
-                html,
+                html: finalHtml,
             },
             ...context, // e.g. poolId, reason
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -186,10 +215,7 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
             const html = renderEmailHtml('Payment Reminder', body, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
 
             // Queue Email
-            await db.collection("mail").add({
-                to: recipient.email,
-                message: { subject, html }
-            });
+            await sendEmail(db, recipient.email, subject, html, { category: 'reminders' });
 
             // Send SMS if opted in and pool enables SMS
             if (pool.reminders?.smsEnabled && recipient.smsOptIn && recipient.phone) {
@@ -237,7 +263,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
             <p>You have ${unpaidSquares.length} squares that are reserved but unpaid.</p>
         `;
         const html = renderEmailHtml(`Action Needed: Unpaid Squares`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
-        await sendEmail(db, pool.contactEmail, `Action Needed: ${unpaidSquares.length} Unpaid Squares`, html);
+        await sendEmail(db, pool.contactEmail, `Action Needed: ${unpaidSquares.length} Unpaid Squares`, html, { category: 'reminders' });
         await logAudit(db, pool.id, `Sent payment reminder to host (${unpaidSquares.length} unpaid)`, 'NOTIFICATION_SENT', { dedupeKey: hostKey });
     }
 
@@ -272,7 +298,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
                     <p>Please pay the host: ${escapeHtml(pool.paymentInstructions || 'See pool details')}</p>
                 `;
                     const html = renderEmailHtml(`Payment Reminder`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
-                    await sendEmail(db, email, `Reminder: ${squares.length} Squares Pending Payment`, html);
+                    await sendEmail(db, email, `Reminder: ${squares.length} Squares Pending Payment`, html, { category: 'reminders' });
                 }
             }
         }
@@ -360,7 +386,7 @@ export async function notifyWaitlist(db: admin.firestore.Firestore, pool: GameSt
     const html = renderEmailHtml(`Squares Available!`, emailBody, `${BASE_URL}/pool/${pool.id}`, 'Claim Squares Now');
 
     for (const entry of pool.waitlist) {
-        await sendEmail(db, entry.email, emailSubject, html);
+        await sendEmail(db, entry.email, emailSubject, html, { category: 'announcements' });
     }
 
     await logAudit(db, pool.id, `Notified ${pool.waitlist.length} waitlisted users about ${releasedCount} released squares`, 'NOTIFICATION_SENT', {
@@ -421,7 +447,7 @@ async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState
                 if (contactEmail) {
                     const hostBody = `<p>Your pool <strong>${escapeHtml(pool.name)}</strong> locks soon.</p>`;
                     const hostHtml = renderEmailHtml(`Pool Locking Soon`, hostBody, `${BASE_URL}/pool/${pool.id}`, 'Manage Pool');
-                    await sendEmail(db, contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml);
+                    await sendEmail(db, contactEmail, `Pool Locking in ${Math.round(minutesUntilLock / 60)} Hours`, hostHtml, { category: 'reminders' });
                 }
 
                 if (pool.type === 'SQUARES' || !pool.type) {
@@ -429,7 +455,7 @@ async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState
                     for (const email of uniqueEmails) {
                         const userBody = `<p>The pool locks in approximately ${Math.round(minutesUntilLock / 60)} hours.</p>`;
                         const userHtml = renderEmailHtml(`Grid Locking Soon: ${pool.name}`, userBody, `${BASE_URL}/pool/${pool.id}`, 'Check Your Squares');
-                        await sendEmail(db, email, `Grid Locking Soon: ${pool.name}`, userHtml);
+                        await sendEmail(db, email, `Grid Locking Soon: ${pool.name}`, userHtml, { category: 'reminders' });
                     }
                 }
 
@@ -492,7 +518,7 @@ export const onWinnerComputed = functions.firestore.onDocumentCreated("pools/{po
 
         // Batch send (naive loop for MVP)
         for (const email of uniqueEmails) {
-            await sendEmail(db, email, subject, html);
+            await sendEmail(db, email, subject, html, { category: 'results' });
         }
 
         await logAudit(db, pool.id, `Sent winner announcement for ${period}`, 'NOTIFICATION_SENT', { dedupeKey: key });
@@ -632,7 +658,7 @@ async function checkBracketReminders(db: admin.firestore.Firestore, pool: Bracke
 
             if (userData.email) {
                 const html = renderEmailHtml(emailSubject, emailBody, `${BASE_URL}/pool/${pool.id}`, 'View Pool');
-                await sendEmail(db, userData.email, emailSubject, html);
+                await sendEmail(db, userData.email, emailSubject, html, { category: 'reminders' });
                 emailsSentCount++;
             }
 

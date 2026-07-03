@@ -75,8 +75,11 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({ value, onChange,
     };
 
     const displayValue = value
-        ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+        ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
         : null;
+
+    // Members may be in other timezones — make the zone this picker operates in explicit
+    const zoneLabel = new Date().toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
 
     return (
         <div ref={ref} className="relative">
@@ -135,7 +138,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({ value, onChange,
 
                     {/* Time Picker */}
                     <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-2">
-                        <Clock size={14} className="text-slate-500" />
+                        <Clock size={14} className="text-slate-500" aria-hidden="true" />
                         <select
                             value={hour}
                             onChange={e => setHour(Number(e.target.value))}
@@ -165,7 +168,11 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({ value, onChange,
                                 className={`px-2 py-1.5 text-xs font-bold ${amPm === 'PM' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
                             >PM</button>
                         </div>
+                        <span className="text-[11px] font-bold text-slate-500 ml-auto">{zoneLabel}</span>
                     </div>
+                    <p className="text-[11px] text-slate-500 mt-2">
+                        Times are in your timezone ({zoneLabel}). Members see this deadline converted to theirs.
+                    </p>
 
                     {/* Actions */}
                     <div className="mt-3 flex gap-2">

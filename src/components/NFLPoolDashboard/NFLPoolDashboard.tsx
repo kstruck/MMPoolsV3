@@ -14,6 +14,10 @@ import { NFLManagerView } from './NFLManagerView';
 import { PickDistribution } from './PickDistribution';
 import { NFLUserBentoDashboard } from './NFLUserBentoDashboard';
 import { AICommissioner } from '../AICommissioner';
+import { useToast } from '../ui/Toast';
+import { now as serverNow } from '../../utils/serverClock';
+import { WeekChecklist } from './WeekChecklist';
+import { PaymentsPanel } from '../PaymentsPanel';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -31,7 +35,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   onOpenAuth
 }) => {
   const castPool = pool as any;
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'picks' | 'standings' | 'recaps' | 'rules' | 'manager'>('dashboard');
+  const toast = useToast();
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'picks' | 'standings' | 'recaps' | 'rules' | 'payments' | 'manager'>('dashboard');
 
   // Estimate current NFL Week based on date (standard season calculations)
   const getEstimatedNFLWeek = (): number => {
@@ -107,12 +112,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return entries.find(e => e.ownerUid === user.id) || null;
   }, [entries, user]);
 
-  // Check if the current selected week is locked (earliest game kicked off)
+  // Check if the current selected week is locked (earliest game kicked off).
+  // Server-corrected clock — device time can drift and lie about the deadline.
   const isWeekLocked = useMemo(() => {
     if (weeklyGames.length === 0) return false;
     const bufferMs = (castPool.settings?.lockBufferMinutes ?? 5) * 60 * 1000;
     const earliestKickoff = Math.min(...weeklyGames.map(g => g.startTime));
-    return Date.now() >= (earliestKickoff - bufferMs);
+    return serverNow() >= (earliestKickoff - bufferMs);
   }, [weeklyGames, castPool.settings?.lockBufferMinutes]);
 
   // Time remaining to earliest game this week
@@ -125,7 +131,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const handleShare = () => {
     const url = `${window.location.origin}/join/${pool.id}`;
     navigator.clipboard.writeText(url);
-    alert('Invite link copied to clipboard!');
+    toast.success('Invite link copied to clipboard!');
   };
 
   const branding = castPool.branding || {};
@@ -220,6 +226,20 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           </div>
         </div>
 
+        {/* Week-by-week pending/done strip + "picks due" call-to-action */}
+        {!isLoading && (
+          <div className="mt-6">
+            <WeekChecklist
+              pool={pool}
+              entry={myEntry}
+              games={games}
+              selectedWeek={selectedWeek}
+              onSelectWeek={setSelectedWeek}
+              onPickNow={(week) => { setSelectedWeek(week); setActiveTab('picks'); }}
+            />
+          </div>
+        )}
+
         {/* Global tab routing headers */}
         <div className="flex border-b border-slate-800/80 mt-8 mb-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
           <button
@@ -277,6 +297,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           >
             Rules & Rulesets
           </button>
+          {user && (
+            <button
+              onClick={() => setActiveTab('payments')}
+              className={`py-3 px-6 text-xs font-extrabold uppercase tracking-wider transition-all border-b-2 ${
+                activeTab === 'payments'
+                  ? 'text-white border-blue-500 font-black'
+                  : 'text-slate-500 hover:text-slate-400 border-transparent'
+              }`}
+              style={activeTab === 'payments' ? { borderBottomColor: accentHex } : {}}
+            >
+              Payments
+            </button>
+          )}
         </div>
 
         {/* Tab View Routers */}
@@ -343,6 +376,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             games={weeklyGames}
                             entry={myEntry}
                             isWeekLocked={isWeekLocked}
+                            onGoToWeek={setSelectedWeek}
                           />
                         )}
 
@@ -498,6 +532,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               {/* TAB 4: RULES */}
               {activeTab === 'rules' && (
                 <NFLPoolRules pool={pool} />
+              )}
+
+              {/* TAB 5: PAYMENTS — member money view (status, pot, ledger) */}
+              {activeTab === 'payments' && user && (
+                <PaymentsPanel pool={pool} user={user} entries={entries} />
               )}
 
               {/* TAB 5: COMMISSIONER */}

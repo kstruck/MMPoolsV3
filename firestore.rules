@@ -92,6 +92,14 @@ service cloud.firestore {
         allow write: if false; // Only via Cloud Functions
       }
 
+      // PAYMENT LEDGER (Subcollection) — append-only money audit trail.
+      // Members of the pool can read it (shared record prevents "I paid you"
+      // disputes); ALL writes go through Cloud Functions.
+      match /payments/{paymentId} {
+        allow read: if isPoolParticipant();
+        allow write: if false; // Only via Cloud Functions
+      }
+
       // PARTICIPANTS INDEX (Subcollection)
       match /participants/{participantId} {
         allow read: if request.auth != null && (
@@ -238,9 +246,17 @@ service cloud.firestore {
     }
 
     // GLOBAL CONFIG
+    // config/internal holds server-only secrets (email unsubscribe HMAC key) —
+    // it must never be client-readable. Cloud Functions use the Admin SDK,
+    // which bypasses these rules.
     match /config/{configId} {
-      allow read: if true;
-      allow write: if isSuperAdmin();
+      allow read: if configId != 'internal';
+      allow write: if isSuperAdmin() && configId != 'internal';
+    }
+
+    // EMAIL OPT-OUTS — written only by the emailUnsubscribe function (Admin SDK)
+    match /email_optouts/{docId} {
+      allow read, write: if false;
     }
 
     // SYSTEM DOCUMENTS

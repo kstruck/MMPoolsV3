@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 
@@ -32,5 +32,9 @@ if (recaptchaSiteKey) {
 }
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Offline persistence: cached reads + queued writes survive spotty connections
+// (users pick on phones in stadiums/bars — the network there is the worst case)
+export const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 export const functions = getFunctions(app);

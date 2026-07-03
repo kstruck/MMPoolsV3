@@ -1,0 +1,23 @@
+{
+  "name": "March Melee Pools",
+  "short_name": "MMPools",
+  "description": "Create and host free NFL pools, Super Bowl squares, and March Madness brackets online.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0A192F",
+  "background_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
