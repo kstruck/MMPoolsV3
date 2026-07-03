@@ -10,6 +10,7 @@ import {
     freeBilling,
     writePoolCreationSideEffects,
 } from './lib/poolCreation';
+import { buildPoolSettingsUpdate } from './lib/poolUpdate';
 
 // Helper to determine if user can manage pool
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
@@ -165,6 +166,64 @@ export const createPool = onCall(async (request) => {
         // Wrap unknown errors
         throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
     }
+});
+
+// ============ UPDATE POOL SETTINGS ============
+// Validated server-side edit path for pool settings. Replaces the rules-gated
+// client dbService.updatePool for the wizard edit flow (Phase B shell edit
+// mode). Enforces ownership + the per-type editability matrix by lifecycle
+// phase, and reconciles payment handles. Other direct-updatePool consumers
+// (dashboards, SuperAdmin, simulators) keep their current path for now.
+export const updatePoolSettings = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in.');
+    }
+
+    const uid = request.auth.uid;
+    const { poolId, updates } = request.data || {};
+    if (!poolId || typeof poolId !== 'string') {
+        throw new HttpsError('invalid-argument', 'poolId is required.');
+    }
+    if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+        throw new HttpsError('invalid-argument', 'updates object is required.');
+    }
+
+    const db = admin.firestore();
+    const poolRef = db.collection('pools').doc(poolId);
+    const snap = await poolRef.get();
+    if (!snap.exists) {
+        throw new HttpsError('not-found', 'Pool not found.');
+    }
+
+    const pool = snap.data();
+    const claimRole = request.auth.token.role as string | undefined;
+    assertNotBanned(claimRole, undefined);
+    assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
+
+    // Pure gate: validates each key against the editability matrix for the
+    // pool's lifecycle phase; throws failed-precondition on any disallowed key.
+    const { set, clearLegacy } = buildPoolSettingsUpdate(pool, updates as Record<string, unknown>);
+
+    const patch: Record<string, unknown> = {
+        ...set,
+        updatedAt: admin.firestore.Timestamp.now(),
+    };
+    for (const key of clearLegacy) {
+        patch[key] = admin.firestore.FieldValue.delete();
+    }
+
+    await poolRef.update(patch);
+
+    await writeAuditEvent({
+        poolId,
+        type: 'POOL_STATUS_CHANGED',
+        message: `Pool settings updated by ${uid}`,
+        severity: 'INFO',
+        actor: { uid, role: 'ADMIN', label: 'Host' },
+        payload: { keys: Object.keys(set) },
+    });
+
+    return { success: true };
 });
 
 // ============ RECALCULATE POOL WINNERS ============
