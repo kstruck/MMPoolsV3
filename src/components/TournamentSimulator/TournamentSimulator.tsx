@@ -18,6 +18,7 @@ import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { Header } from '../Header';
 import { Footer } from '../Footer';
 import { useToast } from '../ui/Toast';
+import { Button } from '../ui';
 import { calculateScore } from '../BracketPoolDashboard/bracketScoring';
 import {
     generateTournament2025,
@@ -37,7 +38,7 @@ import type { Tournament, BracketEntry, BracketPool, User } from '../../types';
 import {
     Play, RotateCcw, Trophy, Users, ChevronRight, Check,
     Zap, Crown, ArrowUp, ArrowDown, Minus, Loader, AlertTriangle,
-    Shuffle, Trash2, X
+    Shuffle, Trash2, X, Download
 } from 'lucide-react';
 
 // ─── TYPES ──────────────────────────────────────────────────────
@@ -582,23 +583,23 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
     // ─── RENDER ─────────────────────────────────────────────────
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <div className="min-h-screen bg-navy-950 text-[#EDF1F8] flex flex-col">
             <Header user={user || null} isManager={true} onOpenAuth={() => { }} onLogout={() => { }} />
             <div className="flex-1">
                 {/* Header */}
-                <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-20">
+                <header className="border-b border-[rgba(230,206,150,0.16)] bg-navy-900/70 backdrop-blur-sm sticky top-0 z-20">
                     <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <Trophy className="w-6 h-6 text-amber-400" />
-                            <h1 className="text-xl font-bold tracking-tight">Tournament Simulator</h1>
-                            <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
+                            <Trophy className="w-6 h-6 text-gold-400" />
+                            <h1 className="text-xl font-display font-bold uppercase tracking-[0.03em]">Tournament Simulator</h1>
+                            <span className="text-xs bg-gold-500/15 text-gold-300 px-2 py-0.5 rounded-full font-display font-bold uppercase tracking-[0.06em]">
                                 2025 NCAA Men's
                             </span>
                         </div>
                         {phase !== 'SETUP' && (
                             <button
                                 onClick={handleReset}
-                                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+                                className="flex items-center gap-1.5 text-xs text-[#9FB0CC] hover:text-white transition-colors duration-150"
                             >
                                 <RotateCcw className="w-3.5 h-3.5" />
                                 Reset
@@ -618,24 +619,24 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                                 return (
                                     <div key={p} className="flex items-center flex-1">
                                         <div className={`
-                                        flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium flex-1 transition-all
-                                        ${isCurrent ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : ''}
-                                        ${isComplete ? 'bg-emerald-500/10 text-emerald-400' : ''}
-                                        ${!isCurrent && !isComplete ? 'text-slate-600' : ''}
+                                        flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-display font-bold uppercase tracking-[0.06em] flex-1 transition-all duration-150
+                                        ${isCurrent ? 'bg-gold-500/15 text-gold-300 border border-gold-500/30' : ''}
+                                        ${isComplete ? 'bg-[#0F7B4A]/15 text-[#3CB371]' : ''}
+                                        ${!isCurrent && !isComplete ? 'text-[#5E7096]' : ''}
                                     `}>
                                             {isComplete ? (
                                                 <Check className="w-3.5 h-3.5" />
                                             ) : (
-                                                <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px]">
+                                                <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px] num">
                                                     {i + 1}
                                                 </span>
                                             )}
                                             {PHASE_LABELS[p]}
                                             {p === 'SIMULATION' && currentRound > 0 && isCurrent && (
-                                                <span className="text-[10px] opacity-70">R{currentRound}/6</span>
+                                                <span className="text-[10px] opacity-70 num">R{currentRound}/6</span>
                                             )}
                                         </div>
-                                        {i < 3 && <ChevronRight className="w-3 h-3 text-slate-700 mx-1 flex-shrink-0" />}
+                                        {i < 3 && <ChevronRight className="w-3 h-3 text-[#5E7096] mx-1 flex-shrink-0" />}
                                     </div>
                                 );
                             })}
@@ -646,7 +647,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                 {/* Error Banner */}
                 {error && (
                     <div className="max-w-7xl mx-auto px-4 mt-4">
-                        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-center gap-2 text-red-300 text-sm">
+                        <div className="bg-brandred-600/15 border border-brandred-600/40 rounded-lg p-3 flex items-center gap-2 text-brandred-500 text-sm font-body">
                             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                             {error}
                         </div>
@@ -726,25 +727,25 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                 {/* Entry View Modal */}
                 {viewingEntry && tournament && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-7xl max-h-[95vh] flex flex-col shadow-2xl">
-                            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                        <div className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl w-full max-w-7xl max-h-[95vh] flex flex-col shadow-panel">
+                            <div className="flex items-center justify-between p-4 border-b border-[rgba(230,206,150,0.16)]">
                                 <div>
-                                    <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                                    <h3 className="font-display font-bold uppercase tracking-[0.03em] text-lg text-white flex items-center gap-2">
                                         {viewingEntry.name}
-                                        <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
-                                            Score: {viewingEntry.score}
+                                        <span className="text-xs bg-gold-500/15 text-gold-300 px-2 py-0.5 rounded-full font-display font-bold uppercase tracking-[0.06em]">
+                                            Score: <span className="num">{viewingEntry.score}</span>
                                         </span>
                                     </h3>
-                                    <p className="text-xs text-slate-400">Tiebreaker: {viewingEntry.tieBreakerPrediction}</p>
+                                    <p className="text-xs text-[#9FB0CC] font-body">Tiebreaker: <span className="num">{viewingEntry.tieBreakerPrediction}</span></p>
                                 </div>
                                 <button
                                     onClick={() => setViewingEntry(null)}
-                                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                                    className="p-2 hover:bg-navy-800 rounded-lg text-[#9FB0CC] hover:text-white transition-colors duration-150"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <div className="flex-1 overflow-auto p-4 bg-slate-950/50">
+                            <div className="flex-1 overflow-auto p-4 bg-navy-950/50">
                                 {/* We re-use BracketBuilder in read-only mode */}
                                 <BracketBuilder
                                     tournament={tournament}
@@ -777,44 +778,44 @@ const SetupPhase: React.FC<{
     <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-8 max-w-2xl">
             <div className="space-y-3">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/20">
-                    <Trophy className="w-10 h-10 text-white" />
+                <div className="w-20 h-20 rounded-2xl bg-gold-foil flex items-center justify-center mx-auto shadow-panel">
+                    <Trophy className="w-10 h-10 text-navy-950" />
                 </div>
-                <h2 className="text-3xl font-bold tracking-tight">Tournament Simulator</h2>
-                <p className="text-slate-400 text-sm leading-relaxed">
+                <h2 className="text-3xl font-display font-extrabold uppercase tracking-[0.02em]">Tournament Simulator</h2>
+                <p className="text-[#9FB0CC] text-sm leading-relaxed font-body">
                     Experience a full NCAA bracket pool tournament lifecycle using real 2025 data.
                     Generate 50+ opponents, fill your bracket, and watch the leaderboard unfold round by round.
                 </p>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 space-y-4">
-                <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">What happens:</h3>
-                <ul className="text-sm text-slate-400 space-y-2 text-left">
+            <div className="bg-navy-900/60 border border-[rgba(230,206,150,0.16)] rounded-xl p-6 space-y-4">
+                <h3 className="text-sm font-display font-bold text-[#EDF1F8] uppercase tracking-[0.08em]">What happens:</h3>
+                <ul className="text-sm text-[#9FB0CC] space-y-2 text-left font-body">
                     <li className="flex items-start gap-2">
-                        <span className="text-indigo-400 font-mono text-xs mt-0.5">01</span>
+                        <span className="text-gold-400 num text-xs mt-0.5">01</span>
                         Create a test pool with CLASSIC scoring (10/20/40/80/160/320)
                     </li>
                     <li className="flex items-start gap-2">
-                        <span className="text-indigo-400 font-mono text-xs mt-0.5">02</span>
+                        <span className="text-gold-400 num text-xs mt-0.5">02</span>
                         Generate 50 random entries + PerfectBracket + 3 control entries
                     </li>
                     <li className="flex items-start gap-2">
-                        <span className="text-indigo-400 font-mono text-xs mt-0.5">03</span>
+                        <span className="text-gold-400 num text-xs mt-0.5">03</span>
                         Fill your own bracket using the interactive bracket builder
                     </li>
                     <li className="flex items-start gap-2">
-                        <span className="text-indigo-400 font-mono text-xs mt-0.5">04</span>
+                        <span className="text-gold-400 num text-xs mt-0.5">04</span>
                         Simulate each round and watch the leaderboard update
                     </li>
                 </ul>
             </div>
 
-            <button
+            <Button
+                variant="premium"
+                size="lg"
                 onClick={onSetup}
                 disabled={isLoading}
-                className="px-8 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl font-semibold text-white 
-                    hover:from-indigo-400 hover:to-purple-500 transition-all shadow-lg shadow-indigo-500/20 
-                    disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+                className="mx-auto"
             >
                 {isLoading ? (
                     <>
@@ -827,34 +828,34 @@ const SetupPhase: React.FC<{
                         Start Simulation
                     </>
                 )}
-            </button>
+            </Button>
 
             {/* Quick Load Options */}
-            <div className="border-t border-slate-800 pt-6">
-                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Quick Test Options</h3>
+            <div className="border-t border-[rgba(230,206,150,0.16)] pt-6">
+                <h3 className="text-xs font-display font-bold text-[#9FB0CC] uppercase tracking-[0.08em] mb-4">Quick Test Options</h3>
 
                 <div className="space-y-3">
                     {/* Load Tournament Data Only */}
                     <button
                         onClick={onLoadTournamentOnly}
                         disabled={isLoading}
-                        className="w-full px-4 py-2.5 bg-slate-800 hover:bg-slate-750 rounded-lg text-sm font-medium text-white 
-                            border border-slate-700 hover:border-indigo-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2.5 bg-navy-800 hover:bg-navy-700 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] text-white
+                            border border-[rgba(230,206,150,0.16)] hover:border-gold-500/50 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                        📥 Load Tournament Data Only
+                        <Download className="w-4 h-4" /> Load Tournament Data Only
                     </button>
 
                     {/* Load Specific Round */}
-                    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-                        <p className="text-xs text-slate-500 mb-3">Jump to specific round:</p>
+                    <div className="bg-navy-900/60 border border-[rgba(230,206,150,0.16)] rounded-xl p-4">
+                        <p className="text-xs text-[#9FB0CC] mb-3 font-body">Jump to specific round:</p>
                         <div className="grid grid-cols-6 gap-2">
                             {[1, 2, 3, 4, 5, 6].map(round => (
                                 <button
                                     key={round}
                                     onClick={() => onLoadRound(round)}
                                     disabled={isLoading}
-                                    className="px-3 py-2 bg-slate-800 hover:bg-indigo-600 rounded-lg text-xs font-mono text-white 
-                                        border border-slate-700 hover:border-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-3 py-2 bg-navy-800 hover:bg-gold-500 hover:text-navy-950 rounded-lg text-xs num text-white
+                                        border border-[rgba(230,206,150,0.16)] hover:border-gold-400 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     R{round}
                                 </button>
@@ -866,10 +867,10 @@ const SetupPhase: React.FC<{
                     <button
                         onClick={onClearTournament}
                         disabled={isLoading}
-                        className="w-full px-4 py-2 bg-slate-900 hover:bg-red-950 rounded-lg text-xs font-medium text-slate-400 hover:text-red-400 
-                            border border-slate-800 hover:border-red-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 bg-navy-900 hover:bg-brandred-600/20 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] text-[#9FB0CC] hover:text-brandred-500
+                            border border-[rgba(230,206,150,0.16)] hover:border-brandred-600/50 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                        🗑️ Clear Tournament Data
+                        <Trash2 className="w-4 h-4" /> Clear Tournament Data
                     </button>
                 </div>
             </div>
@@ -893,19 +894,19 @@ const BracketPhase: React.FC<{
 }> = ({ tournament, picks, onPick, pickCount, totalPicks, tieBreakerInput, onTieBreakerChange, onSubmit, onSkip, onRandomFill, onClear, isLoading }) => (
     <div className="space-y-4">
         {/* Progress bar */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+        <div className="bg-navy-900/60 border border-[rgba(230,206,150,0.16)] rounded-xl p-4 flex items-center justify-between">
             <div className="flex items-center gap-4 flex-1">
-                <div className="text-sm font-medium text-slate-300">
-                    Picks: <span className="text-indigo-400 font-bold">{pickCount}</span> / {totalPicks}
+                <div className="text-sm font-medium text-[#9FB0CC] font-body">
+                    Picks: <span className="text-gold-400 font-bold num">{pickCount}</span> / <span className="num">{totalPicks}</span>
                 </div>
-                <div className="flex-1 max-w-xs bg-slate-800 rounded-full h-2 overflow-hidden">
+                <div className="flex-1 max-w-xs bg-navy-800 rounded-full h-2 overflow-hidden">
                     <div
-                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-300"
+                        className="h-full bg-gold-foil rounded-full transition-all duration-300"
                         style={{ width: `${(pickCount / totalPicks) * 100}%` }}
                     />
                 </div>
                 {pickCount === totalPicks && (
-                    <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
+                    <span className="text-xs text-[#3CB371] font-medium flex items-center gap-1 font-body">
                         <Check className="w-3.5 h-3.5" /> All picks made!
                     </span>
                 )}
@@ -914,79 +915,79 @@ const BracketPhase: React.FC<{
             <div className="flex items-center gap-3">
                 {/* Tiebreaker */}
                 <div className="flex items-center gap-2">
-                    <label className="text-xs text-slate-500">Tiebreaker (total score):</label>
+                    <label className="text-xs text-[#9FB0CC] font-body">Tiebreaker (total score):</label>
                     <input
                         type="number"
                         value={tieBreakerInput}
                         onChange={(e) => onTieBreakerChange(e.target.value)}
                         placeholder="e.g. 145"
-                        className="w-20 bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                        className="w-20 bg-navy-800 border border-[rgba(230,206,150,0.16)] rounded-md px-2 py-1 text-sm text-white num focus:border-gold-500 focus:outline-none"
                     />
                 </div>
 
                 <button
                     onClick={onSkip}
-                    className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-3 py-1.5"
+                    className="text-xs text-[#9FB0CC] hover:text-white transition-colors duration-150 px-3 py-1.5"
                 >
                     Skip →
                 </button>
 
-                <div className="h-6 w-px bg-slate-700 mx-2" />
+                <div className="h-6 w-px bg-navy-700 mx-2" />
 
                 {/* Random Options */}
-                <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5">
+                <div className="flex items-center gap-1 bg-navy-800 rounded-lg p-0.5">
                     <button
                         onClick={() => onRandomFill('random')}
-                        className="p-1.5 px-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors flex items-center gap-1"
+                        className="p-1.5 px-2 text-xs font-display font-bold uppercase tracking-[0.05em] text-[#9FB0CC] hover:text-white hover:bg-navy-700 rounded-md transition-colors duration-150 flex items-center gap-1"
                         title="Randomly fill remaining"
                     >
                         <Shuffle className="w-3.5 h-3.5" />
                         Random
                     </button>
-                    <div className="h-4 w-px bg-slate-700" />
+                    <div className="h-4 w-px bg-navy-700" />
                     <button
                         onClick={() => onRandomFill('chalk')}
-                        className="p-1.5 px-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                        className="p-1.5 px-2 text-xs font-display font-bold uppercase tracking-[0.05em] text-[#9FB0CC] hover:text-white hover:bg-navy-700 rounded-md transition-colors duration-150"
                         title="Fill with favorites"
                     >
                         Chalk
                     </button>
-                    <div className="h-4 w-px bg-slate-700" />
+                    <div className="h-4 w-px bg-navy-700" />
                     <button
                         onClick={() => onRandomFill('upset')}
-                        className="p-1.5 px-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                        className="p-1.5 px-2 text-xs font-display font-bold uppercase tracking-[0.05em] text-[#9FB0CC] hover:text-white hover:bg-navy-700 rounded-md transition-colors duration-150"
                         title="Fill with upsets"
                     >
                         Chaos
                     </button>
                 </div>
 
-                <div className="h-6 w-px bg-slate-700 mx-2" />
+                <div className="h-6 w-px bg-navy-700 mx-2" />
 
                 <button
                     onClick={onClear}
-                    className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                    className="p-1.5 text-[#9FB0CC] hover:text-brandred-500 hover:bg-brandred-600/10 rounded-md transition-colors duration-150"
                     title="Clear all picks"
                 >
                     <Trash2 className="w-4 h-4" />
                 </button>
 
-                <div className="h-6 w-px bg-slate-700 mx-2" />
+                <div className="h-6 w-px bg-navy-700 mx-2" />
 
-                <button
+                <Button
+                    variant="primary"
+                    size="sm"
                     onClick={onSubmit}
                     disabled={isLoading || pickCount === 0}
-                    className="px-4 py-1.5 bg-indigo-500 hover:bg-indigo-400 disabled:opacity-40 disabled:cursor-not-allowed
-                        rounded-lg text-sm font-medium text-white transition-colors flex items-center gap-1.5"
                 >
                     {isLoading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                     Submit Bracket
-                </button>
+                </Button>
             </div>
         </div>
 
         {/* Bracket Builder */}
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 overflow-x-auto">
+        <div className="bg-navy-900/40 border border-[rgba(230,206,150,0.16)] rounded-xl p-4 overflow-x-auto">
             <BracketBuilder
                 tournament={tournament}
                 picks={picks}
@@ -1005,16 +1006,16 @@ const SimulationControls: React.FC<{
     const canSimulate = nextRound <= 6;
 
     return (
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 flex items-center justify-between">
+        <div className="bg-navy-900/60 border border-[rgba(230,206,150,0.16)] rounded-xl p-6 flex items-center justify-between">
             <div>
-                <h2 className="text-lg font-bold">
+                <h2 className="text-lg font-display font-bold uppercase tracking-[0.03em]">
                     {canSimulate ? (
-                        <>Next: <span className="text-indigo-300">{ROUND_LABELS[nextRound]}</span></>
+                        <>Next: <span className="text-gold-300">{ROUND_LABELS[nextRound]}</span></>
                     ) : (
-                        <span className="text-emerald-400">Tournament Complete!</span>
+                        <span className="text-[#3CB371]">Tournament Complete!</span>
                     )}
                 </h2>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-[#9FB0CC] mt-1 font-body">
                     {canSimulate
                         ? `${GAMES_PER_ROUND[nextRound]} game${GAMES_PER_ROUND[nextRound] > 1 ? 's' : ''} to decide`
                         : 'All 63 games have been played'}
@@ -1022,12 +1023,10 @@ const SimulationControls: React.FC<{
             </div>
 
             {canSimulate && (
-                <button
+                <Button
+                    variant="premium"
                     onClick={onSimulate}
                     disabled={isLoading}
-                    className="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl font-semibold text-white
-                        hover:from-amber-400 hover:to-orange-400 transition-all shadow-lg shadow-amber-500/20
-                        disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                     {isLoading ? (
                         <>
@@ -1040,42 +1039,42 @@ const SimulationControls: React.FC<{
                             {nextRound === 1 ? 'Start Simulation (Round of 64)' : `Simulate ${ROUND_LABELS[nextRound]}`}
                         </>
                     )}
-                </button>
+                </Button>
             )}
         </div>
     );
 };
 
 const RoundResultCard: React.FC<{ result: RoundResult }> = ({ result }) => (
-    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 space-y-3">
+    <div className="bg-navy-900/40 border border-[rgba(230,206,150,0.16)] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-            <h3 className="font-bold text-sm">
-                <span className="text-amber-400">Round {result.round}</span>
-                <span className="text-slate-500 ml-2">{result.label}</span>
+            <h3 className="font-display font-bold uppercase tracking-[0.05em] text-sm">
+                <span className="text-gold-400">Round <span className="num">{result.round}</span></span>
+                <span className="text-[#9FB0CC] ml-2">{result.label}</span>
             </h3>
-            <span className="text-xs text-slate-500">{result.gamesDecided} games decided</span>
+            <span className="text-xs text-[#9FB0CC] font-body"><span className="num">{result.gamesDecided}</span> games decided</span>
         </div>
 
         <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-                <div className="text-lg font-bold text-white">{result.topScore}</div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider">Leader Score</div>
+                <div className="text-lg font-display font-bold text-white num">{result.topScore}</div>
+                <div className="text-[10px] text-[#9FB0CC] uppercase tracking-[0.08em]">Leader Score</div>
             </div>
             <div>
-                <div className="text-lg font-bold text-orange-400">{result.upsets.length}</div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider">Upsets</div>
+                <div className="text-lg font-display font-bold text-brandred-500 num">{result.upsets.length}</div>
+                <div className="text-[10px] text-[#9FB0CC] uppercase tracking-[0.08em]">Upsets</div>
             </div>
             <div>
-                <div className="text-sm font-medium text-emerald-400 truncate">{result.topMover}</div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider">Top Mover</div>
+                <div className="text-sm font-medium text-[#3CB371] truncate font-body">{result.topMover}</div>
+                <div className="text-[10px] text-[#9FB0CC] uppercase tracking-[0.08em]">Top Mover</div>
             </div>
         </div>
 
         {result.upsets.length > 0 && (
-            <div className="text-xs text-slate-400 border-t border-slate-800 pt-2 space-y-0.5">
+            <div className="text-xs text-[#9FB0CC] border-t border-[rgba(230,206,150,0.12)] pt-2 space-y-0.5 font-body">
                 {result.upsets.map((u, i) => (
                     <div key={i} className="flex items-center gap-1.5">
-                        <Zap className="w-3 h-3 text-orange-400" />
+                        <Zap className="w-3 h-3 text-gold-400" />
                         {u}
                     </div>
                 ))}
@@ -1088,24 +1087,24 @@ const ResultsBanner: React.FC<{
     winner: LeaderboardEntry;
     champTotal: number;
 }> = ({ winner, champTotal }) => (
-    <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-8 text-center space-y-4">
-        <Crown className="w-12 h-12 text-amber-400 mx-auto" />
+    <div className="bg-gold-500/10 border border-gold-500/30 rounded-xl p-8 text-center space-y-4">
+        <Crown className="w-12 h-12 text-gold-400 mx-auto" />
         <div>
-            <h2 className="text-2xl font-bold text-amber-300">{winner.name}</h2>
-            <p className="text-slate-400 text-sm mt-1">Tournament Champion</p>
+            <h2 className="text-2xl font-display font-bold uppercase tracking-[0.03em] text-gold-300">{winner.name}</h2>
+            <p className="text-[#9FB0CC] text-sm mt-1 font-body">Tournament Champion</p>
         </div>
         <div className="flex justify-center gap-8">
             <div>
-                <div className="text-3xl font-bold text-white">{winner.score}</div>
-                <div className="text-xs text-slate-500 uppercase">Total Score</div>
+                <div className="text-3xl font-display font-bold text-white num">{winner.score}</div>
+                <div className="text-xs text-[#9FB0CC] uppercase tracking-[0.08em]">Total Score</div>
             </div>
             <div>
-                <div className="text-3xl font-bold text-emerald-400">{winner.correctPicks}</div>
-                <div className="text-xs text-slate-500 uppercase">Correct Picks</div>
+                <div className="text-3xl font-display font-bold text-[#3CB371] num">{winner.correctPicks}</div>
+                <div className="text-xs text-[#9FB0CC] uppercase tracking-[0.08em]">Correct Picks</div>
             </div>
             <div>
-                <div className="text-3xl font-bold text-indigo-400">{winner.tieBreakerPrediction}</div>
-                <div className="text-xs text-slate-500 uppercase">Tiebreaker ({champTotal} actual)</div>
+                <div className="text-3xl font-display font-bold text-gold-400 num">{winner.tieBreakerPrediction}</div>
+                <div className="text-xs text-[#9FB0CC] uppercase tracking-[0.08em]">Tiebreaker (<span className="num">{champTotal}</span> actual)</div>
             </div>
         </div>
     </div>
@@ -1136,19 +1135,19 @@ const ControlValidation: React.FC<{ leaderboard: LeaderboardEntry[] }> = ({ lead
     ];
 
     return (
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 space-y-3">
-            <h3 className="text-sm font-bold text-slate-300">Control Entry Validation</h3>
+        <div className="bg-navy-900/40 border border-[rgba(230,206,150,0.16)] rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-display font-bold uppercase tracking-[0.05em] text-[#EDF1F8]">Control Entry Validation</h3>
             {checks.map((check, i) => (
                 <div key={i} className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
                         {check.passed ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
+                            <Check className="w-4 h-4 text-[#3CB371]" />
                         ) : (
-                            <AlertTriangle className="w-4 h-4 text-red-400" />
+                            <AlertTriangle className="w-4 h-4 text-brandred-500" />
                         )}
-                        <span className={check.passed ? 'text-slate-300' : 'text-red-300'}>{check.label}</span>
+                        <span className={`font-body ${check.passed ? 'text-[#9FB0CC]' : 'text-brandred-500'}`}>{check.label}</span>
                     </div>
-                    <span className="text-xs text-slate-500">{check.detail}</span>
+                    <span className="text-xs text-[#9FB0CC] num">{check.detail}</span>
                 </div>
             ))}
         </div>
@@ -1172,32 +1171,32 @@ const LeaderboardSidebar = ({
     const eliminated = leaderboard.filter(e => e.maxPossible < (leaderboard[0]?.score || 0)).length;
 
     return (
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden sticky top-32">
+        <div className="bg-navy-900/60 border border-[rgba(230,206,150,0.16)] rounded-xl overflow-hidden sticky top-32">
             {/* Header */}
-            <div className="p-4 border-b border-slate-800 bg-slate-900/80">
+            <div className="p-4 border-b border-[rgba(230,206,150,0.16)] bg-navy-900/80">
                 <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-bold text-sm flex items-center gap-2">
-                        <Users className="w-4 h-4 text-indigo-400" />
+                    <h3 className="font-display font-bold uppercase tracking-[0.05em] text-sm flex items-center gap-2">
+                        <Users className="w-4 h-4 text-gold-400" />
                         Leaderboard
                     </h3>
                     {currentRound > 0 && (
-                        <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] bg-navy-800 text-[#9FB0CC] px-2 py-0.5 rounded-full num">
                             After R{currentRound}
                         </span>
                     )}
                 </div>
                 {currentRound > 0 && (
-                    <div className="flex gap-4 text-[10px] text-slate-500">
-                        <span>Entries: <span className="text-slate-300">{entryCount}</span></span>
-                        <span>Avg: <span className="text-slate-300">{avgScore}</span></span>
-                        <span>Eliminated: <span className="text-red-400">{eliminated}</span></span>
+                    <div className="flex gap-4 text-[10px] text-[#9FB0CC] font-body">
+                        <span>Entries: <span className="text-[#EDF1F8] num">{entryCount}</span></span>
+                        <span>Avg: <span className="text-[#EDF1F8] num">{avgScore}</span></span>
+                        <span>Eliminated: <span className="text-brandred-500 num">{eliminated}</span></span>
                     </div>
                 )}
             </div>
 
             {/* Entries */}
             {leaderboard.length === 0 ? (
-                <div className="p-8 text-center text-sm text-slate-600">
+                <div className="p-8 text-center text-sm text-[#9FB0CC] font-body">
                     Simulate a round to see the leaderboard
                 </div>
             ) : (
@@ -1211,41 +1210,41 @@ const LeaderboardSidebar = ({
                             <div
                                 key={entry.id}
                                 className={`
-                                    px-4 py-2 flex items-center gap-3 text-sm border-b border-slate-800/50 transition-all cursor-pointer hover:bg-slate-800/50
-                                    ${entry.isUser ? 'bg-indigo-500/10 border-l-2 border-l-indigo-400' : ''}
-                                    ${rank <= 3 ? 'bg-amber-500/5' : ''}
+                                    px-4 py-2 flex items-center gap-3 text-sm border-b border-[rgba(230,206,150,0.10)] transition-all duration-150 cursor-pointer hover:bg-navy-800/50
+                                    ${entry.isUser ? 'bg-brandred-600/15 border-l-2 border-l-brandred-500' : ''}
+                                    ${rank <= 3 ? 'bg-gold-500/5' : ''}
                                     ${isEliminated ? 'opacity-40 hover:opacity-100' : ''}
                                 `}
                                 onClick={() => onEntryClick(entry)}
                             >
                                 {/* Rank */}
-                                <div className={`w-6 text-center font-mono text-xs font-bold ${rank === 1 ? 'text-amber-400' : rank === 2 ? 'text-slate-300' : rank === 3 ? 'text-orange-400' : 'text-slate-600'
+                                <div className={`w-6 text-center num text-xs font-bold ${rank === 1 ? 'text-gold-400' : rank === 2 ? 'text-[#EDF1F8]' : rank === 3 ? 'text-gold-600' : 'text-[#5E7096]'
                                     }`}>
                                     {rank}
                                 </div>
 
                                 {/* Rank change indicator */}
                                 <div className="w-4">
-                                    {rankChange > 0 && <ArrowUp className="w-3 h-3 text-emerald-400" />}
-                                    {rankChange < 0 && <ArrowDown className="w-3 h-3 text-red-400" />}
-                                    {rankChange === 0 && entry.previousRank > 0 && <Minus className="w-3 h-3 text-slate-700" />}
+                                    {rankChange > 0 && <ArrowUp className="w-3 h-3 text-[#3CB371]" />}
+                                    {rankChange < 0 && <ArrowDown className="w-3 h-3 text-brandred-500" />}
+                                    {rankChange === 0 && entry.previousRank > 0 && <Minus className="w-3 h-3 text-[#5E7096]" />}
                                 </div>
 
                                 {/* Name */}
                                 <div className="flex-1 min-w-0">
-                                    <div className={`text-xs font-medium truncate ${entry.isUser ? 'text-indigo-300' : 'text-slate-300'}`}>
+                                    <div className={`text-xs font-medium truncate font-body ${entry.isUser ? 'text-brandred-500 font-bold' : 'text-[#EDF1F8]'}`}>
                                         {entry.name}
-                                        {entry.isUser && <span className="text-[10px] ml-1 text-indigo-400">◄ YOU</span>}
+                                        {entry.isUser && <span className="text-[10px] ml-1 text-brandred-500 font-display font-bold uppercase tracking-[0.06em]">◄ You</span>}
                                     </div>
                                     {entry.isControl && (
-                                        <span className="text-[9px] text-purple-400 bg-purple-400/10 px-1 rounded">CTRL</span>
+                                        <span className="text-[9px] text-[#8655B5] bg-[#5B2A86]/20 px-1 rounded font-display font-bold uppercase tracking-[0.06em]">CTRL</span>
                                     )}
                                 </div>
 
                                 {/* Score */}
                                 <div className="text-right">
-                                    <div className="text-xs font-bold text-white">{entry.score}</div>
-                                    <div className="text-[9px] text-slate-600">{entry.correctPicks} picks</div>
+                                    <div className="text-xs font-bold text-white num">{entry.score}</div>
+                                    <div className="text-[9px] text-[#9FB0CC] num">{entry.correctPicks} picks</div>
                                 </div>
                             </div>
                         );

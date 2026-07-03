@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader, Shield, Edit2, ChevronUp, ChevronDown, Lock, Zap, HelpCircle, ExternalLink, Check, Copy, Heart } from 'lucide-react';
+import { Loader, Shield, Edit2, ChevronUp, ChevronDown, Lock, Zap, HelpCircle, ExternalLink, Check, Copy, Heart, DollarSign } from 'lucide-react';
 
 import { Header } from '../Header';
 import { Footer } from '../Footer';
@@ -25,6 +25,7 @@ import { calculateQuarterlyPayouts } from '../../utils/payouts';
 import { isSuperAdmin, isPoolManager } from '../../utils/auth';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
+import { Button, Badge } from '../ui';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner } from '../../types';
 
 interface PoolRouteProps {
@@ -142,17 +143,17 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         return res;
     }, [pool, winners]);
 
-    if (isLoading || isFetchingPool) return <div className="text-white p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-indigo-500" size={48} /><p>Loading Pool...</p></div>;
+    if (isLoading || isFetchingPool) return <div className="text-[color:var(--text)] p-10 flex flex-col items-center gap-4"><Loader className="animate-spin text-gold-500" size={48} /><p className="font-body">Loading Pool...</p></div>;
 
     if (!pool) {
         return (
-            <div className="text-white p-10 font-mono flex flex-col items-center justify-center min-h-[50vh]">
-                <h2 className="text-xl font-bold mb-4 text-rose-400">Pool Not Found</h2>
-                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 max-w-2xl w-full text-sm space-y-2 shadow-2xl">
-                    <p><strong>ID/Slug:</strong> <span className="text-amber-300">"{id}"</span></p>
+            <div className="text-[color:var(--text)] p-10 font-body flex flex-col items-center justify-center min-h-[50vh]">
+                <h2 className="text-xl font-display font-bold uppercase tracking-[0.05em] mb-4 text-brandred-500">Pool Not Found</h2>
+                <div className="bg-card p-6 rounded-xl border border-line max-w-2xl w-full text-sm space-y-2 shadow-card">
+                    <p><strong>ID/Slug:</strong> <span className="text-gold-600 num">"{id}"</span></p>
                     <div className="pt-4 flex gap-4">
-                        <button onClick={() => navigate('/')} className="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded text-white font-bold transition-colors">Go Home</button>
-                        <button onClick={() => window.location.reload()} className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-white font-bold transition-colors">Reload Page</button>
+                        <Button variant="primary" size="sm" onClick={() => navigate('/')}>Go Home</Button>
+                        <Button variant="ghost" size="sm" onClick={() => window.location.reload()}>Reload Page</Button>
                     </div>
                 </div>
             </div>
@@ -168,7 +169,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
     if (pool.type === 'BRACKET') {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+            <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header
                     user={user}
                     isManager={isManager}
@@ -196,7 +197,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
     if (pool.type === 'PROPS') {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+            <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header
                     user={user}
                     isManager={isManager}
@@ -221,7 +222,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
     if (pool.type === 'NFL_PLAYOFFS') {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+            <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header
                     user={user}
                     isManager={isManager}
@@ -243,7 +244,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
     if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+            <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header
                     user={user}
                     isManager={isManager}
@@ -352,17 +353,17 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     // Actually it was mainly for debug in header.
 
     const renderPasswordGate = () => (
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 max-w-md w-full text-center">
-                <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6"><Lock size={32} className="text-indigo-500" /></div>
-                <h2 className="text-2xl font-bold text-white mb-2">Password Protected</h2>
-                <p className="text-slate-400 mb-6">This pool is private. Please enter the password to view it.</p>
-                {passwordError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-lg text-sm mb-4">Incorrect password.</div>}
+        <div className="min-h-screen bg-page flex items-center justify-center p-4">
+            <div className="bg-card border border-line rounded-xl p-8 max-w-md w-full text-center shadow-card">
+                <div className="w-16 h-16 bg-page rounded-full flex items-center justify-center mx-auto mb-6 border border-line"><Lock size={32} className="text-gold-500" /></div>
+                <h2 className="text-2xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Password Protected</h2>
+                <p className="text-muted mb-6 font-body">This pool is private. Please enter the password to view it.</p>
+                {passwordError && <div className="bg-brandred-600/10 border border-brandred-600/30 text-brandred-500 p-3 rounded-lg text-sm mb-4 font-body">Incorrect password.</div>}
                 <div className="flex gap-2">
-                    <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500" onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()} />
-                    <button onClick={handlePasswordSubmit} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-lg">Unlock</button>
+                    <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-page border border-line rounded-lg px-4 py-2 text-[color:var(--text)] font-body outline-none focus:ring-2 focus:ring-gold-500 placeholder:text-faint" onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()} />
+                    <Button variant="primary" onClick={handlePasswordSubmit}>Unlock</Button>
                 </div>
-                <div className="mt-6 pt-6 border-t border-slate-800"><p className="text-xs text-slate-500">Contact the pool manager for access.</p></div>
+                <div className="mt-6 pt-6 border-t border-line"><p className="text-xs text-faint font-body">Contact the pool manager for access.</p></div>
             </div>
         </div>
     );
@@ -380,8 +381,8 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
     return (
         <div
-            className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-20 relative transition-colors duration-500"
-            style={{ backgroundColor: squaresPool.branding?.backgroundColor || '#020617' }}
+            className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] pb-20 relative transition-colors duration-500"
+            style={{ backgroundColor: squaresPool.branding?.backgroundColor || undefined }}
         >
             <Header user={user} isManager={isManager} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
             <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
@@ -393,43 +394,43 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         {squaresPool.branding?.logoUrl && (
                             <img src={squaresPool.branding.logoUrl} className="h-16 w-auto object-contain drop-shadow-lg" alt="Pool Logo" />
                         )}
-                        <h1 className="text-3xl font-bold text-white">{squaresPool.name}</h1>
-                        <button onClick={() => setShowAudit(true)} className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors">
-                            <Shield size={10} className="fill-emerald-400/20" /> Fully Auditable
+                        <h1 className="text-3xl font-display font-extrabold uppercase tracking-[0.02em] text-[color:var(--text)]">{squaresPool.name}</h1>
+                        <button onClick={() => setShowAudit(true)} className="bg-gold-500/10 hover:bg-gold-500/20 text-gold-600 border border-gold-500/30 text-[10px] font-display font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors duration-150">
+                            <Shield size={10} className="fill-gold-400/20" /> Fully Auditable
                         </button>
                     </div>
-                    <p className="text-slate-400 text-sm font-medium">{squaresRemaining} Squares Remaining</p>
+                    <p className="text-muted text-sm font-medium font-body"><span className="num">{squaresRemaining}</span> Squares Remaining</p>
                 </div>
                 <div className="flex gap-2">
                     {user && (user.id === squaresPool.ownerId || isSuperAdmin(user)) && (
-                        <button onClick={() => navigate(`/admin/${squaresPool.id}`)} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/${squaresPool.id}`)}>
                             <Edit2 size={16} /> Manage Pool
-                        </button>
+                        </Button>
                     )}
                     {!user && (
-                        <button onClick={() => handleLocalAuth('login')} className="hidden md:block bg-indigo-900/50 hover:bg-indigo-800 text-indigo-200 border border-indigo-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors">
+                        <Button variant="ghost" size="sm" className="hidden md:inline-flex" onClick={() => handleLocalAuth('login')}>
                             Sign In to Manage Your Pool
-                        </button>
+                        </Button>
                     )}
-                    <button onClick={() => openShare(squaresPool.id)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Share</button>
+                    <Button variant="primary" size="sm" onClick={() => openShare(squaresPool.id)}>Share</Button>
                 </div>
             </div>
 
             {/* Latest Winner Banner */}
             {latestWinner && (
                 <div className="flex justify-center mt-4 mb-2">
-                    <div className="bg-gradient-to-r from-amber-900/40 to-yellow-900/40 border border-amber-500/50 rounded-full px-8 py-2 text-amber-200 font-bold tracking-widest uppercase shadow-[0_0_20px_rgba(245,158,11,0.1)] flex items-center gap-3">
-                        🤑 IN THE MONEY: <span className="text-white text-lg">{latestWinner}</span> 🤑
+                    <div className="bg-[#FBF3E0] border border-[#EAD9A8] rounded-full px-8 py-2 text-gold-700 font-display font-bold tracking-[0.16em] uppercase shadow-card flex items-center gap-3">
+                        <DollarSign size={16} /> In The Money: <span className="text-[color:var(--text)] text-lg">{latestWinner}</span> <DollarSign size={16} />
                     </div>
                 </div>
             )}
 
             <div className="max-w-[1400px] mx-auto px-4 py-6">
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-slate-400 font-black uppercase text-xl tracking-wider">Pool Details</h3>
+                    <h3 className="text-muted font-display font-bold uppercase text-xl tracking-[0.08em]">Pool Details</h3>
                     <button
                         onClick={() => setShowPoolInfo(!showPoolInfo)}
-                        className="bg-slate-900 hover:bg-slate-800 text-slate-400 p-2 rounded-full transition-colors"
+                        className="bg-card hover:bg-page text-muted p-2 rounded-full transition-colors duration-150 border border-line"
                     >
                         {showPoolInfo ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
@@ -439,68 +440,68 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${(squaresPool as GameState).charity?.enabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2 max-w-5xl mx-auto'}`}>
 
                         {/* 1. Status Card (Tabbed) */}
-                        <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
+                        <div className="bg-card rounded-xl border border-line shadow-card flex flex-col overflow-hidden h-full">
                             {/* Tabs Header */}
-                            <div className="flex border-b border-slate-800">
-                                <button onClick={() => setStatusTab('overview')} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'overview' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}>Overview</button>
-                                <button onClick={() => setStatusTab('rules')} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'rules' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}>Rules</button>
-                                <button onClick={() => setStatusTab('payment')} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${statusTab === 'payment' ? 'bg-slate-900 text-white border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-400 hover:bg-slate-900/50'}`}>Payment</button>
+                            <div className="flex border-b border-line">
+                                <button onClick={() => setStatusTab('overview')} className={`flex-1 py-3 text-xs font-display font-bold uppercase tracking-[0.08em] transition-colors duration-150 ${statusTab === 'overview' ? 'bg-page text-[color:var(--text)] border-b-2 border-gold-500' : 'text-faint hover:text-muted hover:bg-page/50'}`}>Overview</button>
+                                <button onClick={() => setStatusTab('rules')} className={`flex-1 py-3 text-xs font-display font-bold uppercase tracking-[0.08em] transition-colors duration-150 ${statusTab === 'rules' ? 'bg-page text-[color:var(--text)] border-b-2 border-gold-500' : 'text-faint hover:text-muted hover:bg-page/50'}`}>Rules</button>
+                                <button onClick={() => setStatusTab('payment')} className={`flex-1 py-3 text-xs font-display font-bold uppercase tracking-[0.08em] transition-colors duration-150 ${statusTab === 'payment' ? 'bg-page text-[color:var(--text)] border-b-2 border-gold-500' : 'text-faint hover:text-muted hover:bg-page/50'}`}>Payment</button>
                             </div>
 
                             <div className="p-6 flex-1 flex flex-col justify-center">
                                 {statusTab === 'overview' && (
                                     <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
-                                        <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Status:</h3>
-                                            {!squaresPool.isLocked ? <div className="flex items-center gap-2"><span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span></span><div><p className="text-emerald-400 font-bold text-sm leading-none">Open</p><p className="text-slate-500 text-[10px]">Grid is available to choose squares</p></div></div>
-                                                : squaresPool.scores?.gameStatus === 'post' ? <div className="flex items-center gap-2"><span className="relative flex h-3 w-3"><span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span><div><p className="text-blue-500 font-bold text-sm leading-none">Locked - Final</p><p className="text-slate-500 text-[10px]">Game has completed</p></div></div>
-                                                    : squaresPool.scores?.gameStatus === 'in' ? <div className="flex items-center gap-2"><span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span></span><div><p className="text-rose-500 font-bold text-sm leading-none">Locked - Live</p><p className="text-slate-500 text-[10px]">Game has started</p></div></div>
-                                                        : <div className="flex items-center gap-2"><Lock size={14} className="text-amber-500" /><div><p className="text-amber-500 font-bold text-sm leading-none">Locked - Pending</p><p className="text-slate-500 text-[10px]">Waiting for kickoff</p></div></div>
+                                        <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Status:</h3>
+                                            {!squaresPool.isLocked ? <div className="flex items-center gap-2"><Badge status="open" /><p className="text-faint text-[10px] font-body">Grid is available to choose squares</p></div>
+                                                : squaresPool.scores?.gameStatus === 'post' ? <div className="flex items-center gap-2"><Badge status="locked">Locked - Final</Badge><p className="text-faint text-[10px] font-body">Game has completed</p></div>
+                                                    : squaresPool.scores?.gameStatus === 'in' ? <div className="flex items-center gap-2"><Badge status="live">Locked - Live</Badge><p className="text-faint text-[10px] font-body">Game has started</p></div>
+                                                        : <div className="flex items-center gap-2"><Badge status="locked"><Lock size={12} /> Locked - Pending</Badge><p className="text-faint text-[10px] font-body">Waiting for kickoff</p></div>
                                             }</div>
-                                        <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Grid Owner:</h3><p className="text-white font-medium">{squaresPool.contactEmail || 'Admin'}</p></div>
-                                        <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Cost Per Square:</h3><p className="text-white font-medium text-sm">${squaresPool.costPerSquare}</p></div>
+                                        <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Grid Owner:</h3><p className="text-[color:var(--text)] font-medium font-body">{squaresPool.contactEmail || 'Admin'}</p></div>
+                                        <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Cost Per Square:</h3><p className="text-[color:var(--text)] font-medium text-sm font-body num">${squaresPool.costPerSquare}</p></div>
                                     </div>
                                 )}
                                 {statusTab === 'rules' && (
                                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                                        <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-center">
+                                        <div className="bg-page border border-line rounded-lg p-3 text-center">
                                             <PoolTimer
                                                 targetDate={squaresPool.scores.startTime}
                                                 gameStatus={squaresPool.scores.gameStatus}
                                                 isLocked={squaresPool.isLocked || (squaresRemaining === 0 && !!squaresPool.axisNumbers)}
                                             />
                                         </div>
-                                        <div><h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Limits:</h3><p className="text-white font-medium text-sm">Max {squaresPool.maxSquaresPerPlayer || 'N/A'} squares per player</p></div>
+                                        <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Limits:</h3><p className="text-[color:var(--text)] font-medium text-sm font-body">Max <span className="num">{squaresPool.maxSquaresPerPlayer || 'N/A'}</span> squares per player</p></div>
                                         {/* Simplified Rule Buttons */}
                                         <div>
-                                            <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Active Rules:</h3>
+                                            <h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Active Rules:</h3>
                                             <div className="flex flex-wrap gap-2">
                                                 {/* Rollover */}
                                                 {squaresPool.ruleVariations.quarterlyRollover && (
                                                     <div className="group relative cursor-help">
-                                                        <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1"><Zap size={12} className="fill-emerald-400" /> Rollover Active</div>
-                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-slate-800 text-slate-200 text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                                                        <div className="bg-gold-500/10 text-gold-600 border border-gold-500/30 px-2 py-0.5 rounded text-xs font-display font-bold uppercase tracking-[0.06em] flex items-center gap-1"><Zap size={12} className="fill-gold-500" /> Rollover Active</div>
+                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-card text-[color:var(--text)] text-[10px] p-2 rounded shadow-card border border-line opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center font-body">
                                                             Unsold squares roll their prize money to the next quarter.
-                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[color:var(--card)]"></div>
                                                         </div>
                                                     </div>
                                                 )}
 
                                                 {/* Number Sets */}
                                                 <div className="group relative cursor-help">
-                                                    <div className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Number Sets: {squaresPool.numberSets || '1'}</div>
-                                                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-slate-800 text-slate-200 text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                                                    <div className="bg-navy-800/10 text-navy-700 dark:text-[#9FB0CC] border border-navy-700/30 px-2 py-0.5 rounded text-xs font-display font-bold uppercase tracking-[0.06em] flex items-center gap-1">Number Sets: <span className="num">{squaresPool.numberSets || '1'}</span></div>
+                                                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-card text-[color:var(--text)] text-[10px] p-2 rounded shadow-card border border-line opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center font-body">
                                                         {squaresPool.numberSets === 4 ? "New numbers generated for each quarter." : "Same numbers used for the entire game."}
-                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[color:var(--card)]"></div>
                                                     </div>
                                                 </div>
 
                                                 {/* Reverse Payouts */}
                                                 {squaresPool.ruleVariations.reverseWinners && (
                                                     <div className="group relative cursor-help">
-                                                        <div className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Reverse Numbers</div>
-                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-slate-800 text-slate-200 text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                                                        <div className="bg-gold-500/10 text-gold-600 border border-gold-500/30 px-2 py-0.5 rounded text-xs font-display font-bold uppercase tracking-[0.06em] flex items-center gap-1">Reverse Numbers</div>
+                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-card text-[color:var(--text)] text-[10px] p-2 rounded shadow-card border border-line opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center font-body">
                                                             Winners split the pot 50/50 with the reverse number combination.
-                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[color:var(--card)]"></div>
                                                         </div>
                                                     </div>
                                                 )}
@@ -508,16 +509,16 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                                 {/* Every Score Pays */}
                                                 {squaresPool.ruleVariations.scoreChangePayout && (
                                                     <div className="group relative cursor-help">
-                                                        <div className="bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/30 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">Every Score Pays</div>
-                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-slate-800 text-slate-200 text-[10px] p-2 rounded shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                                                        <div className="bg-[#5B2A86]/10 text-[#5B2A86] dark:text-[#8655B5] border border-[#5B2A86]/30 px-2 py-0.5 rounded text-xs font-display font-bold uppercase tracking-[0.06em] flex items-center gap-1">Every Score Pays</div>
+                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-card text-[color:var(--text)] text-[10px] p-2 rounded shadow-card border border-line opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center font-body">
                                                             Payouts awarded for every score change, not just at quarter ends.
-                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[color:var(--card)]"></div>
                                                         </div>
                                                     </div>
                                                 )}
                                             </div>
-                                            <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:text-white transition-colors text-slate-500 text-xs font-bold uppercase tracking-wider">
-                                                <HelpCircle size={14} className="text-slate-500 group-hover:text-indigo-400 transition-colors" /> View Full Rules
+                                            <button onClick={() => setShowRulesModal(true)} className="flex items-center gap-2 group hover:text-[color:var(--text)] transition-colors duration-150 text-faint text-xs font-display font-bold uppercase tracking-[0.08em]">
+                                                <HelpCircle size={14} className="text-faint group-hover:text-gold-500 transition-colors duration-150" /> View Full Rules
                                             </button>
                                         </div>
                                     </div>
@@ -527,12 +528,12 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                         {(squaresPool.paymentHandles?.venmo || squaresPool.paymentHandles?.zelle) ? (
                                             <div className="flex flex-col gap-2">
                                                 {squaresPool.paymentHandles?.venmo && <a href={`https://venmo.com/u/${squaresPool.paymentHandles.venmo.replace('@', '')}`} target="_blank" rel="noreferrer" className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center transition-colors w-full">Venmo: {squaresPool.paymentHandles.venmo} <ExternalLink size={14} /></a>}
-                                                {squaresPool.paymentHandles?.zelle && <div className="bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center w-full">Zelle: {squaresPool.paymentHandles.zelle} <button onClick={() => { navigator.clipboard.writeText(squaresPool.paymentHandles?.zelle || ''); setZelleCopied(true); setTimeout(() => setZelleCopied(false), 2000); }} className="ml-2 bg-slate-700 hover:bg-slate-600 p-1.5 rounded transition-colors">{zelleCopied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-slate-400 opacity-80" />}</button></div>}
+                                                {squaresPool.paymentHandles?.zelle && <div className="bg-page border border-line text-[color:var(--text)] px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center w-full font-body">Zelle: {squaresPool.paymentHandles.zelle} <button onClick={() => { navigator.clipboard.writeText(squaresPool.paymentHandles?.zelle || ''); setZelleCopied(true); setTimeout(() => setZelleCopied(false), 2000); }} className="ml-2 bg-card hover:bg-surface p-1.5 rounded transition-colors duration-150 border border-line">{zelleCopied ? <Check size={14} className="text-[#0F7B4A]" /> : <Copy size={14} className="text-muted opacity-80" />}</button></div>}
                                             </div>
-                                        ) : <div className="text-slate-500 text-xs italic">No digital payment methods configured.</div>}
-                                        <div className="border-t border-slate-800 pt-3">
-                                            <h3 className="text-slate-500 font-bold uppercase text-xs mb-1">Instructions:</h3>
-                                            <p className="text-slate-300 text-sm leading-relaxed max-h-32 overflow-y-auto pr-1">{squaresPool.paymentInstructions || "No additional instructions."}</p>
+                                        ) : <div className="text-faint text-xs italic font-body">No digital payment methods configured.</div>}
+                                        <div className="border-t border-line pt-3">
+                                            <h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Instructions:</h3>
+                                            <p className="text-[color:var(--text)] text-sm leading-relaxed max-h-32 overflow-y-auto pr-1 font-body">{squaresPool.paymentInstructions || "No additional instructions."}</p>
                                         </div>
                                     </div>
                                 )}
@@ -541,28 +542,28 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
                         {/* Charity */}
                         {squaresPool.charity?.enabled && (
-                            <div className="bg-slate-900 border border-rose-500/30 rounded-xl p-6 shadow-lg shadow-rose-500/10 relative overflow-hidden flex flex-col justify-center">
-                                <div className="absolute top-0 right-0 p-4 opacity-10"><Heart size={80} className="text-rose-500" /></div>
+                            <div className="bg-card border border-gold-500/30 rounded-xl p-6 shadow-card relative overflow-hidden flex flex-col justify-center">
+                                <div className="absolute top-0 right-0 p-4 opacity-10"><Heart size={80} className="text-gold-500" /></div>
                                 <div className="relative z-10">
-                                    <div className="flex items-center gap-2 mb-2"><div className="bg-rose-500/20 p-1.5 rounded-lg"><Heart size={18} className="text-rose-400" /></div><h3 className="text-sm font-bold text-white uppercase tracking-wider">Proudly Supporting</h3></div>
-                                    <h2 className="text-2xl font-black text-rose-400 mb-1 leading-tight">{squaresPool.charity.name}</h2>
-                                    <span className="text-2xl font-mono font-bold text-white">${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (squaresPool.charity.percentage / 100)))).toLocaleString()}</span>
+                                    <div className="flex items-center gap-2 mb-2"><div className="bg-gold-500/20 p-1.5 rounded-lg"><Heart size={18} className="text-gold-600" /></div><h3 className="text-sm font-display font-bold text-[color:var(--text)] uppercase tracking-[0.08em]">Proudly Supporting</h3></div>
+                                    <h2 className="text-2xl font-display font-bold uppercase text-gold-600 mb-1 leading-tight">{squaresPool.charity.name}</h2>
+                                    <span className="text-2xl font-display font-bold text-[color:var(--text)] num">${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (squaresPool.charity.percentage / 100)))).toLocaleString()}</span>
                                 </div>
                             </div>
                         )}
 
                         {/* Payout Structure Card - Simplified */}
-                        <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
-                            <div className="flex border-b border-slate-800 bg-slate-900 px-6 py-4"><h3 className="text-sm font-bold uppercase tracking-wider text-white">Payout Structure</h3></div>
+                        <div className="bg-card rounded-xl border border-line shadow-card flex flex-col overflow-hidden h-full">
+                            <div className="flex border-b border-line bg-page px-6 py-4"><h3 className="text-sm font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">Payout Structure</h3></div>
                             <div className="p-6 flex-1 flex flex-col justify-center">
-                                <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2"><span className="text-slate-400">Total Pot</span><span className="text-white font-mono font-bold">${(squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare).toLocaleString()}</span></div>
-                                <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2 mt-2"><span className="text-white font-bold">Net Prize Pool</span><span className="text-emerald-400 font-mono font-bold text-lg">${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (1 - (squaresPool.charity?.enabled ? squaresPool.charity.percentage / 100 : 0))))).toLocaleString()}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-line pb-2"><span className="text-muted font-body">Total Pot</span><span className="text-[color:var(--text)] font-bold num">${(squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare).toLocaleString()}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-line pb-2 mb-2 mt-2"><span className="text-[color:var(--text)] font-bold font-body">Net Prize Pool</span><span className="text-gold-600 font-display font-bold text-lg num">${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (1 - (squaresPool.charity?.enabled ? squaresPool.charity.percentage / 100 : 0))))).toLocaleString()}</span></div>
                                 <div className="space-y-1 mt-2">
                                     {quarterlyPayouts.map((card) => {
                                         return (
-                                            <div key={card.period} className="flex justify-between items-center text-sm border-b border-slate-800/50 pb-2 last:border-0">
-                                                <span className="text-slate-400 font-bold">{card.label} <span className="text-slate-600 font-normal">({(squaresPool as GameState).payouts[card.period as keyof typeof squaresPool.payouts]}%)</span></span>
-                                                <div className="flex flex-col items-end"><span className="text-white font-mono font-bold">${(card.amount || 0).toLocaleString()}</span></div>
+                                            <div key={card.period} className="flex justify-between items-center text-sm border-b border-line/50 pb-2 last:border-0">
+                                                <span className="text-muted font-bold font-body">{card.label} <span className="text-faint font-normal num">({(squaresPool as GameState).payouts[card.period as keyof typeof squaresPool.payouts]}%)</span></span>
+                                                <div className="flex flex-col items-end"><span className="text-[color:var(--text)] font-bold num">${(card.amount || 0).toLocaleString()}</span></div>
                                             </div>
                                         );
                                     })}
@@ -573,41 +574,43 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 </div>
 
                 {/* SCOREBOARD */}
-                <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative mb-8 max-w-4xl mx-auto">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-slate-800/20 rounded-full blur-3xl"></div>
-                    <div className="p-4 border-b border-slate-800 text-center relative z-10 flex flex-col md:flex-row items-center justify-between px-8">
-                        <h3 className="text-white font-bold text-xl tracking-tight">Game Scoreboard</h3>
-                        <p className="text-sm text-slate-500 font-bold uppercase tracking-wider">{squaresPool.scores.gameStatus === 'in' ? 'LIVE' : squaresPool.scores.gameStatus === 'post' ? 'FINAL' : 'PENDING'}</p>
+                <div className="bg-navy-900 rounded-xl border border-[rgba(230,206,150,0.16)] p-0 shadow-panel overflow-hidden relative mb-8 max-w-4xl mx-auto">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-navy-800/40 rounded-full blur-3xl"></div>
+                    <div className="p-4 border-b border-[rgba(230,206,150,0.16)] text-center relative z-10 flex flex-col md:flex-row items-center justify-between px-8">
+                        <h3 className="text-white font-display font-bold uppercase text-xl tracking-[0.05em]">Game Scoreboard</h3>
+                        {squaresPool.scores.gameStatus === 'in'
+                            ? <Badge status="live" />
+                            : <p className="text-sm text-[#9FB0CC] font-display font-bold uppercase tracking-[0.08em]">{squaresPool.scores.gameStatus === 'post' ? 'FINAL' : 'PENDING'}</p>}
                     </div>
                     {/* Simple Scoreboard Grid */}
                     <div className="p-0 overflow-x-auto">
                         <table className="w-full text-center">
                             <thead>
-                                <tr className="border-b border-slate-800 bg-slate-900/50">
-                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-left">Team</th>
-                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Q1</th>
-                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Q2</th>
-                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Q3</th>
-                                    <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Q4</th>
-                                    <th className="py-3 px-4 text-xs font-bold text-white uppercase tracking-wider bg-slate-800">Total</th>
+                                <tr className="border-b border-[rgba(230,206,150,0.16)] bg-navy-950/50">
+                                    <th className="py-3 px-4 text-xs font-display font-bold text-[#9FB0CC] uppercase tracking-[0.08em] text-left">Team</th>
+                                    <th className="py-3 px-4 text-xs font-display font-bold text-[#9FB0CC] uppercase tracking-[0.08em]">Q1</th>
+                                    <th className="py-3 px-4 text-xs font-display font-bold text-[#9FB0CC] uppercase tracking-[0.08em]">Q2</th>
+                                    <th className="py-3 px-4 text-xs font-display font-bold text-[#9FB0CC] uppercase tracking-[0.08em]">Q3</th>
+                                    <th className="py-3 px-4 text-xs font-display font-bold text-[#9FB0CC] uppercase tracking-[0.08em]">Q4</th>
+                                    <th className="py-3 px-4 text-xs font-display font-bold text-white uppercase tracking-[0.08em] bg-navy-800">Total</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-800">
+                            <tbody className="divide-y divide-[rgba(230,206,150,0.12)]">
                                 <tr>
-                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2">{awayLogo ? <img src={awayLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.awayTeam}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q1?.away ?? '-'}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.away - squaresPool.scores.q1.away) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.q1.away) : '-')}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.away - squaresPool.scores.half.away) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.half.away) : '-')}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.final && squaresPool.scores.q3 ? (squaresPool.scores.final.away - squaresPool.scores.q3.away) : (squaresPool.scores.period && squaresPool.scores.period >= 4 && squaresPool.scores.q3 ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.q3.away) : '-')}</td>
-                                    <td className="py-4 px-4 font-black text-indigo-400 text-lg bg-slate-900/50">{squaresPool.scores.current?.away ?? 0}</td>
+                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{awayLogo ? <img src={awayLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.awayTeam}</td>
+                                    <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q1?.away ?? '-'}</td>
+                                    <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.away - squaresPool.scores.q1.away) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.q1.away) : '-')}</td>
+                                    <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.away - squaresPool.scores.half.away) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.half.away) : '-')}</td>
+                                    <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.final && squaresPool.scores.q3 ? (squaresPool.scores.final.away - squaresPool.scores.q3.away) : (squaresPool.scores.period && squaresPool.scores.period >= 4 && squaresPool.scores.q3 ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.q3.away) : '-')}</td>
+                                    <td className="py-4 px-4 font-display font-bold text-gold-400 text-lg bg-navy-950/50 num">{squaresPool.scores.current?.away ?? 0}</td>
                                 </tr>
                                 <tr>
-                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2">{homeLogo ? <img src={homeLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.homeTeam}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q1?.home ?? '-'}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.home - squaresPool.scores.q1.home) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.q1.home) : '-')}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.home - squaresPool.scores.half.home) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.half.home) : '-')}</td>
-                                    <td className="py-4 px-4 font-mono text-slate-300">{squaresPool.scores.final && squaresPool.scores.q3 ? (squaresPool.scores.final.home - squaresPool.scores.q3.home) : (squaresPool.scores.period && squaresPool.scores.period >= 4 && squaresPool.scores.q3 ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.q3.home) : '-')}</td>
-                                    <td className="py-4 px-4 font-black text-rose-400 text-lg bg-slate-900/50">{squaresPool.scores.current?.home ?? 0}</td>
+                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{homeLogo ? <img src={homeLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.homeTeam}</td>
+                                    <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q1?.home ?? '-'}</td>
+                                    <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.home - squaresPool.scores.q1.home) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.q1.home) : '-')}</td>
+                                    <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.home - squaresPool.scores.half.home) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.half.home) : '-')}</td>
+                                    <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.final && squaresPool.scores.q3 ? (squaresPool.scores.final.home - squaresPool.scores.q3.home) : (squaresPool.scores.period && squaresPool.scores.period >= 4 && squaresPool.scores.q3 ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.q3.home) : '-')}</td>
+                                    <td className="py-4 px-4 font-display font-bold text-brandred-500 text-lg bg-navy-950/50 num">{squaresPool.scores.current?.home ?? 0}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -620,8 +623,8 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 {/* Grid Rendering */}
                 <div className="flex items-center gap-4 w-full justify-center">
                     <div className="hidden md:flex flex-col items-center gap-2">
-                        <div className="w-16 h-16 bg-indigo-900/20 rounded-full flex items-center justify-center border-2 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-white p-1">
-                            {awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-indigo-400 font-bold text-xl">{squaresPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 border-gold-500 shadow-[0_0_20px_rgba(217,188,128,0.3)] bg-white p-1">
+                            {awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-gold-600 font-display font-bold text-xl">{squaresPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
                         </div>
                     </div>
                     <div className="flex-1 overflow-x-auto">
@@ -640,8 +643,8 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         />
                     </div>
                     <div className="hidden md:flex flex-col items-center gap-2">
-                        <div className="w-16 h-16 bg-rose-900/20 rounded-full flex items-center justify-center border-2 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] bg-white p-1">
-                            {homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-rose-400 font-bold text-xl">{squaresPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
+                        <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 border-brandred-500 shadow-[0_0_20px_rgba(196,52,46,0.3)] bg-white p-1">
+                            {homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-brandred-500 font-display font-bold text-xl">{squaresPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
                         </div>
                     </div>
                 </div>
@@ -649,13 +652,13 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
             {/* What If Scenarios */}
             <div className="max-w-[1600px] mx-auto px-4 grid grid-cols-1 xl:grid-cols-2 gap-8 items-start mb-8">
-                <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
-                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2"><h3 className="text-amber-400 font-medium text-sm">If {squaresPool.awayTeam} scores next...</h3></div>
-                    <div className="bg-slate-950 p-4 space-y-4">{awayPredictions.map(pred => <div key={pred.points} className="flex justify-between items-center border-b border-slate-800/50 pb-2"><div><span className="block text-slate-300 font-bold text-sm">+{pred.points}</span><span className="text-[10px] text-slate-500">Digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>)}</div>
+                <div className="border border-gold-500/30 rounded-xl p-0 overflow-hidden">
+                    <div className="bg-page p-4 border-b border-line flex items-center gap-2"><h3 className="text-gold-600 font-display font-bold uppercase tracking-[0.05em] text-sm">If {squaresPool.awayTeam} scores next...</h3></div>
+                    <div className="bg-card p-4 space-y-4">{awayPredictions.map(pred => <div key={pred.points} className="flex justify-between items-center border-b border-line/50 pb-2"><div><span className="block text-[color:var(--text)] font-bold text-sm num">+{pred.points}</span><span className="text-[10px] text-faint num">Digit: {pred.newDigit}</span></div><span className="text-[color:var(--text)] font-bold text-sm font-body">{pred.owner}</span></div>)}</div>
                 </div>
-                <div className="border border-amber-500/30 rounded-xl p-0 overflow-hidden">
-                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-4 border-b border-slate-800 flex items-center gap-2"><h3 className="text-amber-400 font-medium text-sm">If {squaresPool.homeTeam} scores next...</h3></div>
-                    <div className="bg-slate-950 p-4 space-y-4">{homePredictions.map(pred => <div key={pred.points} className="flex justify-between items-center border-b border-slate-800/50 pb-2"><div><span className="block text-slate-300 font-bold text-sm">+{pred.points}</span><span className="text-[10px] text-slate-500">Digit: {pred.newDigit}</span></div><span className="text-white font-bold text-sm">{pred.owner}</span></div>)}</div>
+                <div className="border border-gold-500/30 rounded-xl p-0 overflow-hidden">
+                    <div className="bg-page p-4 border-b border-line flex items-center gap-2"><h3 className="text-gold-600 font-display font-bold uppercase tracking-[0.05em] text-sm">If {squaresPool.homeTeam} scores next...</h3></div>
+                    <div className="bg-card p-4 space-y-4">{homePredictions.map(pred => <div key={pred.points} className="flex justify-between items-center border-b border-line/50 pb-2"><div><span className="block text-[color:var(--text)] font-bold text-sm num">+{pred.points}</span><span className="text-[10px] text-faint num">Digit: {pred.newDigit}</span></div><span className="text-[color:var(--text)] font-bold text-sm font-body">{pred.owner}</span></div>)}</div>
                 </div>
             </div>
 
@@ -666,41 +669,41 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     const awayDigit = getLastDigit(card.away);
 
                     return (
-                        <div key={card.period} className="bg-black border border-slate-800 rounded-xl p-6 flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
+                        <div key={card.period} className="bg-card border border-line rounded-xl p-6 flex flex-col items-center text-center shadow-card relative overflow-hidden group">
                             {/* Top Bar Color Indicator (Optional) */}
-                            {card.isLocked && <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400"></div>}
+                            {card.isLocked && <div className="absolute top-0 left-0 right-0 h-1 bg-[#0F7B4A]"></div>}
 
-                            <h3 className="text-slate-500 font-bold uppercase tracking-widest text-xs mb-4 mt-2">{card.label}</h3>
+                            <h3 className="text-faint font-display font-bold uppercase tracking-[0.16em] text-xs mb-4 mt-2">{card.label}</h3>
 
-                            <div className="text-4xl font-black text-white mb-6 flex gap-4 items-center">
+                            <div className="text-4xl font-display font-bold text-[color:var(--text)] mb-6 flex gap-4 items-center num">
                                 <span>{card.home}</span>
-                                <span className="text-slate-700 text-2xl">-</span>
+                                <span className="text-faint text-2xl">-</span>
                                 <span>{card.away}</span>
                             </div>
 
-                            <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3 w-full mb-4 grid grid-cols-2 gap-4">
-                                <div className="flex flex-col items-center border-r border-slate-800 border-dashed pr-2">
-                                    <span className="text-[10px] font-bold text-rose-400 uppercase mb-1">{squaresPool.homeTeam ? "Home Digit" : "Row Digit"}</span>
-                                    <span className="text-2xl font-black text-white font-mono">{homeDigit}</span>
+                            <div className="bg-page/50 border border-line rounded-lg p-3 w-full mb-4 grid grid-cols-2 gap-4">
+                                <div className="flex flex-col items-center border-r border-line border-dashed pr-2">
+                                    <span className="text-[10px] font-display font-bold text-brandred-500 uppercase tracking-[0.06em] mb-1">{squaresPool.homeTeam ? "Home Digit" : "Row Digit"}</span>
+                                    <span className="text-2xl font-display font-bold text-[color:var(--text)] num">{homeDigit}</span>
                                 </div>
                                 <div className="flex flex-col items-center pl-2">
-                                    <span className="text-[10px] font-bold text-indigo-400 uppercase mb-1">{squaresPool.awayTeam ? "Away Digit" : "Col Digit"}</span>
-                                    <span className="text-2xl font-black text-white font-mono">{awayDigit}</span>
+                                    <span className="text-[10px] font-display font-bold text-gold-600 uppercase tracking-[0.06em] mb-1">{squaresPool.awayTeam ? "Away Digit" : "Col Digit"}</span>
+                                    <span className="text-2xl font-display font-bold text-[color:var(--text)] num">{awayDigit}</span>
                                 </div>
                             </div>
 
-                            <div className="text-slate-500 text-xs font-mono mb-6">
+                            <div className="text-faint text-xs mb-6 num">
                                 This Quarter: {card.qPointsHome} - {card.qPointsAway}
                             </div>
 
                             <div className="mt-auto flex flex-col items-center w-full">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">IN THE MONEY:</span>
-                                <div className="text-lg font-bold text-white mb-1 truncate w-full px-2" title={card.winnerName}>{card.winnerName}</div>
-                                <div className="text-3xl font-black text-emerald-400 font-mono tracking-tight">${card.amount}</div>
+                                <span className="text-[10px] font-display font-bold text-faint uppercase tracking-[0.16em] mb-2">In The Money:</span>
+                                <div className="text-lg font-bold text-[color:var(--text)] mb-1 truncate w-full px-2 font-body" title={card.winnerName}>{card.winnerName}</div>
+                                <div className="text-3xl font-display font-bold text-gold-600 tracking-tight num">${card.amount}</div>
                             </div>
 
                             <div className="mt-6">
-                                {card.isLocked ? <Lock size={18} className="text-emerald-500/30" /> : <Lock size={18} className="text-slate-800/50" />}
+                                {card.isLocked ? <Lock size={18} className="text-[#0F7B4A]/40" /> : <Lock size={18} className="text-faint/50" />}
                             </div>
                         </div>
                     );
@@ -710,31 +713,31 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             {/* Score Change History (Only for Every Score Pays) */}
             {squaresPool.ruleVariations.scoreChangePayout && (
                 <div className="max-w-[1600px] mx-auto px-4 mb-8">
-                    <div className="bg-black border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-                        <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between">
-                            <h3 className="font-bold text-white flex items-center gap-2"><Zap size={18} className="text-amber-400" /> Score Change History</h3>
-                            <span className="text-xs font-bold text-slate-500 uppercase">{winners.filter(w => w.period === 'Event').length} Events</span>
+                    <div className="bg-card border border-line rounded-xl overflow-hidden shadow-card">
+                        <div className="p-4 border-b border-line bg-page/50 flex items-center justify-between">
+                            <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2"><Zap size={18} className="text-[#5B2A86] dark:text-[#8655B5]" /> Score Change History</h3>
+                            <span className="text-xs font-display font-bold text-faint uppercase tracking-[0.08em]"><span className="num">{winners.filter(w => w.period === 'Event').length}</span> Events</span>
                         </div>
                         <div className="max-h-[400px] overflow-y-auto">
                             <table className="w-full">
-                                <thead className="bg-slate-900 sticky top-0 z-10">
+                                <thead className="bg-page sticky top-0 z-10">
                                     <tr>
-                                        <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase">Event</th>
-                                        <th className="py-3 px-4 text-center text-xs font-bold text-slate-500 uppercase">Digits</th>
-                                        <th className="py-3 px-4 text-right text-xs font-bold text-slate-500 uppercase">Winner</th>
-                                        <th className="py-3 px-4 text-right text-xs font-bold text-slate-500 uppercase">Prize</th>
+                                        <th className="py-3 px-4 text-left text-xs font-display font-bold text-faint uppercase tracking-[0.08em]">Event</th>
+                                        <th className="py-3 px-4 text-center text-xs font-display font-bold text-faint uppercase tracking-[0.08em]">Digits</th>
+                                        <th className="py-3 px-4 text-right text-xs font-display font-bold text-faint uppercase tracking-[0.08em]">Winner</th>
+                                        <th className="py-3 px-4 text-right text-xs font-display font-bold text-faint uppercase tracking-[0.08em]">Prize</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-800">
+                                <tbody className="divide-y divide-line">
                                     {winners.filter(w => w.period === 'Event').length === 0 ? (
-                                        <tr><td colSpan={4} className="py-8 text-center text-slate-500 italic">No score changes yet.</td></tr>
+                                        <tr><td colSpan={4} className="py-8 text-center text-faint italic font-body">No score changes yet.</td></tr>
                                     ) : (
                                         winners.filter(w => w.period === 'Event').map((win, i) => (
-                                            <tr key={i} className="hover:bg-slate-900/30 transition-colors">
-                                                <td className="py-3 px-4 text-slate-400 text-sm">{win.description || 'Score Update'}</td>
-                                                <td className="py-3 px-4 text-center"><span className="bg-slate-800 px-2 py-1 rounded text-xs font-mono text-slate-300">{win.homeDigit}-{win.awayDigit}</span></td>
-                                                <td className="py-3 px-4 text-right font-bold text-emerald-400">{win.owner}</td>
-                                                <td className="py-3 px-4 text-right font-mono text-white">${win.amount}</td>
+                                            <tr key={i} className="hover:bg-page/30 transition-colors duration-150">
+                                                <td className="py-3 px-4 text-muted text-sm font-body">{win.description || 'Score Update'}</td>
+                                                <td className="py-3 px-4 text-center"><span className="bg-page px-2 py-1 rounded text-xs num text-[color:var(--text)] border border-line">{win.homeDigit}-{win.awayDigit}</span></td>
+                                                <td className="py-3 px-4 text-right font-bold text-gold-600 font-body">{win.owner}</td>
+                                                <td className="py-3 px-4 text-right num text-[color:var(--text)]">${win.amount}</td>
                                             </tr>
                                         ))
                                     )}
@@ -749,7 +752,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             <div className="max-w-[1600px] mx-auto px-4 mb-20">
                 <AICommissioner poolId={squaresPool.id} userId={user?.id} userName={user?.name} />
                 <div className="flex justify-center mt-8">
-                    <p className="text-slate-600 text-xs italic">All pool activities are automated and verified.</p>
+                    <p className="text-faint text-xs italic font-body">All pool activities are automated and verified.</p>
                 </div>
             </div>
 
@@ -760,12 +763,12 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             {/* Rule Modal */}
             {showRulesModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                    <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full relative shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="p-6 border-b border-slate-800 bg-slate-950 flex justify-between items-center shrink-0">
-                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                <HelpCircle className="text-indigo-400" /> Pool Rules & Payouts
+                    <div className="bg-card border border-line rounded-xl max-w-2xl w-full relative shadow-card overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-line bg-page flex justify-between items-center shrink-0">
+                            <h3 className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+                                <HelpCircle className="text-gold-500" /> Pool Rules & Payouts
                             </h3>
-                            <button onClick={() => setShowRulesModal(false)} className="text-slate-500 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 p-2 rounded-lg">
+                            <button onClick={() => setShowRulesModal(false)} className="text-muted hover:text-[color:var(--text)] transition-colors duration-150 bg-page hover:bg-surface p-2 rounded-lg border border-line">
                                 <span className="sr-only">Close</span>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                             </button>
@@ -774,40 +777,40 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         <div className="p-6 overflow-y-auto space-y-8">
                             {/* General Stats */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center">
-                                    <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Cost Per Square</div>
-                                    <div className="text-xl font-mono font-bold text-white">${squaresPool.costPerSquare}</div>
+                                <div className="bg-page p-3 rounded-lg border border-line text-center">
+                                    <div className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1">Cost Per Square</div>
+                                    <div className="text-xl font-display font-bold text-[color:var(--text)] num">${squaresPool.costPerSquare}</div>
                                 </div>
-                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center">
-                                    <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Max Per Player</div>
-                                    <div className="text-xl font-mono font-bold text-white">{squaresPool.maxSquaresPerPlayer || '∞'}</div>
+                                <div className="bg-page p-3 rounded-lg border border-line text-center">
+                                    <div className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1">Max Per Player</div>
+                                    <div className="text-xl font-display font-bold text-[color:var(--text)] num">{squaresPool.maxSquaresPerPlayer || '∞'}</div>
                                 </div>
-                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center">
-                                    <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Number Sets</div>
-                                    <div className="text-xl font-mono font-bold text-white">{squaresPool.numberSets}</div>
+                                <div className="bg-page p-3 rounded-lg border border-line text-center">
+                                    <div className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1">Number Sets</div>
+                                    <div className="text-xl font-display font-bold text-[color:var(--text)] num">{squaresPool.numberSets}</div>
                                 </div>
-                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center">
-                                    <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Winners</div>
-                                    <div className="text-xl font-mono font-bold text-white">{Object.keys(squaresPool.payouts).length + (squaresPool.ruleVariations.reverseWinners ? Object.keys(squaresPool.payouts).length : 0)}</div>
+                                <div className="bg-page p-3 rounded-lg border border-line text-center">
+                                    <div className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1">Winners</div>
+                                    <div className="text-xl font-display font-bold text-[color:var(--text)] num">{Object.keys(squaresPool.payouts).length + (squaresPool.ruleVariations.reverseWinners ? Object.keys(squaresPool.payouts).length : 0)}</div>
                                 </div>
                             </div>
 
                             {/* Payout Structure */}
                             <div>
-                                <h4 className="text-slate-400 font-bold uppercase text-xs mb-3 flex items-center gap-2">
+                                <h4 className="text-muted font-display font-bold uppercase text-xs tracking-[0.08em] mb-3 flex items-center gap-2">
                                     <Zap size={14} /> Payout Breakdown
                                 </h4>
-                                <div className="bg-black rounded-lg overflow-hidden border border-slate-800">
+                                <div className="bg-page rounded-lg overflow-hidden border border-line">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-slate-900 text-slate-500 font-bold uppercase text-xs">
+                                        <thead className="bg-card text-faint font-display font-bold uppercase text-xs tracking-[0.08em]">
                                             <tr>
                                                 <th className="py-2 px-4 text-left">Period</th>
                                                 <th className="py-2 px-4 text-right">Percentage</th>
                                                 <th className="py-2 px-4 text-right">Est. Prize</th>
-                                                {squaresPool.ruleVariations.reverseWinners && <th className="py-2 px-4 text-right text-amber-500">Reverse</th>}
+                                                {squaresPool.ruleVariations.reverseWinners && <th className="py-2 px-4 text-right text-gold-600">Reverse</th>}
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-800 text-slate-300">
+                                        <tbody className="divide-y divide-line text-[color:var(--text)]">
                                             {[
                                                 { label: '1st Quarter', pct: squaresPool.payouts.q1 },
                                                 { label: 'Halftime', pct: squaresPool.payouts.half },
@@ -826,69 +829,69 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                                 // We'll show the base calculation.
                                                 return (
                                                     <tr key={i}>
-                                                        <td className="py-3 px-4 font-bold text-white">{r.label}</td>
-                                                        <td className="py-3 px-4 text-right font-mono text-slate-400">{r.pct}%</td>
-                                                        <td className="py-3 px-4 text-right font-mono text-emerald-400">${prize.toLocaleString()}*</td>
-                                                        {squaresPool.ruleVariations.reverseWinners && <td className="py-3 px-4 text-right font-mono text-amber-500">Active</td>}
+                                                        <td className="py-3 px-4 font-bold text-[color:var(--text)] font-body">{r.label}</td>
+                                                        <td className="py-3 px-4 text-right num text-muted">{r.pct}%</td>
+                                                        <td className="py-3 px-4 text-right num text-gold-600">${prize.toLocaleString()}*</td>
+                                                        {squaresPool.ruleVariations.reverseWinners && <td className="py-3 px-4 text-right text-gold-600 font-display font-bold uppercase text-xs tracking-[0.06em]">Active</td>}
                                                     </tr>
                                                 );
                                             })}
                                         </tbody>
                                     </table>
                                 </div>
-                                <p className="text-[10px] text-slate-600 mt-2 italic">* Estimated prizes assuming all 100 squares are sold. Actual prizes depend on total sales.</p>
+                                <p className="text-[10px] text-faint mt-2 italic font-body">* Estimated prizes assuming all 100 squares are sold. Actual prizes depend on total sales.</p>
                             </div>
 
                             {/* Special Rules */}
                             <div>
-                                <h4 className="text-slate-400 font-bold uppercase text-xs mb-3 flex items-center gap-2">
+                                <h4 className="text-muted font-display font-bold uppercase text-xs tracking-[0.08em] mb-3 flex items-center gap-2">
                                     <Shield size={14} /> Active Rules
                                 </h4>
                                 <div className="space-y-3">
                                     {squaresPool.numberSets === 4 ? (
                                         <div className="flex gap-3">
-                                            <div className="shrink-0 w-1 bg-indigo-500 rounded-full"></div>
+                                            <div className="shrink-0 w-1 bg-navy-700 rounded-full"></div>
                                             <div>
-                                                <p className="font-bold text-indigo-400 text-sm">4 Number Sets</p>
-                                                <p className="text-slate-400 text-xs">New numbers are generated for each quarter (Q1, Half, Q3, Final). This increases randomness and fairness.</p>
+                                                <p className="font-display font-bold uppercase text-navy-700 dark:text-[#9FB0CC] text-sm">4 Number Sets</p>
+                                                <p className="text-muted text-xs font-body">New numbers are generated for each quarter (Q1, Half, Q3, Final). This increases randomness and fairness.</p>
                                             </div>
                                         </div>
                                     ) : (
                                         <div className="flex gap-3">
-                                            <div className="shrink-0 w-1 bg-slate-600 rounded-full"></div>
+                                            <div className="shrink-0 w-1 bg-line rounded-full"></div>
                                             <div>
-                                                <p className="font-bold text-slate-400 text-sm">Standard Numbers</p>
-                                                <p className="text-slate-500 text-xs">The same numbers (row/column) apply for the entire game.</p>
+                                                <p className="font-display font-bold uppercase text-muted text-sm">Standard Numbers</p>
+                                                <p className="text-faint text-xs font-body">The same numbers (row/column) apply for the entire game.</p>
                                             </div>
                                         </div>
                                     )}
 
                                     {squaresPool.ruleVariations.quarterlyRollover && (
                                         <div className="flex gap-3">
-                                            <div className="shrink-0 w-1 bg-emerald-500 rounded-full"></div>
+                                            <div className="shrink-0 w-1 bg-gold-500 rounded-full"></div>
                                             <div>
-                                                <p className="font-bold text-emerald-400 text-sm">Quarterly Rollover</p>
-                                                <p className="text-slate-400 text-xs">If a winning square is unsold, the prize money rolls over and is added to the NEXT quarter's pot.</p>
+                                                <p className="font-display font-bold uppercase text-gold-600 text-sm">Quarterly Rollover</p>
+                                                <p className="text-muted text-xs font-body">If a winning square is unsold, the prize money rolls over and is added to the NEXT quarter's pot.</p>
                                             </div>
                                         </div>
                                     )}
 
                                     {squaresPool.ruleVariations.reverseWinners && (
                                         <div className="flex gap-3">
-                                            <div className="shrink-0 w-1 bg-amber-500 rounded-full"></div>
+                                            <div className="shrink-0 w-1 bg-gold-500 rounded-full"></div>
                                             <div>
-                                                <p className="font-bold text-amber-400 text-sm">Reverse Winners</p>
-                                                <p className="text-slate-400 text-xs">The square matching the REVERSE of the score digits also wins (e.g., if ending in 3-7, then 7-3 also wins). The quarter's pot is split.</p>
+                                                <p className="font-display font-bold uppercase text-gold-600 text-sm">Reverse Winners</p>
+                                                <p className="text-muted text-xs font-body">The square matching the REVERSE of the score digits also wins (e.g., if ending in 3-7, then 7-3 also wins). The quarter's pot is split.</p>
                                             </div>
                                         </div>
                                     )}
 
                                     {squaresPool.ruleVariations.scoreChangePayout && (
                                         <div className="flex gap-3">
-                                            <div className="shrink-0 w-1 bg-fuchsia-500 rounded-full"></div>
+                                            <div className="shrink-0 w-1 bg-[#5B2A86] rounded-full"></div>
                                             <div>
-                                                <p className="font-bold text-fuchsia-400 text-sm">Every Score Pays</p>
-                                                <p className="text-slate-400 text-xs">Payouts are awarded for EVERY score change (Touchdown, Field Goal, Safety, etc.), not just end of quarters.</p>
+                                                <p className="font-display font-bold uppercase text-[#5B2A86] dark:text-[#8655B5] text-sm">Every Score Pays</p>
+                                                <p className="text-muted text-xs font-body">Payouts are awarded for EVERY score change (Touchdown, Field Goal, Safety, etc.), not just end of quarters.</p>
                                             </div>
                                         </div>
                                     )}
@@ -897,21 +900,21 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
                             {/* Charity Info */}
                             {squaresPool.charity?.enabled && (
-                                <div className="bg-rose-900/10 border border-rose-500/20 p-4 rounded-xl flex gap-4 items-start">
-                                    <div className="bg-rose-500/20 p-2 rounded-lg shrink-0"><Heart className="text-rose-400" size={24} /></div>
+                                <div className="bg-gold-500/10 border border-gold-500/20 p-4 rounded-xl flex gap-4 items-start">
+                                    <div className="bg-gold-500/20 p-2 rounded-lg shrink-0"><Heart className="text-gold-600" size={24} /></div>
                                     <div>
-                                        <h4 className="text-rose-400 font-bold text-sm uppercase">Fundraiser Pool</h4>
-                                        <p className="text-slate-300 text-sm mb-1"><span className="font-bold text-white">{squaresPool.charity.percentage}%</span> of all proceeds go directly to <span className="font-bold text-white">{squaresPool.charity.name}</span>.</p>
-                                        {squaresPool.charity.url && <a href={squaresPool.charity.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 underline">Learn more about this cause</a>}
+                                        <h4 className="text-gold-600 font-display font-bold text-sm uppercase tracking-[0.05em]">Fundraiser Pool</h4>
+                                        <p className="text-[color:var(--text)] text-sm mb-1 font-body"><span className="font-bold num">{squaresPool.charity.percentage}%</span> of all proceeds go directly to <span className="font-bold">{squaresPool.charity.name}</span>.</p>
+                                        {squaresPool.charity.url && <a href={squaresPool.charity.url} target="_blank" rel="noreferrer" className="text-xs text-gold-600 hover:text-gold-500 underline font-body">Learn more about this cause</a>}
                                     </div>
                                 </div>
                             )}
 
                         </div>
 
-                        <div className="p-4 border-t border-slate-800 bg-slate-950 text-center">
-                            <p className="text-[10px] text-slate-600">
-                                This pool is hosted on MarchMelee. Prize distribution is managed by the pool host: <span className="text-slate-500">{squaresPool.contactEmail}</span>
+                        <div className="p-4 border-t border-line bg-page text-center">
+                            <p className="text-[10px] text-faint font-body">
+                                This pool is hosted on MarchMelee. Prize distribution is managed by the pool host: <span className="text-muted">{squaresPool.contactEmail}</span>
                             </p>
                         </div>
                     </div>
