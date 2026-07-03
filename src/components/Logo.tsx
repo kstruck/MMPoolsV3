@@ -2,15 +2,27 @@ import React from 'react';
 
 interface LogoProps {
   className?: string;
+  /** Tailwind height class applied to the crest image */
   height?: string;
+  /** Render the live-text wordmark next to the crest (for dark navy chrome) */
+  withWordmark?: boolean;
 }
 
-export const Logo: React.FC<LogoProps> = ({ className = "", height = "h-12" }) => (
-  <a href="/" className={`flex items-center ${className}`}>
+/* Crest + live-text wordmark (white "MARCH MELEE" / gold "POOLS") per brand
+   handoff — on dark chrome the navy raster wordmark is illegible, so the
+   wordmark is real text. */
+export const Logo: React.FC<LogoProps> = ({ className = "", height = "h-12", withWordmark = true }) => (
+  <a href="/" className={`flex items-center gap-2.5 ${className}`}>
     <img
-      src="/mmp_logo_500x150_trans3.png"
-      alt="March Melee Pools Logo"
+      src="/mmp-crest.png"
+      alt="March Melee Pools crest"
       className={`${height} w-auto`}
     />
+    {withWordmark && (
+      <span className="flex flex-col leading-none font-display uppercase">
+        <span className="text-white font-bold tracking-[0.04em] text-[17px]">March Melee</span>
+        <span className="text-gold-500 font-extrabold tracking-[0.18em] text-[15px]">Pools</span>
+      </span>
+    )}
   </a>
 );

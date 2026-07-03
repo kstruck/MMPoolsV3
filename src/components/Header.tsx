@@ -5,7 +5,9 @@ import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckC
 import { authService } from '../services/authService';
 import { isSuperAdmin, canCreatePool } from '../utils/auth';
 import { logger } from '../utils/logger';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ThemeToggle } from './ui/ThemeToggle';
+import { cn } from './ui/cn';
 
 interface HeaderProps {
     user: User | null;
@@ -15,10 +17,41 @@ interface HeaderProps {
     onCreatePool?: () => void;
 }
 
+/* Nav link on the always-dark navy chrome: Saira 600 uppercase 14px,
+   gold underline when active. */
+const NavLink: React.FC<{
+    to: string;
+    active?: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+    className?: string;
+}> = ({ active, onClick, children, className }) => (
+    <button
+        onClick={onClick}
+        className={cn(
+            'relative flex items-center gap-1 font-display font-semibold uppercase text-[14px] tracking-[0.06em] pb-0.5 transition-colors',
+            active ? 'text-white' : 'text-white/70 hover:text-white',
+            'after:absolute after:left-0 after:right-0 after:-bottom-0.5 after:h-[2px] after:rounded-full after:bg-gold-500',
+            active ? 'after:opacity-100' : 'after:opacity-0 hover:after:opacity-40',
+            'after:transition-opacity',
+            className
+        )}
+    >
+        {children}
+    </button>
+);
+
+/* Compact chrome action button (header is always navy — no theme flip here) */
+const chromeBtn =
+    'inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 font-display font-bold uppercase text-[13px] tracking-[0.05em] transition-all duration-150 hover:-translate-y-px';
+
 export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenAuth, onLogout, onCreatePool }) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [isResending, setIsResending] = useState(false);
     const [resendStatus, setResendStatus] = useState<'idle' | 'sent' | 'error'>('idle');
+
+    const isActive = (path: string) => location.pathname === path;
 
     const handleResend = async () => {
         setIsResending(true);
@@ -39,78 +72,90 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
     return (
         <>
             {user && !user.emailVerified && user.provider === 'password' && (
-                <div className="bg-amber-500 text-white text-xs font-bold text-center py-1 flex justify-center items-center gap-2">
+                <div className="bg-gold-600 text-navy-950 text-xs font-bold text-center py-1 flex justify-center items-center gap-2">
                     <span>Verify your email to secure your account — check your inbox for the link.</span>
                     {resendStatus === 'sent' ? (
-                        <span className="flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded text-white">
+                        <span className="flex items-center gap-1 bg-white/30 px-2 py-0.5 rounded-sm">
                             <CheckCircle size={12} /> Sent!
                         </span>
                     ) : resendStatus === 'error' ? (
-                        <span className="flex items-center gap-1 bg-red-600/50 px-2 py-0.5 rounded text-white">
+                        <span className="flex items-center gap-1 bg-brandred-600 px-2 py-0.5 rounded-sm text-white">
                             <AlertCircle size={12} /> Error
                         </span>
                     ) : (
                         <button
                             onClick={handleResend}
                             disabled={isResending}
-                            className="underline hover:text-amber-100 flex items-center gap-1 disabled:opacity-50"
+                            className="underline hover:text-navy-800 flex items-center gap-1 disabled:opacity-50"
                         >
                             {isResending ? <RefreshCw size={12} className="animate-spin" /> : 'Resend Email'}
                         </button>
                     )}
                 </div>
             )}
-            <header className="bg-slate-950 border-b border-slate-700 backdrop-blur-md sticky top-0 z-50 shadow-lg transition-colors duration-300">
+            <header className="bg-navy-900 border-b border-[rgba(230,206,150,0.16)] sticky top-0 z-50 shadow-lg">
                 <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
                     <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-                        <Logo height="h-20" />
+                        <Logo height="h-12" />
                     </div>
-                    <div className="flex items-center gap-4 flex-wrap justify-center">
+                    <div className="flex items-center gap-5 flex-wrap justify-center">
                         {!user ? (
                             <>
-                                <button onClick={() => navigate('/features')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                <NavLink to="/features" active={isActive('/features')} onClick={() => navigate('/features')}>
                                     Features
-                                </button>
-                                <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                </NavLink>
+                                <NavLink to="/how-it-works" active={isActive('/how-it-works')} onClick={() => navigate('/how-it-works')}>
                                     How it Works
-                                </button>
-                                <button onClick={() => navigate('/how-it-works?view=strategy')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                </NavLink>
+                                <NavLink to="/how-it-works?view=strategy" onClick={() => navigate('/how-it-works?view=strategy')}>
                                     Pool Guides
-                                </button>
-                                <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                </NavLink>
+                                <NavLink to="/browse" active={isActive('/browse')} onClick={() => navigate('/browse')}>
                                     Public Pools
-                                </button>
-                                <button onClick={() => navigate('/pricing')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors mr-2">
+                                </NavLink>
+                                <NavLink to="/pricing" active={isActive('/pricing')} onClick={() => navigate('/pricing')}>
                                     Pricing
-                                </button>
-                                <button onClick={() => navigate('/scoreboard')} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors mr-2">
+                                </NavLink>
+                                <NavLink to="/scoreboard" active={isActive('/scoreboard')} onClick={() => navigate('/scoreboard')} className="text-gold-400 hover:text-gold-300">
                                     <Trophy size={14} /> Live Scores
-                                </button>
-                                <div className="flex gap-2">
-                                    <button onClick={onOpenAuth} className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 transition-colors">Sign In / Register</button>
+                                </NavLink>
+                                <div className="flex items-center gap-2">
+                                    <ThemeToggle />
+                                    <button
+                                        onClick={onOpenAuth}
+                                        className={cn(chromeBtn, 'text-white/80 hover:text-white')}
+                                    >
+                                        Log In
+                                    </button>
+                                    <button
+                                        onClick={onOpenAuth}
+                                        className={cn(chromeBtn, 'bg-brandred-600 text-white hover:bg-brandred-500 shadow-[0_6px_16px_rgba(196,52,46,0.28)]')}
+                                    >
+                                        Get Started
+                                    </button>
                                 </div>
                             </>
                         ) : (
-                            <div className="flex items-center gap-4">
-                                <button onClick={() => navigate('/how-it-works')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                            <div className="flex items-center gap-4 flex-wrap justify-center">
+                                <NavLink to="/how-it-works" active={isActive('/how-it-works')} onClick={() => navigate('/how-it-works')}>
                                     How it Works
-                                </button>
-                                <button onClick={() => navigate('/how-it-works?view=strategy')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                </NavLink>
+                                <NavLink to="/how-it-works?view=strategy" onClick={() => navigate('/how-it-works?view=strategy')}>
                                     Pool Guides
-                                </button>
-                                <button onClick={() => navigate('/browse')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                </NavLink>
+                                <NavLink to="/browse" active={isActive('/browse')} onClick={() => navigate('/browse')}>
                                     Public Pools
-                                </button>
-                                <button onClick={() => navigate('/pricing')} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+                                </NavLink>
+                                <NavLink to="/pricing" active={isActive('/pricing')} onClick={() => navigate('/pricing')}>
                                     Pricing
-                                </button>
-                                <button onClick={() => navigate('/scoreboard')} className="flex items-center gap-1 text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors">
+                                </NavLink>
+                                <NavLink to="/scoreboard" active={isActive('/scoreboard')} onClick={() => navigate('/scoreboard')} className="text-gold-400 hover:text-gold-300">
                                     <Trophy size={14} /> Live Scores
-                                </button>
+                                </NavLink>
 
                                 <button
                                     onClick={() => navigate('/participant')}
-                                    className="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
+                                    className={cn(chromeBtn, 'bg-navy-700 text-white hover:bg-navy-600')}
                                     title="Pools you have joined as a participant"
                                 >
                                     <LayoutGrid size={14} /> My Entries
@@ -119,7 +164,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 {(isManager || canCreatePool(user)) && (
                                     <button
                                         onClick={() => navigate('/participant')}
-                                        className="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1"
+                                        className={cn(chromeBtn, 'border-[1.5px] border-white/25 text-white hover:border-gold-500 hover:text-gold-300')}
                                         title="Pools you created and control"
                                     >
                                         <LayoutGrid size={14} /> Manage My Pools
@@ -129,26 +174,43 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <button
                                     onClick={isSuperAdmin(user) ? onCreatePool : undefined}
                                     disabled={!isSuperAdmin(user)}
-                                    className={`text-xs px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-bold ${isSuperAdmin(user)
-                                        ? "bg-orange-500 hover:bg-orange-600 text-white"
-                                        : "bg-slate-700 text-slate-400 cursor-not-allowed opacity-70"
-                                        }`}
+                                    className={cn(
+                                        chromeBtn,
+                                        isSuperAdmin(user)
+                                            ? 'bg-brandred-600 text-white hover:bg-brandred-500 shadow-[0_6px_16px_rgba(196,52,46,0.28)]'
+                                            : 'bg-navy-800 text-white/40 cursor-not-allowed hover:translate-y-0'
+                                    )}
                                     title={isSuperAdmin(user) ? "Create a new pool" : "Pool creation is coming soon"}
                                 >
                                     <LayoutGrid size={14} /> {(isManager || canCreatePool(user)) ? "Create a New Pool" : "Create your own pool"}
                                 </button>
 
                                 {isSuperAdmin(user) && (
-                                    <button onClick={() => navigate('/super-admin')} className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded text-white transition-colors flex items-center gap-1 font-bold">
-                                        <Shield size={12} /> SuperAdmin Dashboard
+                                    <button
+                                        onClick={() => navigate('/super-admin')}
+                                        className={cn(chromeBtn, 'bg-gold-foil text-navy-900 hover:brightness-105')}
+                                    >
+                                        <Shield size={12} /> SuperAdmin
                                     </button>
                                 )}
 
-                                <button onClick={() => navigate('/profile')} className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded transition-colors flex items-center gap-1 font-bold">
-                                    <UserIcon size={14} /> {user.name.split(' ')[0]} <span className="text-[10px] text-slate-400">({user.role})</span>
+                                <ThemeToggle />
+
+                                <button
+                                    onClick={() => navigate('/profile')}
+                                    className={cn(chromeBtn, 'border border-white/20 text-white/80 hover:text-white hover:border-white/40')}
+                                >
+                                    <UserIcon size={14} /> {user.name.split(' ')[0]}{' '}
+                                    <span className="text-[10px] text-white/40 normal-case">({user.role})</span>
                                 </button>
 
-                                <button onClick={onLogout} className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded transition-colors"><LogOut size={14} /></button>
+                                <button
+                                    onClick={onLogout}
+                                    aria-label="Log out"
+                                    className={cn(chromeBtn, 'border border-white/20 text-white/80 hover:text-white hover:border-white/40')}
+                                >
+                                    <LogOut size={14} />
+                                </button>
                             </div>
                         )}
                     </div>
