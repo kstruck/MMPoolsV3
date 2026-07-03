@@ -84,6 +84,13 @@ a material change to the monetization funnel that does **not** match current beh
 This is a T14-class premise gap and needs an explicit decision before the unified
 `createPool` billing stamp is written (see the open decision raised with the user).
 
+**RESOLVED (2026-07-03):** stamp **`free`, no auto-lock** — preserve today's behavior
+exactly. `createPool` sets `billing.status='free'` (or leaves it absent, equivalent);
+`enforceBillingStatus` never touches it; cap stays enforced at join; commissioners
+upgrade via Stripe when they want more. Confirms PlayoffWizard already sends a
+client `billing.status='trial'` that `stripPrivilegedPoolFields` discards
+(PlayoffWizard.tsx:393-405 → poolOps.ts:22) — so nothing changes on the wire.
+
 ## 6. Still needed before writing the remaining Phase A code
 
 - **Per-type `CreatePoolInput` schema archaeology:** exact submit payloads for the
