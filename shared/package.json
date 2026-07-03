@@ -3,5 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "type": "commonjs",
-  "description": "Canonical pool-type contracts shared by the app (src/) and Cloud Functions (functions/)."
+  "description": "Canonical pool-type contracts shared by the app (src/) and Cloud Functions (functions/).",
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
 }

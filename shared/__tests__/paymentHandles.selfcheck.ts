@@ -61,4 +61,4 @@ assert.deepStrictEqual(
   'round-trips all five handles through the canonical nested object',
 );
 
-console.log('paymentHandles.test: all assertions passed');
+console.log('paymentHandles.selfcheck: all assertions passed');
