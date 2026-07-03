@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildNFLPayload } from './buildNFLPayload';
-import { pickemCreateInputSchema, survivorCreateInputSchema } from '@shared/schemas';
+import { pickemCreateInputSchema, survivorCreateInputSchema, marginCreateInputSchema } from '@shared/schemas';
 
 const pickemBase: Record<string, unknown> = {
   type: 'NFL_PICKEM', name: 'Weekly Pickem', season: '2025', isPublic: true,
@@ -44,5 +44,18 @@ describe('buildNFLPayload', () => {
     const p = buildNFLPayload(survivorBase, 'NFL_SURVIVOR');
     expect((p.settings as any).maxStrikes).toBe(1);
     expect(survivorCreateInputSchema.safeParse(p).success).toBe(true);
+  });
+
+  it('passes through margin settings and gate', () => {
+    const marginBase: Record<string, unknown> = {
+      ...pickemBase, type: 'NFL_MARGIN',
+      settings: {
+        entryFee: 15, isListedPublic: true, payoutMode: 'SEASON',
+        payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
+      },
+    };
+    const p = buildNFLPayload(marginBase, 'NFL_MARGIN');
+    expect(p.type).toBe('NFL_MARGIN');
+    expect(marginCreateInputSchema.safeParse(p).success).toBe(true);
   });
 });

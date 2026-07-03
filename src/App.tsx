@@ -45,6 +45,8 @@ const WizardPreview = React.lazy(() => import('./components/wizard/__preview__/W
 // Unified create flow (Phase B) — Playoff migrated first
 const CreatePlayoffPool = React.lazy(() => import('./components/wizard/create/CreatePlayoffPool').then(m => ({ default: m.CreatePlayoffPool })));
 const CreateNFLPickemPool = React.lazy(() => import('./components/wizard/create/CreateNFLPickemPool').then(m => ({ default: m.CreateNFLPickemPool })));
+const CreateNFLSurvivorPool = React.lazy(() => import('./components/wizard/create/CreateNFLSurvivorPool').then(m => ({ default: m.CreateNFLSurvivorPool })));
+const CreateNFLMarginPool = React.lazy(() => import('./components/wizard/create/CreateNFLMarginPool').then(m => ({ default: m.CreateNFLMarginPool })));
 const PropsWizard = React.lazy(() => import('./components/PropsWizard/PropsWizard').then(m => ({ default: m.PropsWizard })));
 const SetupWizard = React.lazy(() => import('./components/SetupWizard').then(m => ({ default: m.SetupWizard })));
 const NFLPoolWizard = React.lazy(() => import('./components/NFLPoolWizard/NFLPoolWizard').then(m => ({ default: m.NFLPoolWizard })));
@@ -274,6 +276,8 @@ const App: React.FC = () => {
           {/* Unified create flow (Phase B) */}
           <Route path="/create/playoff" element={user ? <CreatePlayoffPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
           <Route path="/create/pickem" element={user ? <CreateNFLPickemPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
+          <Route path="/create/survivor" element={user ? <CreateNFLSurvivorPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
+          <Route path="/create/margin" element={user ? <CreateNFLMarginPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
 
           {/* Global Pages */}
           <Route path="/pricing" element={<PricingPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
