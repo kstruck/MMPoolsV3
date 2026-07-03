@@ -804,6 +804,21 @@ export const dbService = {
         }
     },
 
+    // Change a user's canonical role (T6). SUPER_ADMIN only (enforced server-side).
+    setUserRole: async (targetUid: string, role: string): Promise<Record<string, unknown>> => {
+        try {
+            const fn = httpsCallable<{ targetUid: string; role: string }, Record<string, unknown>>(functions, 'setUserRole');
+            const result = await fn({ targetUid, role });
+            return result.data;
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.CRITICAL,
+                context: { operation: 'setUserRole', targetUid, role }
+            });
+            throw error;
+        }
+    },
+
     sendAdminPasswordReset: async (email: string): Promise<Record<string, unknown>> => {
         try {
             const fn = httpsCallable<{ email: string }, Record<string, unknown>>(functions, 'sendAdminPasswordReset');

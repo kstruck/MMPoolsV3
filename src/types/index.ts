@@ -512,7 +512,9 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'POOL_MANAGER' | 'PARTICIPANT' | 'SUPER_ADMIN';
+  // Canonical roles (T6) + legacy values still present in older docs until
+  // normalizeRole() folds them. Never compare raw — use src/utils/roles.
+  role: 'SUPER_ADMIN' | 'MODERATOR' | 'COMMISSIONER' | 'MEMBER' | 'BANNED' | 'POOL_MANAGER' | 'PARTICIPANT';
   provider: 'password' | 'google';
   picture?: string | null; // Allow null for Firebase compatibility
   registrationMethod?: 'google' | 'email' | 'unknown';

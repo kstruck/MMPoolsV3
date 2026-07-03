@@ -10,6 +10,8 @@ import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRig
 import { NFL_TEAMS, getTeamLogo } from '../constants';
 import { getPoolSport, getPoolLifecycleState } from '../utils/poolSport';
 import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
+import { CANONICAL_ROLES, normalizeRole, roleBadge } from '../utils/roles';
+import { ConfirmActionModal } from './admin/ConfirmActionModal';
 import { db } from '../firebase';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -73,6 +75,19 @@ export const SuperAdmin: React.FC = () => {
     const [themes, setThemes] = useState<PoolTheme[]>([]);
     const [editingTheme, setEditingTheme] = useState<PoolTheme | null>(null);
     const [showThemeBuilder, setShowThemeBuilder] = useState(false);
+    const [roleChange, setRoleChange] = useState<{ user: User; role: string } | null>(null);
+
+    const applyRoleChange = async () => {
+        if (!roleChange) return;
+        const { user: u, role } = roleChange;
+        setRoleChange(null);
+        try {
+            await dbService.setUserRole(u.id, role);
+            toast.success(`${u.email || u.id} is now ${role}.`);
+        } catch (e) {
+            toast.error(getUserMessage(e, 'Failed to change role.'));
+        }
+    };
 
     // Prop Seeds State
     const [propSeeds, setPropSeeds] = useState<PropSeed[]>([]);
@@ -1517,9 +1532,19 @@ export const SuperAdmin: React.FC = () => {
                                             </td>
                                             <td className="p-4 text-slate-400">{u.email}</td>
                                             <td className="p-4">
-                                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.role === 'SUPER_ADMIN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'POOL_MANAGER' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
-                                                    {u.role || 'USER'}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${roleBadge(u.role).className}`}>
+                                                        {roleBadge(u.role).label}
+                                                    </span>
+                                                    <select
+                                                        aria-label={`Change role for ${u.email || u.id}`}
+                                                        value={normalizeRole(u.role)}
+                                                        onChange={(e) => setRoleChange({ user: u, role: e.target.value })}
+                                                        className="bg-slate-900 border border-slate-700 rounded text-[10px] text-slate-300 px-1 py-1 focus:outline-none focus:border-indigo-500"
+                                                    >
+                                                        {CANONICAL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                                                    </select>
+                                                </div>
                                             </td>
                                             <td className="p-4">
                                                 <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border ${u.registrationMethod === 'google' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
@@ -2287,6 +2312,19 @@ export const SuperAdmin: React.FC = () => {
             )}
 
             {/* ============ THEME BUILDER MODAL ============ */}
+            {/* Role-change guardrail (T6): typed-confirm for SUPER_ADMIN / BANNED. */}
+            <ConfirmActionModal
+                open={!!roleChange}
+                title="Change user role"
+                description={roleChange ? `Set ${roleChange.user.email || roleChange.user.id} from ${normalizeRole(roleChange.user.role)} to ${roleChange.role}.` : ''}
+                blastRadius={roleChange && (roleChange.role === 'SUPER_ADMIN' || roleChange.role === 'BANNED') ? `${roleChange.role} is a high-impact role — confirm carefully.` : undefined}
+                confirmToken={roleChange && (roleChange.role === 'SUPER_ADMIN' || roleChange.role === 'BANNED') ? (roleChange.user.email || roleChange.user.id) : undefined}
+                destructive={roleChange?.role === 'SUPER_ADMIN' || roleChange?.role === 'BANNED'}
+                confirmLabel="Change role"
+                onConfirm={applyRoleChange}
+                onCancel={() => setRoleChange(null)}
+            />
+
             {showThemeBuilder && editingTheme && (
                 <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-auto">
                     <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-5xl max-h-[90vh] overflow-auto">
@@ -3504,6 +3542,32 @@ export const SuperAdmin: React.FC = () => {
                             </div>
 
                             <div className="p-6">
+                                {/* Unified profile facts (T6): account + referrals + loyalty in one place. */}
+                                {(() => {
+                                    const ownedCount = pools.filter(p => {
+                                        const owner = p.type === 'BRACKET' ? (p as unknown as PoolLike).managerUid as string : (p as unknown as PoolLike).ownerId as string;
+                                        return owner === viewingUser.id;
+                                    }).length;
+                                    const tier = [...activeTiers].reverse().find(t => ownedCount >= (t.minPools || 0));
+                                    const facts = [
+                                        { label: 'Role', value: roleBadge(viewingUser.role).label },
+                                        { label: 'Referrals', value: String(getComputedReferrals(viewingUser.id)) },
+                                        { label: 'Loyalty Tier', value: tier?.name || '—' },
+                                        { label: 'Method', value: (viewingUser.registrationMethod || 'email').toUpperCase() },
+                                        { label: 'Pools Owned', value: String(ownedCount) },
+                                    ];
+                                    return (
+                                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                                            {facts.map(f => (
+                                                <div key={f.label} className="bg-slate-800/60 border border-slate-700 rounded-xl p-3">
+                                                    <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mb-1">{f.label}</p>
+                                                    <p className="text-sm font-black text-white truncate">{f.value}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
+
                                 <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                                     <Activity size={20} className="text-indigo-400" /> Pools Managed by {viewingUser.name.split(' ')[0]}
                                 </h3>

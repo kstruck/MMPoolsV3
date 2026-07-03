@@ -6,6 +6,66 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { normalizeRole, isCanonicalRole, type CanonicalRole } from "./lib/roles";
+import { writeAdminAudit } from "./lib/adminAudit";
+
+/**
+ * setUserRole (T6)
+ * Generic role assignment for SUPER_ADMIN: set any target user to any canonical
+ * role. Sets the tamper-proof custom claim, mirrors users/{uid}.role for display,
+ * writes an admin_audit entry, and logs ROLE_CHANGED to the target's activity.
+ * Requires: { targetUid: string, role: CanonicalRole }
+ */
+export const setUserRole = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Must be logged in.");
+    }
+    if (request.auth.token.role !== "SUPER_ADMIN") {
+        throw new HttpsError("permission-denied", "Only Super Admins can change roles.");
+    }
+
+    const { targetUid, role } = request.data as { targetUid: string; role: string };
+    if (!targetUid || typeof role !== "string" || !isCanonicalRole(role)) {
+        throw new HttpsError("invalid-argument", "targetUid and a valid canonical role are required.");
+    }
+    if (targetUid === request.auth.uid && role !== "SUPER_ADMIN") {
+        // Guard against an admin accidentally locking themselves out.
+        throw new HttpsError("failed-precondition", "You cannot demote your own account.");
+    }
+
+    const targetUser = await admin.auth().getUser(targetUid); // throws if not found
+    const priorRole = normalizeRole(
+        (await admin.firestore().doc(`users/${targetUid}`).get()).data()?.role
+    );
+    const newRole = role as CanonicalRole;
+
+    await admin.auth().setCustomUserClaims(targetUid, { role: newRole });
+    await admin.firestore().doc(`users/${targetUid}`).set({ role: newRole }, { merge: true });
+
+    // Forensic trail + per-user activity.
+    await writeAdminAudit({
+        actorUid: request.auth.uid,
+        actorEmail: request.auth.token.email as string | undefined,
+        action: "ROLE_CHANGED",
+        targetType: "user",
+        targetId: targetUid,
+        metadata: { from: priorRole, to: newRole },
+        status: "success",
+    });
+    await admin.firestore().collection(`users/${targetUid}/activity`).add({
+        type: "ROLE_CHANGED",
+        from: priorRole,
+        to: newRole,
+        at: Date.now(),
+        by: request.auth.uid,
+    }).catch(() => { /* activity log is best-effort */ });
+
+    return {
+        success: true,
+        message: `${targetUser.email || targetUid} is now ${newRole}.`,
+        role: newRole,
+    };
+});
 
 /**
  * setSuperAdminClaim
@@ -33,8 +93,8 @@ export const setSuperAdminClaim = onCall(async (request) => {
     // 3. Verify target user exists
     await admin.auth().getUser(targetUid); // throws if not found
 
-    // 4. Set or remove the custom claim
-    const newClaims = isSuperAdmin ? { role: "SUPER_ADMIN" } : { role: "PARTICIPANT" };
+    // 4. Set or remove the custom claim (canonical roles; demote → MEMBER)
+    const newClaims = isSuperAdmin ? { role: "SUPER_ADMIN" } : { role: "MEMBER" };
     await admin.auth().setCustomUserClaims(targetUid, newClaims);
 
     // 5. Mirror the role in Firestore for display purposes (not used for security checks)
@@ -68,7 +128,8 @@ export const syncMyClaims = onCall(async (request) => {
     }
 
     const userData = userDoc.data();
-    const role = userData?.role || "PARTICIPANT";
+    // Normalize any legacy stored value so the claim is always canonical.
+    const role = normalizeRole(userData?.role);
 
     // Set custom claim to match their Firestore role
     const claims = { role };

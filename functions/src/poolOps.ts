@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { writeAuditEvent } from './audit';
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { assertPoolCreationAllowed } from './lib/systemGuards';
+import { assertPoolCreationAllowed, assertNotBanned } from './lib/systemGuards';
 
 // Helper to determine if user can manage pool
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
@@ -44,6 +44,7 @@ export const createPool = onCall(async (request) => {
         if (!request.auth) {
             throw new HttpsError('unauthenticated', 'User must be logged in.');
         }
+        assertNotBanned(request.auth.token.role);
 
         const uid = request.auth.uid;
         const db = admin.firestore();
@@ -119,7 +120,7 @@ export const createPool = onCall(async (request) => {
 
             // 2. Upgrade Role if needed
             if (currentRole === 'PARTICIPANT') {
-                t.update(userRef, { role: 'POOL_MANAGER' });
+                t.update(userRef, { role: 'COMMISSIONER' });
             }
 
             // 3. Write Manager Index

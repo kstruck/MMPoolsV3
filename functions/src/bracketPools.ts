@@ -4,7 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { BracketPool } from "./types";
 import { Timestamp } from "firebase-admin/firestore";
 import * as crypto from "crypto";
-import { assertPoolCreationAllowed } from "./lib/systemGuards";
+import { assertPoolCreationAllowed, assertNotBanned } from "./lib/systemGuards";
 
 
 
@@ -15,6 +15,7 @@ export const createBracketPool = onCall(async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "User must be logged in.");
     }
+    assertNotBanned(request.auth.token.role);
 
     const { name, settings, seasonYear, gender, tournamentType } = request.data;
     const uid = request.auth.uid;
