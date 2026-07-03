@@ -120,7 +120,7 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans transition-colors duration-200">
+        <div className="min-h-screen bg-page flex flex-col font-body transition-colors duration-200">
             <Header
                 user={user}
                 onOpenAuth={() => onOpenAuth('login')}
@@ -128,27 +128,27 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
                 onCreatePool={onCreatePool}
             />
             <div className="flex-1 flex items-center justify-center p-4">
-                <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 p-8">
-                    <h2 className="text-2xl font-bold text-center text-slate-900 dark:text-white mb-6">
+                <div className="max-w-md w-full bg-card rounded-xl shadow-card border border-line p-8">
+                    <h2 className="text-2xl font-display font-bold uppercase text-center text-[color:var(--text)] mb-6">
                         Authentication
                     </h2>
 
                     {loading && (
                         <div className="flex flex-col items-center justify-center space-y-4 py-8">
-                            <Loader className="w-8 h-8 text-indigo-500 animate-spin" />
-                            <p className="text-slate-600 dark:text-slate-400">Processing your request...</p>
+                            <Loader className="w-8 h-8 text-gold-500 animate-spin" />
+                            <p className="text-muted">Processing your request...</p>
                         </div>
                     )}
 
                     {!loading && error && (
-                        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-3 mb-6">
+                        <div className="bg-[#FCEEED] dark:bg-transparent dark:border dark:border-brandred-500 text-brandred-600 dark:text-brandred-500 p-4 rounded-lg flex items-center gap-3 mb-6">
                             <AlertCircle className="w-5 h-5 flex-shrink-0" />
                             <p className="text-sm">{error}</p>
                         </div>
                     )}
 
                     {!loading && message && (
-                        <div className="bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 p-4 rounded-lg flex items-center gap-3 mb-6">
+                        <div className="bg-[#E4F5EC] dark:bg-transparent dark:border dark:border-[#0F7B4A] text-[#0F7B4A] dark:text-[#4CC38A] p-4 rounded-lg flex items-center gap-3 mb-6">
                             <CheckCircle className="w-5 h-5 flex-shrink-0" />
                             <p className="text-sm">{message}</p>
                         </div>
@@ -156,11 +156,11 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
 
                     {!loading && mode === 'resetPassword' && resetEmail && !message && (
                         <form onSubmit={handlePasswordReset} className="space-y-4">
-                            <p className="text-slate-600 dark:text-slate-400 text-sm text-center mb-4">
+                            <p className="text-muted text-sm text-center mb-4">
                                 Resetting password for: <span className="font-semibold">{resetEmail}</span>
                             </p>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                <label className="block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">
                                     New Password
                                 </label>
                                 <input
@@ -168,7 +168,7 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
                                     required
                                     value={newPassword}
                                     onChange={(e) => setNewPassword(e.target.value)}
-                                    className="w-full px-4 py-2 bg-white dark:bg-black border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white transition-colors"
+                                    className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                                     placeholder="Enter new password"
                                     autoComplete="new-password"
                                     minLength={6}
@@ -177,7 +177,7 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
                             <button
                                 type="submit"
                                 disabled={loading || !newPassword || newPassword.length < 6}
-                                className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                                className="w-full py-2 px-4 bg-brandred-600 hover:bg-brandred-500 text-white rounded-md font-display font-bold uppercase tracking-[0.05em] shadow-[0_6px_16px_rgba(196,52,46,0.28)] transition-colors duration-150 disabled:opacity-50"
                             >
                                 Reset Password
                             </button>
@@ -188,14 +188,14 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
                         <div className="mt-8 text-center space-y-3">
                             <button
                                 onClick={() => navigate('/')}
-                                className="w-full py-2 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-lg font-medium transition-colors"
+                                className="w-full py-2 px-4 border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-[color:var(--line)] dark:text-[color:var(--text)] dark:hover:bg-white/10 dark:hover:text-white rounded-md font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150"
                             >
                                 Return to Home
                             </button>
                             {message && (
                                 <button
                                     onClick={() => onOpenAuth('login')}
-                                    className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+                                    className="w-full py-2 px-4 bg-brandred-600 hover:bg-brandred-500 text-white rounded-md font-display font-bold uppercase tracking-[0.05em] shadow-[0_6px_16px_rgba(196,52,46,0.28)] transition-colors duration-150"
                                 >
                                     Log In Now
                                 </button>

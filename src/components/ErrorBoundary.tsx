@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { errorHandler, ErrorSeverity } from '../services/errorHandler';
 
 interface ErrorBoundaryState {
@@ -53,18 +54,18 @@ export class ErrorBoundary extends React.Component<
     render() {
         if (this.state.hasError) {
             return (
-                <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-                    <div className="max-w-md w-full bg-slate-900 border border-slate-700 rounded-2xl p-8 text-center shadow-2xl">
-                        <div className="text-5xl mb-4">⚠️</div>
-                        <h1 className="text-2xl font-bold text-white mb-2">
+                <div className="min-h-screen bg-navy-950 flex items-center justify-center p-6">
+                    <div className="max-w-md w-full bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-8 text-center shadow-panel">
+                        <div className="mb-4 flex justify-center"><AlertTriangle size={48} className="text-gold-500" /></div>
+                        <h1 className="text-2xl font-display font-bold uppercase text-white mb-2">
                             Something went wrong
                         </h1>
-                        <p className="text-slate-400 mb-6">
+                        <p className="text-[#9FB0CC] font-body mb-6">
                             An unexpected error occurred. Our team has been notified.
                             Please try refreshing or returning to the home page.
                         </p>
                         {import.meta.env.DEV && this.state.error && (
-                            <pre className="text-left text-xs text-red-400 bg-slate-950 rounded-lg p-4 mb-6 overflow-auto max-h-40 border border-red-900/30">
+                            <pre className="text-left text-xs text-brandred-500 bg-navy-950 rounded-lg p-4 mb-6 overflow-auto max-h-40 border border-brandred-700/30">
                                 {this.state.error.message}
                                 {'\n'}
                                 {this.state.error.stack}
@@ -73,13 +74,13 @@ export class ErrorBoundary extends React.Component<
                         <div className="flex gap-3 justify-center">
                             <button
                                 onClick={() => window.location.reload()}
-                                className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium text-sm"
+                                className="px-5 py-2.5 bg-navy-800 hover:bg-navy-700 text-white rounded-lg transition-colors duration-150 font-display font-bold uppercase tracking-[0.05em] text-sm"
                             >
                                 Refresh Page
                             </button>
                             <button
                                 onClick={this.handleReload}
-                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-medium text-sm"
+                                className="px-5 py-2.5 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg transition-colors duration-150 font-display font-bold uppercase tracking-[0.05em] text-sm shadow-[0_6px_16px_rgba(196,52,46,0.28)]"
                             >
                                 Go Home
                             </button>
