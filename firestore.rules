@@ -233,6 +233,12 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == userId;
         allow write: if false; // Only via Cloud Functions
       }
+
+      // SEASON HISTORY (career record, written on pool completion)
+      match /seasonHistory/{poolId} {
+        allow read: if request.auth != null && (request.auth.uid == userId || isSuperAdmin());
+        allow write: if false; // Only via Cloud Functions
+      }
     }
 
     // POOL CLAIMS (Cross-Device Merge) — Cloud Functions only

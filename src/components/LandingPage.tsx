@@ -6,6 +6,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { Countdown } from './Countdown';
 import { isSuperAdmin } from '../utils/auth';
+import { POOLS_OPEN } from '../config/season';
 
 interface LandingPageProps {
   user?: User | null;
@@ -58,7 +59,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ backgroundColor: `${BRAND.orange}20`, border: `1px solid ${BRAND.orange}40` }}>
             <span className="flex h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: BRAND.orange }}></span>
-            <span className="text-xs font-bold tracking-wide uppercase" style={{ color: BRAND.orange }}>2026 NFL Season Pools are Open</span>
+            <span className="text-xs font-bold tracking-wide uppercase" style={{ color: BRAND.orange }}>{POOLS_OPEN ? '2026 NFL Season Pools are Open' : '2026 NFL Season Pools are Opening Soon'}</span>
           </div>
 
           <div className="flex justify-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
@@ -67,11 +68,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200 mb-8">
             <button
-              onClick={isSuperAdmin(user) ? onCreatePool : undefined}
-              disabled={!isSuperAdmin(user)}
+              onClick={POOLS_OPEN && isSuperAdmin(user) ? onCreatePool : undefined}
+              disabled={!POOLS_OPEN || !isSuperAdmin(user)}
               className="w-full sm:w-auto text-white px-8 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100 cursor-pointer"
               style={{ backgroundColor: BRAND.orange, boxShadow: `0 10px 40px ${BRAND.orange}40` }}
-              title={isSuperAdmin(user) ? "Create an NFL Pool" : "Pool creation is coming soon"}
+              title={!POOLS_OPEN ? "Pool creation opens soon" : (isSuperAdmin(user) ? "Create an NFL Pool" : "Pool creation is coming soon")}
             >
               <Trophy size={20} /> Create an NFL Pool
             </button>
@@ -258,7 +259,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch mb-16">
             
             {/* Card 1: Free Sandbox Tier (4 cols) */}
-            <div className="lg:col-span-4 bg-slate-900/40 border border-slate-800 rounded-3xl p-8 hover:border-emerald-500/40 transition-all duration-300 flex flex-col justify-between shadow-2xl relative group hover:scale-[1.01]">
+            <div className={`lg:col-span-4 bg-slate-900/40 border border-slate-800 rounded-3xl p-8 transition-all duration-300 flex flex-col justify-between shadow-2xl relative group ${POOLS_OPEN ? 'hover:border-emerald-500/40 hover:scale-[1.01]' : 'opacity-50 pointer-events-none grayscale'}`}>
               <div className="space-y-6">
                 <div className="flex justify-between items-start">
                   <div className="p-3.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:scale-110 transition-transform duration-300">
@@ -284,15 +285,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <div className="text-3xl font-black text-white mb-4">$0 <span className="text-xs text-slate-500 font-medium">/ forever</span></div>
                 <button
                   onClick={() => navigate('/create-pool')}
-                  className="w-full bg-slate-800/80 hover:bg-slate-750 text-slate-200 border border-slate-700/60 hover:border-slate-600 py-3 px-6 rounded-2xl text-xs font-bold transition-all"
+                  disabled={!POOLS_OPEN}
+                  className="w-full bg-slate-800/80 hover:bg-slate-750 text-slate-200 border border-slate-700/60 hover:border-slate-600 py-3 px-6 rounded-2xl text-xs font-bold transition-all disabled:cursor-not-allowed"
                 >
-                  Launch Free Pool
+                  {POOLS_OPEN ? 'Launch Free Pool' : 'Opening Soon'}
                 </button>
               </div>
             </div>
 
             {/* Card 2: Dynamic Pool Tier - Featured (5 cols) */}
-            <div className="lg:col-span-5 bg-gradient-to-b from-indigo-950/20 via-slate-900/40 to-slate-900/40 border border-indigo-500/20 rounded-3xl p-8 hover:border-indigo-500/50 transition-all duration-300 flex flex-col justify-between shadow-2xl relative group hover:scale-[1.01] overflow-hidden">
+            <div className={`lg:col-span-5 bg-gradient-to-b from-indigo-950/20 via-slate-900/40 to-slate-900/40 border border-indigo-500/20 rounded-3xl p-8 transition-all duration-300 flex flex-col justify-between shadow-2xl relative group overflow-hidden ${POOLS_OPEN ? 'hover:border-indigo-500/50 hover:scale-[1.01]' : 'opacity-50 pointer-events-none grayscale'}`}>
               {/* Top ambient glow */}
               <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-indigo-500/10 blur-2xl pointer-events-none" />
               
@@ -322,16 +324,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <div className="text-3xl font-black text-white mb-4">Starts at $9 <span className="text-xs text-slate-500 font-medium">/ pool</span></div>
                 <button
                   onClick={() => navigate('/pricing')}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-1.5 group/btn"
+                  disabled={!POOLS_OPEN}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-1.5 group/btn disabled:cursor-not-allowed"
                 >
-                  Estimate Pool Price
+                  {POOLS_OPEN ? 'Estimate Pool Price' : 'Opening Soon'}
                   <Zap size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
                 </button>
               </div>
             </div>
 
             {/* Card 3: Commissioner Packs (3 cols) */}
-            <div className="lg:col-span-3 bg-slate-900/40 border border-slate-800 rounded-3xl p-8 hover:border-amber-500/40 transition-all duration-300 flex flex-col justify-between shadow-2xl relative group hover:scale-[1.01]">
+            <div className={`lg:col-span-3 bg-slate-900/40 border border-slate-800 rounded-3xl p-8 transition-all duration-300 flex flex-col justify-between shadow-2xl relative group ${POOLS_OPEN ? 'hover:border-amber-500/40 hover:scale-[1.01]' : 'opacity-50 pointer-events-none grayscale'}`}>
               <div className="space-y-6">
                 <div className="flex justify-between items-start">
                   <div className="p-3.5 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:scale-110 transition-transform duration-300">
@@ -357,9 +360,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <div className="text-3xl font-black text-white mb-4">$49 <span className="text-xs text-slate-500 font-medium">/ 3-pool bundle</span></div>
                 <button
                   onClick={() => navigate('/pricing')}
-                  className="w-full bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700/60 hover:border-slate-600 py-3 px-6 rounded-2xl text-xs font-bold transition-all"
+                  disabled={!POOLS_OPEN}
+                  className="w-full bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700/60 hover:border-slate-600 py-3 px-6 rounded-2xl text-xs font-bold transition-all disabled:cursor-not-allowed"
                 >
-                  View Bundle Packages
+                  {POOLS_OPEN ? 'View Bundle Packages' : 'Opening Soon'}
                 </button>
               </div>
             </div>
@@ -367,7 +371,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           </div>
 
           {/* Bottom Interactive Promotion Indicator */}
-          <div className="bg-slate-900/20 border border-slate-850 p-6 rounded-2xl text-center max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 backdrop-blur-sm shadow-xl">
+          <div className={`bg-slate-900/20 border border-slate-850 p-6 rounded-2xl text-center max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 backdrop-blur-sm shadow-xl ${POOLS_OPEN ? '' : 'opacity-50 pointer-events-none grayscale'}`}>
             <div className="text-left space-y-1">
               <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Interactive Estimator</span>
               <p className="text-sm text-slate-300 font-medium">
@@ -376,7 +380,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
             <button
               onClick={() => navigate('/pricing')}
-              className="bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 px-5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap"
+              disabled={!POOLS_OPEN}
+              className="bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 px-5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap disabled:cursor-not-allowed"
             >
               Open Pricing Calculator →
             </button>
@@ -476,11 +481,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-5xl font-black text-white mb-8" style={{ fontFamily: "'Montserrat', sans-serif" }}>Ready to Kick Off the Season?</h2>
           <button
-            onClick={isSuperAdmin(user) ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
-            disabled={!isSuperAdmin(user)}
+            onClick={POOLS_OPEN && isSuperAdmin(user) ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
+            disabled={!POOLS_OPEN || !isSuperAdmin(user)}
             className="text-white px-10 py-5 rounded-full text-xl font-black transition-all transform hover:scale-105 mb-4 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:brightness-100 cursor-pointer"
             style={{ backgroundColor: BRAND.orange, boxShadow: `0 0 40px ${BRAND.orange}50` }}
-            title={isSuperAdmin(user) ? "Create Your Free Pool Now" : "Pool creation is coming soon"}
+            title={!POOLS_OPEN ? "Pool creation opens soon" : (isSuperAdmin(user) ? "Create Your Free Pool Now" : "Pool creation is coming soon")}
           >
             Create Your Free Pool Now
           </button>

@@ -5,6 +5,7 @@ import { Trophy, Grid3X3, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User } from '../types';
+import { POOLS_OPEN } from '../config/season';
 
 interface CreatePoolSelectionProps {
     onSelectSquares: () => void;
@@ -78,11 +79,12 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* GAMEDAY SQUARES CARD */}
                             <button
-                                onClick={onSelectSquares}
-                                className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-violet-500 rounded-2xl p-6 text-left transition-all hover:-translate-y-1 shadow-xl flex flex-col"
+                                onClick={POOLS_OPEN ? onSelectSquares : undefined}
+                                disabled={!POOLS_OPEN}
+                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-violet-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
                                 <div className="absolute top-4 right-4 bg-violet-500/20 p-2.5 rounded-xl group-hover:bg-violet-500 transition-colors">
-                                    <Grid3X3 size={20} className="text-violet-400 group-hover:text-white" />
+                                    {POOLS_OPEN ? <Grid3X3 size={20} className="text-violet-400 group-hover:text-white" /> : <Lock size={20} className="text-slate-500" />}
                                 </div>
                                 <h3 className="text-xl font-bold text-white mb-2 pr-10">Gameday Squares</h3>
                                 <p className="text-slate-400 text-sm mb-4 flex-grow">Classic 10x10 grid for the Super Bowl, MNF, Thanksgiving weekend, or any game of the season. Interactive square selection and live updates.</p>
@@ -92,17 +94,18 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <li className="flex items-center gap-2">✓ Custom settings & pricing</li>
                                 </ul>
                                 <span className="inline-flex items-center gap-1.5 text-violet-400 text-sm font-bold group-hover:translate-x-1 transition-transform mt-auto">
-                                    Setup Squares <ArrowRight size={14} />
+                                    {POOLS_OPEN ? <>Setup Squares <ArrowRight size={14} /></> : 'Opens Soon'}
                                 </span>
                             </button>
 
                             {/* WEEKLY PICK'EM CARD */}
                             <button
-                                onClick={() => navigate('/nfl-wizard?type=NFL_PICKEM')}
-                                className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-blue-500 rounded-2xl p-6 text-left transition-all hover:-translate-y-1 shadow-xl flex flex-col"
+                                onClick={POOLS_OPEN ? () => navigate('/nfl-wizard?type=NFL_PICKEM') : undefined}
+                                disabled={!POOLS_OPEN}
+                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-blue-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
                                 <div className="absolute top-4 right-4 bg-blue-500/20 p-2.5 rounded-xl group-hover:bg-blue-500 transition-colors">
-                                    <Trophy size={20} className="text-blue-400 group-hover:text-white" />
+                                    {POOLS_OPEN ? <Trophy size={20} className="text-blue-400 group-hover:text-white" /> : <Lock size={20} className="text-slate-500" />}
                                 </div>
                                 <h3 className="text-xl font-bold text-white mb-2 pr-10">Weekly Pick'em</h3>
                                 <p className="text-slate-400 text-sm mb-4 flex-grow">Pick winners for all games weekly. Supports Standard (1pt/win) or unique Confidence rankings.</p>
@@ -112,17 +115,18 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <li className="flex items-center gap-2">✓ Live leaderboards & scoring</li>
                                 </ul>
                                 <span className="inline-flex items-center gap-1.5 text-blue-400 text-sm font-bold group-hover:translate-x-1 transition-transform mt-auto">
-                                    Setup Pick'em <ArrowRight size={14} />
+                                    {POOLS_OPEN ? <>Setup Pick'em <ArrowRight size={14} /></> : 'Opens Soon'}
                                 </span>
                             </button>
 
                             {/* SURVIVOR CARD */}
                             <button
-                                onClick={() => navigate('/nfl-wizard?type=NFL_SURVIVOR')}
-                                className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-red-500 rounded-2xl p-6 text-left transition-all hover:-translate-y-1 shadow-xl flex flex-col"
+                                onClick={POOLS_OPEN ? () => navigate('/nfl-wizard?type=NFL_SURVIVOR') : undefined}
+                                disabled={!POOLS_OPEN}
+                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-red-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
                                 <div className="absolute top-4 right-4 bg-red-500/20 p-2.5 rounded-xl group-hover:bg-red-500 transition-colors">
-                                    <Trophy size={20} className="text-red-400 group-hover:text-white" />
+                                    {POOLS_OPEN ? <Trophy size={20} className="text-red-400 group-hover:text-white" /> : <Lock size={20} className="text-slate-500" />}
                                 </div>
                                 <h3 className="text-xl font-bold text-white mb-2 pr-10">Survivor Pool</h3>
                                 <p className="text-slate-400 text-sm mb-4 flex-grow">Pick 1 winner per week. Lose/tie = take a strike. Supports mulligans and buy-backs.</p>
@@ -132,17 +136,18 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <li className="flex items-center gap-2">✓ Automated tiebreakers & lists</li>
                                 </ul>
                                 <span className="inline-flex items-center gap-1.5 text-red-400 text-sm font-bold group-hover:translate-x-1 transition-transform mt-auto">
-                                    Setup Survivor <ArrowRight size={14} />
+                                    {POOLS_OPEN ? <>Setup Survivor <ArrowRight size={14} /></> : 'Opens Soon'}
                                 </span>
                             </button>
 
                             {/* MARGIN CARD */}
                             <button
-                                onClick={() => navigate('/nfl-wizard?type=NFL_MARGIN')}
-                                className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-teal-500 rounded-2xl p-6 text-left transition-all hover:-translate-y-1 shadow-xl flex flex-col"
+                                onClick={POOLS_OPEN ? () => navigate('/nfl-wizard?type=NFL_MARGIN') : undefined}
+                                disabled={!POOLS_OPEN}
+                                className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-teal-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
                                 <div className="absolute top-4 right-4 bg-teal-500/20 p-2.5 rounded-xl group-hover:bg-teal-500 transition-colors">
-                                    <Trophy size={20} className="text-teal-400 group-hover:text-white" />
+                                    {POOLS_OPEN ? <Trophy size={20} className="text-teal-400 group-hover:text-white" /> : <Lock size={20} className="text-slate-500" />}
                                 </div>
                                 <h3 className="text-xl font-bold text-white mb-2 pr-10">Margin Pool</h3>
                                 <p className="text-slate-400 text-sm mb-4 flex-grow">Choose 1 team per week. Score is their margin of victory. Negative differential hurts you.</p>
@@ -152,7 +157,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                     <li className="flex items-center gap-2">✓ Progressive live standings</li>
                                 </ul>
                                 <span className="inline-flex items-center gap-1.5 text-teal-400 text-sm font-bold group-hover:translate-x-1 transition-transform mt-auto">
-                                    Setup Margin <ArrowRight size={14} />
+                                    {POOLS_OPEN ? <>Setup Margin <ArrowRight size={14} /></> : 'Opens Soon'}
                                 </span>
                             </button>
                         </div>
@@ -168,11 +173,12 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                         {/* PROPS / SIDE HUSTLE OPTION */}
                         <button
-                            onClick={onSelectProps}
-                            className="group relative bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-emerald-500 rounded-2xl p-8 text-left transition-all hover:-translate-y-1 shadow-xl w-full"
+                            onClick={POOLS_OPEN ? onSelectProps : undefined}
+                            disabled={!POOLS_OPEN}
+                            className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-8 text-left transition-all shadow-xl w-full ${POOLS_OPEN ? 'hover:bg-slate-700 hover:border-emerald-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                         >
                             <div className="absolute top-4 right-4 bg-emerald-500/20 p-3 rounded-xl group-hover:bg-emerald-500 transition-colors">
-                                <Grid3X3 size={32} className="text-emerald-400 group-hover:text-white" />
+                                {POOLS_OPEN ? <Grid3X3 size={32} className="text-emerald-400 group-hover:text-white" /> : <Lock size={32} className="text-slate-500" />}
                             </div>
                             <h3 className="text-2xl font-bold text-white mb-2">Side Hustle (Props Only)</h3>
                             <p className="text-slate-400 mb-6">Host a standalone Props game without the grid. Players answer questions like "Who will score first?" or "Total field goals?". Perfect for casual groups.</p>
@@ -183,7 +189,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                 <li className="flex items-center gap-2">✓ Real-time leaderboard</li>
                             </ul>
                             <span className="inline-flex items-center gap-2 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
-                                Create Props Pool <ArrowRight size={16} />
+                                {POOLS_OPEN ? <>Create Props Pool <ArrowRight size={16} /></> : 'Opens Soon'}
                             </span>
                         </button>
                     </div>

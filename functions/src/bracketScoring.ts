@@ -2,6 +2,8 @@ import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Tournament, BracketPool, BracketEntry } from "./types";
+import { sendEmail } from "./reminders";
+import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
 
 
 // Scoring Constants — must match ROUND_CONFIG in BracketWizard.tsx
@@ -478,5 +480,138 @@ export const finalizeTournamentPayouts = onCall(async (request) => {
         }
     }
 
-    return { success: true, payoutCount };
+    // ------------------------------------------------------------------
+    // Additive post-finalization steps (UX overhaul Phase 4.1/4.2):
+    // season history writes + season recap emails. Each step runs in its
+    // own try/catch so a failure here can NEVER break payout finalization.
+    // ------------------------------------------------------------------
+    let historyWrites = 0;
+    let recapEmails = 0;
+
+    for (const poolDoc of pools) {
+        const pool = Object.assign(poolDoc.data(), { id: poolDoc.id }) as BracketPool;
+
+        let entries: BracketEntry[] = [];
+        try {
+            const entriesSnap = await db.collection('pools').doc(pool.id).collection('entries').get();
+            entries = entriesSnap.docs.map(d => Object.assign(d.data(), { id: d.id }) as BracketEntry);
+        } catch (err) {
+            logger.error(`Season history: failed to load entries for pool ${pool.id}`, err);
+            continue;
+        }
+        if (entries.length === 0) continue;
+
+        // Final ranks: prefer the rank stored by scoreTournamentEntries (which
+        // applies the full tiebreaker logic). Fallback: competition-rank by
+        // score desc — tied scores share the minimum rank (1, 1, 3, ...).
+        const byScore = [...entries].sort((a, b) => (b.score || 0) - (a.score || 0));
+        const fallbackRank = new Map<string, number>();
+        byScore.forEach((e, idx) => {
+            const prev = idx > 0 ? byScore[idx - 1] : null;
+            const rank = (prev && (e.score || 0) === (prev.score || 0))
+                ? (fallbackRank.get(prev.id) || idx + 1)
+                : idx + 1;
+            fallbackRank.set(e.id, rank);
+        });
+        const finalRankOf = (e: BracketEntry): number =>
+            (typeof e.rank === 'number' && e.rank > 0) ? e.rank : (fallbackRank.get(e.id) || entries.length);
+
+        const season = tournament.seasonYear
+            || (pool as unknown as { season?: number }).season
+            || pool.seasonYear
+            || new Date().getFullYear();
+
+        // One seasonHistory doc per pool per user: a user with multiple
+        // entries gets their BEST (lowest final rank) entry recorded.
+        const bestByUser = new Map<string, BracketEntry>();
+        entries.forEach(e => {
+            if (!e.ownerUid) return;
+            const current = bestByUser.get(e.ownerUid);
+            if (!current || finalRankOf(e) < finalRankOf(current)) bestByUser.set(e.ownerUid, e);
+        });
+
+        // Step 1 (4.2): season history writes — users/{uid}/seasonHistory/{poolId}
+        try {
+            let batch = db.batch();
+            let count = 0;
+            for (const [uid, entry] of bestByUser) {
+                const rank = finalRankOf(entry);
+                batch.set(
+                    db.collection('users').doc(uid).collection('seasonHistory').doc(pool.id),
+                    {
+                        poolId: pool.id,
+                        poolName: pool.name,
+                        poolType: 'BRACKET',
+                        season,
+                        finalRank: rank,
+                        totalEntries: entries.length,
+                        points: entry.score || 0,
+                        entryName: entry.name,
+                        isChampion: rank === 1,
+                        completedAt: Date.now(),
+                    },
+                    { merge: true }
+                );
+                count++;
+                historyWrites++;
+                if (count >= 400) {
+                    await batch.commit();
+                    batch = db.batch();
+                    count = 0;
+                }
+            }
+            if (count > 0) await batch.commit();
+        } catch (err) {
+            logger.error(`Season history writes failed for pool ${pool.id}`, err);
+        }
+
+        // Step 2 (4.1): season recap email to every entry owner (category 'results')
+        try {
+            const ranked = [...entries].sort((a, b) => finalRankOf(a) - finalRankOf(b));
+            const champion = ranked[0];
+            const podium = ranked.slice(0, 3);
+            const ordinal = (n: number): string => {
+                const rem = n % 100;
+                if (rem >= 11 && rem <= 13) return `${n}th`;
+                switch (n % 10) {
+                    case 1: return `${n}st`;
+                    case 2: return `${n}nd`;
+                    case 3: return `${n}rd`;
+                    default: return `${n}th`;
+                }
+            };
+            const medals = ['🥇', '🥈', '🥉'];
+            const podiumHtml = podium.map((e, i) =>
+                `<li style="margin-bottom: 6px;">${medals[i] || ''} <strong>${escapeHtml(e.name)}</strong> — ${ordinal(finalRankOf(e))} place, ${e.score || 0} pts</li>`
+            ).join('');
+
+            // bestByUser is keyed by uid, so each owner gets exactly one email.
+            for (const [uid, entry] of bestByUser) {
+                const userSnap = await db.collection('users').doc(uid).get();
+                const email = userSnap.exists ? (userSnap.data()?.email as string | undefined) : undefined;
+                if (!email || !email.includes('@')) continue;
+
+                const rank = finalRankOf(entry);
+                const finishLine = rank === 1
+                    ? `🏆 Congratulations — <strong>you won the pool</strong> with &quot;${escapeHtml(entry.name)}&quot;!`
+                    : `You finished <strong>${ordinal(rank)} of ${entries.length}</strong> with &quot;${escapeHtml(entry.name)}&quot; (${entry.score || 0} pts).`;
+
+                const body = `
+                    <p style="font-size: 18px;">🏆 <strong>${escapeHtml(champion.name)}</strong> is the champion of <strong>${escapeHtml(pool.name)}</strong>!</p>
+                    <p style="font-size: 16px; margin-bottom: 8px;"><strong>Final podium:</strong></p>
+                    <ul style="font-size: 16px; padding-left: 20px; margin-top: 0;">${podiumHtml}</ul>
+                    <p style="font-size: 16px;">${finishLine}</p>
+                    <p style="font-size: 16px;">Thanks for playing this season — see you next year!</p>
+                `;
+                const html = renderEmailHtml(`Final results: ${pool.name}`, body, `${BASE_URL}/pool/${pool.id}`, 'View Final Standings');
+                await sendEmail(db, email, `Final results: ${pool.name}`, html, { poolId: pool.id, category: 'results' });
+                recapEmails++;
+            }
+        } catch (err) {
+            logger.error(`Season recap emails failed for pool ${pool.id}`, err);
+        }
+    }
+
+    logger.info(`finalizeTournamentPayouts(${tournamentId}): ${payoutCount} payouts, ${historyWrites} season-history docs, ${recapEmails} recap emails.`);
+    return { success: true, payoutCount, historyWrites, recapEmails };
 });

@@ -23,7 +23,8 @@ import {
   AlertTriangle,
   Coins,
   CheckCircle,
-  Crown
+  Crown,
+  RotateCcw
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -703,6 +704,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         {filteredPools.map(pool => {
                             const isSquares = pool.type === 'SQUARES';
                             const isPlayoff = pool.type === 'NFL_PLAYOFFS';
+                            // Season-to-season retention: completed NFL season pools the user
+                            // commissions can be re-run via the wizard, pre-seeded (?cloneFrom=)
+                            const canRerun =
+                                (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') &&
+                                (pool.ownerId === user.id || pool.managerUid === user.id) &&
+                                getPoolTabStatus(pool) === 'completed';
 
                             let userEntryCount = 0;
                             let percentFull = 0;
