@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import type { GameState, PropCard } from '../../types';
-import { Trophy, Medal } from 'lucide-react';
+import { Trophy, Lock, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { dbService } from '../../services/dbService';
+import { RankChip, YouPill } from '../ui';
 
 interface PropLeaderboardProps {
     gameState: GameState;
@@ -58,10 +59,7 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
     }, [effectiveCards, questions]);
 
     const getRankIcon = (index: number) => {
-        if (index === 0) return <Trophy className="text-amber-400" size={20} />;
-        if (index === 1) return <Medal className="text-slate-300" size={20} />;
-        if (index === 2) return <Medal className="text-amber-600" size={20} />;
-        return <span className="font-mono text-slate-500 font-bold">#{index + 1}</span>;
+        return <RankChip rank={index + 1} />;
     };
 
     const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
@@ -72,17 +70,17 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
     };
 
     return (
-        <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-lg animate-in fade-in slide-in-from-bottom-4 delay-100">
-            <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
-                <h3 className="font-bold text-white flex items-center gap-2">
-                    <Trophy size={18} className="text-indigo-400" /> Leaderboard
+        <div className="bg-card rounded-xl border border-line overflow-hidden shadow-card animate-in fade-in slide-in-from-bottom-4 delay-100 font-body">
+            <div className="p-4 bg-surface border-b border-line flex justify-between items-center">
+                <h3 className="font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                    <Trophy size={18} className="text-gold-500" /> Leaderboard
                 </h3>
-                <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">{sortedCards.length} Entries</span>
+                <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted num">{sortedCards.length} Entries</span>
             </div>
 
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-900/50 text-slate-400 uppercase font-bold text-xs">
+                    <thead className="bg-surface text-muted font-display font-bold uppercase text-[12px] tracking-[0.08em]">
                         <tr>
                             <th className="p-4 w-12 text-center">Rank</th>
                             <th className="p-4">Player</th>
@@ -92,7 +90,7 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                             <th className="p-4 w-10"></th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800">
+                    <tbody className="divide-y divide-[color:var(--line)]">
                         {sortedCards.map((card, idx) => {
                             const isMe = currentUser && card.userId === currentUser.id;
                             const isExpanded = expandedCardId === card.id;
@@ -101,41 +99,40 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                                 <React.Fragment key={card.id || card.userId}>
                                     <tr
                                         onClick={() => toggleExpand(card.id)}
-                                        className={`${isMe ? 'bg-indigo-500/10' : 'hover:bg-slate-800/50'} transition-colors cursor-pointer group`}
+                                        className={`${isMe ? 'bg-brandred-600/[0.07]' : 'hover:bg-[color:var(--page)]'} transition-colors cursor-pointer group`}
                                     >
                                         <td className="p-4 text-center flex justify-center">
                                             {getRankIcon(idx)}
                                         </td>
                                         <td className="p-4">
-                                            <div className="font-bold text-white flex items-center gap-2">
+                                            <div className="font-bold text-[color:var(--text)] flex items-center gap-2">
                                                 {card.userName || 'Anonymous'}
-                                                {isMe && <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded uppercase">You</span>}
+                                                {isMe && <YouPill />}
                                             </div>
                                         </td>
                                         <td className="p-4 text-center">
-                                            <span className="font-mono text-emerald-400 font-bold text-lg">{card.calculatedScore}</span>
-                                            <span className="text-slate-600 text-xs ml-1">/{totalPossiblePoints}</span>
+                                            <span className="num font-display text-gold-600 dark:text-gold-400 font-bold text-lg">{card.calculatedScore}</span>
+                                            <span className="text-faint text-xs ml-1 num">/{totalPossiblePoints}</span>
                                         </td>
                                         <td className="p-4 text-center">
-                                            <span className="font-mono text-indigo-400">{card.correctCount}</span>
-                                            <span className="text-slate-600 text-xs ml-1">/{questions.length}</span>
+                                            <span className="num text-[color:var(--text)]">{card.correctCount}</span>
+                                            <span className="text-faint text-xs ml-1 num">/{questions.length}</span>
                                         </td>
-                                        <td className="p-4 text-center font-mono text-slate-400">
+                                        <td className="p-4 text-center num text-muted">
                                             {card.tiebreakerVal || '-'}
                                         </td>
-                                        <td className="p-4 text-center text-slate-500 group-hover:text-white transition-colors">
-                                            {/* Use a simple character or icon if lucide not imported yet, but I'll add import in next step if needed or just use text for now to be safe, wait I see icons in file. Need ChevronDown. */}
-                                            {isExpanded ? '▼' : '▶'}
+                                        <td className="p-4 text-center text-faint group-hover:text-[color:var(--text)] transition-colors">
+                                            {isExpanded ? <ChevronDown size={16} className="inline-block" /> : <ChevronRight size={16} className="inline-block" />}
                                         </td>
                                     </tr>
                                     {isExpanded && (
                                         <tr>
-                                            <td colSpan={6} className="bg-slate-950/50 p-0 shadow-inner">
-                                                <div className="p-6 border-b border-slate-800 animate-in fade-in zoom-in-95 duration-200">
+                                            <td colSpan={6} className="bg-surface p-0 shadow-inner">
+                                                <div className="p-6 border-b border-line animate-in fade-in zoom-in-95 duration-200">
                                                     {!gameState.isLocked && !isManager && !isAdmin ? (
-                                                        <div className="text-center py-8 text-slate-500 italic flex flex-col items-center justify-center gap-2">
-                                                            <div className="bg-slate-900 p-3 rounded-full mb-2">
-                                                                <span className="text-2xl">🔒</span>
+                                                        <div className="text-center py-8 text-muted italic flex flex-col items-center justify-center gap-2">
+                                                            <div className="bg-page border border-line p-3 rounded-full mb-2 text-muted">
+                                                                <Lock size={24} />
                                                             </div>
                                                             <p>Picks hidden until pool locks.</p>
                                                             <p className="text-xs">Check back after the deadline!</p>
@@ -149,24 +146,24 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                                                                 const isWrong = q.correctOption !== undefined && q.correctOption !== answerIdx;
 
                                                                 return (
-                                                                    <div key={q.id} className={`p-3 rounded-lg border flex justify-between items-start gap-3 ${isCorrect ? 'bg-emerald-500/10 border-emerald-500/30' :
-                                                                        isWrong ? 'bg-rose-500/5 border-rose-500/20' :
-                                                                            'bg-slate-900 border-slate-800'
+                                                                    <div key={q.id} className={`p-3 rounded-lg border flex justify-between items-start gap-3 ${isCorrect ? 'bg-[#E4F5EC] border-[#BEE7D0]' :
+                                                                        isWrong ? 'bg-brandred-600/[0.06] border-brandred-600/25' :
+                                                                            'bg-card border-line'
                                                                         }`}>
                                                                         <div>
-                                                                            <div className="text-xs text-slate-500 mb-1 line-clamp-1">{qIdx + 1}. {q.text}</div>
-                                                                            <div className={`font-bold ${isCorrect ? 'text-emerald-400' : isWrong ? 'text-rose-400' : 'text-slate-300'}`}>
+                                                                            <div className={`text-xs mb-1 line-clamp-1 num ${isCorrect ? 'text-[#0F7B4A]/70' : 'text-muted'}`}>{qIdx + 1}. {q.text}</div>
+                                                                            <div className={`font-bold ${isCorrect ? 'text-[#0F7B4A]' : isWrong ? 'text-brandred-600' : 'text-[color:var(--text)]'}`}>
                                                                                 {answerText}
                                                                             </div>
                                                                         </div>
-                                                                        {isCorrect && <span className="text-emerald-500 text-lg">✓</span>}
-                                                                        {isWrong && <span className="text-rose-500 text-lg">✗</span>}
+                                                                        {isCorrect && <Check size={18} className="text-[#0F7B4A] shrink-0" />}
+                                                                        {isWrong && <X size={18} className="text-brandred-600 shrink-0" />}
                                                                     </div>
                                                                 );
                                                             })}
-                                                            <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex justify-between items-center">
-                                                                <span className="text-indigo-300 font-bold">Tiebreaker</span>
-                                                                <span className="text-white font-mono font-bold text-lg">{card.tiebreakerVal}</span>
+                                                            <div className="p-3 rounded-lg bg-navy-600/10 border border-navy-600/30 dark:border-gold-500/40 flex justify-between items-center">
+                                                                <span className="text-navy-800 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em]">Tiebreaker</span>
+                                                                <span className="text-[color:var(--text)] num font-display font-bold text-lg">{card.tiebreakerVal}</span>
                                                             </div>
                                                         </div>
                                                     )}
@@ -179,7 +176,7 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
                         })}
                         {sortedCards.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="p-8 text-center text-slate-500">
+                                <td colSpan={6} className="p-8 text-center text-muted">
                                     No players have joined yet. Be the first!
                                 </td>
                             </tr>
@@ -190,4 +187,3 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
         </div>
     );
 };
-

@@ -10,6 +10,7 @@ import { PlayoffPayoutCard } from './PlayoffPayoutCard'; // [NEW]
 import { AnnouncementManager } from '../AnnouncementManager'; // [NEW]
 import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
+import { Badge, Button, RankChip, Tag, YouPill } from '../ui';
 
 interface PlayoffDashboardProps {
     pool: PlayoffPool;
@@ -76,7 +77,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
 
     return (
         <BillingGate pool={pool as any} isCommissioner={isManager}>
-        <div className="min-h-screen text-slate-100 font-sans pb-20 duration-300" style={{ backgroundColor: pool.branding?.bgColor || '#020617' }}>
+        <div className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 duration-300" style={{ backgroundColor: pool.branding?.bgColor || undefined }}>
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4 md:p-6">
                 {/* Pool Header */}
@@ -87,13 +88,13 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                             <img src={pool.branding.logoUrl} alt="Pool Logo" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg" />
                         </div>
                     )}    <div>
-                            <h1 className="text-3xl font-black text-white mb-2">{pool.name}</h1>
-                            <div className="flex items-center gap-3 text-slate-400 text-sm">
-                                <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded text-xs font-bold uppercase border border-emerald-500/20">
+                            <h1 className="text-3xl font-display font-extrabold uppercase leading-[0.95] text-[color:var(--text)] mb-2">{pool.name}</h1>
+                            <div className="flex items-center gap-3 text-muted text-sm">
+                                <Tag sport="nfl">
                                     {pool.type === 'NFL_PLAYOFFS' ? 'Playoff Challenge' : 'Pool'}
-                                </span>
+                                </Tag>
                                 {pool.settings?.entryFee > 0 && (
-                                    <span className="text-slate-300 font-bold bg-slate-800 px-2 py-1 rounded border border-slate-700">
+                                    <span className="text-[color:var(--text)] font-display font-bold num bg-card px-2 py-1 rounded border border-line">
                                         ${pool.settings.entryFee} Entry
                                     </span>
                                 )}
@@ -103,50 +104,50 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                         setShareCopied(true);
                                         setTimeout(() => setShareCopied(false), 2000);
                                     }}
-                                    className="flex items-center gap-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-all ml-2 px-3 py-1.5 rounded-lg shadow-lg shadow-indigo-900/20 hover:scale-105 active:scale-95"
+                                    className="flex items-center gap-2 text-xs font-display font-bold uppercase tracking-[0.05em] text-white bg-navy-800 hover:bg-navy-700 transition-all duration-150 ml-2 px-3 py-1.5 rounded-lg hover:-translate-y-px"
                                 >
-                                    {shareCopied ? <><Check size={14} className="text-emerald-400" /> Copied!</> : <><Share2 size={14} /> Share</>}
+                                    {shareCopied ? <><Check size={14} className="text-gold-400" /> Copied!</> : <><Share2 size={14} /> Share</>}
                                 </button>
                             </div>
                         </div>
                     </div>
                     <div className="flex gap-2">
                         {isManager && (
-                            <button onClick={() => window.location.href = `/playoff-wizard/${pool.id}`} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => window.location.href = `/playoff-wizard/${pool.id}`}>
                                 <Settings size={16} /> Manage Pool
-                            </button>
+                            </Button>
                         )}
 
-                        <button onClick={onBack} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
+                        <Button variant="ghost" size="sm" onClick={onBack}>
                             Back
-                        </button>
+                        </Button>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-slate-800 mb-6 overflow-x-auto">
+                <div className="flex border-b border-line mb-6 overflow-x-auto">
                     <button
                         onClick={() => { setActiveTab('picks'); handleCancelEdit(); }}
-                        className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'picks' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                        className={`px-6 py-3 font-display font-bold text-sm uppercase tracking-[0.08em] border-b-2 transition-colors duration-150 flex items-center gap-2 whitespace-nowrap ${activeTab === 'picks' ? 'border-gold-500 text-[color:var(--text)]' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                     >
                         <ListOrdered size={16} /> My Picks
                     </button>
                     <button
                         onClick={() => setActiveTab('leaderboard')}
-                        className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'leaderboard' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                        className={`px-6 py-3 font-display font-bold text-sm uppercase tracking-[0.08em] border-b-2 transition-colors duration-150 flex items-center gap-2 whitespace-nowrap ${activeTab === 'leaderboard' ? 'border-gold-500 text-[color:var(--text)]' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                     >
                         <Trophy size={16} /> Leaderboard
                     </button>
                     <button
                         onClick={() => setActiveTab('rules')}
-                        className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'rules' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                        className={`px-6 py-3 font-display font-bold text-sm uppercase tracking-[0.08em] border-b-2 transition-colors duration-150 flex items-center gap-2 whitespace-nowrap ${activeTab === 'rules' ? 'border-gold-500 text-[color:var(--text)]' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                     >
                         <FileText size={16} /> Rules & Payment Info
                     </button>
                     {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
                         <button
                             onClick={() => setActiveTab('ai')}
-                            className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'ai' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                            className={`px-6 py-3 font-display font-bold text-sm uppercase tracking-[0.08em] border-b-2 transition-colors duration-150 flex items-center gap-2 whitespace-nowrap ${activeTab === 'ai' ? 'border-gold-500 text-[color:var(--text)]' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                         >
                             <Bot size={16} /> AI Insights
                         </button>
@@ -154,7 +155,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     {isManager && (
                         <button
                             onClick={() => setActiveTab('commissioner')}
-                            className={`px-6 py-3 font-bold text-sm uppercase tracking-wider border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'commissioner' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                            className={`px-6 py-3 font-display font-bold text-sm uppercase tracking-[0.08em] border-b-2 transition-colors duration-150 flex items-center gap-2 whitespace-nowrap ${activeTab === 'commissioner' ? 'border-gold-500 text-[color:var(--text)]' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                         >
                             <Settings size={16} /> Commissioner
                         </button>
@@ -164,21 +165,21 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                 {/* Content */}
                 <div className="min-h-[400px]">
                     {activeTab === 'picks' && (
-                        <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 md:p-8">
+                        <div className="bg-card rounded-xl border border-line shadow-card p-6 md:p-8">
 
                             {/* Render Form if Adding or Editing, OR if no entries exist yet (force first entry) */}
                             {(!user) ? (
                                 <div className="text-center py-12">
-                                    <h3 className="text-2xl font-bold text-white mb-4">Login Required</h3>
-                                    <p className="text-slate-400 mb-8 max-w-md mx-auto">
-                                        You must be logged in to create an entry for the <span className="text-emerald-400 font-bold">{pool.name}</span>.
+                                    <h3 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] mb-4">Login Required</h3>
+                                    <p className="text-muted mb-8 max-w-md mx-auto">
+                                        You must be logged in to create an entry for the <span className="text-gold-600 dark:text-gold-400 font-bold">{pool.name}</span>.
                                     </p>
-                                    <button
+                                    <Button
                                         onClick={() => document.dispatchEvent(new CustomEvent('open-auth-modal', { detail: { mode: 'login' } }))}
-                                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-full shadow-lg shadow-emerald-900/20 transition-all transform hover:scale-105"
+                                        className="rounded-full px-8"
                                     >
                                         Login or Register to Play
-                                    </button>
+                                    </Button>
                                 </div>
                             ) : (isAddingNew || editingEntryId || myEntries.length === 0) ? (
                                 <RankingForm
@@ -197,30 +198,27 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                 /* List View of Entries */
                                 <div className="space-y-6">
                                     <div className="flex justify-between items-center">
-                                        <h3 className="text-xl font-bold text-white">Your Entries</h3>
+                                        <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)]">Your Entries</h3>
                                         {!pool.isLocked && (
-                                            <button
-                                                onClick={handleAddNew}
-                                                className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
-                                            >
+                                            <Button size="sm" onClick={handleAddNew}>
                                                 <Plus size={16} /> Add Entry
-                                            </button>
+                                            </Button>
                                         )}
                                     </div>
 
                                     <div className="grid gap-4 md:grid-cols-2">
                                         {myEntries.map((entry, idx) => (
-                                            <div key={entry.id || idx} className="bg-slate-800 border border-slate-700 rounded-lg p-4 hover:border-indigo-500 transition-colors group">
+                                            <div key={entry.id || idx} className="bg-surface border border-line rounded-lg p-4 hover:border-navy-600 transition-colors duration-150 group">
                                                 <div className="flex justify-between items-start mb-4">
                                                     <div>
-                                                        <h4 className="font-bold text-white text-lg">{entry.entryName || `Entry #${idx + 1}`}</h4>
-                                                        <p className="text-xs text-slate-400 uppercase font-bold">Tiebreaker: {entry.tiebreaker}</p>
+                                                        <h4 className="font-body font-bold text-[color:var(--text)] text-lg">{entry.entryName || `Entry #${idx + 1}`}</h4>
+                                                        <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em] num">Tiebreaker: {entry.tiebreaker}</p>
                                                     </div>
                                                     {!pool.isLocked ? (
                                                         <div className="flex gap-2">
                                                             <button
                                                                 onClick={() => handleEditEntry(entry.id || '')}
-                                                                className="text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 p-2 rounded-lg transition-colors"
+                                                                className="text-muted hover:text-[color:var(--text)] bg-card hover:bg-page border border-line p-2 rounded-lg transition-colors duration-150"
                                                                 title="Edit Entry"
                                                             >
                                                                 <Edit2 size={16} />
@@ -231,7 +229,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                     if (!ok) return;
                                                                     dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
                                                                 }}
-                                                                className="text-white hover:text-rose-100 bg-rose-600 hover:bg-rose-500 p-2 rounded-lg transition-colors border border-rose-500/50 shadow-lg shadow-rose-500/10"
+                                                                className="text-white bg-brandred-600 hover:bg-brandred-500 p-2 rounded-lg transition-colors duration-150"
                                                                 title="Delete Entry"
                                                             >
                                                                 <Trash2 size={16} />
@@ -241,28 +239,28 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                         <div className="flex gap-2">
                                                             <button
                                                                 onClick={() => setViewingEntry(entry)}
-                                                                className="text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 p-2 rounded-lg transition-colors"
+                                                                className="text-muted hover:text-[color:var(--text)] bg-card hover:bg-page border border-line p-2 rounded-lg transition-colors duration-150"
                                                                 title="View Picks"
                                                             >
                                                                 <Eye size={16} />
                                                             </button>
-                                                            <span className="text-rose-400 text-xs font-bold bg-rose-500/10 px-2 py-2 rounded flex items-center">Locked</span>
+                                                            <Badge status="locked" />
                                                         </div>
                                                     )}
                                                 </div>
 
                                                 {/* Preview top 3 picks? */}
                                                 <div className="space-y-2">
-                                                    <p className="text-xs text-slate-500 uppercase font-bold">Top Picks:</p>
+                                                    <p className="text-xs text-muted uppercase font-display font-bold tracking-[0.08em]">Top Picks:</p>
                                                     <div className="flex flex-wrap gap-2">
                                                         {pool.teams
                                                             .map(t => ({ ...t, rank: entry.rankings[t.id] || 0 }))
                                                             .sort((a, b) => b.rank - a.rank)
                                                             .slice(0, 3)
                                                             .map(t => (
-                                                                <span key={t.id} className={`border px-2 py-1 rounded text-xs font-bold ${t.eliminated
-                                                                    ? 'bg-rose-950/30 border-rose-500/20 text-rose-400 opacity-75 decoration-rose-500/50'
-                                                                    : 'bg-slate-900 border-slate-700 text-slate-300'
+                                                                <span key={t.id} className={`border px-2 py-1 rounded text-xs font-display font-bold num ${t.eliminated
+                                                                    ? 'bg-brandred-600/10 border-brandred-600/25 text-brandred-600 opacity-75'
+                                                                    : 'bg-page border-line text-muted'
                                                                     }`}>
                                                                     #{t.seed} {t.name}
                                                                 </span>
@@ -275,9 +273,9 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                     </div>
                                 </div>
                             )}
-                            
+
                             {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
-                                <div className="mt-8 pt-8 border-t border-slate-800">
+                                <div className="mt-8 pt-8 border-t border-line">
                                     <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
                                 </div>
                             )}
@@ -292,18 +290,18 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
 
                             {/* Bottom Section: Table */}
                             <div>
-                                <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden overflow-x-auto">
-                                    <table className="w-full text-left border-collapse">
+                                <div className="bg-card rounded-xl border border-line shadow-card overflow-hidden overflow-x-auto">
+                                    <table className="w-full text-left border-collapse font-body text-[15px]">
                                         <thead>
-                                            <tr className="border-b border-slate-800 bg-slate-950/50">
-                                                <th className="p-4 text-slate-400 font-bold text-sm sticky left-0 bg-slate-950/90 backdrop-blur z-10 w-12">#</th>
-                                                <th className="p-4 text-slate-400 font-bold text-sm sticky left-12 bg-slate-950/90 backdrop-blur z-10 min-w-[180px]">Entry Name</th>
-                                                <th className="p-4 text-slate-400 font-bold text-sm bg-slate-950/50 backdrop-blur z-10 min-w-[150px]">Player Name</th>
-                                                <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Wild Cards</th>
-                                                <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Divisional</th>
-                                                <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Conf Champ</th>
-                                                <th className="p-4 text-slate-400 font-bold text-xs text-center uppercase tracking-wider">Super Bowl</th>
-                                                <th className="p-4 text-emerald-400 font-black text-sm text-right bg-emerald-500/10 border-l border-emerald-500/20">TOTAL</th>
+                                            <tr className="border-b border-line bg-surface">
+                                                <th className="p-4 text-muted font-display font-bold uppercase text-[12px] tracking-[0.08em] sticky left-0 bg-surface backdrop-blur z-10 w-12">#</th>
+                                                <th className="p-4 text-muted font-display font-bold uppercase text-[12px] tracking-[0.08em] sticky left-12 bg-surface backdrop-blur z-10 min-w-[180px]">Entry Name</th>
+                                                <th className="p-4 text-muted font-display font-bold uppercase text-[12px] tracking-[0.08em] bg-surface backdrop-blur z-10 min-w-[150px]">Player Name</th>
+                                                <th className="p-4 text-muted font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">Wild Cards</th>
+                                                <th className="p-4 text-muted font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">Divisional</th>
+                                                <th className="p-4 text-muted font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">Conf Champ</th>
+                                                <th className="p-4 text-muted font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">Super Bowl</th>
+                                                <th className="p-4 text-gold-600 dark:text-gold-400 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right bg-gold-500/10 border-l border-gold-500/20">TOTAL</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -329,19 +327,20 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                 .map((entry, index) => {
                                                     const isMe = user?.id === entry.userId;
                                                     return (
-                                                        <tr key={entry.id || entry.userId} className={`border-b border-slate-800/50 ${isMe ? 'bg-indigo-900/20' : 'hover:bg-slate-800/50'}`}>
-                                                            <td className="p-4 font-bold text-slate-500 sticky left-0 bg-inherit border-r border-slate-800/50">
-                                                                {index + 1}
+                                                        <tr key={entry.id || entry.userId} className={`border-b border-line ${isMe ? 'bg-brandred-600/[0.07]' : 'hover:bg-[color:var(--page)]'}`}>
+                                                            <td className="p-4 sticky left-0 bg-inherit border-r border-line">
+                                                                <RankChip rank={index + 1} />
                                                             </td>
-                                                            <td className="p-4 sticky left-12 bg-inherit border-r border-slate-800/50">
+                                                            <td className="p-4 sticky left-12 bg-inherit border-r border-line">
                                                                 <div className="flex items-center gap-2">
-                                                                    <div className={`font-bold ${isMe ? 'text-indigo-400' : 'text-white'}`}>
+                                                                    <div className="font-bold text-[color:var(--text)]">
                                                                         {entry.entryName || entry.userName}
                                                                     </div>
+                                                                    {isMe && <YouPill />}
                                                                     {canViewPicks && (
                                                                         <button
                                                                             onClick={() => setViewingEntry(entry)}
-                                                                            className="text-slate-500 hover:text-emerald-400 transition-colors"
+                                                                            className="text-faint hover:text-gold-500 transition-colors duration-150"
                                                                             title="View Picks"
                                                                         >
                                                                             <Eye size={16} />
@@ -349,21 +348,17 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                     )}
                                                                 </div>
                                                                 {/* Status Indicators (Always Visible) */}
-                                                                <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                                                                    {canViewPicks && <span>Tiebreaker: {entry.tiebreaker}</span>}
+                                                                <div className="text-xs text-muted mt-1 flex items-center gap-2 flex-wrap">
+                                                                    {canViewPicks && <span className="num">Tiebreaker: {entry.tiebreaker}</span>}
                                                                     {entry.paid && (
-                                                                        <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-500/20">
-                                                                            Paid
-                                                                        </span>
+                                                                        <Badge status="paid" className="text-[10px] px-2 py-[3px]" />
                                                                     )}
                                                                     {!entry.paid && isManager && (
-                                                                        <span className="bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-rose-500/20">
-                                                                            Unpaid
-                                                                        </span>
+                                                                        <Badge status="unpaid" className="text-[10px] px-2 py-[3px]" />
                                                                     )}
                                                                 </div>
                                                             </td>
-                                                            <td className="p-4 text-slate-400 border-r border-slate-800/50">
+                                                            <td className="p-4 text-muted border-r border-line">
                                                                 <div className="flex justify-between items-center group/row">
                                                                     {entry.userName}
                                                                     {/* Manager Actions */}
@@ -381,10 +376,10 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                                         toast.error('Failed to update payment status');
                                                                                     }
                                                                                 }}
-                                                                                className={`p-1.5 rounded hover:bg-slate-700 transition-colors ${entry.paid ? 'text-emerald-400' : 'text-slate-500'}`}
+                                                                                className={`p-1.5 rounded hover:bg-[color:var(--page)] transition-colors duration-150 ${entry.paid ? 'text-[#0F7B4A]' : 'text-faint'}`}
                                                                                 title={entry.paid ? "Mark Unpaid" : "Mark Paid"}
                                                                             >
-                                                                                <span className="font-bold text-xs">$</span>
+                                                                                <span className="font-display font-bold text-xs">$</span>
                                                                             </button>
                                                                             <button
                                                                                 onClick={async (e) => {
@@ -394,7 +389,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                                     // TODO: Implement delete
                                                                                     dbService.managePlayoffEntry(pool.id, entry.id!, 'delete');
                                                                                 }}
-                                                                                className="p-1.5 rounded hover:bg-rose-900/50 text-slate-500 hover:text-rose-500 transition-colors"
+                                                                                className="p-1.5 rounded hover:bg-brandred-600/10 text-faint hover:text-brandred-600 transition-colors duration-150"
                                                                                 title="Delete Entry"
                                                                             >
                                                                                 <Trash2 size={14} />
@@ -403,19 +398,19 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                                     )}
                                                                 </div>
                                                             </td>
-                                                            <td className="p-4 text-center font-mono text-slate-300">
+                                                            <td className="p-4 text-center num text-[color:var(--text)]">
                                                                 {entry.scoreWC > 0 ? entry.scoreWC : '-'}
                                                             </td>
-                                                            <td className="p-4 text-center font-mono text-slate-300">
+                                                            <td className="p-4 text-center num text-[color:var(--text)]">
                                                                 {entry.scoreDiv > 0 ? entry.scoreDiv : '-'}
                                                             </td>
-                                                            <td className="p-4 text-center font-mono text-slate-300">
+                                                            <td className="p-4 text-center num text-[color:var(--text)]">
                                                                 {entry.scoreConf > 0 ? entry.scoreConf : '-'}
                                                             </td>
-                                                            <td className="p-4 text-center font-mono text-slate-300">
+                                                            <td className="p-4 text-center num text-[color:var(--text)]">
                                                                 {entry.scoreSB > 0 ? entry.scoreSB : '-'}
                                                             </td>
-                                                            <td className="p-4 text-right font-black text-emerald-400 text-xl bg-emerald-500/10 border-l border-emerald-500/20">
+                                                            <td className="p-4 text-right font-display font-bold num text-gold-600 dark:text-gold-400 text-xl bg-gold-500/10 border-l border-gold-500/20">
                                                                 {entry.calculatedTotal}
                                                             </td>
                                                         </tr>
@@ -423,7 +418,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                 })}
                                             {(!pool.entries || Object.keys(pool.entries).length === 0) && (
                                                 <tr>
-                                                    <td colSpan={8} className="p-8 text-center text-slate-500 italic">No entries yet. Be the first!</td>
+                                                    <td colSpan={8} className="p-8 text-center text-muted italic">No entries yet. Be the first!</td>
                                                 </tr>
                                             )}
                                         </tbody>
@@ -434,14 +429,14 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         </div>
                     )}
                     {activeTab === 'rules' && (
-                        <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 space-y-6">
-                            <h3 className="text-xl font-bold">How to Play</h3>
-                            <ul className="list-disc pl-5 space-y-2 text-slate-300">
+                        <div className="bg-card rounded-xl border border-line shadow-card p-8 space-y-6">
+                            <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)]">How to Play</h3>
+                            <ul className="list-disc pl-5 space-y-2 text-[color:var(--text)]">
                                 <li>Rank all 14 playoff teams from 14 (Strongest) to 1 (Weakest).</li>
                                 <li>Earn points equal to the assigned rank when a team wins.</li>
                                 <li>
                                     Points are multiplied in each round:
-                                    <ul className="list-none grid grid-cols-2 gap-2 mt-2 font-mono text-sm text-emerald-400">
+                                    <ul className="list-none grid grid-cols-2 gap-2 mt-2 num text-sm text-gold-600 dark:text-gold-400">
                                         <li>Wild Card: {pool.settings?.scoring?.roundMultipliers?.WILD_CARD ?? 1}x</li>
                                         <li>Divisional: {pool.settings?.scoring?.roundMultipliers?.DIVISIONAL ?? 2}x</li>
                                         <li>Conference: {pool.settings?.scoring?.roundMultipliers?.CONF_CHAMP ?? 4}x</li>
@@ -454,7 +449,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                             {pool.settings?.payouts && (
                                 <>
                                     {/* [NEW] Use Payout Card */}
-                                    <div className="max-w-md pt-4 border-t border-slate-800">
+                                    <div className="max-w-md pt-4 border-t border-line">
                                         <PlayoffPayoutCard pool={pool} paidEntriesCount={paidEntriesCount} />
                                     </div>
                                     {/* Old list removed/replaced */}
@@ -463,17 +458,17 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
 
                             {(pool.venmo || pool.zelle) && (
                                 <>
-                                    <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payment Options</h3>
+                                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] pt-4 border-t border-line">Payment Options</h3>
                                     <div className="flex flex-col gap-2 max-w-sm">
                                         {pool.venmo && (
-                                            <a href={`https://venmo.com/u/${pool.venmo.replace('@', '')}`} target="_blank" rel="noreferrer" className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-4 py-3 rounded-lg font-bold flex items-center gap-2 justify-center transition-colors shadow-lg shadow-[#008CFF]/20">
+                                            <a href={`https://venmo.com/u/${pool.venmo.replace('@', '')}`} target="_blank" rel="noreferrer" className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-4 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 justify-center transition-colors duration-150 shadow-lg shadow-[#008CFF]/20">
                                                 Venmo: {pool.venmo} <ExternalLink size={16} />
                                             </a>
                                         )}
                                         {pool.zelle && (
-                                            <div className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-lg font-bold flex items-center gap-2 justify-between group">
+                                            <div className="bg-surface border border-line text-[color:var(--text)] px-4 py-3 rounded-lg font-bold flex items-center gap-2 justify-between group">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-slate-400 text-xs uppercase font-bold mr-1">Zelle:</span>
+                                                    <span className="text-muted text-xs uppercase font-display font-bold tracking-[0.08em] mr-1">Zelle:</span>
                                                     {pool.zelle}
                                                 </div>
                                                 <button
@@ -482,10 +477,10 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                         setZelleCopied(true);
                                                         setTimeout(() => setZelleCopied(false), 2000);
                                                     }}
-                                                    className="bg-slate-700 hover:bg-slate-600 p-2 rounded transition-all transform active:scale-95"
+                                                    className="bg-card border border-line hover:bg-page p-2 rounded transition-all duration-150 transform active:scale-95"
                                                     title="Copy Zelle Info"
                                                 >
-                                                    {zelleCopied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} className="text-slate-400 group-hover:text-white" />}
+                                                    {zelleCopied ? <Check size={16} className="text-[#0F7B4A]" /> : <Copy size={16} className="text-muted group-hover:text-[color:var(--text)]" />}
                                                 </button>
                                             </div>
                                         )}
@@ -495,8 +490,8 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
 
                             {pool.settings?.paymentInstructions && (
                                 <>
-                                    <h3 className="text-xl font-bold pt-4 border-t border-slate-800">Payment Instructions</h3>
-                                    <div className="bg-slate-950 p-4 rounded-lg text-slate-300 whitespace-pre-wrap">
+                                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] pt-4 border-t border-line">Payment Instructions</h3>
+                                    <div className="bg-page border border-line p-4 rounded-lg text-[color:var(--text)] whitespace-pre-wrap">
                                         {pool.settings.paymentInstructions}
                                     </div>
                                 </>
@@ -504,33 +499,35 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         </div>
                     )}
                     {activeTab === 'ai' && (
-                        <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 space-y-6">
+                        <div className="bg-card rounded-xl border border-line shadow-card p-8 space-y-6">
                             <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
                         </div>
                     )}
                     {/* [NEW] Commissioner Tab */}
                     {activeTab === 'commissioner' && isManager && user && (
-                        <div className="bg-slate-900 rounded-xl border border-slate-800 p-8 space-y-8">
-                            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-                                <Settings className="text-indigo-400" /> Commissioner Tools
+                        <div className="bg-card rounded-xl border border-line shadow-card p-8 space-y-8">
+                            <h2 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] mb-6 flex items-center gap-2">
+                                <Settings className="text-gold-500" /> Commissioner Tools
                             </h2>
 
                             {/* [NEW] Pool Status Control */}
-                            <div className="bg-slate-950/50 p-6 rounded-xl border border-slate-800">
-                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                            <div className="bg-surface p-6 rounded-xl border border-line">
+                                <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-4 flex items-center gap-2">
                                     Pool Status
-                                    <span className={`text-xs px-2 py-0.5 rounded uppercase ${pool.isLocked ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                    <Badge status={pool.isLocked ? 'locked' : 'open'} className="text-[11px] px-2 py-[3px]">
                                         {pool.isLocked ? 'Locked' : 'Open'}
-                                    </span>
+                                    </Badge>
                                 </h3>
                                 <div className="flex items-center justify-between gap-4">
-                                    <p className="text-sm text-slate-400">
+                                    <p className="text-sm text-muted">
                                         {pool.isLocked
                                             ? "Pool is locked. New entries cannot be added and picks are visible to everyone."
                                             : "Pool is open. Users can add/edit entries and picks are hidden."
                                         }
                                     </p>
-                                    <button
+                                    <Button
+                                        variant={pool.isLocked ? 'secondary' : 'primary'}
+                                        size="sm"
                                         onClick={async () => {
                                             const newStatus = !pool.isLocked;
                                             const ok = await toast.confirm({
@@ -546,18 +543,14 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                 toast.error('Failed to update pool status');
                                             }
                                         }}
-                                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${pool.isLocked
-                                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                                            : 'bg-rose-600 hover:bg-rose-500 text-white'
-                                            }`}
                                     >
                                         {pool.isLocked ? 'Unlock Pool' : 'Lock Pool'}
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
 
                             <div className="max-w-2xl">
-                                <h3 className="text-lg font-bold text-slate-300 mb-4">Announcements</h3>
+                                <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-4">Announcements</h3>
                                 <AnnouncementManager pool={pool as any} currentUser={user} />
                             </div>
                         </div>
@@ -567,15 +560,15 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
             {/* View Picks Modal */}
             {viewingEntry && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-                    <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
-                        <div className="p-6 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
+                    <div className="bg-card rounded-xl border border-line shadow-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+                        <div className="p-6 border-b border-line flex justify-between items-center sticky top-0 bg-card z-10">
                             <div>
-                                <h3 className="text-xl font-bold text-white">{viewingEntry.userName}'s Picks</h3>
-                                <p className="text-sm text-slate-400">Tiebreaker Prediction: {viewingEntry.tiebreaker}</p>
+                                <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)]">{viewingEntry.userName}'s Picks</h3>
+                                <p className="text-sm text-muted num">Tiebreaker Prediction: {viewingEntry.tiebreaker}</p>
                             </div>
                             <button
                                 onClick={() => setViewingEntry(null)}
-                                className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-lg transition-colors"
+                                className="bg-surface border border-line hover:bg-page text-muted hover:text-[color:var(--text)] p-2 rounded-lg transition-colors duration-150"
                             >
                                 <X size={20} />
                             </button>
@@ -588,19 +581,19 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                     .map(t => ({ ...t, rank: viewingEntry.rankings[t.id] || 0 }))
                                     .sort((a, b) => b.rank - a.rank)
                                     .map((team, index) => (
-                                        <div key={team.id} className={`flex items-center gap-4 bg-slate-800/50 p-3 rounded-lg border border-slate-800 ${team.eliminated ? 'opacity-50 grayscale' : ''}`}>
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${index < 3 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-700 text-slate-400'
+                                        <div key={team.id} className={`flex items-center gap-4 bg-surface p-3 rounded-lg border border-line ${team.eliminated ? 'opacity-50 grayscale' : ''}`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-sm num ${index < 3 ? 'bg-gold-foil text-navy-900' : 'bg-page border border-line text-muted'
                                                 }`}>
                                                 {team.rank}
                                             </div>
                                             <div className="flex-1">
-                                                <div className="font-bold text-white flex items-center gap-2">
+                                                <div className="font-bold text-[color:var(--text)] flex items-center gap-2">
                                                     {team.name}
-                                                    <span className="text-xs font-normal text-slate-400 px-2 py-0.5 bg-slate-900 rounded border border-slate-700">
+                                                    <span className="text-xs font-normal text-muted px-2 py-0.5 bg-page rounded border border-line num">
                                                         #{team.seed} {team.conference}
                                                     </span>
                                                     {team.eliminated && (
-                                                        <span className="text-[10px] font-bold text-rose-400 uppercase border border-rose-500/30 px-1.5 py-0.5 rounded bg-rose-500/10">
+                                                        <span className="text-[10px] font-display font-bold text-brandred-600 uppercase tracking-[0.08em] border border-brandred-600/30 px-1.5 py-0.5 rounded bg-brandred-600/10">
                                                             Eliminated
                                                         </span>
                                                     )}
@@ -615,13 +608,14 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-slate-800 bg-slate-950/50">
-                            <button
+                        <div className="p-6 border-t border-line bg-surface">
+                            <Button
+                                variant="secondary"
                                 onClick={() => setViewingEntry(null)}
-                                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-lg transition-colors"
+                                className="w-full"
                             >
                                 Close
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>

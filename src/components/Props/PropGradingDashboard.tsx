@@ -1,8 +1,9 @@
 import { logger } from '../../utils/logger';
 import React, { useState, useEffect } from 'react';
 import type { GameState, PropCard } from '../../types';
-import { Check, Trophy, Award, Target } from 'lucide-react';
+import { Check, Trophy, Target } from 'lucide-react';
 import { dbService } from '../../services/dbService';
+import { RankChip, StatTile } from '../ui';
 
 interface PropGradingDashboardProps {
     gameState: GameState;
@@ -56,42 +57,30 @@ export const PropGradingDashboard: React.FC<PropGradingDashboardProps> = ({ game
     const gradedCount = questions.filter(q => q.correctOption !== undefined).length;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 font-body">
             {/* Stats Header */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
-                    <div className="text-3xl font-bold text-white">{questions.length}</div>
-                    <div className="text-xs text-slate-500 uppercase">Questions</div>
-                </div>
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
-                    <div className="text-3xl font-bold text-emerald-400">{gradedCount}</div>
-                    <div className="text-xs text-slate-500 uppercase">Graded</div>
-                </div>
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
-                    <div className="text-3xl font-bold text-amber-400">{totalPossiblePoints}</div>
-                    <div className="text-xs text-slate-500 uppercase">Total Pts</div>
-                </div>
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
-                    <div className="text-3xl font-bold text-indigo-400">{propCards.length}</div>
-                    <div className="text-xs text-slate-500 uppercase">Entries</div>
-                </div>
+                <StatTile label="Questions" value={questions.length} className="text-center" />
+                <StatTile label="Graded" value={gradedCount} accent="gold" className="text-center" />
+                <StatTile label="Total Pts" value={totalPossiblePoints} accent="gold" className="text-center" />
+                <StatTile label="Entries" value={propCards.length} className="text-center" />
             </div>
 
             <div className="grid lg:grid-cols-2 gap-6">
                 {/* Grading Panel */}
                 <div className="space-y-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Target className="text-indigo-400" size={20} /> Grade Questions
+                    <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                        <Target className="text-navy-700 dark:text-gold-400" size={20} /> Grade Questions
                     </h3>
                     <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                         {questions.map((q, idx) => (
-                            <div key={q.id} className={`bg-slate-800 p-4 rounded-xl border ${q.correctOption !== undefined ? 'border-emerald-500/50' : 'border-slate-700'}`}>
+                            <div key={q.id} className={`bg-card p-4 rounded-xl border ${q.correctOption !== undefined ? 'border-[#0F7B4A]/50' : 'border-line'}`}>
                                 <div className="flex items-start justify-between mb-3">
                                     <div className="flex items-center gap-2">
-                                        <span className="bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded text-xs font-bold">#{idx + 1}</span>
-                                        <span className="text-white font-medium">{q.text}</span>
+                                        <span className="bg-navy-600/15 text-navy-700 dark:text-gold-400 px-2 py-0.5 rounded text-xs font-display font-bold num">#{idx + 1}</span>
+                                        <span className="text-[color:var(--text)] font-medium">{q.text}</span>
                                     </div>
-                                    <span className="text-amber-400 text-xs font-bold">{q.points || 1} pts</span>
+                                    <span className="text-gold-700 dark:text-gold-400 text-xs font-display font-bold num">{q.points || 1} pts</span>
                                 </div>
                                 <div className={`grid gap-2 ${q.options.length <= 2 ? 'grid-cols-2' : 'grid-cols-2'}`}>
                                     {q.options.map((opt, optIdx) => {
@@ -102,10 +91,10 @@ export const PropGradingDashboard: React.FC<PropGradingDashboardProps> = ({ game
                                                 key={optIdx}
                                                 onClick={() => handleGrade(q.id, optIdx)}
                                                 disabled={isLoading}
-                                                className={`px-3 py-2 text-sm rounded-lg border flex items-center justify-between transition-all
+                                                className={`px-3 py-2 text-sm rounded-lg border flex items-center justify-between transition-all duration-150
                                                     ${isCorrect
-                                                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
-                                                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-white'}
+                                                        ? 'bg-[#E4F5EC] border-[#0F7B4A] text-[#0F7B4A]'
+                                                        : 'bg-surface border-line text-muted hover:border-navy-600 hover:text-[color:var(--text)]'}
                                                     ${isLoading ? 'opacity-50 cursor-wait' : ''}
                                                 `}
                                             >
@@ -122,41 +111,38 @@ export const PropGradingDashboard: React.FC<PropGradingDashboardProps> = ({ game
 
                 {/* Live Leaderboard */}
                 <div className="space-y-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Trophy className="text-amber-400" size={20} /> Live Leaderboard
+                    <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                        <Trophy className="text-gold-500" size={20} /> Live Leaderboard
                     </h3>
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                        <div className="grid grid-cols-12 gap-2 p-3 text-xs font-bold text-slate-500 uppercase border-b border-slate-700 bg-slate-900/50">
+                    <div className="bg-card rounded-xl border border-line shadow-card overflow-hidden">
+                        <div className="grid grid-cols-12 gap-2 p-3 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line bg-surface">
                             <div className="col-span-1">Rank</div>
                             <div className="col-span-5">Player</div>
                             <div className="col-span-2 text-center">Score</div>
                             <div className="col-span-2 text-center">Correct</div>
                             <div className="col-span-2 text-center">TB</div>
                         </div>
-                        <div className="divide-y divide-slate-700/50 max-h-[550px] overflow-y-auto">
+                        <div className="divide-y divide-[color:var(--line)] max-h-[550px] overflow-y-auto">
                             {leaderboard.length === 0 ? (
-                                <div className="p-8 text-center text-slate-500">No entries yet</div>
+                                <div className="p-8 text-center text-muted">No entries yet</div>
                             ) : (
                                 leaderboard.map((card, idx) => (
-                                    <div key={card.id} className={`grid grid-cols-12 gap-2 p-3 items-center hover:bg-slate-700/30 ${idx < 3 ? 'bg-amber-500/5' : ''}`}>
+                                    <div key={card.id} className={`grid grid-cols-12 gap-2 p-3 items-center hover:bg-[color:var(--page)] transition-colors ${idx < 3 ? 'bg-gold-500/5' : ''}`}>
                                         <div className="col-span-1">
-                                            {idx === 0 && <Trophy size={16} className="text-amber-400" />}
-                                            {idx === 1 && <Award size={16} className="text-slate-300" />}
-                                            {idx === 2 && <Award size={16} className="text-amber-600" />}
-                                            {idx > 2 && <span className="text-slate-500 text-sm">{idx + 1}</span>}
+                                            <RankChip rank={idx + 1} />
                                         </div>
                                         <div className="col-span-5">
-                                            <div className="text-white font-medium truncate">{card.userName || 'Anonymous'}</div>
+                                            <div className="text-[color:var(--text)] font-medium truncate">{card.userName || 'Anonymous'}</div>
                                         </div>
-                                        <div className="col-span-2 text-center">
-                                            <span className="text-emerald-400 font-bold">{card.score}</span>
-                                            <span className="text-slate-600">/{totalPossiblePoints}</span>
+                                        <div className="col-span-2 text-center num">
+                                            <span className="text-gold-600 dark:text-gold-400 font-bold">{card.score}</span>
+                                            <span className="text-faint">/{totalPossiblePoints}</span>
                                         </div>
-                                        <div className="col-span-2 text-center">
-                                            <span className="text-indigo-400">{card.correctCount}</span>
-                                            <span className="text-slate-600">/{questions.length}</span>
+                                        <div className="col-span-2 text-center num">
+                                            <span className="text-[color:var(--text)]">{card.correctCount}</span>
+                                            <span className="text-faint">/{questions.length}</span>
                                         </div>
-                                        <div className="col-span-2 text-center text-slate-400">
+                                        <div className="col-span-2 text-center text-muted num">
                                             {card.tiebreakerVal || '-'}
                                         </div>
                                     </div>

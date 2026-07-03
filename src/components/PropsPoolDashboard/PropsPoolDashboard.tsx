@@ -11,12 +11,13 @@ import { GameScoreboard } from '../GameScoreboard';
 import { StatusCard } from '../StatusCard';
 import { PayoutSummaryCard } from '../PayoutSummaryCard';
 
-import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check, Lock, Bot } from 'lucide-react';
+import { Share2, Grid3X3, Trophy, ChevronLeft, Shield, BarChart2, Check, Lock, Bot, Dices } from 'lucide-react';
 import { PropsWizard as PropWizard } from '../PropsWizard/PropsWizard';
 import { dbService } from '../../services/dbService';
 import { ShareModal } from '../modals/ShareModal';
 import { useToast } from '../ui/Toast';
 import { getUserMessage } from '../../utils/errorMessages';
+import { Badge, Button, Tag } from '../ui';
 
 interface PropsPoolDashboardProps {
     pool: PropsPool;
@@ -50,34 +51,34 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
     return (
         <BillingGate pool={pool as any} isCommissioner={!!isManager}>
         <div
-            className="min-h-screen text-white pb-20 transition-colors duration-500"
-            style={{ backgroundColor: pool.branding?.backgroundColor || '#0f172a' }}
+            className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 transition-colors duration-500"
+            style={{ backgroundColor: pool.branding?.backgroundColor || undefined }}
         >
             {/* Header */}
-            <header className="bg-slate-900/50 backdrop-blur-md relative border-b border-slate-800">
+            <header className="bg-surface backdrop-blur-md relative border-b border-line">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors">
+                        <button onClick={onBack} className="p-2 hover:bg-page rounded-lg text-muted hover:text-[color:var(--text)] transition-colors duration-150">
                             <ChevronLeft size={20} />
                         </button>
                         <div className="flex items-center gap-3">
                             {pool.branding?.logoUrl ? (
-                                <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-800 p-1 shadow-lg">
+                                <div className="w-10 h-10 bg-card rounded-lg flex items-center justify-center border border-line p-1 shadow-card">
                                     <img src={pool.branding.logoUrl} alt={pool.name} className="max-w-full max-h-full object-contain" />
                                 </div>
                             ) : (
-                                <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-600/20">
-                                    🎲
+                                <div className="w-10 h-10 bg-gold-foil text-navy-900 rounded-lg flex items-center justify-center shadow-card">
+                                    <Dices size={22} />
                                 </div>
                             )}
                             <div>
-                                <h1 className="font-bold text-lg leading-tight">{pool.name}</h1>
-                                <div className="flex items-center gap-2 text-xs text-slate-500">
-                                    <span className="uppercase font-bold tracking-wider">Props Pool</span>
+                                <h1 className="font-display font-bold uppercase text-lg leading-tight text-[color:var(--text)]">{pool.name}</h1>
+                                <div className="flex items-center gap-2 text-xs text-muted">
+                                    <Tag sport="props" className="text-[10px] px-2 py-[3px]">Props Pool</Tag>
                                     <span>•</span>
-                                    <span className={pool.isLocked ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                                    <Badge status={pool.isLocked ? 'locked' : 'open'} className="text-[10px] px-2 py-[3px]">
                                         {pool.isLocked ? 'LOCKED' : 'OPEN FOR PICKS'}
-                                    </span>
+                                    </Badge>
                                 </div>
                             </div>
                         </div>
@@ -86,7 +87,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setShowShareModal(true)}
-                            className="p-2 hover:bg-slate-800 rounded-lg text-indigo-400 hover:text-white transition-colors"
+                            className="p-2 hover:bg-page rounded-lg text-navy-700 dark:text-gold-400 hover:text-[color:var(--text)] transition-colors duration-150"
                         >
                             <Share2 size={20} />
                         </button>
@@ -97,13 +98,13 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                 <div className="max-w-7xl mx-auto px-4 flex gap-6 overflow-x-auto hide-scrollbar">
                     <button
                         onClick={() => setActiveTab('cards')}
-                        className={`pb-3 border-b-2 font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'cards' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}
+                        className={`pb-3 border-b-2 font-display font-bold uppercase tracking-[0.08em] text-sm flex items-center gap-2 whitespace-nowrap transition-colors duration-150 ${activeTab === 'cards' ? 'border-gold-500 text-gold-600 dark:text-gold-400' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                     >
                         <Grid3X3 size={16} /> Overview
                     </button>
                     <button
                         onClick={() => setActiveTab('leaderboard')}
-                        className={`pb-3 border-b-2 font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'leaderboard' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}
+                        className={`pb-3 border-b-2 font-display font-bold uppercase tracking-[0.08em] text-sm flex items-center gap-2 whitespace-nowrap transition-colors duration-150 ${activeTab === 'leaderboard' ? 'border-gold-500 text-gold-600 dark:text-gold-400' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                     >
                         <Trophy size={16} /> Leaderboard
                     </button>
@@ -111,7 +112,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                     {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
                         <button
                             onClick={() => setActiveTab('ai')}
-                            className={`pb-3 border-b-2 font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'ai' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}
+                            className={`pb-3 border-b-2 font-display font-bold uppercase tracking-[0.08em] text-sm flex items-center gap-2 whitespace-nowrap transition-colors duration-150 ${activeTab === 'ai' ? 'border-gold-500 text-gold-600 dark:text-gold-400' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                         >
                             <Bot size={16} /> AI Insights
                         </button>
@@ -120,7 +121,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                     {showStats && (
                         <button
                             onClick={() => setActiveTab('stats')}
-                            className={`pb-3 border-b-2 font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'stats' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}
+                            className={`pb-3 border-b-2 font-display font-bold uppercase tracking-[0.08em] text-sm flex items-center gap-2 whitespace-nowrap transition-colors duration-150 ${activeTab === 'stats' ? 'border-gold-500 text-gold-600 dark:text-gold-400' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                         >
                             <BarChart2 size={16} /> Stats
                         </button>
@@ -130,13 +131,13 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                         <>
                             <button
                                 onClick={() => setActiveTab('admin')}
-                                className={`pb-3 border-b-2 font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'admin' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}
+                                className={`pb-3 border-b-2 font-display font-bold uppercase tracking-[0.08em] text-sm flex items-center gap-2 whitespace-nowrap transition-colors duration-150 ${activeTab === 'admin' ? 'border-gold-500 text-gold-600 dark:text-gold-400' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                             >
                                 <Shield size={16} /> Pool Admin
                             </button>
                             <button
                                 onClick={() => setActiveTab('grading')}
-                                className={`pb-3 border-b-2 font-bold text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'grading' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}
+                                className={`pb-3 border-b-2 font-display font-bold uppercase tracking-[0.08em] text-sm flex items-center gap-2 whitespace-nowrap transition-colors duration-150 ${activeTab === 'grading' ? 'border-gold-500 text-gold-600 dark:text-gold-400' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
                             >
                                 <Check size={16} /> Grading
                             </button>
@@ -243,18 +244,19 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
 
                         {/* Manual Lock Control */}
                         {!pool.isLocked && (
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div className="bg-card border border-line rounded-xl shadow-card p-6 flex flex-col md:flex-row justify-between items-center gap-4">
                                 <div>
-                                    <h3 className="text-white font-bold text-lg flex items-center gap-2">
-                                        <Lock className="text-rose-500" size={20} /> Lock Pool
+                                    <h3 className="text-[color:var(--text)] font-display font-bold uppercase text-lg flex items-center gap-2">
+                                        <Lock className="text-brandred-500" size={20} /> Lock Pool
                                     </h3>
-                                    <p className="text-slate-400 text-sm mt-1">
+                                    <p className="text-muted text-sm mt-1">
                                         Manually lock the pool to prevent further entries.
                                         <br />
-                                        <span className="text-amber-500 text-xs">Note: This cannot be undone from this dashboard.</span>
+                                        <span className="text-gold-600 dark:text-gold-400 text-xs">Note: This cannot be undone from this dashboard.</span>
                                     </p>
                                 </div>
-                                <button
+                                <Button
+                                    size="sm"
                                     onClick={async () => {
                                         const ok = await toast.confirm({ title: 'Lock this pool?', message: 'Are you sure you want to LOCK this pool? No more entries will be allowed.', confirmLabel: 'Lock Pool', danger: true });
                                         if (!ok) return;
@@ -270,20 +272,19 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                                         }
                                     }}
                                     disabled={locking}
-                                    className="bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
                                 >
                                     {locking ? 'Locking...' : 'Lock Pool Now'}
-                                </button>
+                                </Button>
                             </div>
                         )}
 
                         {/* Fix Sync Tool */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="bg-card border border-line rounded-xl shadow-card p-6 flex flex-col md:flex-row justify-between items-center gap-4">
                             <div>
-                                <h3 className="text-white font-bold text-lg flex items-center gap-2">
-                                    <Shield className="text-amber-500" size={20} /> Score Sync Repair
+                                <h3 className="text-[color:var(--text)] font-display font-bold uppercase text-lg flex items-center gap-2">
+                                    <Shield className="text-gold-500" size={20} /> Score Sync Repair
                                 </h3>
-                                <p className="text-slate-400 text-sm mt-1">If the scoreboard is missing updated scores or events, use this tool to force a re-sync from ESPN.</p>
+                                <p className="text-muted text-sm mt-1">If the scoreboard is missing updated scores or events, use this tool to force a re-sync from ESPN.</p>
                             </div>
                             <button
                                 onClick={async () => {
@@ -305,14 +306,14 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                                     if (btn) btn.innerText = 'Run Repair';
                                 }}
                                 id="btn-fix-sync"
-                                className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors"
+                                className="bg-gold-foil text-navy-900 hover:brightness-105 px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 hover:-translate-y-px"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9" /><path d="M17.64 15 22 10.64" /><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25V7.86c0-.55-.45-1-1-1H16.4c-.84 0-1.65-.33-2.25-.93L12.9 4.68" /><path d="M16.25 16.25 9 9" /></svg>
                                 Run Repair
                             </button>
                         </div>
 
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                        <div className="bg-card border border-line rounded-xl shadow-card p-6">
                             <PropWizard
                                 user={user}
                                 onCancel={() => setActiveTab('cards')} // Or handle otherwise
