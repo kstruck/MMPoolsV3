@@ -796,6 +796,14 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                         </div>
                                     </div>
 
+                                    {canRerun && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); navigate(`/nfl-wizard?type=${pool.type}&cloneFrom=${pool.id}`); }}
+                                            className="flex items-center justify-center gap-1.5 text-[10px] font-black uppercase text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl py-2 mb-3 transition-colors"
+                                        >
+                                            <RotateCcw size={11} /> Re-run for Next Season
+                                        </button>
+                                    )}
                                     <div className="flex items-center justify-between text-[10px] text-slate-600 border-t border-slate-800/60 pt-3 mt-auto font-bold uppercase">
                                         <span className="flex items-center gap-1"><UserIcon size={10} /> Host: {pool.managerName || 'Unknown'}</span>
                                         <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1 text-orange-500 font-black">
