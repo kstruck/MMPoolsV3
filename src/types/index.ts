@@ -911,6 +911,9 @@ export interface SystemSettings {
   currentSeason: number;
   propCategories: string[]; // Dynamic categories for prop seeds
   loyaltyTiers?: LoyaltyTier[];
+  // Per-pool-type creation flags (T5). Missing/partial => fail open to all-enabled.
+  // Server enforces via functions/src/lib/systemGuards; this is the client mirror.
+  poolTypeFlags?: Partial<Record<PoolType, boolean>>;
 }
 
 

@@ -10,6 +10,7 @@ import { RouteSEO } from './components/RouteSEO';
 import { AuthModal } from './components/modals';
 import { OfflineBanner } from './components/ui/OfflineBanner';
 import { useToast } from './components/ui/Toast';
+import { PoolTypeGate } from './components/PoolTypeGate';
 
 // Lazy-loaded route components (loaded on demand)
 const GamedaySquaresLanding = React.lazy(() => import('./components/GamedaySquaresLanding').then(m => ({ default: m.GamedaySquaresLanding })));
@@ -374,7 +375,9 @@ const App: React.FC = () => {
             user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                <PoolTypeGate type="BRACKET">
+                  <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
@@ -383,7 +386,9 @@ const App: React.FC = () => {
             user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                <PoolTypeGate type="NFL_PLAYOFFS">
+                  <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
@@ -392,7 +397,9 @@ const App: React.FC = () => {
             user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                <PoolTypeGate type="PROPS">
+                  <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
@@ -402,7 +409,9 @@ const App: React.FC = () => {
             user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
+                <PoolTypeGate type="SQUARES">
+                  <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
+                </PoolTypeGate>
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
@@ -412,7 +421,9 @@ const App: React.FC = () => {
             user ? (
               <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <NFLPoolWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                <PoolTypeGate>
+                  <NFLPoolWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />

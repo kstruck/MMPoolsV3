@@ -9,6 +9,7 @@ import { SimpleTestingDashboard } from './SimpleTestingDashboard';
 import { Trash2, Shield, Activity, Heart, Users, Settings, ToggleLeft, ToggleRight, PlayCircle, Search, ArrowDown, Palette, Plus, Eye, EyeOff, Star, Copy, X, List, Bot, Trophy, Lock, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { NFL_TEAMS, getTeamLogo } from '../constants';
 import { getPoolSport, getPoolLifecycleState } from '../utils/poolSport';
+import { POOL_TYPES, resolvePoolTypeFlags } from '../utils/featureFlags';
 import { db } from '../firebase';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -2777,6 +2778,31 @@ export const SuperAdmin: React.FC = () => {
                                 >
                                     {settings?.maintenanceMode ? <ToggleRight size={40} className="fill-amber-500/20" /> : <ToggleLeft size={40} />}
                                 </button>
+                            </div>
+
+                            {/* Per-pool-type creation flags (T5). Server-enforced: disabling a
+                                type blocks its create callable end-to-end, not just the UI. */}
+                            <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                                <h4 className="font-bold text-white mb-1">Pool Type Availability</h4>
+                                <p className="text-sm text-slate-400 mb-4">Disabling a type hides its card on <span className="font-mono">/create-pool</span> and rejects new creation server-side.</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {POOL_TYPES.map((pt) => {
+                                        const flags = resolvePoolTypeFlags(settings);
+                                        const on = flags[pt];
+                                        return (
+                                            <div key={pt} className="flex items-center justify-between px-3 py-2 bg-slate-900/60 rounded-lg border border-slate-700/60">
+                                                <span className="text-sm font-mono text-slate-200">{pt}</span>
+                                                <button
+                                                    aria-label={`Toggle ${pt} pool creation`}
+                                                    onClick={() => settingsService.update({ poolTypeFlags: { ...flags, [pt]: !on } })}
+                                                    className={on ? 'text-emerald-400' : 'text-slate-500'}
+                                                >
+                                                    {on ? <ToggleRight size={32} className="fill-emerald-500/20" /> : <ToggleLeft size={32} />}
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
                     </div>
