@@ -21,9 +21,9 @@ export const BracketCountdown: React.FC<BracketCountdownProps> = ({ lockAt }) =>
 
     if (isLocked) {
         return (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30">
-                <Lock size={16} className="text-red-400" />
-                <span className="text-sm font-bold text-red-400">Brackets are locked</span>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brandred-600/10 border border-brandred-600/30">
+                <Lock size={16} className="text-brandred-600" />
+                <span className="text-sm font-display font-bold uppercase tracking-[0.05em] text-brandred-600">Brackets are locked</span>
             </div>
         );
     }
@@ -37,14 +37,14 @@ export const BracketCountdown: React.FC<BracketCountdownProps> = ({ lockAt }) =>
     const isWarning = diff < 24 * 60 * 60 * 1000; // < 24 hours
 
     const bgClass = isUrgent
-        ? 'bg-red-500/10 border-red-500/30'
+        ? 'bg-brandred-600/10 border-brandred-600/30'
         : isWarning
-            ? 'bg-amber-500/10 border-amber-500/30'
-            : 'bg-slate-800/50 border-slate-700/50';
+            ? 'bg-gold-500/10 border-gold-500/30'
+            : 'bg-card border-line';
 
-    const iconColor = isUrgent ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-indigo-400';
-    const textColor = isUrgent ? 'text-red-300' : isWarning ? 'text-amber-300' : 'text-slate-300';
-    const numColor = isUrgent ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-white';
+    const iconColor = isUrgent ? 'text-brandred-600' : isWarning ? 'text-gold-600' : 'text-gold-500';
+    const textColor = isUrgent ? 'text-brandred-600' : isWarning ? 'text-gold-700' : 'text-muted';
+    const numColor = isUrgent ? 'text-brandred-600' : isWarning ? 'text-gold-600' : 'text-[color:var(--text)]';
 
     return (
         <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border ${bgClass} ${isUrgent ? 'animate-pulse' : ''}`}>
@@ -53,7 +53,7 @@ export const BracketCountdown: React.FC<BracketCountdownProps> = ({ lockAt }) =>
             ) : (
                 <Clock size={16} className={iconColor} />
             )}
-            <span className={`text-xs font-medium ${textColor}`}>
+            <span className={`text-xs font-display font-bold uppercase tracking-[0.08em] ${textColor}`}>
                 {isUrgent ? 'Hurry!' : 'Locks in'}
             </span>
             <div className="flex items-baseline gap-1.5">
@@ -64,7 +64,7 @@ export const BracketCountdown: React.FC<BracketCountdownProps> = ({ lockAt }) =>
                 <TimeUnit value={minutes} label="m" color={numColor} />
                 <TimeUnit value={seconds} label="s" color={numColor} />
             </div>
-            <span className="hidden sm:inline text-[10px] font-bold text-slate-500">
+            <span className="hidden sm:inline text-[10px] font-display font-bold uppercase tracking-[0.08em] text-faint num">
                 {formatDeadline(lockAt)}
             </span>
         </div>
@@ -73,9 +73,9 @@ export const BracketCountdown: React.FC<BracketCountdownProps> = ({ lockAt }) =>
 
 const TimeUnit: React.FC<{ value: number; label: string; color: string }> = ({ value, label, color }) => (
     <div className="flex items-baseline">
-        <span className={`text-lg font-black tabular-nums ${color}`}>
+        <span className={`text-lg font-display font-extrabold num ${color}`}>
             {String(value).padStart(2, '0')}
         </span>
-        <span className="text-[10px] text-slate-500 font-bold ml-0.5">{label}</span>
+        <span className="text-[10px] text-faint font-display font-bold ml-0.5">{label}</span>
     </div>
 );

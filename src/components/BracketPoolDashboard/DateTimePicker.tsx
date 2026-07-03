@@ -83,34 +83,34 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({ value, onChange,
 
     return (
         <div ref={ref} className="relative">
-            <label className="text-xs text-slate-500 block mb-1">{label}</label>
+            <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">{label}</label>
             <button
                 type="button"
                 onClick={() => setOpen(o => !o)}
-                className={`w-full flex items-center justify-between bg-slate-950 border rounded-lg p-2.5 text-sm transition-colors ${open ? 'border-indigo-500 ring-1 ring-indigo-500/30' : 'border-slate-700 hover:border-slate-600'}`}
+                className={`w-full flex items-center justify-between bg-surface border rounded-lg p-2.5 text-sm font-body transition-colors ${open ? 'border-gold-500 ring-1 ring-gold-500/30' : 'border-line hover:border-gold-500'}`}
             >
-                <span className={displayValue ? 'text-white' : 'text-slate-600'}>{displayValue || placeholder}</span>
+                <span className={displayValue ? 'text-[color:var(--text)] num' : 'text-faint'}>{displayValue || placeholder}</span>
                 <div className="flex items-center gap-1">
                     {value && (
-                        <span onClick={e => { e.stopPropagation(); clear(); }} className="text-slate-500 hover:text-red-400 p-0.5 rounded"><X size={14} /></span>
+                        <span onClick={e => { e.stopPropagation(); clear(); }} className="text-faint hover:text-brandred-600 p-0.5 rounded"><X size={14} /></span>
                     )}
-                    <Calendar size={14} className="text-slate-500" />
+                    <Calendar size={14} className="text-faint" />
                 </div>
             </button>
 
             {open && (
-                <div className="absolute z-50 mt-2 left-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl shadow-black/60 p-4 w-[300px] animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="absolute z-50 mt-2 left-0 bg-card border border-line rounded-xl shadow-card-hover p-4 w-[300px] animate-in fade-in slide-in-from-top-2 duration-200">
                     {/* Month Nav */}
                     <div className="flex items-center justify-between mb-3">
-                        <button onClick={prevMonth} className="p-1 rounded hover:bg-slate-800 text-slate-400"><ChevronLeft size={16} /></button>
-                        <span className="text-white text-sm font-bold">{MONTHS[viewMonth.month]} {viewMonth.year}</span>
-                        <button onClick={nextMonth} className="p-1 rounded hover:bg-slate-800 text-slate-400"><ChevronRight size={16} /></button>
+                        <button onClick={prevMonth} className="p-1 rounded hover:bg-surface text-muted"><ChevronLeft size={16} /></button>
+                        <span className="text-[color:var(--text)] text-sm font-display font-bold uppercase num">{MONTHS[viewMonth.month]} {viewMonth.year}</span>
+                        <button onClick={nextMonth} className="p-1 rounded hover:bg-surface text-muted"><ChevronRight size={16} /></button>
                     </div>
 
                     {/* Day Headers */}
                     <div className="grid grid-cols-7 gap-1 mb-1">
                         {DAYS.map(d => (
-                            <div key={d} className="text-center text-[10px] text-slate-600 font-bold py-1">{d}</div>
+                            <div key={d} className="text-center text-[10px] text-faint font-display font-bold uppercase py-1">{d}</div>
                         ))}
                     </div>
 
@@ -127,8 +127,8 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({ value, onChange,
                                 <button
                                     key={day}
                                     onClick={() => selectDay(day)}
-                                    className={`w-8 h-8 rounded-lg text-xs font-medium flex items-center justify-center transition-colors
-                                        ${selected ? 'bg-indigo-600 text-white' : todayMark ? 'bg-slate-800 text-indigo-400 ring-1 ring-indigo-500/40' : 'text-slate-300 hover:bg-slate-800'}`}
+                                    className={`w-8 h-8 rounded-lg text-xs font-medium num flex items-center justify-center transition-colors
+                                        ${selected ? 'bg-gold-500 text-navy-900 font-bold' : todayMark ? 'bg-surface text-gold-600 ring-1 ring-gold-500/40' : 'text-muted hover:bg-surface'}`}
                                 >
                                     {day}
                                 </button>
@@ -137,40 +137,40 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({ value, onChange,
                     </div>
 
                     {/* Time Picker */}
-                    <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-2">
-                        <Clock size={14} className="text-slate-500" aria-hidden="true" />
+                    <div className="mt-3 pt-3 border-t border-line flex items-center gap-2">
+                        <Clock size={14} className="text-faint" aria-hidden="true" />
                         <select
                             value={hour}
                             onChange={e => setHour(Number(e.target.value))}
-                            className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-sm w-14 appearance-none text-center"
+                            className="bg-surface border border-line rounded-lg px-2 py-1.5 text-[color:var(--text)] num text-sm w-14 appearance-none text-center"
                         >
                             {Array.from({ length: 12 }, (_, i) => i + 1).map(h => (
                                 <option key={h} value={h}>{String(h).padStart(2, '0')}</option>
                             ))}
                         </select>
-                        <span className="text-slate-500 font-bold">:</span>
+                        <span className="text-faint font-bold">:</span>
                         <select
                             value={minute}
                             onChange={e => setMinute(Number(e.target.value))}
-                            className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-sm w-14 appearance-none text-center"
+                            className="bg-surface border border-line rounded-lg px-2 py-1.5 text-[color:var(--text)] num text-sm w-14 appearance-none text-center"
                         >
                             {Array.from({ length: 60 }, (_, i) => i).map(m => (
                                 <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
                             ))}
                         </select>
-                        <div className="flex bg-slate-950 border border-slate-700 rounded-lg overflow-hidden">
+                        <div className="flex bg-surface border border-line rounded-lg overflow-hidden">
                             <button
                                 onClick={() => setAmPm('AM')}
-                                className={`px-2 py-1.5 text-xs font-bold ${amPm === 'AM' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                className={`px-2 py-1.5 text-xs font-display font-bold ${amPm === 'AM' ? 'bg-gold-500 text-navy-900' : 'text-muted hover:text-[color:var(--text)]'}`}
                             >AM</button>
                             <button
                                 onClick={() => setAmPm('PM')}
-                                className={`px-2 py-1.5 text-xs font-bold ${amPm === 'PM' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                                className={`px-2 py-1.5 text-xs font-display font-bold ${amPm === 'PM' ? 'bg-gold-500 text-navy-900' : 'text-muted hover:text-[color:var(--text)]'}`}
                             >PM</button>
                         </div>
-                        <span className="text-[11px] font-bold text-slate-500 ml-auto">{zoneLabel}</span>
+                        <span className="text-[11px] font-bold text-faint ml-auto">{zoneLabel}</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-2">
+                    <p className="text-[11px] text-faint mt-2">
                         Times are in your timezone ({zoneLabel}). Members see this deadline converted to theirs.
                     </p>
 
@@ -179,13 +179,13 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({ value, onChange,
                         <button
                             onClick={confirm}
                             disabled={!selectedDate}
-                            className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold py-2 rounded-lg transition-colors"
+                            className="flex-1 bg-brandred-600 hover:bg-brandred-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-display font-bold uppercase tracking-[0.05em] py-2 rounded-lg transition-colors"
                         >
                             Confirm
                         </button>
                         <button
                             onClick={clear}
-                            className="px-3 text-xs text-slate-400 hover:text-red-400 font-bold py-2 rounded-lg border border-slate-700 hover:border-red-800 transition-colors"
+                            className="px-3 text-xs text-muted hover:text-brandred-600 font-display font-bold uppercase tracking-[0.05em] py-2 rounded-lg border border-line hover:border-brandred-600/50 transition-colors"
                         >
                             Clear
                         </button>

@@ -144,7 +144,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
 
     if (!tournament) {
         return (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+            <div className="bg-card border border-line rounded-xl p-6 text-center py-12 text-faint shadow-card">
                 <BarChart3 size={48} className="mx-auto mb-4 opacity-20" />
                 <p>Reports will be available once the tournament bracket is set.</p>
             </div>
@@ -155,17 +155,17 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
         <div className="space-y-6">
             {/* Header / Controls */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800 self-start">
+                <div className="flex bg-card p-1 rounded-lg border border-line self-start">
                     <button
                         onClick={() => setView('breakdown')}
-                        className={`px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-colors ${view === 'breakdown' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                        className={`px-4 py-2 rounded-md text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-colors ${view === 'breakdown' ? 'bg-navy-800 text-white shadow-lg' : 'text-muted hover:text-[color:var(--text)]'
                             }`}
                     >
                         <Table size={16} /> Scoring Breakdown
                     </button>
                     <button
                         onClick={() => setView('popularity')}
-                        className={`px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-colors ${view === 'popularity' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                        className={`px-4 py-2 rounded-md text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-colors ${view === 'popularity' ? 'bg-navy-800 text-white shadow-lg' : 'text-muted hover:text-[color:var(--text)]'
                             }`}
                     >
                         <BarChart3 size={16} /> Pick Popularity
@@ -174,7 +174,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
 
                 <button
                     onClick={handleDownloadCSV}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-bold border border-slate-700 transition-colors flex items-center gap-2"
+                    className="px-4 py-2 bg-navy-800 hover:bg-navy-700 text-white rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-colors flex items-center gap-2"
                 >
                     <Download size={16} /> Export CSV
                 </button>
@@ -182,14 +182,14 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
 
             {/* Content Views */}
             {view === 'breakdown' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                <div className="bg-card border border-line rounded-xl overflow-hidden shadow-card">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-950 text-slate-400 font-bold uppercase text-xs border-b border-slate-800">
+                        <table className="w-full text-sm text-left font-body">
+                            <thead className="bg-surface text-muted font-display font-bold uppercase text-[12px] tracking-[0.08em] border-b border-line">
                                 <tr>
                                     <th className="p-4">Entry</th>
                                     <th className="p-4 text-center">Total</th>
-                                    <th className="p-4 text-center text-slate-600">Max</th>
+                                    <th className="p-4 text-center text-faint">Max</th>
                                     {Array.from({ length: maxRound }).map((_, idx) => {
                                         let label = `Round ${idx + 1}`;
                                         if (maxRound === 5) {
@@ -203,26 +203,26 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                                             if (idx === 5) label = 'Championship';
                                         }
                                         return (
-                                            <th key={idx} className={`p-4 text-center ${idx === 0 ? 'border-l border-slate-800' : ''}`}>
+                                            <th key={idx} className={`p-4 text-center ${idx === 0 ? 'border-l border-line' : ''}`}>
                                                 {label}
                                             </th>
                                         );
                                     })}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-800">
+                            <tbody className="divide-y divide-line">
                                 {scoringData.map((data, i) => (
-                                    <tr key={data.entry.id} className="hover:bg-slate-800/50 transition-colors">
-                                        <td className="p-4 font-bold text-white max-w-[200px] truncate">
+                                    <tr key={data.entry.id} className="hover:bg-[color:var(--page)] transition-colors">
+                                        <td className="p-4 font-bold text-[color:var(--text)] max-w-[200px] truncate">
                                             {data.entry.name}
-                                            <div className="text-[10px] text-slate-500 font-normal">Rank #{i + 1}</div>
+                                            <div className="text-[10px] text-faint font-normal num">Rank #{i + 1}</div>
                                         </td>
-                                        <td className="p-4 text-center font-mono font-bold text-emerald-400">{data.total}</td>
-                                        <td className="p-4 text-center font-mono text-slate-500">{data.max}</td>
+                                        <td className="p-4 text-center num font-display font-bold text-[color:var(--text)]">{data.total}</td>
+                                        <td className="p-4 text-center num text-faint">{data.max}</td>
                                         {data.result.roundBreakdown.map((rd, idx) => (
-                                            <td key={idx} className={`p-4 text-center font-mono ${idx === 0 ? 'border-l border-slate-800' : ''} ${rd.points > 0 ? 'text-slate-300' : 'text-slate-700'}`}>
+                                            <td key={idx} className={`p-4 text-center num ${idx === 0 ? 'border-l border-line' : ''} ${rd.points > 0 ? 'text-muted' : 'text-faint'}`}>
                                                 {rd.points}
-                                                {rd.possible > 0 && <div className="text-[10px] text-slate-600 font-sans">{rd.correct}/{rd.possible}</div>}
+                                                {rd.possible > 0 && <div className="text-[10px] text-faint font-body num">{rd.correct}/{rd.possible}</div>}
                                             </td>
                                         ))}
                                     </tr>
@@ -236,31 +236,31 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
             {view === 'popularity' && popularityData && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Champion Picks Chart */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                            <Trophy size={18} className="text-amber-400" /> Champion Picks
+                    <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                        <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-6 flex items-center gap-2">
+                            <Trophy size={18} className="text-gold-500" /> Champion Picks
                         </h3>
                         <div className="h-[500px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={popularityData.champion} layout="vertical" margin={{ left: 40, right: 40 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" horizontal={false} />
                                     <XAxis type="number" hide />
                                     <YAxis
                                         dataKey="name"
                                         type="category"
                                         width={100}
-                                        tick={{ fill: '#94a3b8', fontSize: 14 }}
+                                        tick={{ fill: 'var(--muted)', fontSize: 14 }}
                                         interval={0}
                                     />
                                     <Tooltip
-                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#fff' }}
-                                        cursor={{ fill: '#1e293b', opacity: 0.4 }}
+                                        contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--line)', color: 'var(--text)' }}
+                                        cursor={{ fill: 'var(--line)', opacity: 0.4 }}
                                     />
                                     <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
                                         {popularityData.champion.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#6366f1'} />
+                                            <Cell key={`cell-${index}`} fill={index === 0 ? '#C9A867' : '#24507F'} />
                                         ))}
-                                        <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={12} fontWeight="bold" />
+                                        <LabelList dataKey="value" position="right" fill="var(--muted)" fontSize={12} fontWeight="bold" />
                                     </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
@@ -268,11 +268,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                     </div>
 
                     {/* Final Four Picks Chart */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                        <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
-                            <FileText size={18} className="text-indigo-400" /> Final Four Picks
+                    <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                        <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-1 flex items-center gap-2">
+                            <FileText size={18} className="text-gold-500" /> Final Four Picks
                         </h3>
-                        <p className="text-xs text-slate-500 mb-4">
+                        <p className="text-xs text-faint mb-4 num">
                             {popularityData.finalFour.length} unique teams picked for the Final Four across all entries
                         </p>
                         {/* Scrollable wrapper — chart grows to fit all rows */}
@@ -280,24 +280,24 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ entries, tournament, poo
                             <div style={{ height: Math.max(300, popularityData.finalFour.length * 26 + 40) }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={popularityData.finalFour} layout="vertical" margin={{ left: 0, right: 40, top: 4, bottom: 4 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" horizontal={false} />
                                         <XAxis type="number" hide />
                                         <YAxis
                                             dataKey="name"
                                             type="category"
                                             width={140}
-                                            tick={{ fill: '#94a3b8', fontSize: 11 }}
+                                            tick={{ fill: 'var(--muted)', fontSize: 11 }}
                                             interval={0}
                                         />
                                         <Tooltip
-                                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#fff' }}
-                                            cursor={{ fill: '#1e293b', opacity: 0.4 }}
+                                            contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--line)', color: 'var(--text)' }}
+                                            cursor={{ fill: 'var(--line)', opacity: 0.4 }}
                                         />
                                         <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={14}>
                                             {popularityData.finalFour.map((_, index) => (
-                                                <Cell key={`cell-${index}`} fill="#8b5cf6" />
+                                                <Cell key={`cell-${index}`} fill="#B78F4A" />
                                             ))}
-                                            <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={11} fontWeight="bold" />
+                                            <LabelList dataKey="value" position="right" fill="var(--muted)" fontSize={11} fontWeight="bold" />
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>

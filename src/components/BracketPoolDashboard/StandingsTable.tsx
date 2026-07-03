@@ -1,7 +1,8 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import type { BracketEntry, BracketPool, Tournament } from '../../types';
-import { Trophy, Medal, AlertCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import { Medal, AlertCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import { RankChip, YouPill, Badge } from '../ui';
 import { calculateEntryMaxScore, getEliminatedTeams } from '../../utils/bracketScoring';
 import { dbService, type ScoreSyncStatus } from '../../services/dbService';
 
@@ -132,7 +133,7 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
 
     if (entries.length === 0) {
         return (
-            <div className="p-8 text-center text-slate-500 italic flex flex-col items-center gap-2">
+            <div className="p-8 text-center text-faint italic flex flex-col items-center gap-2">
                 <AlertCircle size={32} />
                 No entries submitted yet.
             </div>
@@ -144,19 +145,19 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
             {/* Legend */}
             {currentUserId && (
                 <div className="flex justify-end px-2">
-                    <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
-                        <div className="w-4 h-4 rounded bg-orange-900/40 border-l-2 border-orange-500 flex items-center justify-center"></div>
+                    <div className="flex items-center gap-2 text-xs text-muted font-medium">
+                        <div className="w-4 h-4 rounded bg-brandred-600/10 border-l-2 border-brandred-600 flex items-center justify-center"></div>
                         <span>Your Entries</span>
                     </div>
                 </div>
             )}
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+            <div className="bg-card border border-line rounded-xl overflow-hidden shadow-card">
                 {/* Horizontal scroll on narrow phones (375px) instead of truncating */}
                 <div className="overflow-x-auto">
                     <div className="min-w-[420px]">
                 {/* Header */}
-                <div className="grid grid-cols-12 gap-4 p-4 bg-slate-950 border-b border-slate-800 font-bold text-slate-400 text-sm uppercase tracking-wider">
+                <div className="grid grid-cols-12 gap-4 p-4 bg-surface border-b border-line font-display font-bold text-muted text-[12px] uppercase tracking-[0.08em]">
                     <div className="col-span-2 md:col-span-1 text-center">Rank</div>
                     <div className="col-span-6 md:col-span-7">Entry Name</div>
                     <div className="col-span-2 text-right">Points</div>
@@ -164,7 +165,7 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
                 </div>
 
                 {/* Rows */}
-                <div className="divide-y divide-slate-800">
+                <div className="divide-y divide-line font-body">
                     {entriesWithStats.map((entry, idx) => {
                         const rank = idx + 1;
                         const isChampion = rank === 1;
@@ -175,49 +176,46 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
                             <div
                                 key={entry.id}
                                 onClick={() => onEntryClick?.(entry)}
-                                className={`grid grid-cols-12 gap-4 p-4 items-center transition-colors ${onEntryClick ? 'cursor-pointer hover:bg-white/5' : ''} ${currentUserId && entry.ownerUid === currentUserId ? 'bg-orange-900/20 border-l-2 border-orange-500' : ''}`}
+                                className={`grid grid-cols-12 gap-4 p-4 items-center transition-colors ${onEntryClick ? 'cursor-pointer hover:bg-[color:var(--page)]' : ''} ${currentUserId && entry.ownerUid === currentUserId ? 'bg-brandred-600/[0.07] border-l-2 border-brandred-600' : ''}`}
                             >
                                 <div className="col-span-2 md:col-span-1 flex flex-col items-center justify-center">
                                     <div className="flex items-center gap-1">
-                                        {isChampion ? <Trophy size={20} className="text-amber-400" /> :
-                                            isTop3 ? <Medal size={20} className={rank === 2 ? 'text-slate-300' : 'text-amber-700'} /> :
-                                                <span className="font-mono text-slate-500 font-bold">#{rank}</span>}
+                                        {isChampion ? <RankChip rank={1} /> :
+                                            isTop3 ? <Medal size={20} className={rank === 2 ? 'text-muted' : 'text-gold-700'} /> :
+                                                <span className="num text-faint font-bold">#{rank}</span>}
                                     </div>
                                     {change !== undefined && change !== 0 && (
-                                        <div className={`text-[10px] font-bold flex items-center ${change > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                        <div className={`text-[10px] font-bold num flex items-center ${change > 0 ? 'text-[#0F7B4A]' : 'text-brandred-600'}`}>
                                             {change > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
                                             {Math.abs(change)}
                                         </div>
                                     )}
                                 </div>
                                 <div className="col-span-6 md:col-span-7">
-                                    <div className="font-bold text-white truncate flex items-center gap-2">
+                                    <div className="font-bold text-[color:var(--text)] truncate flex items-center gap-2">
                                         {entry.name}
+                                        {currentUserId && entry.ownerUid === currentUserId && <YouPill />}
                                         {pool.settings.entryFee > 0 && (
                                             entry.paidStatus === 'PAID' ? (
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
-                                                    PAID
-                                                </span>
+                                                <Badge status="paid" className="text-[10px] px-1.5 py-0.5 whitespace-nowrap">PAID</Badge>
                                             ) : (
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-slate-800 text-slate-400 border border-slate-700 whitespace-nowrap">
-                                                    UNPAID
-                                                </span>
+                                                <Badge status="unpaid" className="text-[10px] px-1.5 py-0.5 whitespace-nowrap">UNPAID</Badge>
                                             )
                                         )}
                                         {change !== undefined && change !== 0 && (
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${change > 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${change > 0 ? 'bg-[#0F7B4A]/10 text-[#0F7B4A]' : 'bg-brandred-600/10 text-brandred-600'}`}>
                                                 {change > 0 ? 'Rank Up' : 'Rank Down'}
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-xs text-slate-500 truncate hidden sm:block">
+                                    <div className="text-xs text-faint truncate hidden sm:block">
                                         {userNames?.[entry.ownerUid] ?? 'Unknown'}
                                     </div>
                                 </div>
-                                <div className="col-span-2 text-right font-mono font-bold text-lg text-emerald-400">
+                                <div className={`col-span-2 text-right num font-display font-bold text-lg ${isChampion ? 'text-gold-600' : 'text-[color:var(--text)]'}`}>
                                     {entry.score}
                                 </div>
-                                <div className="col-span-2 text-right font-mono text-slate-500 hidden md:block">
+                                <div className="col-span-2 text-right num text-faint hidden md:block">
                                     {entry.max}
                                 </div>
                             </div>
@@ -231,12 +229,12 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({ entries, pool, t
             {/* Score sync freshness stamp */}
             {syncStatus && (
                 syncDelayed ? (
-                    <div className="flex items-center gap-1.5 px-2 text-xs text-amber-400">
+                    <div className="flex items-center gap-1.5 px-2 text-xs text-gold-600">
                         <AlertCircle size={12} className="shrink-0" />
                         <span>Score sync delayed — standings may lag</span>
                     </div>
                 ) : (
-                    <div className="px-2 text-xs text-slate-500">
+                    <div className="px-2 text-xs text-faint">
                         Scores updated {formatRelativeTime(now - syncStatus.lastSyncAt)} ago
                     </div>
                 )

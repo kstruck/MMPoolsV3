@@ -210,14 +210,14 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
         <div className="space-y-6">
             {deletingId && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center gap-4 text-red-400 mb-4">
-                            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                    <div className="bg-card border border-line rounded-2xl max-w-md w-full p-6 shadow-card-hover animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-4 text-brandred-600 mb-4">
+                            <div className="w-12 h-12 rounded-full bg-brandred-600/10 flex items-center justify-center">
                                 <AlertCircle size={24} />
                             </div>
-                            <h3 className="text-xl font-bold">Confirm Deletion</h3>
+                            <h3 className="text-xl font-display font-bold uppercase">Confirm Deletion</h3>
                         </div>
-                        <p className="text-slate-300 mb-6">
+                        <p className="text-muted font-body mb-6">
                             {deletingType === 'USER'
                                 ? 'Are you sure you want to delete this user and ALL of their entries from the pool? This cannot be undone.'
                                 : 'Are you sure you want to delete this entry? This cannot be undone.'}
@@ -225,7 +225,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={() => { setDeletingId(null); setDeletingType(null); }}
-                                className="px-5 py-2.5 rounded-xl font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                                className="px-5 py-2.5 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-muted hover:text-[color:var(--text)] hover:bg-surface transition-colors"
                             >
                                 Cancel
                             </button>
@@ -238,7 +238,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                     }
                                 }}
                                 disabled={updatingId !== null}
-                                className="px-5 py-2.5 rounded-xl font-bold bg-red-600 hover:bg-red-500 text-white transition-colors flex items-center gap-2"
+                                className="px-5 py-2.5 rounded-xl font-display font-bold uppercase tracking-[0.05em] bg-brandred-600 hover:bg-brandred-500 text-white transition-colors flex items-center gap-2"
                             >
                                 <Trash2 size={18} />
                                 {updatingId ? 'Deleting...' : 'Delete'}
@@ -248,24 +248,24 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                 </div>
             )}
             {message && (
-                <div className={`px-4 py-3 rounded-xl mb-4 text-sm flex items-center justify-between border animate-in fade-in slide-in-from-bottom-4 ${message.type === 'success' ? 'bg-emerald-900/40 border-emerald-800 text-emerald-300' : 'bg-red-900/40 border-red-800 text-red-300'}`}>
+                <div className={`px-4 py-3 rounded-xl mb-4 text-sm flex items-center justify-between border animate-in fade-in slide-in-from-bottom-4 ${message.type === 'success' ? 'bg-[#E4F5EC] border-[#BEE7D0] text-[#0F7B4A]' : 'bg-brandred-600/10 border-brandred-600/30 text-brandred-600'}`}>
                     <span>{message.text}</span>
                     <button onClick={() => setMessage(null)} className="opacity-70 hover:opacity-100 transition-opacity"><X size={16} /></button>
                 </div>
             )}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <DollarSign className="text-emerald-400" />
+                    <h2 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                        <DollarSign className="text-[#0F7B4A]" />
                         Payment Ledger
                     </h2>
-                    <p className="text-slate-400 text-sm">Manage entry fees and track payments for your pool.</p>
+                    <p className="text-muted font-body text-sm">Manage entry fees and track payments for your pool.</p>
                 </div>
 
                 <div className="flex gap-2">
                     <button
                         onClick={handleExportCSV}
-                        className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors text-sm font-medium border border-slate-700"
+                        className="flex items-center gap-2 px-3 py-2 bg-navy-800 hover:bg-navy-700 text-white rounded-lg transition-colors text-sm font-display font-bold uppercase tracking-[0.05em]"
                     >
                         <Download size={16} />
                         Export CSV
@@ -274,20 +274,20 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
             </div>
 
             {/* Commissioner Settings Section */}
-            <div className="bg-slate-900/40 border border-slate-800/80 backdrop-blur-md rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-indigo-500/30">
+            <div className="bg-card border border-line rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-gold-500/40 shadow-card">
                 <div className="flex items-start gap-3">
-                    <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400 mt-0.5 animate-pulse">
+                    <div className="p-3 bg-gold-500/10 rounded-xl text-gold-600 mt-0.5 animate-pulse">
                         <AlertCircle size={22} />
                     </div>
                     <div>
-                        <h3 className="font-bold text-white text-base">Lock Unpaid Entries</h3>
-                        <p className="text-slate-400 text-sm max-w-xl">
-                            When enabled, members will be blocked from submitting or updating their picks until their entry is marked as <span className="text-emerald-400 font-semibold">Paid</span>.
+                        <h3 className="font-display font-bold uppercase text-[color:var(--text)] text-base">Lock Unpaid Entries</h3>
+                        <p className="text-muted font-body text-sm max-w-xl">
+                            When enabled, members will be blocked from submitting or updating their picks until their entry is marked as <span className="text-[#0F7B4A] font-semibold">Paid</span>.
                         </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
-                    <span className="text-sm font-bold text-slate-400">
+                    <span className="text-sm font-display font-bold uppercase tracking-[0.08em] text-muted">
                         {pool.settings?.lockUnpaid ? 'Active' : 'Disabled'}
                     </span>
                     <button
@@ -305,7 +305,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                             }
                         }}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none ${
-                            pool.settings?.lockUnpaid ? 'bg-indigo-600' : 'bg-slate-700'
+                            pool.settings?.lockUnpaid ? 'bg-gold-500' : 'bg-line'
                         }`}
                     >
                         <span
@@ -318,70 +318,70 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <div className="bg-card border border-line rounded-xl p-4 flex items-center gap-4 shadow-card">
+                    <div className="w-12 h-12 rounded-full bg-[#E4F5EC] flex items-center justify-center text-[#0F7B4A]">
                         <DollarSign size={24} />
                     </div>
                     <div>
-                        <p className="text-sm text-slate-400">Total Collected</p>
-                        <p className="text-2xl font-bold text-white">${totalPaid}</p>
+                        <p className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-muted">Total Collected</p>
+                        <p className="text-2xl font-display font-bold num text-[color:var(--text)]">${totalPaid}</p>
                     </div>
                 </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
+                <div className="bg-card border border-line rounded-xl p-4 flex items-center gap-4 shadow-card">
+                    <div className="w-12 h-12 rounded-full bg-gold-500/20 flex items-center justify-center text-gold-600">
                         <AlertCircle size={24} />
                     </div>
                     <div>
-                        <p className="text-sm text-slate-400">Outstanding</p>
-                        <p className="text-2xl font-bold text-white">${totalExpected - totalPaid}</p>
+                        <p className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-muted">Outstanding</p>
+                        <p className="text-2xl font-display font-bold num text-[color:var(--text)]">${totalExpected - totalPaid}</p>
                     </div>
                 </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-center">
-                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Collected By Method</p>
+                <div className="bg-card border border-line rounded-xl p-4 flex flex-col justify-center shadow-card">
+                    <p className="text-xs font-display text-muted font-bold uppercase tracking-[0.08em] mb-2">Collected By Method</p>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                         {Object.entries(totalsByMethod).length > 0 ? (
                             Object.entries(totalsByMethod).map(([method, amount]) => (
                                 <div key={method} className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-300">{method}</span>
-                                    <span className="text-white font-mono">${amount}</span>
+                                    <span className="text-muted">{method}</span>
+                                    <span className="text-[color:var(--text)] num">${amount}</span>
                                 </div>
                             ))
                         ) : (
-                            <div className="text-sm text-slate-500 col-span-2">No payments received yet.</div>
+                            <div className="text-sm text-faint col-span-2">No payments received yet.</div>
                         )}
                     </div>
                 </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                <div className="bg-card border border-line rounded-xl p-4 flex items-center gap-4 shadow-card">
+                    <div className="w-12 h-12 rounded-full bg-navy-600/15 flex items-center justify-center text-navy-700 dark:text-gold-300">
                         <CreditCard size={24} />
                     </div>
                     <div>
-                        <p className="text-sm text-slate-400">Total Entries</p>
-                        <p className="text-2xl font-bold text-white">{entries.length}</p>
+                        <p className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-muted">Total Entries</p>
+                        <p className="text-2xl font-display font-bold num text-[color:var(--text)]">{entries.length}</p>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row gap-4">
+            <div className="bg-card border border-line rounded-xl overflow-hidden shadow-card">
+                <div className="p-4 border-b border-line flex flex-col sm:flex-row gap-4">
                     <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" size={18} />
                         <input
                             type="text"
                             placeholder="Search entries..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                            className="w-full pl-10 pr-4 py-2 bg-surface border border-line rounded-lg font-body text-[color:var(--text)] placeholder:text-faint focus:outline-none focus:border-gold-500"
                         />
                     </div>
-                    <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+                    <div className="flex bg-surface p-1 rounded-lg border border-line">
                         {(['ALL', 'PAID', 'UNPAID'] as const).map(status => (
                             <button
                                 key={status}
                                 onClick={() => setFilterStatus(status)}
-                                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors ${filterStatus === status
-                                    ? 'bg-slate-800 text-white'
-                                    : 'text-slate-500 hover:text-slate-300'
+                                className={`px-4 py-1.5 rounded-md text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors ${filterStatus === status
+                                    ? 'bg-navy-800 text-white'
+                                    : 'text-faint hover:text-muted'
                                     }`}
                             >
                                 {status}
@@ -391,9 +391,9 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse font-body">
                         <thead>
-                            <tr className="bg-slate-950/50 border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider">
+                            <tr className="bg-surface border-b border-line font-display font-bold text-[12px] text-muted uppercase tracking-[0.08em]">
                                 <th className="p-4 font-medium">Entry Name</th>
                                 <th className="p-4 font-medium text-center">Status</th>
                                 <th className="p-4 font-medium text-right">Fee</th>
@@ -402,26 +402,26 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                 <th className="p-4 font-medium text-right">Action</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-800">
+                        <tbody className="divide-y divide-line">
                             {groupedEntries.map((group) => (
                                 <React.Fragment key={group.entries[0].ownerUid}>
-                                    <tr className="bg-slate-800/80">
+                                    <tr className="bg-surface">
                                         <td colSpan={6} className="p-3">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 font-bold">
+                                                    <div className="w-8 h-8 rounded-full bg-navy-800 flex items-center justify-center text-white font-display font-bold">
                                                         {group.user?.name?.charAt(0)?.toUpperCase() || '?'}
                                                     </div>
                                                     <div>
-                                                        <p className="font-bold text-white text-sm">
+                                                        <p className="font-bold text-[color:var(--text)] text-sm">
                                                             {group.user?.name || 'Unknown User'}
                                                         </p>
-                                                        <div className="flex items-center gap-3 text-xs text-slate-400">
+                                                        <div className="flex items-center gap-3 text-xs text-muted">
                                                             <span className="flex items-center gap-1">
                                                                 <Mail size={12} /> {group.user?.email || 'No email'}
                                                             </span>
                                                             {group.user?.email && (
-                                                                <a href={`mailto:${group.user.email}`} className="text-indigo-400 hover:text-indigo-300 transition-colors">
+                                                                <a href={`mailto:${group.user.email}`} className="text-gold-600 hover:text-gold-500 transition-colors">
                                                                     Contact
                                                                 </a>
                                                             )}
@@ -429,17 +429,17 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-3 text-sm">
-                                                    <div className="text-slate-400">
-                                                        Entries: <span className="text-white font-bold">{group.entries.length}</span>
+                                                    <div className="text-muted">
+                                                        Entries: <span className="text-[color:var(--text)] font-bold num">{group.entries.length}</span>
                                                     </div>
-                                                    <div className="text-slate-400">
-                                                        Total Due: <span className="text-white font-bold">${group.entries.length * costPerEntry}</span>
+                                                    <div className="text-muted">
+                                                        Total Due: <span className="text-[color:var(--text)] font-bold num">${group.entries.length * costPerEntry}</span>
                                                     </div>
                                                     {group.entries.some(e => e.paidStatus === 'UNPAID') && (
                                                         <button
                                                             onClick={() => handleMarkAllPaid(group.entries[0].ownerUid)}
                                                             disabled={updatingId === group.entries[0].ownerUid}
-                                                            className="text-xs px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors disabled:opacity-50"
+                                                            className="text-xs px-2 py-1 rounded bg-[#0F7B4A] hover:bg-[#0d6b40] text-white font-display font-bold uppercase tracking-[0.05em] transition-colors disabled:opacity-50"
                                                         >
                                                             {updatingId === group.entries[0].ownerUid ? 'Updating...' : 'Mark All Paid'}
                                                         </button>
@@ -447,7 +447,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                                     <button
                                                         onClick={() => handleDeleteUser(group.entries[0].ownerUid)}
                                                         disabled={updatingId === group.entries[0].ownerUid}
-                                                        className="text-red-400 hover:text-red-300 hover:bg-red-900/40 p-1 rounded transition-colors"
+                                                        className="text-brandred-600 hover:text-brandred-500 hover:bg-brandred-600/10 p-1 rounded transition-colors"
                                                         title="Delete user and all their entries"
                                                     >
                                                         <Trash2 size={16} />
@@ -459,29 +459,29 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                     {group.entries.map((entry) => {
                                         const hasMethodChanged = selectedMethods[entry.id] && selectedMethods[entry.id] !== entry.paymentMethod;
                                         return (
-                                            <tr key={entry.id} className="hover:bg-slate-800/50 transition-colors">
+                                            <tr key={entry.id} className="hover:bg-[color:var(--page)] transition-colors">
                                                 <td className="p-4 pl-10">
-                                                    <div className="font-bold text-white">{entry.name}</div>
+                                                    <div className="font-bold text-[color:var(--text)]">{entry.name}</div>
                                                 </td>
                                                 <td className="p-4 text-center">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${entry.status === 'SUBMITTED' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-400'
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.05em] ${entry.status === 'SUBMITTED' ? 'bg-[#E5EDF6] text-[#142A4C] border border-[#CBDCEC]' : 'bg-cream text-muted border border-line'
                                                         }`}>
                                                         {entry.status}
                                                     </span>
                                                 </td>
                                                 <td className="p-4 text-right">
-                                                    <span className="text-white font-mono">${costPerEntry}</span>
+                                                    <span className="text-[color:var(--text)] num">${costPerEntry}</span>
                                                 </td>
                                                 <td className="p-4 text-center">
                                                     {entry.paidStatus === 'PAID' ? (
                                                         <div className="flex flex-col items-center gap-1">
-                                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">
+                                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[#E4F5EC] text-[#0F7B4A] border border-[#BEE7D0] text-xs font-display font-bold uppercase tracking-[0.05em]">
                                                                 <Check size={12} /> Paid
                                                             </span>
-                                                            {entry.paymentMethod && <span className="text-[10px] text-slate-500">{entry.paymentMethod}</span>}
+                                                            {entry.paymentMethod && <span className="text-[10px] text-faint">{entry.paymentMethod}</span>}
                                                         </div>
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/20 text-red-400 text-xs font-bold">
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[#FBEEDD] text-[#B4530A] border border-[#F2D6B0] text-xs font-display font-bold uppercase tracking-[0.05em]">
                                                             <X size={12} /> Unpaid
                                                         </span>
                                                     )}
@@ -490,7 +490,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                                     <select
                                                         value={selectedMethods[entry.id] || entry.paymentMethod || ''}
                                                         onChange={(e) => setSelectedMethods(prev => ({ ...prev, [entry.id]: e.target.value as 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other' }))}
-                                                        className="bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-2 py-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
+                                                        className="bg-surface border border-line text-[color:var(--text)] text-xs rounded-lg px-2 py-1 focus:ring-gold-500 focus:border-gold-500 block w-full"
                                                         disabled={updatingId === entry.id}
                                                     >
                                                         <option value="" disabled>Select Method</option>
@@ -507,7 +507,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                                         <button
                                                             onClick={() => handleUpdateMethod(entry.id, selectedMethods[entry.id])}
                                                             disabled={updatingId === entry.id}
-                                                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 bg-blue-600 hover:bg-blue-500 text-white"
+                                                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors disabled:opacity-50 bg-navy-700 hover:bg-navy-600 text-white"
                                                             title="Save edited payment method"
                                                         >
                                                             {updatingId === entry.id ? 'Saving...' : <><Save size={14} /> Save</>}
@@ -516,9 +516,9 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                                         <button
                                                             onClick={() => handleTogglePayment(entry.id, entry.paidStatus, (selectedMethods[entry.id] || entry.paymentMethod) as 'Cash' | 'Check' | 'Venmo' | 'Google Pay' | 'Cash.me' | 'Other' | undefined)}
                                                             disabled={updatingId === entry.id}
-                                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 ${entry.paidStatus === 'PAID'
-                                                                ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                                                                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                                            className={`px-3 py-1.5 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors disabled:opacity-50 ${entry.paidStatus === 'PAID'
+                                                                ? 'bg-surface hover:bg-page text-muted border border-line'
+                                                                : 'bg-[#0F7B4A] hover:bg-[#0d6b40] text-white'
                                                                 }`}
                                                         >
                                                             {updatingId === entry.id ? 'Updating...' : (entry.paidStatus === 'PAID' ? 'Mark Unpaid' : 'Mark Paid')}
@@ -528,7 +528,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                                                     <button
                                                         onClick={() => handleDeleteEntry(entry.id)}
                                                         disabled={updatingId === entry.id}
-                                                        className="text-red-400 hover:text-red-300 hover:bg-red-900/40 p-1.5 rounded transition-colors"
+                                                        className="text-brandred-600 hover:text-brandred-500 hover:bg-brandred-600/10 p-1.5 rounded transition-colors"
                                                         title="Delete entry"
                                                     >
                                                         <Trash2 size={16} />
@@ -542,7 +542,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
 
                             {filteredEntries.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="p-8 text-center text-slate-500">
+                                    <td colSpan={5} className="p-8 text-center text-faint">
                                         <div className="flex flex-col items-center gap-2">
                                             <Search size={24} className="opacity-20" />
                                             <p>No entries found matching your filters.</p>

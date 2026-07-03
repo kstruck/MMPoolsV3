@@ -33,6 +33,7 @@ import { BanterBoard } from './BanterBoard';
 import { PaymentLedger } from './PaymentLedger';
 import { ExportControls } from './ExportControls';
 import { useToast } from '../ui/Toast';
+import { YouPill } from '../ui';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'rules' | 'manager' | 'ledger';
 type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'chalk' | 'analytics' | 'insights';
@@ -603,26 +604,26 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     return (
         <BillingGate pool={pool as any} isCommissioner={isManager}>
-        <div className="min-h-screen bg-slate-950 pb-20">
+        <div className="min-h-screen bg-page pb-20">
             {/* Header */}
-            <div className="bg-slate-900 border-b border-slate-800 p-4 relative">
+            <div className="bg-surface border-b border-line p-4 relative">
                 <div className="max-w-6xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
+                        <button onClick={onBack} className="p-2 hover:bg-card rounded-full text-muted hover:text-[color:var(--text)] transition-colors">
                             <ArrowLeft size={20} />
                         </button>
                         <div>
-                            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                                <Trophy className="text-amber-500" size={24} />
+                            <h1 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                                <Trophy className="text-gold-500" size={24} />
                                 {pool.name}
                             </h1>
-                            <p className="text-xs text-slate-400 font-mono hidden md:block">/{pool.slug}</p>
+                            <p className="text-xs text-muted font-mono hidden md:block">/{pool.slug}</p>
                         </div>
                     </div>
 
                     <div className="flex gap-2">
                         <ExportControls pool={pool} entries={entries} tournament={tournament} />
-                        <button onClick={() => setShowShareModal(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm">
+                        <button onClick={() => setShowShareModal(true)} className="bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta">
                             <Share2 size={16} /> Share
                         </button>
                     </div>
@@ -637,11 +638,11 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 {/* Commissioner Message Banner */}
                 {pool.commissionerMessage && (
-                    <div className="bg-indigo-900/30 border border-indigo-800 rounded-xl p-4 mb-6 flex items-start gap-3 animate-in fade-in">
-                        <ShieldCheck className="text-indigo-400 shrink-0 mt-0.5" size={18} />
+                    <div className="bg-gold-500/10 border border-gold-500/30 rounded-xl p-4 mb-6 flex items-start gap-3 animate-in fade-in">
+                        <ShieldCheck className="text-gold-600 shrink-0 mt-0.5" size={18} />
                         <div className="flex-1">
-                            <p className="text-xs font-bold text-indigo-400 uppercase mb-1">Commissioner Message</p>
-                            <p className="text-slate-300 text-sm">{pool.commissionerMessage}</p>
+                            <p className="text-xs font-display font-bold text-gold-700 uppercase tracking-[0.08em] mb-1">Commissioner Message</p>
+                            <p className="text-[color:var(--text)] font-body text-sm">{pool.commissionerMessage}</p>
                         </div>
                     </div>
                 )}
@@ -656,17 +657,17 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         { id: 'reports' as DashboardTab, label: 'Reports', icon: FileText },
                         { id: 'rules' as DashboardTab, label: 'Rules', icon: ClipboardList },
                         { id: 'ledger' as DashboardTab, label: 'Payment Ledger', icon: CreditCard, hidden: !isManager },
-                        { id: 'manager' as DashboardTab, label: '⚙️ Settings', icon: ShieldCheck, hidden: !isManager },
+                        { id: 'manager' as DashboardTab, label: 'Settings', icon: ShieldCheck, hidden: !isManager },
                     ].map(tab => !tab.hidden && (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm ${activeTab === tab.id
-                                ? (tab.id === 'manager' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' : 'bg-indigo-600 text-white')
-                                : (tab.id === 'manager' ? 'bg-slate-900 border border-indigo-500/30 text-indigo-400 hover:bg-slate-800' : 'bg-slate-900 text-slate-400 hover:bg-slate-800')
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 whitespace-nowrap text-sm ${activeTab === tab.id
+                                ? (tab.id === 'manager' ? 'bg-gold-foil text-navy-900 shadow-lg shadow-gold-700/30' : 'bg-navy-800 text-white')
+                                : (tab.id === 'manager' ? 'bg-card border border-gold-500/40 text-gold-600 hover:bg-surface' : 'bg-card text-muted hover:bg-surface')
                                 }`}
                         >
-                            {tab.id !== 'manager' && <tab.icon size={14} />}
+                            <tab.icon size={14} />
                             {tab.label}
                         </button>
                     ))}
@@ -674,15 +675,15 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 {/* Error Banner */}
                 {error && (
-                    <div className="bg-red-900/30 border border-red-800 text-red-300 px-4 py-3 rounded-xl mb-6 text-sm">
+                    <div className="bg-brandred-600/10 border border-brandred-600/30 text-brandred-600 px-4 py-3 rounded-xl mb-6 text-sm">
                         {error}
-                        <button onClick={() => setError(null)} className="ml-2 underline hover:text-red-200">Dismiss</button>
+                        <button onClick={() => setError(null)} className="ml-2 underline hover:text-brandred-500">Dismiss</button>
                     </div>
                 )}
 
                 {/* Success Banner */}
                 {showSuccess && (
-                    <div className="bg-emerald-900/40 border border-emerald-800 text-emerald-300 px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-2 animate-in fade-in">
+                    <div className="bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A] px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-2 animate-in fade-in">
                         <Check size={16} />
                         Bracket submitted successfully!
                     </div>
@@ -691,8 +692,8 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 {/* Loading State */}
                 {loading && (
                     <div className="flex items-center justify-center py-20">
-                        <Loader2 className="animate-spin text-indigo-400" size={32} />
-                        <span className="ml-3 text-slate-400">Loading bracket pool...</span>
+                        <Loader2 className="animate-spin text-gold-500" size={32} />
+                        <span className="ml-3 text-muted">Loading bracket pool...</span>
                     </div>
                 )}
 
@@ -719,7 +720,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             }}
                                             disabled={submitting || !tournament}
                                             title={!tournament ? "Tournament data not available yet" : ""}
-                                            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold px-4 py-2 rounded-lg flex items-center gap-2"
+                                            className="bg-gold-foil hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed text-navy-900 font-display font-bold uppercase tracking-[0.05em] px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-150 hover:-translate-y-px"
                                         >
                                             {submitting ? <Loader2 size={18} className="animate-spin" /> : <PlusCircle size={18} />}
                                             {userEntries.length === 0 ? 'Create Your Bracket' : 'Add Another Entry'}
@@ -730,69 +731,69 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 {/* Pool Overview Stats Cards */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     {/* Pot & Payouts */}
-                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
+                                    <div className="bg-card border border-line rounded-xl p-4 relative overflow-hidden shadow-card">
                                         <div className="absolute top-0 right-0 p-3 opacity-10">
-                                            <Coins size={48} className="text-emerald-400" />
+                                            <Coins size={48} className="text-gold-500" />
                                         </div>
-                                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-1">Total Pot</h3>
-                                        <div className="text-2xl font-bold text-white mb-2">
+                                        <h3 className="text-muted text-[12px] font-display font-bold uppercase tracking-[0.08em] mb-1">Total Pot</h3>
+                                        <div className="text-2xl font-display font-bold num text-[color:var(--text)] mb-2">
                                             ${entries.length * pool.settings.entryFee}
                                         </div>
-                                        <div className="text-xs text-slate-500">
+                                        <div className="text-xs text-faint num">
                                             {entries.length} entries × ${pool.settings.entryFee}
                                         </div>
                                         {/* Payout Structure Hint */}
-                                        <div className="mt-3 pt-3 border-t border-slate-800">
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Payouts</p>
+                                        <div className="mt-3 pt-3 border-t border-line">
+                                            <p className="text-[10px] font-display text-muted font-bold uppercase tracking-[0.08em] mb-1">Payouts</p>
                                             <div className="space-y-1">
                                                 {pool.settings.payouts?.places.map((p, i) => (
                                                     <div key={i} className="flex justify-between text-xs">
-                                                        <span className="text-slate-400">{p.rank === 1 ? '1st' : p.rank === 2 ? '2nd' : p.rank === 3 ? '3rd' : `${p.rank}th`}</span>
-                                                        <span className="text-emerald-400 font-mono">
+                                                        <span className="text-muted">{p.rank === 1 ? '1st' : p.rank === 2 ? '2nd' : p.rank === 3 ? '3rd' : `${p.rank}th`}</span>
+                                                        <span className="text-[#0F7B4A] num">
                                                             ${Math.floor((entries.length * pool.settings.entryFee) * (p.percentage / 100))}
                                                         </span>
                                                     </div>
                                                 ))}
                                                 {pool.settings.charity?.enabled && (
-                                                    <div className="flex justify-between text-xs border-t border-slate-800 pt-1 mt-1">
-                                                        <span className="text-indigo-400">Charity ({pool.settings.charity.percentage}%)</span>
-                                                        <span className="text-indigo-400 font-mono">
+                                                    <div className="flex justify-between text-xs border-t border-line pt-1 mt-1">
+                                                        <span className="text-gold-600">Charity ({pool.settings.charity.percentage}%)</span>
+                                                        <span className="text-gold-600 num">
                                                             ${Math.floor((entries.length * pool.settings.entryFee) * (pool.settings.charity.percentage / 100))}
                                                         </span>
                                                     </div>
                                                 )}
                                                 {(!pool.settings.payouts?.places || pool.settings.payouts.places.length === 0) && !pool.settings.charity?.enabled && (
-                                                    <div className="text-xs text-slate-500 italic">No payouts configured</div>
+                                                    <div className="text-xs text-faint italic">No payouts configured</div>
                                                 )}
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* User Stats */}
-                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
+                                    <div className="bg-card border border-line rounded-xl p-4 relative overflow-hidden shadow-card">
                                         <div className="absolute top-0 right-0 p-3 opacity-10">
-                                            <BarChart3 size={48} className="text-indigo-400" />
+                                            <BarChart3 size={48} className="text-gold-500" />
                                         </div>
-                                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-1">Your Stats</h3>
+                                        <h3 className="text-muted text-[12px] font-display font-bold uppercase tracking-[0.08em] mb-1">Your Stats</h3>
                                         <div className="grid grid-cols-2 gap-4 mt-2">
                                             <div>
-                                                <div className="text-xl font-bold text-white">{userEntries.length}</div>
-                                                <div className="text-[10px] text-slate-500 uppercase">Entries</div>
+                                                <div className="text-xl font-display font-bold num text-[color:var(--text)]">{userEntries.length}</div>
+                                                <div className="text-[10px] font-display text-faint uppercase tracking-[0.08em]">Entries</div>
                                             </div>
                                             <div>
-                                                <div className="text-xl font-bold text-amber-400">
+                                                <div className="text-xl font-display font-bold num text-gold-600">
                                                     {/* Calculate best rank or score */}
                                                     {userEntries.length > 0
                                                         ? Math.max(...userEntries.map(e => e.score || 0))
                                                         : '-'
                                                     }
                                                 </div>
-                                                <div className="text-[10px] text-slate-500 uppercase">Best Score</div>
+                                                <div className="text-[10px] font-display text-faint uppercase tracking-[0.08em]">Best Score</div>
                                             </div>
                                             {tournament && (
-                                                <div className="col-span-2 mt-2 pt-2 border-t border-slate-800 flex justify-between items-center">
-                                                    <span className="text-[10px] text-slate-500 uppercase">Max Correct Picks</span>
-                                                    <span className="text-sm font-bold text-emerald-400">
+                                                <div className="col-span-2 mt-2 pt-2 border-t border-line flex justify-between items-center">
+                                                    <span className="text-[10px] font-display text-faint uppercase tracking-[0.08em]">Max Correct Picks</span>
+                                                    <span className="text-sm font-bold num text-[#0F7B4A]">
                                                         {userEntries.length > 0
                                                             ? Math.max(...userEntries.map(e => calculateCorrectPicks(e, tournament)))
                                                             : '-'}
@@ -803,22 +804,22 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
 
                                     {/* Tournament Status */}
-                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
+                                    <div className="bg-card border border-line rounded-xl p-4 relative overflow-hidden shadow-card">
                                         <div className="absolute top-0 right-0 p-3 opacity-10">
-                                            <Trophy size={48} className="text-amber-500" />
+                                            <Trophy size={48} className="text-gold-500" />
                                         </div>
-                                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-1">Tournament</h3>
-                                        <div className="text-sm font-bold text-white mt-1">
+                                        <h3 className="text-muted text-[12px] font-display font-bold uppercase tracking-[0.08em] mb-1">Tournament</h3>
+                                        <div className="text-sm font-display font-bold uppercase text-[color:var(--text)] mt-1">
                                             {tournament?.isFinalized ? 'Finalized' : 'In Progress'}
                                         </div>
-                                        <div className="text-xs text-slate-500 mt-1">
+                                        <div className="text-xs text-faint mt-1">
                                             Click on "Standings" to see live leaderboards.
                                         </div>
                                     </div>
                                 </div>
 
                                 {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
-                                    <div className="mt-8 pt-8 border-t border-slate-800">
+                                    <div className="mt-8 pt-8 border-t border-line">
                                         <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType="BRACKET" />
                                     </div>
                                 )}
@@ -826,25 +827,25 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 {/* User's existing entries */}
                                 {userEntries.length > 0 && (
                                     <div className="space-y-3">
-                                        <h2 className="text-lg font-bold text-white">My Brackets</h2>
+                                        <h2 className="text-lg font-display font-bold uppercase text-[color:var(--text)]">My Brackets</h2>
                                         {userEntries.map(entry => (
-                                            <div key={entry.id} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                                            <div key={entry.id} className="bg-card border border-line rounded-xl p-4 flex items-center justify-between shadow-card">
                                                 <div>
-                                                    <div className="font-bold text-white">{entry.name}</div>
-                                                    <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                                                    <div className="font-bold text-[color:var(--text)]">{entry.name}</div>
+                                                    <div className="text-xs text-faint mt-1 flex items-center gap-2">
                                                         {entry.status === 'SUBMITTED' ? (
                                                             <>
-                                                                <span className="text-emerald-400">✓ Submitted — Score: {entry.score || 0}</span>
-                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.paidStatus === 'PAID' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                                                <span className="text-[#0F7B4A] num flex items-center gap-1"><Check size={12} /> Submitted — Score: {entry.score || 0}</span>
+                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-display font-bold uppercase tracking-[0.05em] ${entry.paidStatus === 'PAID' ? 'bg-[#E4F5EC] text-[#0F7B4A] border border-[#BEE7D0]' : 'bg-[#FBEEDD] text-[#B4530A] border border-[#F2D6B0]'}`}>
                                                                     {entry.paidStatus === 'PAID' ? 'PAID' : 'PENDING'}
                                                                 </span>
                                                             </>
                                                         ) : (
-                                                            <span className="text-amber-400">Draft — {Object.keys(entry.picks || {}).length}/{requiredPicks} picks</span>
+                                                            <span className="text-gold-600 num">Draft — {Object.keys(entry.picks || {}).length}/{requiredPicks} picks</span>
                                                         )}
                                                         {championshipGameId && entry.picks && entry.picks[championshipGameId] && entry.picks[championshipGameId] !== 'TBD' && (
-                                                            <span className="text-slate-400 border-l border-slate-700 pl-2">
-                                                                Champ: <span className="text-white font-bold">{entry.picks[championshipGameId]}</span>
+                                                            <span className="text-muted border-l border-line pl-2">
+                                                                Champ: <span className="text-[color:var(--text)] font-bold">{entry.picks[championshipGameId]}</span>
                                                             </span>
                                                         )}
                                                     </div>
@@ -852,7 +853,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleViewEntry(entry); }}
-                                                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                                        className="bg-navy-800 hover:bg-navy-700 text-white px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 hover:-translate-y-px"
                                                         title="View & Print"
                                                     >
                                                         <Printer size={16} />
@@ -861,14 +862,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                     {/* Share button temporarily hidden - image generation failing */}
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleEditEntry(entry); }}
-                                                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold"
+                                                        className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
                                                         disabled={(entry.status === 'SUBMITTED' && pool.status !== 'OPEN') || pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED'}
                                                     >
                                                         {entry.status === 'SUBMITTED' ? 'Edit' : 'Enter Picks/Edit Picks'}
                                                     </button>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleDeleteEntry(entry); }}
-                                                        className="bg-red-500/20 hover:bg-red-500/40 text-red-400 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        className="bg-brandred-600/10 hover:bg-brandred-600/20 text-brandred-600 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:text-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                                         title="Delete Entry"
                                                         disabled={pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED'}
                                                     >
@@ -888,37 +889,37 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 {/* ── Full-Screen Bracket Editor Portal ─────────────────────────────── */}
                 {isCreating && createPortal(
-                    <div className="fixed inset-0 z-[60] flex flex-col bg-slate-950 animate-in fade-in duration-150">
+                    <div className="fixed inset-0 z-[60] flex flex-col bg-page animate-in fade-in duration-150">
                         {/* ── Top bar ─────────────────────────────────────────────────── */}
-                        <div className="flex-shrink-0 flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
+                        <div className="flex-shrink-0 flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-b border-line bg-card/95 backdrop-blur">
                             <div>
                                 <input
                                     type="text"
                                     value={entryName}
                                     onChange={(e) => setEntryName(e.target.value)}
-                                    className="font-bold text-white bg-transparent border-b border-transparent hover:border-slate-700 focus:border-indigo-500 focus:outline-none px-1 py-0.5 transition-colors w-52 sm:w-72"
+                                    className="font-bold text-[color:var(--text)] bg-transparent border-b border-transparent hover:border-line focus:border-gold-500 focus:outline-none px-1 py-0.5 transition-colors w-52 sm:w-72"
                                     placeholder="Bracket Name"
                                 />
-                                <div className="text-xs text-slate-500 px-1 mt-0.5">{pickCount}/{requiredPicks} picks</div>
+                                <div className="text-xs text-faint num px-1 mt-0.5">{pickCount}/{requiredPicks} picks</div>
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => { setIsCreating(false); setActiveEntryId(null); setPicks({}); setTieBreakerPrediction(undefined); setError(null); }}
-                                    className="text-slate-400 hover:text-white px-3 py-2 rounded text-sm font-medium flex items-center gap-1.5"
+                                    className="text-muted hover:text-[color:var(--text)] px-3 py-2 rounded text-sm font-medium flex items-center gap-1.5"
                                 >
                                     <X size={14} /> Cancel
                                 </button>
                                 <button
                                     onClick={handleSaveDraft}
                                     disabled={submitting}
-                                    className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold flex items-center gap-1.5 text-sm"
+                                    className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm transition-all duration-150 hover:-translate-y-px"
                                 >
                                     <Save size={14} /> Save Draft
                                 </button>
                                 <button
                                     onClick={handleSubmitBracket}
                                     disabled={submitting}
-                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded font-bold flex items-center gap-1.5 text-sm shadow-lg shadow-emerald-500/30"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm shadow-red-cta transition-all duration-150 hover:-translate-y-px"
                                 >
                                     {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                                     Submit Bracket
@@ -928,19 +929,19 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                         {/* ── Error / Success strip inside portal ───────────────────────── */}
                         {isUnpaidLocked && (
-                            <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/20 text-amber-400 text-xs font-semibold animate-in slide-in-from-top duration-350">
+                            <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-gold-500/10 border-b border-gold-500/20 text-gold-700 text-xs font-semibold animate-in slide-in-from-top duration-350">
                                 <AlertTriangle size={14} className="animate-pulse animate-duration-1000 shrink-0" />
                                 <span>Your entry is unpaid. Please make a payment to the pool manager to enable final submission.</span>
                             </div>
                         )}
                         {error && (
-                            <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 py-2.5 bg-red-950/80 border-b border-red-800 text-red-300 text-sm animate-in fade-in">
-                                <span>⚠️ {error}</span>
-                                <button onClick={() => setError(null)} className="text-red-400 hover:text-red-200 font-bold ml-4 flex-shrink-0">✕</button>
+                            <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 py-2.5 bg-brandred-600/10 border-b border-brandred-600/30 text-brandred-600 text-sm animate-in fade-in">
+                                <span className="flex items-center gap-2"><AlertTriangle size={14} className="shrink-0" /> {error}</span>
+                                <button onClick={() => setError(null)} className="text-brandred-600 hover:text-brandred-500 font-bold ml-4 flex-shrink-0"><X size={14} /></button>
                             </div>
                         )}
                         {showSuccess && (
-                            <div className="flex-shrink-0 px-4 py-2.5 bg-emerald-950/80 border-b border-emerald-800 text-emerald-300 text-sm animate-in fade-in flex items-center gap-2">
+                            <div className="flex-shrink-0 px-4 py-2.5 bg-[#E4F5EC] border-b border-[#BEE7D0] text-[#0F7B4A] text-sm animate-in fade-in flex items-center gap-2">
                                 <Check size={14} /> Bracket submitted successfully!
                             </div>
                         )}
@@ -964,18 +965,18 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     />
                                 )
                             ) : (
-                                <div className="text-center py-16 text-slate-500">
+                                <div className="text-center py-16 text-faint">
                                     Tournament data not yet available.
                                 </div>
                             )}
                         </div>
 
                         {/* ── Bottom bar: tiebreaker + actions ──────────────────────────── */}
-                        <div className="flex-shrink-0 px-4 py-3 border-t border-slate-800 bg-slate-900/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-3">
-                            <div className="bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+                        <div className="flex-shrink-0 px-4 py-3 border-t border-line bg-card/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <div className="bg-surface border border-line rounded-lg px-4 py-2.5 flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
                                 <div>
-                                    <label className="text-xs font-bold text-amber-400 block leading-none mb-0.5">🏆 Tiebreaker</label>
-                                    <p className="text-[11px] text-slate-400">Combined score of the championship game.</p>
+                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-gold-600 leading-none mb-0.5 flex items-center gap-1"><Trophy size={12} /> Tiebreaker</label>
+                                    <p className="text-[11px] text-muted">Combined score of the championship game.</p>
                                 </div>
                                 <input
                                     type="number"
@@ -984,21 +985,21 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     value={tieBreakerPrediction ?? ''}
                                     onChange={(e) => setTieBreakerPrediction(e.target.value ? parseInt(e.target.value) : undefined)}
                                     placeholder="e.g. 145"
-                                    className={`bg-slate-900 border ${error?.includes('tie-breaker') ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'border-slate-600'} rounded-lg px-4 py-2 text-white w-28 text-center font-mono text-lg focus:outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                                    className={`bg-card border ${error?.includes('tie-breaker') ? 'border-brandred-500 shadow-[0_0_10px_rgba(196,52,46,0.5)]' : 'border-line'} rounded-lg px-4 py-2 text-[color:var(--text)] w-28 text-center num text-lg focus:outline-none focus:border-gold-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                                 />
                             </div>
                             <div className="flex gap-2 ml-auto">
                                 <button
                                     onClick={handleSaveDraft}
                                     disabled={submitting}
-                                    className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold flex items-center gap-1.5 text-sm"
+                                    className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm transition-all duration-150 hover:-translate-y-px"
                                 >
                                     <Save size={14} /> Save Draft
                                 </button>
                                 <button
                                     onClick={handleSubmitBracket}
                                     disabled={submitting}
-                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-bold flex items-center gap-1.5 text-sm shadow-lg shadow-emerald-500/30"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm shadow-red-cta transition-all duration-150 hover:-translate-y-px"
                                 >
                                     {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                                     Submit Bracket
@@ -1034,7 +1035,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-center py-12 text-slate-500">
+                            <div className="text-center py-12 text-faint">
                                 <Trophy size={48} className="mx-auto mb-4 opacity-20" />
                                 <p>Standings will be available once the tournament bracket is finalized.</p>
                             </div>
@@ -1045,41 +1046,41 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 {!loading && activeTab === 'entries' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-white font-bold">All Entries ({entries.length})</h3>
+                            <h3 className="text-[color:var(--text)] font-display font-bold uppercase">All Entries ({entries.length})</h3>
                             {!shouldShowBrackets && !isManager && (
-                                <p className="text-xs text-amber-400">
+                                <p className="text-xs text-gold-700">
                                     Brackets will be visible after pool locks
                                 </p>
                             )}
                         </div>
                         {entries.length === 0 ? (
-                            <div className="text-center py-10 text-slate-500 italic">No entries yet.</div>
+                            <div className="text-center py-10 text-faint italic">No entries yet.</div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {entries.map(entry => (
                                     <div
                                         key={entry.id}
                                         onClick={() => handleViewEntry(entry)}
-                                        className={`bg-slate-900 p-4 rounded-lg border transition-all cursor-pointer hover:scale-105 ${entry.ownerUid === user?.id ? 'border-indigo-500 bg-indigo-900/10 hover:border-indigo-400' : 'border-slate-800 hover:border-slate-600'}`}
+                                        className={`bg-card p-4 rounded-lg border transition-all cursor-pointer hover:scale-105 shadow-card ${entry.ownerUid === user?.id ? 'border-brandred-600/60 bg-brandred-600/[0.05] hover:border-brandred-500' : 'border-line hover:border-gold-500'}`}
                                     >
-                                        <div className="font-bold text-white flex items-center gap-2">
+                                        <div className="font-bold text-[color:var(--text)] flex items-center gap-2">
                                             {entry.name}
                                             {entry.ownerUid === user?.id && (
-                                                <span className="text-xs bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full">You</span>
+                                                <YouPill />
                                             )}
                                         </div>
-                                        <div className="text-xs text-slate-500 mt-1">
-                                            Score: <span className="text-emerald-400 font-mono">{entry.score || 0}</span>
+                                        <div className="text-xs text-faint mt-1">
+                                            Score: <span className="text-[color:var(--text)] num font-semibold">{entry.score || 0}</span>
                                             {' · '}
-                                            <span className={entry.status === 'SUBMITTED' ? 'text-emerald-400' : 'text-amber-400'}>
+                                            <span className={entry.status === 'SUBMITTED' ? 'text-[#0F7B4A]' : 'text-gold-600'}>
                                                 {entry.status === 'SUBMITTED' ? 'Submitted' : 'Draft'}
                                             </span>
                                             {' · '}
-                                            <span className={entry.paidStatus === 'PAID' ? 'text-emerald-400' : 'text-red-400'}>
+                                            <span className={entry.paidStatus === 'PAID' ? 'text-[#0F7B4A]' : 'text-brandred-600'}>
                                                 {entry.paidStatus === 'PAID' ? 'Paid' : 'Unpaid'}
                                             </span>
                                         </div>
-                                        <div className="mt-2 text-xs text-indigo-400 font-bold">
+                                        <div className="mt-2 text-xs text-gold-600 font-display font-bold uppercase tracking-[0.05em]">
                                             Click to view →
                                         </div>
                                     </div>
@@ -1118,14 +1119,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 { id: 'compare' as BracketSubTab, label: 'Compare Brackets' },
                                 { id: 'chalk' as BracketSubTab, label: 'Vs. Chalk' },
                                 { id: 'analytics' as BracketSubTab, label: 'Analytics' },
-                                { id: 'insights' as BracketSubTab, label: '✨ AI Insights' },
+                                { id: 'insights' as BracketSubTab, label: 'AI Insights' },
                             ].map(sub => (
                                 <button
                                     key={sub.id}
                                     onClick={() => setBracketSubTab(sub.id)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${bracketSubTab === sub.id
-                                        ? 'bg-indigo-600 text-white border-indigo-500'
-                                        : 'bg-slate-900 text-slate-400 hover:bg-slate-800 border-slate-800'
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] border transition-colors duration-150 ${bracketSubTab === sub.id
+                                        ? 'bg-navy-800 text-white border-navy-700'
+                                        : 'bg-card text-muted hover:bg-surface border-line'
                                         }`}
                                 >
                                     {sub.label}
@@ -1135,12 +1136,12 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                         {/* Poolwide Picks Heatmap */}
                         {bracketSubTab === 'poolwide' && (
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                            <div className="bg-card border border-line rounded-xl p-6 shadow-card">
                                 <div className="flex items-center gap-2 mb-4">
-                                    <Target size={20} className="text-amber-400" />
-                                    <h3 className="text-xl font-bold text-white">Poolwide Picks</h3>
+                                    <Target size={20} className="text-gold-500" />
+                                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)]">Poolwide Picks</h3>
                                 </div>
-                                <p className="text-slate-400 text-sm mb-4">See what percentage of the pool picked each team to advance in each round.</p>
+                                <p className="text-muted font-body text-sm mb-4">See what percentage of the pool picked each team to advance in each round.</p>
                                 {tournament ? (
                                     <div className="space-y-3">
                                         {Object.values(tournament.games)
@@ -1151,24 +1152,24 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 const awayPicks = entries.filter(e => e.picks[game.id] === game.awayTeamId).length;
                                                 const total = entries.length || 1;
                                                 return (
-                                                    <div key={game.id} className="flex items-center gap-2 bg-slate-950 rounded-lg p-3 border border-slate-800">
+                                                    <div key={game.id} className="flex items-center gap-2 bg-surface rounded-lg p-3 border border-line">
                                                         <div className="flex-1">
                                                             <div className="flex justify-between text-xs mb-1">
-                                                                <span className="text-white">{game.homeTeamId}</span>
-                                                                <span className="text-emerald-400 font-mono">{Math.round((homePicks / total) * 100)}%</span>
+                                                                <span className="text-[color:var(--text)]">{game.homeTeamId}</span>
+                                                                <span className="text-gold-600 num">{Math.round((homePicks / total) * 100)}%</span>
                                                             </div>
-                                                            <div className="w-full bg-slate-800 rounded-full h-1.5">
-                                                                <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${(homePicks / total) * 100}%` }} />
+                                                            <div className="w-full bg-line rounded-full h-1.5">
+                                                                <div className="bg-gold-500 h-full rounded-full" style={{ width: `${(homePicks / total) * 100}%` }} />
                                                             </div>
                                                         </div>
-                                                        <span className="text-slate-600 text-xs">vs</span>
+                                                        <span className="text-faint text-xs">vs</span>
                                                         <div className="flex-1">
                                                             <div className="flex justify-between text-xs mb-1">
-                                                                <span className="text-white">{game.awayTeamId}</span>
-                                                                <span className="text-indigo-400 font-mono">{Math.round((awayPicks / total) * 100)}%</span>
+                                                                <span className="text-[color:var(--text)]">{game.awayTeamId}</span>
+                                                                <span className="text-navy-700 dark:text-[#9FB0CC] num">{Math.round((awayPicks / total) * 100)}%</span>
                                                             </div>
-                                                            <div className="w-full bg-slate-800 rounded-full h-1.5">
-                                                                <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${(awayPicks / total) * 100}%` }} />
+                                                            <div className="w-full bg-line rounded-full h-1.5">
+                                                                <div className="bg-navy-600 h-full rounded-full" style={{ width: `${(awayPicks / total) * 100}%` }} />
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1176,7 +1177,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             })}
                                     </div>
                                 ) : (
-                                    <div className="text-center py-12 text-slate-500">
+                                    <div className="text-center py-12 text-faint">
                                         <GitBranch size={48} className="mx-auto mb-4 opacity-20" />
                                         <p>Bracket data will be available once the tournament bracket is set.</p>
                                     </div>
@@ -1189,7 +1190,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             tournament && userEntries.length > 0 ? (
                                 <PickHistory entry={userEntries[0]} entries={userEntries} tournament={tournament} pool={pool} />
                             ) : (
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                <div className="bg-card border border-line rounded-xl p-6 text-center py-12 text-faint shadow-card">
                                     <p>{!tournament ? 'Tournament data not yet available.' : 'Submit a bracket to see your pick history.'}</p>
                                 </div>
                             )
@@ -1200,7 +1201,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             tournament && userEntries.length > 0 ? (
                                 <WhoToRootFor userEntries={userEntries} allEntries={entries} tournament={tournament} pool={pool} />
                             ) : (
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                <div className="bg-card border border-line rounded-xl p-6 text-center py-12 text-faint shadow-card">
                                     <p>{!tournament ? 'Tournament data not yet available.' : 'Submit a bracket to see rooting advice.'}</p>
                                 </div>
                             )
@@ -1211,7 +1212,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             tournament ? (
                                 <WhatIfSimulator entries={entries} tournament={tournament} pool={pool} currentUserId={user?.id} />
                             ) : (
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                <div className="bg-card border border-line rounded-xl p-6 text-center py-12 text-faint shadow-card">
                                     <p>Tournament data not yet available for simulation.</p>
                                 </div>
                             )
@@ -1229,7 +1230,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     />
                                 </div>
                             ) : (
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                <div className="bg-card border border-line rounded-xl p-6 text-center py-12 text-faint shadow-card">
                                     <p>{!tournament ? 'Tournament data not yet available.' : 'Need at least 2 entries to compare.'}</p>
                                 </div>
                             )
@@ -1242,7 +1243,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     <ChalkComparison tournament={tournament} userEntries={userEntries} isConference={isConference} />
                                 </div>
                             ) : (
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                <div className="bg-card border border-line rounded-xl p-6 text-center py-12 text-faint shadow-card">
                                     <p>{!tournament ? 'Tournament data not yet available.' : 'Submit a bracket to compare.'}</p>
                                 </div>
                             )
@@ -1259,7 +1260,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     />
                                 </div>
                             ) : (
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center py-12 text-slate-500">
+                                <div className="bg-card border border-line rounded-xl p-6 text-center py-12 text-faint shadow-card">
                                     <p>{!tournament ? 'Tournament data not yet available.' : 'Need at least 1 entry for analytics.'}</p>
                                 </div>
                             )
@@ -1292,16 +1293,16 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 {!loading && activeTab === 'manager' && isManager && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 max-w-3xl">
                         {/* Pool Settings + Deadlines Card */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-xl font-bold text-white">Pool Settings</h3>
+                                <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)]">Pool Settings</h3>
                                 {!editingSettings ? (
                                     ((pool.status !== 'LOCKED' && pool.status !== 'LIVE' && pool.status !== 'COMPLETED') || isSuperAdmin(user)) ? (
-                                        <button onClick={() => setEditingSettings(true)} className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 px-3 py-1.5 border border-indigo-800 rounded-lg">
+                                        <button onClick={() => setEditingSettings(true)} className="text-xs text-gold-600 hover:text-gold-500 font-bold flex items-center gap-1 px-3 py-1.5 border border-gold-500/40 rounded-lg">
                                             <Edit3 size={12} /> Edit
                                         </button>
                                     ) : (
-                                        <span className="text-xs text-slate-500 font-bold px-3 py-1.5 border border-slate-800 rounded-lg flex items-center gap-1">
+                                        <span className="text-xs text-faint font-bold px-3 py-1.5 border border-line rounded-lg flex items-center gap-1">
                                             <Lock size={12} /> Locked
                                         </span>
                                     )
@@ -1309,7 +1310,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     <button
                                         onClick={handleSaveSettings}
                                         disabled={savingSettings}
-                                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                        className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
                                     >
                                         {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
                                         {settingsSaved ? 'Saved!' : 'Save Settings'}
@@ -1321,43 +1322,43 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 /* Read-Only View */
                                 <div className="space-y-3">
                                     {[
-                                        { label: 'Status', value: pool.status, color: 'text-emerald-400' },
-                                        { label: 'Pool Name', value: pool.name, color: 'text-white' },
-                                        { label: 'Manager', value: pool.managerName || '—', color: 'text-white' },
-                                        { label: 'Contact', value: pool.contactEmail || '—', color: 'text-white' },
-                                        { label: 'Public', value: pool.isListedPublic ? 'Yes' : 'No', color: pool.isListedPublic ? 'text-emerald-400' : 'text-slate-500' },
-                                        { label: 'Scoring', value: pool.settings.scoringSystem, color: 'text-white' },
-                                        { label: 'Entries', value: `${entries.length} / ${pool.settings.maxEntriesTotal === -1 ? '\u221e' : pool.settings.maxEntriesTotal}`, color: 'text-white' },
-                                        { label: 'Per User', value: pool.settings.maxEntriesPerUser === -1 ? 'Unlimited' : String(pool.settings.maxEntriesPerUser), color: 'text-white' },
-                                        { label: 'Entry Fee', value: pool.settings.entryFee > 0 ? `$${pool.settings.entryFee}` : 'Free', color: 'text-white' },
-                                        { label: 'Tiebreaker', value: pool.settings.tieBreakers?.closestUnder ? 'Closest Under' : 'Closest Absolute', color: 'text-white' },
-                                        { label: 'Upset Bonus', value: pool.settings.upsetBonus?.enabled ? `${pool.settings.upsetBonus.multiplier}x multiplier` : 'Disabled', color: pool.settings.upsetBonus?.enabled ? 'text-amber-400' : 'text-slate-600' },
-                                        { label: 'Lock Date', value: pool.lockAt ? new Date(pool.lockAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not set', color: pool.lockAt ? 'text-white' : 'text-slate-600' },
-                                        { label: 'Registration', value: pool.registrationDeadline ? new Date(pool.registrationDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.registrationDeadline ? 'text-white' : 'text-slate-600' },
-                                        { label: 'Submission', value: pool.submissionDeadline ? new Date(pool.submissionDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.submissionDeadline ? 'text-white' : 'text-slate-600' },
-                                        { label: 'Tournament', value: pool.tournamentId || 'Not linked', color: 'text-slate-300' },
-                                        { label: 'Venmo', value: pool.venmo || '—', color: pool.venmo ? 'text-white' : 'text-slate-600' },
-                                        { label: 'Zelle', value: pool.zelle || '—', color: pool.zelle ? 'text-white' : 'text-slate-600' },
-                                        { label: 'CashApp', value: pool.cashapp || '—', color: pool.cashapp ? 'text-white' : 'text-slate-600' },
-                                        { label: 'PayPal', value: pool.paypal || '—', color: pool.paypal ? 'text-white' : 'text-slate-600' },
+                                        { label: 'Status', value: pool.status, color: 'text-[#0F7B4A]' },
+                                        { label: 'Pool Name', value: pool.name, color: 'text-[color:var(--text)]' },
+                                        { label: 'Manager', value: pool.managerName || '—', color: 'text-[color:var(--text)]' },
+                                        { label: 'Contact', value: pool.contactEmail || '—', color: 'text-[color:var(--text)]' },
+                                        { label: 'Public', value: pool.isListedPublic ? 'Yes' : 'No', color: pool.isListedPublic ? 'text-[#0F7B4A]' : 'text-faint' },
+                                        { label: 'Scoring', value: pool.settings.scoringSystem, color: 'text-[color:var(--text)]' },
+                                        { label: 'Entries', value: `${entries.length} / ${pool.settings.maxEntriesTotal === -1 ? '\u221e' : pool.settings.maxEntriesTotal}`, color: 'text-[color:var(--text)]' },
+                                        { label: 'Per User', value: pool.settings.maxEntriesPerUser === -1 ? 'Unlimited' : String(pool.settings.maxEntriesPerUser), color: 'text-[color:var(--text)]' },
+                                        { label: 'Entry Fee', value: pool.settings.entryFee > 0 ? `$${pool.settings.entryFee}` : 'Free', color: 'text-[color:var(--text)]' },
+                                        { label: 'Tiebreaker', value: pool.settings.tieBreakers?.closestUnder ? 'Closest Under' : 'Closest Absolute', color: 'text-[color:var(--text)]' },
+                                        { label: 'Upset Bonus', value: pool.settings.upsetBonus?.enabled ? `${pool.settings.upsetBonus.multiplier}x multiplier` : 'Disabled', color: pool.settings.upsetBonus?.enabled ? 'text-gold-600' : 'text-faint' },
+                                        { label: 'Lock Date', value: pool.lockAt ? new Date(pool.lockAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not set', color: pool.lockAt ? 'text-white' : 'text-faint' },
+                                        { label: 'Registration', value: pool.registrationDeadline ? new Date(pool.registrationDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.registrationDeadline ? 'text-white' : 'text-faint' },
+                                        { label: 'Submission', value: pool.submissionDeadline ? new Date(pool.submissionDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'None set', color: pool.submissionDeadline ? 'text-white' : 'text-faint' },
+                                        { label: 'Tournament', value: pool.tournamentId || 'Not linked', color: 'text-muted' },
+                                        { label: 'Venmo', value: pool.venmo || '—', color: pool.venmo ? 'text-white' : 'text-faint' },
+                                        { label: 'Zelle', value: pool.zelle || '—', color: pool.zelle ? 'text-white' : 'text-faint' },
+                                        { label: 'CashApp', value: pool.cashapp || '—', color: pool.cashapp ? 'text-white' : 'text-faint' },
+                                        { label: 'PayPal', value: pool.paypal || '—', color: pool.paypal ? 'text-white' : 'text-faint' },
                                     ].map(row => (
-                                        <div key={row.label} className="flex justify-between items-center p-3 bg-slate-950 rounded border border-slate-800">
-                                            <span className="text-slate-400 text-sm">{row.label}</span>
-                                            <span className={`font-mono text-sm ${row.color}`}>{row.value}</span>
+                                        <div key={row.label} className="flex justify-between items-center p-3 bg-surface rounded border border-line">
+                                            <span className="text-muted text-sm">{row.label}</span>
+                                            <span className={`num text-sm ${row.color}`}>{row.value}</span>
                                         </div>
                                     ))}
                                     {/* Payouts summary */}
                                     {pool.settings.payouts?.places && pool.settings.payouts.places.length > 0 && (
-                                        <div className="p-3 bg-slate-950 rounded border border-slate-800">
-                                            <span className="text-slate-400 text-sm block mb-1">Payouts</span>
+                                        <div className="p-3 bg-surface rounded border border-line">
+                                            <span className="text-muted text-sm block mb-1">Payouts</span>
                                             <div className="flex flex-wrap gap-2">
                                                 {pool.settings.payouts.places.map(p => (
-                                                    <span key={p.rank} className="text-xs bg-slate-800 text-white px-2 py-1 rounded">
+                                                    <span key={p.rank} className="text-xs bg-page border border-line text-[color:var(--text)] num px-2 py-1 rounded">
                                                         #{p.rank}: {p.percentage}%
                                                     </span>
                                                 ))}
                                                 {pool.settings.payouts.bonuses?.map(b => (
-                                                    <span key={b.name} className="text-xs bg-emerald-800/50 text-emerald-300 px-2 py-1 rounded">
+                                                    <span key={b.name} className="text-xs bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A] num px-2 py-1 rounded">
                                                         {b.name}: {b.percentage}%
                                                     </span>
                                                 ))}
@@ -1369,39 +1370,39 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 /* Edit Mode - Collapsible Sections */
                                 <div className="space-y-3">
                                     {/* Cancel button */}
-                                    <button onClick={() => setEditingSettings(false)} className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 mb-2">
+                                    <button onClick={() => setEditingSettings(false)} className="text-xs text-faint hover:text-muted flex items-center gap-1 mb-2">
                                         <X size={12} /> Cancel
                                     </button>
 
                                     {/* Section 1: Pool Details */}
-                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
-                                        <button onClick={() => toggleSection('details')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
-                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Globe size={14} className="text-blue-400" /> Pool Details</span>
-                                            {openSections.details ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="border border-line rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('details')} className="w-full flex items-center justify-between p-3 bg-surface hover:bg-page transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-display font-bold uppercase text-[color:var(--text)]"><Globe size={14} className="text-gold-500" /> Pool Details</span>
+                                            {openSections.details ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                                         </button>
                                         {openSections.details && (
-                                            <div className="p-4 bg-slate-950 space-y-3">
+                                            <div className="p-4 bg-card space-y-3">
                                                 <div>
-                                                    <label className="text-xs text-slate-500 block mb-1">Pool Name</label>
+                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Pool Name</label>
                                                     <input value={editPoolName} onChange={e => setEditPoolName(e.target.value)}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
-                                                        <label className="text-xs text-slate-500 block mb-1">Manager Name</label>
+                                                        <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Manager Name</label>
                                                         <input value={editManagerName} onChange={e => setEditManagerName(e.target.value)}
-                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                            className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs text-slate-500 block mb-1">Contact Email</label>
+                                                        <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Contact Email</label>
                                                         <input type="email" value={editContactEmail} onChange={e => setEditContactEmail(e.target.value)}
-                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                            className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center justify-between p-3 bg-slate-900 rounded border border-slate-800">
-                                                    <span className="text-sm text-slate-300">Publicly Listed</span>
+                                                <div className="flex items-center justify-between p-3 bg-surface rounded border border-line">
+                                                    <span className="text-sm text-muted">Publicly Listed</span>
                                                     <button onClick={() => setEditIsPublic(!editIsPublic)}
-                                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editIsPublic ? 'bg-emerald-600' : 'bg-slate-700'}`}>
+                                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editIsPublic ? 'bg-gold-500' : 'bg-line'}`}>
                                                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editIsPublic ? 'translate-x-6' : 'translate-x-1'}`} />
                                                     </button>
                                                 </div>
@@ -1410,23 +1411,23 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
 
                                     {/* Section 2: Rules */}
-                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
-                                        <button onClick={() => toggleSection('rules')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
-                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Target size={14} className="text-amber-400" /> Rules</span>
-                                            {openSections.rules ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="border border-line rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('rules')} className="w-full flex items-center justify-between p-3 bg-surface hover:bg-page transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-display font-bold uppercase text-[color:var(--text)]"><Target size={14} className="text-gold-600" /> Rules</span>
+                                            {openSections.rules ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                                         </button>
                                         {openSections.rules && (
-                                            <div className="p-4 bg-slate-950 space-y-3">
+                                            <div className="p-4 bg-card space-y-3">
                                                 {/* Status (read-only) */}
-                                                <div className="flex justify-between items-center p-3 bg-slate-900 rounded border border-slate-800">
-                                                    <span className="text-slate-400 text-sm">Status</span>
-                                                    <span className="font-mono text-sm text-emerald-400">{pool.status}</span>
+                                                <div className="flex justify-between items-center p-3 bg-surface rounded border border-line">
+                                                    <span className="text-muted text-sm">Status</span>
+                                                    <span className="num text-sm text-[#0F7B4A]">{pool.status}</span>
                                                 </div>
                                                 {/* Scoring System */}
                                                 <div>
-                                                    <label className="text-xs text-slate-500 block mb-1">Scoring System</label>
+                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Scoring System</label>
                                                     <select value={editScoring} onChange={e => setEditScoring(e.target.value as 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM')}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm">
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm">
                                                         <option value="CLASSIC">Classic (1-2-4-8-16-32)</option>
                                                         <option value="ESPN">ESPN (10-20-40-80-160-320)</option>
                                                         <option value="FIBONACCI">Fibonacci (2-3-5-8-13-21)</option>
@@ -1436,14 +1437,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 {/* Custom Scoring Input */}
                                                 {editScoring === 'CUSTOM' && (
                                                     <div>
-                                                        <label className="text-xs text-slate-500 block mb-1">Custom Points (R64, R32, S16, E8, F4, Champ)</label>
+                                                        <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Custom Points (R64, R32, S16, E8, F4, Champ)</label>
                                                         <div className="grid grid-cols-6 gap-2">
                                                             {['R64', 'R32', 'S16', 'E8', 'F4', 'CH'].map((label, i) => (
                                                                 <div key={label} className="text-center">
-                                                                    <span className="text-[10px] text-slate-500 block mb-0.5">{label}</span>
+                                                                    <span className="text-[10px] text-faint block mb-0.5">{label}</span>
                                                                     <input type="number" value={editCustomScoring[i] || 0}
                                                                         onChange={e => { const c = [...editCustomScoring]; c[i] = Number(e.target.value); setEditCustomScoring(c); }}
-                                                                        className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-white text-sm text-center" min={0} />
+                                                                        className="w-full bg-surface border border-line rounded p-1.5 text-[color:var(--text)] num text-sm text-center" min={0} />
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -1452,49 +1453,49 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 {/* Entry Limits */}
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
-                                                        <label className="text-xs text-slate-500 block mb-1">Max Entries (Total)</label>
+                                                        <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Max Entries (Total)</label>
                                                         <input type="number" value={editMaxTotal} onChange={e => setEditMaxTotal(Number(e.target.value))}
-                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" min={-1} />
-                                                        <p className="text-[10px] text-slate-600 mt-1">-1 = unlimited</p>
+                                                            className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" min={-1} />
+                                                        <p className="text-[10px] text-faint mt-1">-1 = unlimited</p>
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs text-slate-500 block mb-1">Max Per User</label>
+                                                        <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Max Per User</label>
                                                         <input type="number" value={editMaxPerUser} onChange={e => setEditMaxPerUser(Number(e.target.value))}
-                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" min={-1} />
-                                                        <p className="text-[10px] text-slate-600 mt-1">-1 = unlimited</p>
+                                                            className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" min={-1} />
+                                                        <p className="text-[10px] text-faint mt-1">-1 = unlimited</p>
                                                     </div>
                                                 </div>
                                                 {/* Entry Fee */}
                                                 <div>
-                                                    <label className="text-xs text-slate-500 block mb-1">Entry Fee ($)</label>
+                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Entry Fee ($)</label>
                                                     <input type="number" value={editEntryFee} onChange={e => setEditEntryFee(Number(e.target.value))}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" min={0} step={5} />
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" min={0} step={5} />
                                                 </div>
                                                 {/* Tiebreaker */}
                                                 <div>
-                                                    <label className="text-xs text-slate-500 block mb-1">Tiebreaker Rule</label>
+                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Tiebreaker Rule</label>
                                                     <select value={editTiebreaker} onChange={e => setEditTiebreaker(e.target.value as 'CLOSEST_ABSOLUTE' | 'CLOSEST_UNDER')}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm">
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm">
                                                         <option value="CLOSEST_ABSOLUTE">Closest to Actual (over or under)</option>
                                                         <option value="CLOSEST_UNDER">Closest Without Going Over</option>
                                                     </select>
                                                 </div>
                                                 {/* Upset Bonus */}
-                                                <div className="pt-3 border-t border-slate-800">
+                                                <div className="pt-3 border-t border-line">
                                                     <div className="flex items-center justify-between mb-2">
-                                                        <span className="text-sm text-slate-300">Upset Bonus Scoring</span>
+                                                        <span className="text-sm text-muted">Upset Bonus Scoring</span>
                                                         <button onClick={() => setEditUpsetBonusEnabled(!editUpsetBonusEnabled)}
-                                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editUpsetBonusEnabled ? 'bg-emerald-600' : 'bg-slate-700'}`}>
+                                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editUpsetBonusEnabled ? 'bg-gold-500' : 'bg-line'}`}>
                                                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editUpsetBonusEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                                                         </button>
                                                     </div>
                                                     {editUpsetBonusEnabled && (
-                                                        <div className="bg-slate-900 p-3 rounded-lg border border-slate-800">
-                                                            <label className="text-[10px] text-slate-500 block mb-1">Points per Seed Difference</label>
+                                                        <div className="bg-surface p-3 rounded-lg border border-line">
+                                                            <label className="text-[10px] text-faint block mb-1">Points per Seed Difference</label>
                                                             <input type="number" value={editUpsetMultiplier} onChange={e => setEditUpsetMultiplier(Number(e.target.value))}
-                                                                className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white text-sm" min={1} />
-                                                            <p className="text-[10px] text-slate-500 mt-2">
-                                                                If a #10 beats a #2, bonus is (10 - 2) × {editUpsetMultiplier} = <span className="text-amber-400 font-bold">{8 * editUpsetMultiplier} pts</span>
+                                                                className="w-full bg-page border border-line rounded p-2 text-[color:var(--text)] num text-sm" min={1} />
+                                                            <p className="text-[10px] text-faint mt-2">
+                                                                If a #10 beats a #2, bonus is (10 - 2) × {editUpsetMultiplier} = <span className="text-gold-600 font-bold">{8 * editUpsetMultiplier} pts</span>
                                                             </p>
                                                         </div>
                                                     )}
@@ -1504,42 +1505,42 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
 
                                     {/* Section 3: Payouts */}
-                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
-                                        <button onClick={() => toggleSection('payouts')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
-                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Trophy size={14} className="text-yellow-400" /> Payouts</span>
-                                            {openSections.payouts ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="border border-line rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('payouts')} className="w-full flex items-center justify-between p-3 bg-surface hover:bg-page transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-display font-bold uppercase text-[color:var(--text)]"><Trophy size={14} className="text-gold-500" /> Payouts</span>
+                                            {openSections.payouts ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                                         </button>
                                         {openSections.payouts && (
-                                            <div className="p-4 bg-slate-950 space-y-3">
-                                                <p className="text-xs text-slate-500 mb-2">Define how the prize pool is split. Percentages should total 100%.</p>
+                                            <div className="p-4 bg-card space-y-3">
+                                                <p className="text-xs text-faint mb-2">Define how the prize pool is split. Percentages should total 100%.</p>
                                                 {/* Place payouts */}
                                                 {editPayouts.places.map((p, i) => (
                                                     <div key={i} className="flex items-center gap-2">
-                                                        <span className="text-xs text-slate-400 w-16">#{p.rank}</span>
+                                                        <span className="text-xs text-muted w-16">#{p.rank}</span>
                                                         <input type="number" value={p.percentage}
                                                             onChange={e => {
                                                                 const updated = [...editPayouts.places];
                                                                 updated[i] = { ...p, percentage: Number(e.target.value) };
                                                                 setEditPayouts({ ...editPayouts, places: updated });
                                                             }}
-                                                            className="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-white text-sm" min={0} max={100} />
-                                                        <span className="text-xs text-slate-500">%</span>
+                                                            className="flex-1 bg-surface border border-line rounded p-2 text-[color:var(--text)] text-sm" min={0} max={100} />
+                                                        <span className="text-xs text-faint">%</span>
                                                         <button onClick={() => {
                                                             const updated = editPayouts.places.filter((_, j) => j !== i);
                                                             setEditPayouts({ ...editPayouts, places: updated });
-                                                        }} className="text-red-400 hover:text-red-300"><X size={14} /></button>
+                                                        }} className="text-brandred-600 hover:text-brandred-500"><X size={14} /></button>
                                                     </div>
                                                 ))}
                                                 <button onClick={() => {
                                                     const nextRank = editPayouts.places.length > 0 ? Math.max(...editPayouts.places.map(p => p.rank)) + 1 : 1;
                                                     setEditPayouts({ ...editPayouts, places: [...editPayouts.places, { rank: nextRank, percentage: 0 }] });
-                                                }} className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+                                                }} className="text-xs text-gold-600 hover:text-gold-500 flex items-center gap-1">
                                                     <PlusCircle size={12} /> Add place payout
                                                 </button>
 
                                                 {/* Bonuses */}
-                                                <div className="pt-2 border-t border-slate-800">
-                                                    <p className="text-xs text-slate-500 mb-2">Bonus Payouts</p>
+                                                <div className="pt-2 border-t border-line">
+                                                    <p className="text-xs text-faint mb-2">Bonus Payouts</p>
                                                     {editPayouts.bonuses.map((b, i) => (
                                                         <div key={i} className="flex items-center gap-2 mb-2">
                                                             <input value={b.name}
@@ -1548,24 +1549,24 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                                     updated[i] = { ...b, name: e.target.value };
                                                                     setEditPayouts({ ...editPayouts, bonuses: updated });
                                                                 }}
-                                                                className="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-white text-sm" placeholder="Bonus name" />
+                                                                className="flex-1 bg-surface border border-line rounded p-2 text-[color:var(--text)] text-sm" placeholder="Bonus name" />
                                                             <input type="number" value={b.percentage}
                                                                 onChange={e => {
                                                                     const updated = [...editPayouts.bonuses];
                                                                     updated[i] = { ...b, percentage: Number(e.target.value) };
                                                                     setEditPayouts({ ...editPayouts, bonuses: updated });
                                                                 }}
-                                                                className="w-20 bg-slate-900 border border-slate-700 rounded p-2 text-white text-sm" min={0} max={100} />
-                                                            <span className="text-xs text-slate-500">%</span>
+                                                                className="w-20 bg-surface border border-line rounded p-2 text-[color:var(--text)] text-sm" min={0} max={100} />
+                                                            <span className="text-xs text-faint">%</span>
                                                             <button onClick={() => {
                                                                 const updated = editPayouts.bonuses.filter((_, j) => j !== i);
                                                                 setEditPayouts({ ...editPayouts, bonuses: updated });
-                                                            }} className="text-red-400 hover:text-red-300"><X size={14} /></button>
+                                                            }} className="text-brandred-600 hover:text-brandred-500"><X size={14} /></button>
                                                         </div>
                                                     ))}
                                                     <button onClick={() => {
                                                         setEditPayouts({ ...editPayouts, bonuses: [...editPayouts.bonuses, { name: '', percentage: 0 }] });
-                                                    }} className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+                                                    }} className="text-xs text-gold-600 hover:text-gold-500 flex items-center gap-1">
                                                         <PlusCircle size={12} /> Add bonus
                                                     </button>
                                                 </div>
@@ -1574,7 +1575,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 {(() => {
                                                     const totalPct = editPayouts.places.reduce((s, p) => s + p.percentage, 0) + editPayouts.bonuses.reduce((s, b) => s + b.percentage, 0);
                                                     return (
-                                                        <div className={`text-xs text-right font-mono ${totalPct === 100 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                        <div className={`text-xs text-right num ${totalPct === 100 ? 'text-[#0F7B4A]' : 'text-brandred-600'}`}>
                                                             Total: {totalPct}% {totalPct !== 100 && '(should be 100%)'}
                                                         </div>
                                                     );
@@ -1584,39 +1585,39 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
 
                                     {/* Section 4: Payment Info */}
-                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
-                                        <button onClick={() => toggleSection('payment')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
-                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><CreditCard size={14} className="text-green-400" /> Payment Info</span>
-                                            {openSections.payment ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="border border-line rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('payment')} className="w-full flex items-center justify-between p-3 bg-surface hover:bg-page transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-display font-bold uppercase text-[color:var(--text)]"><CreditCard size={14} className="text-[#0F7B4A]" /> Payment Info</span>
+                                            {openSections.payment ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                                         </button>
                                         {openSections.payment && (
-                                            <div className="p-4 bg-slate-950 space-y-3">
+                                            <div className="p-4 bg-card space-y-3">
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
-                                                        <label className="text-xs text-slate-500 block mb-1">Venmo</label>
+                                                        <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Venmo</label>
                                                         <input value={editVenmo} onChange={e => setEditVenmo(e.target.value)} placeholder="@username"
-                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                            className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs text-slate-500 block mb-1">Zelle</label>
+                                                        <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Zelle</label>
                                                         <input value={editZelle} onChange={e => setEditZelle(e.target.value)} placeholder="email or phone"
-                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                            className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs text-slate-500 block mb-1">CashApp</label>
+                                                        <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">CashApp</label>
                                                         <input value={editCashapp} onChange={e => setEditCashapp(e.target.value)} placeholder="$username"
-                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                            className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs text-slate-500 block mb-1">PayPal</label>
+                                                        <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">PayPal</label>
                                                         <input value={editPaypal} onChange={e => setEditPaypal(e.target.value)} placeholder="email"
-                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
+                                                            className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs text-slate-500 block mb-1">Payment Instructions</label>
+                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Payment Instructions</label>
                                                     <textarea value={editPaymentInstructions} onChange={e => setEditPaymentInstructions(e.target.value)}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" rows={3}
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" rows={3}
                                                         placeholder="How should participants pay? e.g. 'Send $25 to @MyVenmo with Pool Name in the memo'" />
                                                 </div>
                                             </div>
@@ -1624,32 +1625,32 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
 
                                     {/* Section 5: Branding */}
-                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
-                                        <button onClick={() => toggleSection('branding')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
-                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Palette size={14} className="text-purple-400" /> Branding</span>
-                                            {openSections.branding ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="border border-line rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('branding')} className="w-full flex items-center justify-between p-3 bg-surface hover:bg-page transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-display font-bold uppercase text-[color:var(--text)]"><Palette size={14} className="text-gold-500" /> Branding</span>
+                                            {openSections.branding ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                                         </button>
                                         {openSections.branding && (
-                                            <div className="p-4 bg-slate-950 space-y-3">
+                                            <div className="p-4 bg-card space-y-3">
                                                 <div>
-                                                    <label className="text-xs text-slate-500 block mb-1">Logo URL</label>
+                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Logo URL</label>
                                                     <input value={editBranding.logoUrl || ''} onChange={e => setEditBranding({ ...editBranding, logoUrl: e.target.value })}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" placeholder="https://..." />
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" placeholder="https://..." />
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs text-slate-500 block mb-1">Background Color</label>
+                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Background Color</label>
                                                     <div className="flex items-center gap-3">
                                                         <input type="color" value={editBranding.bgColor || '#0f172a'}
                                                             onChange={e => setEditBranding({ ...editBranding, bgColor: e.target.value })}
-                                                            className="w-10 h-10 rounded border border-slate-700 cursor-pointer" />
+                                                            className="w-10 h-10 rounded border border-line cursor-pointer" />
                                                         <input value={editBranding.bgColor || '#0f172a'}
                                                             onChange={e => setEditBranding({ ...editBranding, bgColor: e.target.value })}
-                                                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm font-mono" />
+                                                            className="flex-1 bg-surface border border-line rounded-lg p-2.5 text-[color:var(--text)] text-sm font-mono" />
                                                     </div>
                                                 </div>
                                                 {editBranding.logoUrl && (
                                                     <div className="mt-2">
-                                                        <p className="text-xs text-slate-500 mb-1">Preview</p>
+                                                        <p className="text-xs text-faint mb-1">Preview</p>
                                                         <img src={editBranding.logoUrl} alt="Pool logo" className="h-12 rounded" onError={e => (e.currentTarget.style.display = 'none')} />
                                                     </div>
                                                 )}
@@ -1658,32 +1659,32 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
 
                                     {/* Section 6: Reminders */}
-                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
-                                        <button onClick={() => toggleSection('reminders')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
-                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Bell size={14} className="text-orange-400" /> Reminders</span>
-                                            {openSections.reminders ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="border border-line rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('reminders')} className="w-full flex items-center justify-between p-3 bg-surface hover:bg-page transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-display font-bold uppercase text-[color:var(--text)]"><Bell size={14} className="text-gold-500" /> Reminders</span>
+                                            {openSections.reminders ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                                         </button>
                                         {openSections.reminders && (
-                                            <div className="p-4 bg-slate-950 space-y-3">
+                                            <div className="p-4 bg-card space-y-3">
                                                 {[
                                                     { key: 'auto24h' as const, label: 'Send reminder 24 hours before lock' },
                                                     { key: 'auto1h' as const, label: 'Send reminder 1 hour before lock' },
                                                     { key: 'autoLock' as const, label: 'Auto-lock at tournament start' },
                                                     { key: 'announceWinner' as const, label: 'Announce winner when tournament ends' },
                                                 ].map(item => (
-                                                    <div key={item.key} className="flex items-center justify-between p-3 bg-slate-900 rounded border border-slate-800">
-                                                        <span className="text-sm text-slate-300">{item.label}</span>
+                                                    <div key={item.key} className="flex items-center justify-between p-3 bg-surface rounded border border-line">
+                                                        <span className="text-sm text-muted">{item.label}</span>
                                                         <button onClick={() => setEditReminders({ ...editReminders, [item.key]: !editReminders[item.key] })}
-                                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editReminders[item.key] ? 'bg-emerald-600' : 'bg-slate-700'}`}>
+                                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editReminders[item.key] ? 'bg-gold-500' : 'bg-line'}`}>
                                                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editReminders[item.key] ? 'translate-x-6' : 'translate-x-1'}`} />
                                                         </button>
                                                     </div>
                                                 ))}
                                                 <div>
-                                                    <label className="text-xs text-slate-500 block mb-1">Reminder Recipient Filter</label>
+                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Reminder Recipient Filter</label>
                                                     <select value={editReminders.recipientFilter || 'all'}
                                                         onChange={e => setEditReminders({ ...editReminders, recipientFilter: e.target.value as 'all' | 'unpaid' | 'noentry' })}
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm">
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm">
                                                         <option value="all">All Participants</option>
                                                         <option value="unpaid">Unpaid Only</option>
                                                         <option value="noentry">No Entry Submitted</option>
@@ -1694,31 +1695,31 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
 
                                     {/* Section 7: Access Control */}
-                                    <div className="border border-slate-800 rounded-lg overflow-hidden">
-                                        <button onClick={() => toggleSection('access')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors">
-                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Key size={14} className="text-red-400" /> Access Control</span>
-                                            {openSections.access ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="border border-line rounded-lg overflow-hidden">
+                                        <button onClick={() => toggleSection('access')} className="w-full flex items-center justify-between p-3 bg-surface hover:bg-page transition-colors">
+                                            <span className="flex items-center gap-2 text-sm font-display font-bold uppercase text-[color:var(--text)]"><Key size={14} className="text-brandred-600" /> Access Control</span>
+                                            {openSections.access ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                                         </button>
                                         {openSections.access && (
-                                            <div className="p-4 bg-slate-950 space-y-3">
+                                            <div className="p-4 bg-card space-y-3">
                                                 <div>
-                                                    <label className="text-xs text-slate-500 block mb-1">Pool Password</label>
+                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Pool Password</label>
                                                     <input value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Leave blank for no password"
-                                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" />
-                                                    <p className="text-[10px] text-slate-600 mt-1">Participants must enter this to join. Leave empty for open access.</p>
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
+                                                    <p className="text-[10px] text-faint mt-1">Participants must enter this to join. Leave empty for open access.</p>
                                                 </div>
                                             </div>
                                         )}
                                     </div>
 
                                     {/* Section 8: Dates & Deadlines */}
-                                    <div className="border border-slate-800 rounded-lg">
-                                        <button onClick={() => toggleSection('dates')} className="w-full flex items-center justify-between p-3 bg-slate-850 hover:bg-slate-800 transition-colors rounded-lg">
-                                            <span className="flex items-center gap-2 text-sm font-bold text-white"><Lock size={14} className="text-cyan-400" /> Dates & Deadlines</span>
-                                            {openSections.dates ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="border border-line rounded-lg">
+                                        <button onClick={() => toggleSection('dates')} className="w-full flex items-center justify-between p-3 bg-surface hover:bg-page transition-colors rounded-lg">
+                                            <span className="flex items-center gap-2 text-sm font-display font-bold uppercase text-[color:var(--text)]"><Lock size={14} className="text-gold-500" /> Dates & Deadlines</span>
+                                            {openSections.dates ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                                         </button>
                                         {openSections.dates && (
-                                            <div className="p-4 bg-slate-950 space-y-3">
+                                            <div className="p-4 bg-card space-y-3">
                                                 <DateTimePicker label="Lock Date (auto-lock entries)" value={editLockAt} onChange={ts => setEditLockAt(ts ?? undefined)} />
                                                 <DateTimePicker label="Registration Deadline (no new members)" value={editRegDeadline} onChange={ts => setEditRegDeadline(ts ?? undefined)} />
                                                 <DateTimePicker label="Submission Deadline (no new/edited brackets)" value={editSubDeadline} onChange={ts => setEditSubDeadline(ts ?? undefined)} />
@@ -1730,20 +1731,20 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         </div>
 
                         {/* Pool Locking Controls */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-                                <ShieldCheck size={18} className="text-amber-400" /> Pool Locking
+                        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                            <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-3 flex items-center gap-2">
+                                <ShieldCheck size={18} className="text-gold-600" /> Pool Locking
                             </h3>
-                            <p className="text-slate-400 text-xs mb-4">
+                            <p className="text-muted text-xs mb-4">
                                 Control when the pool locks and brackets become visible to all participants.
                             </p>
 
                             <div className="space-y-4">
                                 {/* Current Status */}
-                                <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
+                                <div className="bg-surface border border-line rounded-lg p-4">
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <p className="text-xs text-slate-400 uppercase mb-1">Current Status</p>
+                                            <p className="text-xs text-muted uppercase mb-1">Current Status</p>
                                             <p className="text-lg font-bold text-white">{pool.status}</p>
                                         </div>
                                         <div className="flex flex-col gap-2 items-end">
@@ -1761,7 +1762,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         }
                                                     }}
                                                     disabled={savingSettings}
-                                                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                                    className="bg-gold-foil hover:brightness-105 disabled:opacity-50 text-navy-900 px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2"
                                                 >
                                                     {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />}
                                                     Publish Pool (Set OPEN)
@@ -1771,7 +1772,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 <button
                                                     onClick={handleLockNow}
                                                     disabled={savingSettings}
-                                                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2"
                                                 >
                                                     {savingSettings ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
                                                     Lock Pool Now
@@ -1782,23 +1783,23 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </div>
 
                                 {/* Auto-Lock Time */}
-                                <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
-                                    <label className="text-xs text-slate-400 uppercase mb-2 block">Auto-Lock Time</label>
-                                    <p className="text-xs text-slate-500 mb-2">
+                                <div className="bg-surface border border-line rounded-lg p-4">
+                                    <label className="text-xs text-muted uppercase mb-2 block">Auto-Lock Time</label>
+                                    <p className="text-xs text-faint mb-2">
                                         Pool will automatically lock at this time (typically tournament start).
                                     </p>
                                     {/* Quick-fill from tournament */}
                                     {tournament?.lockAt && editLockAt !== tournament.lockAt && (
                                         <button
                                             onClick={() => setEditLockAt(tournament.lockAt)}
-                                            className="mb-3 text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-lg px-3 py-1.5 transition-colors"
+                                            className="mb-3 text-xs text-gold-600 hover:text-gold-500 flex items-center gap-1.5 bg-gold-500/10 border border-gold-500/20 rounded-lg px-3 py-1.5 transition-colors"
                                         >
                                             <Lock size={11} />
                                             Use tournament lock: {new Date(tournament.lockAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
                                         </button>
                                     )}
                                     {tournament?.lockAt && editLockAt === tournament.lockAt && (
-                                        <p className="mb-3 text-xs text-emerald-400 flex items-center gap-1.5">
+                                        <p className="mb-3 text-xs text-[#0F7B4A] flex items-center gap-1.5">
                                             <Check size={11} /> Synced with tournament lock date
                                         </p>
                                     )}
@@ -1814,7 +1815,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         <button
                                             onClick={handleSaveLockAt}
                                             disabled={savingSettings || !editLockAt}
-                                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 mb-0.5"
+                                            className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 mb-0.5"
                                         >
                                             {savingSettings ? <Loader2 size={14} className="animate-spin" /> : settingsSaved ? <Check size={14} /> : <Save size={14} />}
                                             {settingsSaved ? 'Saved!' : 'Save'}
@@ -1825,24 +1826,24 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         </div>
 
                         {/* Commissioner Message Editor */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-                                <MessageSquare size={18} className="text-amber-400" /> Commissioner Message
+                        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                            <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-3 flex items-center gap-2">
+                                <MessageSquare size={18} className="text-gold-600" /> Commissioner Message
                             </h3>
-                            <p className="text-slate-400 text-xs mb-3">This message is displayed to all pool members as a banner.</p>
+                            <p className="text-muted text-xs mb-3">This message is displayed to all pool members as a banner.</p>
                             <textarea
                                 value={commissionerDraft}
                                 onChange={e => setCommissionerDraft(e.target.value)}
                                 placeholder="Welcome to the pool! Payment is due by March 15th via Venmo..."
-                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white text-sm resize-none h-24 placeholder:text-slate-600"
+                                className="w-full bg-surface border border-line rounded-lg p-3 font-body text-[color:var(--text)] text-sm resize-none h-24 placeholder:text-faint"
                                 maxLength={500}
                             />
                             <div className="flex items-center justify-between mt-2">
-                                <span className="text-[10px] text-slate-600">{commissionerDraft.length}/500</span>
+                                <span className="text-[10px] text-faint">{commissionerDraft.length}/500</span>
                                 <button
                                     onClick={handleSaveCommissionerMessage}
                                     disabled={savingMessage}
-                                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
                                 >
                                     {savingMessage ? <Loader2 size={14} className="animate-spin" /> : messageSaved ? <Check size={14} /> : <Save size={14} />}
                                     {messageSaved ? 'Saved!' : 'Save Message'}
@@ -1851,24 +1852,24 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         </div>
 
                         {/* Entry Status Card */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                                <ClipboardList size={18} className="text-blue-400" /> Entry Status
+                        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                            <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-4 flex items-center gap-2">
+                                <ClipboardList size={18} className="text-gold-500" /> Entry Status
                             </h3>
                             <div className="grid grid-cols-2 gap-3 mb-4">
-                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
-                                    <p className="text-2xl font-bold text-emerald-400">{entries.filter(e => e.status === 'SUBMITTED').length}</p>
-                                    <p className="text-[10px] text-slate-500 uppercase">Completed</p>
+                                <div className="bg-surface rounded-lg p-3 border border-line text-center">
+                                    <p className="text-2xl font-bold text-[#0F7B4A]">{entries.filter(e => e.status === 'SUBMITTED').length}</p>
+                                    <p className="text-[10px] text-faint uppercase">Completed</p>
                                 </div>
-                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
-                                    <p className="text-2xl font-bold text-amber-400">{entries.filter(e => e.status === 'DRAFT').length + ((pool.participantIds?.length || 0) - new Set(entries.map(e => e.ownerUid)).size)}</p>
-                                    <p className="text-[10px] text-slate-500 uppercase">Incomplete</p>
+                                <div className="bg-surface rounded-lg p-3 border border-line text-center">
+                                    <p className="text-2xl font-bold text-gold-600">{entries.filter(e => e.status === 'DRAFT').length + ((pool.participantIds?.length || 0) - new Set(entries.map(e => e.ownerUid)).size)}</p>
+                                    <p className="text-[10px] text-faint uppercase">Incomplete</p>
                                 </div>
                             </div>
                             <button
                                 onClick={handleEmailIncomplete}
                                 disabled={sendingEmail}
-                                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
+                                className="w-full bg-navy-700 hover:bg-navy-600 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-2 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
                             >
                                 {sendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
                                 Email Incomplete Entries
@@ -1876,86 +1877,86 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         </div>
 
                         {/* Accounting Card */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                    💰 Accounting
+                                <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                                    <Coins size={18} className="text-gold-500" /> Accounting
                                 </h3>
                                 <button
                                     onClick={handleExportCSV}
-                                    className="text-xs text-indigo-400 hover:text-indigo-300 font-bold px-3 py-1.5 border border-indigo-800 rounded-lg flex items-center gap-1"
+                                    className="text-xs text-gold-600 hover:text-gold-500 font-bold px-3 py-1.5 border border-gold-500/40 rounded-lg flex items-center gap-1"
                                 >
                                     <Download size={12} /> Export CSV
                                 </button>
                             </div>
                             {/* Summary Stats */}
                             <div className="grid grid-cols-4 gap-3 mb-4">
-                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
-                                    <p className="text-2xl font-bold text-emerald-400">${entries.filter(e => e.paidStatus === 'PAID').length * pool.settings.entryFee}</p>
-                                    <p className="text-[10px] text-slate-500 uppercase">Collected</p>
+                                <div className="bg-surface rounded-lg p-3 border border-line text-center">
+                                    <p className="text-2xl font-bold text-[#0F7B4A]">${entries.filter(e => e.paidStatus === 'PAID').length * pool.settings.entryFee}</p>
+                                    <p className="text-[10px] text-faint uppercase">Collected</p>
                                 </div>
-                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
-                                    <p className="text-2xl font-bold text-amber-400">${entries.filter(e => e.paidStatus !== 'PAID').length * pool.settings.entryFee}</p>
-                                    <p className="text-[10px] text-slate-500 uppercase">Outstanding</p>
+                                <div className="bg-surface rounded-lg p-3 border border-line text-center">
+                                    <p className="text-2xl font-bold text-gold-600">${entries.filter(e => e.paidStatus !== 'PAID').length * pool.settings.entryFee}</p>
+                                    <p className="text-[10px] text-faint uppercase">Outstanding</p>
                                 </div>
-                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
+                                <div className="bg-surface rounded-lg p-3 border border-line text-center">
                                     <p className="text-2xl font-bold text-white">${entries.length * pool.settings.entryFee}</p>
-                                    <p className="text-[10px] text-slate-500 uppercase">Gross Pot</p>
+                                    <p className="text-[10px] text-faint uppercase">Gross Pot</p>
                                 </div>
-                                <div className="bg-slate-950 rounded-lg p-3 border border-slate-800 text-center">
-                                    <p className="text-2xl font-bold text-indigo-400">
+                                <div className="bg-surface rounded-lg p-3 border border-line text-center">
+                                    <p className="text-2xl font-display font-bold num text-gold-600">
                                         ${pool.settings.charity?.enabled
                                             ? Math.floor((entries.length * pool.settings.entryFee) * (pool.settings.charity.percentage / 100))
                                             : 0}
                                     </p>
-                                    <p className="text-[10px] text-slate-500 uppercase">Charity</p>
+                                    <p className="text-[10px] text-faint uppercase">Charity</p>
                                 </div>
                             </div>
                             {/* Entry Payment List — now with toggle buttons */}
                             <div className="space-y-2">
                                 {entries.map(entry => (
-                                    <div key={entry.id} className="flex items-center justify-between p-3 bg-slate-950 rounded border border-slate-800">
+                                    <div key={entry.id} className="flex items-center justify-between p-3 bg-surface rounded border border-line">
                                         <div>
                                             <span className="text-white text-sm font-bold">{entry.name}</span>
-                                            <span className="text-slate-500 text-xs ml-2">${pool.settings.entryFee}</span>
+                                            <span className="text-faint text-xs ml-2">${pool.settings.entryFee}</span>
                                         </div>
                                         <button
                                             onClick={() => handleTogglePayment(entry.id, entry.paidStatus)}
                                             disabled={togglingPayment === entry.id}
-                                            className={`text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1 ${entry.paidStatus === 'PAID' ? 'bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20' : 'bg-red-400/10 text-red-400 hover:bg-red-400/20'}`}
+                                            className={`text-xs font-display font-bold uppercase tracking-[0.05em] px-3 py-1.5 rounded transition-colors flex items-center gap-1 ${entry.paidStatus === 'PAID' ? 'bg-[#E4F5EC] text-[#0F7B4A] hover:bg-[#d3ecdd]' : 'bg-[#FBEEDD] text-[#B4530A] hover:bg-[#f4e2c9]'}`}
                                         >
                                             {togglingPayment === entry.id ? (
                                                 <Loader2 size={12} className="animate-spin" />
                                             ) : entry.paidStatus === 'PAID' ? (
                                                 <><Check size={12} /> Paid</>
                                             ) : (
-                                                <>✗ Unpaid</>
+                                                <><X size={12} /> Unpaid</>
                                             )}
                                         </button>
                                     </div>
                                 ))}
                                 {entries.length === 0 && (
-                                    <p className="text-slate-500 text-sm text-center py-4">No entries yet.</p>
+                                    <p className="text-faint text-sm text-center py-4">No entries yet.</p>
                                 )}
                             </div>
                         </div>
 
                         {/* Send Invitation */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-                                <Send size={18} className="text-indigo-400" /> Send Invitation
+                        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                            <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-3 flex items-center gap-2">
+                                <Send size={18} className="text-gold-500" /> Send Invitation
                             </h3>
-                            <p className="text-slate-400 text-sm mb-3">Share the pool link to invite players.</p>
+                            <p className="text-muted text-sm mb-3">Share the pool link to invite players.</p>
                             <div className="flex gap-2">
                                 <input
                                     type="text"
                                     readOnly
                                     value={`${window.location.origin}/pool/${pool.slug}`}
-                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm font-mono"
+                                    className="flex-1 bg-surface border border-line rounded-lg p-2.5 text-[color:var(--text)] text-sm font-mono"
                                 />
                                 <button
                                     onClick={handleCopyLink}
-                                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors ${linkCopied ? 'bg-emerald-600 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors ${linkCopied ? 'bg-[#0F7B4A] text-white' : 'bg-brandred-600 hover:bg-brandred-500 text-white'}`}
                                 >
                                     {linkCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
                                 </button>
@@ -1963,54 +1964,54 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         </div>
 
                         {/* Share Analytics Card */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
                             <div className="flex items-center gap-2 mb-4">
-                                <BarChart3 size={20} className="text-indigo-400" />
-                                <h3 className="text-xl font-bold text-white">Share Analytics</h3>
+                                <BarChart3 size={20} className="text-gold-500" />
+                                <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)]">Share Analytics</h3>
                             </div>
                             {shareStats ? (
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-slate-950 rounded-lg p-4 border border-slate-800 text-center">
-                                            <p className="text-3xl font-bold text-indigo-400">{shareStats.total}</p>
-                                            <p className="text-[10px] text-slate-500 uppercase">Total Clicks</p>
+                                        <div className="bg-surface rounded-lg p-4 border border-line text-center">
+                                            <p className="text-3xl font-display font-bold num text-gold-600">{shareStats.total}</p>
+                                            <p className="text-[10px] text-faint uppercase">Total Clicks</p>
                                         </div>
-                                        <div className="bg-slate-950 rounded-lg p-4 border border-slate-800 text-center">
-                                            <p className="text-3xl font-bold text-emerald-400">{shareStats.last7Days}</p>
-                                            <p className="text-[10px] text-slate-500 uppercase">Last 7 Days</p>
+                                        <div className="bg-surface rounded-lg p-4 border border-line text-center">
+                                            <p className="text-3xl font-display font-bold num text-[#0F7B4A]">{shareStats.last7Days}</p>
+                                            <p className="text-[10px] text-faint uppercase">Last 7 Days</p>
                                         </div>
                                     </div>
                                     {Object.keys(shareStats.byPlatform).length > 0 ? (
                                         <div className="space-y-2">
-                                            <p className="text-xs font-bold text-slate-400 uppercase">By Platform</p>
+                                            <p className="text-xs font-bold text-muted uppercase">By Platform</p>
                                             {Object.entries(shareStats.byPlatform)
                                                 .sort(([, a], [, b]) => b - a)
                                                 .map(([platform, count]) => {
                                                     const pct = shareStats.total > 0 ? (count / shareStats.total) * 100 : 0;
                                                     const colors: Record<string, string> = {
-                                                        facebook: 'bg-blue-500', twitter: 'bg-sky-500', reddit: 'bg-orange-500',
-                                                        discord: 'bg-indigo-500', email: 'bg-slate-500', copy: 'bg-emerald-500',
-                                                        instagram: 'bg-pink-500'
+                                                        facebook: 'bg-navy-600', twitter: 'bg-navy-700', reddit: 'bg-gold-600',
+                                                        discord: 'bg-navy-600', email: 'bg-line', copy: 'bg-[#0F7B4A]',
+                                                        instagram: 'bg-brandred-500'
                                                     };
                                                     return (
                                                         <div key={platform} className="flex items-center gap-3">
-                                                            <span className="text-xs text-slate-300 w-20 capitalize">{platform}</span>
-                                                            <div className="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
-                                                                <div className={`h-full rounded-full ${colors[platform] || 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
+                                                            <span className="text-xs text-muted w-20 capitalize">{platform}</span>
+                                                            <div className="flex-1 bg-line rounded-full h-2 overflow-hidden">
+                                                                <div className={`h-full rounded-full ${colors[platform] || 'bg-gold-500'}`} style={{ width: `${pct}%` }} />
                                                             </div>
-                                                            <span className="text-xs font-mono text-slate-400 w-10 text-right">{count}</span>
+                                                            <span className="text-xs font-mono text-muted w-10 text-right">{count}</span>
                                                         </div>
                                                     );
                                                 })}
                                         </div>
                                     ) : (
-                                        <p className="text-slate-500 text-sm text-center py-4">No share clicks recorded yet.</p>
+                                        <p className="text-faint text-sm text-center py-4">No share clicks recorded yet.</p>
                                     )}
                                 </div>
                             ) : (
                                 <div className="text-center py-6">
-                                    <Loader2 className="animate-spin text-indigo-400 mx-auto" size={24} />
-                                    <p className="text-slate-500 text-xs mt-2">Loading share analytics...</p>
+                                    <Loader2 className="animate-spin text-gold-500 mx-auto" size={24} />
+                                    <p className="text-faint text-xs mt-2">Loading share analytics...</p>
                                 </div>
                             )}
                         </div>
@@ -2021,23 +2022,23 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             {/* Viewing Entry Modal */}
             {viewingEntry && tournament && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-[98vw] max-h-[95vh] flex flex-col shadow-2xl">
-                        <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-950 rounded-t-2xl">
+                    <div className="bg-card border border-line rounded-2xl w-full max-w-[98vw] max-h-[95vh] flex flex-col shadow-card-hover">
+                        <div className="flex items-center justify-between p-4 border-b border-line bg-surface rounded-t-2xl">
                             <div>
-                                <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                                <h3 className="font-display font-bold uppercase text-lg text-[color:var(--text)] flex items-center gap-2">
                                     {viewingEntry.name}
-                                    <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
+                                    <span className="text-xs bg-gold-500/15 text-gold-700 border border-gold-500/30 px-2 py-0.5 rounded-full font-medium num">
                                         Score: {viewingEntry.score || 0}
                                     </span>
                                 </h3>
-                                <p className="text-xs text-slate-400">
+                                <p className="text-xs text-muted">
                                     Owner: {entries.find(e => e.id === viewingEntry.id)?.ownerUid === user?.id ? 'You' : 'Another User'}
                                 </p>
                             </div>
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => window.print()}
-                                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors flex items-center gap-2"
+                                    className="p-2 hover:bg-card rounded-lg text-muted hover:text-gold-600 transition-colors flex items-center gap-2"
                                     title="Print Bracket"
                                 >
                                     <Printer className="w-5 h-5" />
@@ -2045,13 +2046,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </button>
                                 <button
                                     onClick={() => setViewingEntry(null)}
-                                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                                    className="p-2 hover:bg-card rounded-lg text-muted hover:text-[color:var(--text)] transition-colors"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-auto p-4 bg-slate-950/50">
+                        <div className="flex-1 overflow-auto p-4 bg-surface/50">
                             {shouldShowBrackets || isManager ? (
                                 isConference ? (
                                     <ConferenceBracketBuilder
@@ -2075,14 +2076,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 )
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                                    <ShieldCheck className="w-16 h-16 text-slate-600 mb-4" />
-                                    <h3 className="text-xl font-bold text-white mb-2">Brackets Not Yet Visible</h3>
-                                    <p className="text-slate-400 max-w-md">
+                                    <ShieldCheck className="w-16 h-16 text-faint mb-4" />
+                                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Brackets Not Yet Visible</h3>
+                                    <p className="text-muted max-w-md">
                                         All brackets will be visible once the pool is locked and the tournament has started.
                                         This ensures a fair playing field for all participants.
                                     </p>
-                                    <div className="mt-4 text-sm text-slate-500">
-                                        Pool Status: <span className="text-amber-400 font-mono">{pool.status}</span>
+                                    <div className="mt-4 text-sm text-faint">
+                                        Pool Status: <span className="text-gold-600 num">{pool.status}</span>
                                     </div>
                                 </div>
                             )}
@@ -2167,22 +2168,22 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 return (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl relative">
+                        <div className="bg-card border border-line rounded-xl max-w-md w-full p-6 shadow-card-hover relative">
                             <button
                                 onClick={() => setShowNameModal(false)}
-                                className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+                                className="absolute top-4 right-4 text-muted hover:text-white transition-colors"
                             >
                                 <X size={20} />
                             </button>
 
-                            <h3 className="text-xl font-bold text-white mb-2">Name Your Bracket</h3>
-                            <p className="text-slate-400 text-sm mb-6">
+                            <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Name Your Bracket</h3>
+                            <p className="text-muted text-sm mb-6">
                                 Give your bracket a unique name to easily identify it in the standings.
                             </p>
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                                    <label className="block text-sm font-medium text-muted mb-1">
                                         Bracket Name
                                     </label>
                                     <input
@@ -2190,7 +2191,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         value={newNameInput}
                                         onChange={(e) => setNewNameInput(e.target.value)}
                                         placeholder="Enter a bracket name..."
-                                        className={`w-full bg-slate-950 border ${isNameTaken && newNameInput.trim() !== '' ? 'border-red-500/50 focus:ring-red-500' : 'border-slate-800 focus:ring-amber-500'} rounded-lg px-4 py-3 text-white focus:ring-2 focus:border-transparent outline-none transition-all placeholder:text-slate-600`}
+                                        className={`w-full bg-surface border ${isNameTaken && newNameInput.trim() !== '' ? 'border-brandred-500/50 focus:ring-brandred-500' : 'border-line focus:ring-gold-500'} rounded-lg px-4 py-3 text-[color:var(--text)] focus:ring-2 focus:border-transparent outline-none transition-all placeholder:text-faint`}
                                         autoFocus
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && newNameInput.trim() && !isNameTaken) {
@@ -2200,10 +2201,10 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         }}
                                     />
                                     {isNameTaken && newNameInput.trim() !== '' && (
-                                        <p className="mt-2 text-sm text-red-400 flex items-center gap-1">
+                                        <p className="mt-2 text-sm text-brandred-600 flex items-center gap-1">
                                             This name is taken. How about <button
                                                 onClick={() => setNewNameInput(suggestedName)}
-                                                className="underline font-bold hover:text-red-300"
+                                                className="underline font-bold hover:text-brandred-500"
                                             >"{suggestedName}"</button>?
                                         </p>
                                     )}
@@ -2212,7 +2213,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 <div className="flex gap-3 pt-2">
                                     <button
                                         onClick={() => setShowNameModal(false)}
-                                        className="flex-1 px-4 py-2 border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-800 transition-colors font-medium"
+                                        className="flex-1 px-4 py-2 border border-line text-muted rounded-lg hover:bg-surface transition-colors font-medium"
                                     >
                                         Cancel
                                     </button>
@@ -2224,7 +2225,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             }
                                         }}
                                         disabled={!newNameInput.trim() || isNameTaken || submitting}
-                                        className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2 rounded-lg transition-colors font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gold-foil hover:brightness-105 text-navy-900 px-4 py-2 rounded-lg transition-all font-display font-bold uppercase tracking-[0.05em] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
                                         Continue

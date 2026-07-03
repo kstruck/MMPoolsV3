@@ -106,7 +106,7 @@ export const ExportControls: React.FC<ExportControlsProps> = ({ pool, entries, t
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm transition-colors border border-slate-700"
+                className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 text-sm transition-all duration-150 hover:-translate-y-px"
             >
                 <Download size={16} /> Export
                 <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -115,12 +115,12 @@ export const ExportControls: React.FC<ExportControlsProps> = ({ pool, entries, t
             {isOpen && (
                 <>
                     <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-                    <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                    <div className="absolute right-0 mt-2 w-56 bg-card border border-line rounded-xl shadow-card-hover z-20 overflow-hidden animate-in fade-in slide-in-from-top-2">
                         <div className="p-2 space-y-1">
                             <button
                                 onClick={handleExportCSV}
                                 disabled={isExporting || entries.length === 0}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                                className="w-full text-left px-3 py-2 text-sm font-body text-[color:var(--text)] hover:bg-surface rounded-lg flex items-center gap-2 disabled:opacity-50 transition-colors duration-150"
                             >
                                 {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
                                 Export Standings (CSV)
@@ -128,7 +128,7 @@ export const ExportControls: React.FC<ExportControlsProps> = ({ pool, entries, t
                             <button
                                 onClick={handlePrintBrackets}
                                 disabled={!tournament}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                                className="w-full text-left px-3 py-2 text-sm font-body text-[color:var(--text)] hover:bg-surface rounded-lg flex items-center gap-2 disabled:opacity-50 transition-colors duration-150"
                                 title="Use browser print to save as PDF"
                             >
                                 <Printer size={16} />

@@ -60,18 +60,18 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
     };
 
     return (
-        <div className="flex flex-col h-[600px] bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-            <div className="p-4 border-b border-slate-700 bg-slate-800/80 sticky top-0 z-10">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                    <MessageSquareIcon className="w-5 h-5 text-indigo-400" />
+        <div className="flex flex-col h-[600px] bg-card rounded-xl border border-line shadow-card overflow-hidden">
+            <div className="p-4 border-b border-line bg-card/80 sticky top-0 z-10">
+                <h2 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                    <MessageSquareIcon className="w-5 h-5 text-gold-500" />
                     Banter Board
                 </h2>
-                <p className="text-sm text-slate-400 mt-1">Chat real-time with other pool members.</p>
+                <p className="text-sm font-body text-muted mt-1">Chat real-time with other pool members.</p>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
+                    <div className="h-full flex flex-col items-center justify-center text-faint space-y-2">
                         <MessageSquareIcon className="w-8 h-8 opacity-50" />
                         <p>No messages yet. Start the trash talk!</p>
                     </div>
@@ -84,18 +84,18 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                                 className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`}
                             >
                                 <div className="flex items-baseline gap-2 px-1">
-                                    <span className={`text-xs font-semibold ${isMe ? 'text-indigo-400' : 'text-slate-300'}`}>
+                                    <span className={`text-xs font-semibold ${isMe ? 'text-gold-600' : 'text-muted'}`}>
                                         {isMe ? 'You' : msg.userName}
                                     </span>
-                                    <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                                    <span className="text-[10px] text-faint flex items-center gap-1">
                                         <Clock className="w-3 h-3" />
                                         {formatDate(msg.timestamp)}
                                     </span>
                                 </div>
                                 <div
-                                    className={`px-4 py-2 rounded-2xl max-w-[85%] break-words ${isMe
-                                        ? 'bg-indigo-600 text-white rounded-tr-sm'
-                                        : 'bg-slate-700 text-slate-100 rounded-tl-sm'
+                                    className={`px-4 py-2 rounded-2xl max-w-[85%] break-words font-body ${isMe
+                                        ? 'bg-navy-800 text-white rounded-tr-sm'
+                                        : 'bg-surface border border-line text-[color:var(--text)] rounded-tl-sm'
                                         }`}
                                 >
                                     {msg.text}
@@ -107,7 +107,7 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                 <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-3 border-t border-slate-700 bg-slate-900/50">
+            <div className="p-3 border-t border-line bg-surface/50">
                 {user ? (
                     <form onSubmit={handleSendMessage} className="flex items-end gap-2">
                         <div className="flex-1 relative">
@@ -116,20 +116,20 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 placeholder="Talk some trash..."
-                                className="w-full bg-slate-800 border border-slate-600 rounded-xl py-3 pl-4 pr-12 text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                                className="w-full bg-card border border-line rounded-xl py-3 pl-4 pr-12 font-body text-[color:var(--text)] placeholder:text-faint focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-colors"
                                 disabled={sending}
                             />
                         </div>
                         <button
                             type="submit"
                             disabled={!newMessage.trim() || sending}
-                            className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center justify-center"
+                            className="p-3 bg-brandred-600 text-white rounded-xl hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center justify-center"
                         >
                             <Send className="w-5 h-5" />
                         </button>
                     </form>
                 ) : (
-                    <div className="text-center p-3 text-slate-400 bg-slate-800 rounded-lg border border-slate-700">
+                    <div className="text-center p-3 text-muted bg-card rounded-lg border border-line">
                         Please sign in to participate in the banter.
                     </div>
                 )}

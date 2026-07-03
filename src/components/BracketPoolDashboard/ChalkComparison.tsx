@@ -127,27 +127,27 @@ export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, us
 
     return (
         <div className="space-y-6">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl relative overflow-hidden">
+            <div className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                    <span className="text-8xl font-black italic">CHALK</span>
+                    <span className="text-8xl font-display font-extrabold italic">CHALK</span>
                 </div>
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                        <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2 flex items-center gap-2">
                             My Bracket vs. The Chalk
                         </h3>
-                        <p className="text-slate-400 max-w-2xl mb-4">
+                        <p className="text-muted font-body max-w-2xl mb-4">
                             "Chalk" means always picking the favorite (the higher seed) to win every matchup.
                             Compare your picks against the mathematically safest bracket.
                         </p>
 
                         {userEntries.length > 1 && (
                             <div className="flex flex-col gap-2 max-w-xs">
-                                <label className="text-sm font-bold text-slate-400">Select Bracket to Compare</label>
+                                <label className="text-sm font-display font-bold uppercase tracking-[0.08em] text-muted">Select Bracket to Compare</label>
                                 <select
                                     value={selectedEntryId}
                                     onChange={(e) => setSelectedEntryId(e.target.value)}
-                                    className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 font-medium"
+                                    className="bg-surface border border-line rounded-lg px-4 py-2.5 text-[color:var(--text)] focus:outline-none focus:border-gold-500 font-body font-medium"
                                 >
                                     {userEntries.map(entry => (
                                         <option key={entry.id} value={entry.id}>{entry.name}</option>
@@ -157,15 +157,15 @@ export const ChalkComparison: React.FC<ChalkComparisonProps> = ({ tournament, us
                         )}
                     </div>
 
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 flex items-center gap-4 min-w-[200px] justify-center text-center">
+                    <div className="bg-surface p-4 rounded-lg border border-line flex items-center gap-4 min-w-[200px] justify-center text-center">
                         <div>
-                            <div className="text-3xl font-bold text-rose-400">{diffCount}</div>
-                            <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Upset Picks</div>
+                            <div className="text-3xl font-display font-bold num text-brandred-600">{diffCount}</div>
+                            <div className="text-xs uppercase tracking-[0.08em] text-faint font-display font-bold">Upset Picks</div>
                         </div>
-                        <div className="w-px h-10 bg-slate-800"></div>
+                        <div className="w-px h-10 bg-line"></div>
                         <div>
-                            <div className="text-3xl font-bold text-amber-400">{upsetPercent}%</div>
-                            <div className="text-xs uppercase tracking-wider text-slate-500 font-bold">Divergence</div>
+                            <div className="text-3xl font-display font-bold num text-gold-600">{upsetPercent}%</div>
+                            <div className="text-xs uppercase tracking-[0.08em] text-faint font-display font-bold">Divergence</div>
                         </div>
                     </div>
                 </div>
