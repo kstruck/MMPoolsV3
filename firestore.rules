@@ -18,6 +18,11 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.get('role', '') == 'SUPER_ADMIN';
     }
 
+    // MODERATOR (T6): read-only oversight of Users + monetization; no state changes.
+    function isModerator() {
+      return request.auth != null && request.auth.token.get('role', '') == 'MODERATOR';
+    }
+
     // POOLS:
     match /pools/{poolId} {
       // Allow GET by anyone (Guest Access via Link)
@@ -215,11 +220,14 @@ service cloud.firestore {
     
     // USERS & PARTICIPATIONS:
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || isSuperAdmin());
+      allow read: if request.auth != null && (request.auth.uid == userId || isSuperAdmin() || isModerator());
 
       allow write: if request.auth != null && (
         (request.auth.uid == userId && (
-          (resource == null && request.resource.data.role == 'PARTICIPANT') ||
+          // Accept the canonical default (MEMBER) and the legacy value (PARTICIPANT)
+          // during the T6 transition. Role escalation still goes through the
+          // setUserRole callable (Admin SDK, bypasses these rules).
+          (resource == null && request.resource.data.role in ['MEMBER', 'PARTICIPANT']) ||
           (resource != null && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
             'role', 'referralCredits', 'freePoolsAvailable',
             'poolCredits', 'activeBundleType', 'bundleExpiresAt'

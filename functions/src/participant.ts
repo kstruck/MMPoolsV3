@@ -28,7 +28,7 @@ export const onUserCreated = v1.auth.user().onCreate(async (user: UserRecord) =>
             email: email || "",
             name: displayName || "New User",
             photoURL: photoURL || null,
-            role: "PARTICIPANT", // Default role
+            role: "MEMBER", // Default role (canonical, T6)
             createdAt: Date.now(),
             provider: user.providerData[0]?.providerId || "unknown",
         });

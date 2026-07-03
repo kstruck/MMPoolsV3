@@ -4,7 +4,7 @@ import { writeAuditEvent } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields } from "./poolOps";
-import { assertPoolCreationAllowed, assertNotMaintenance } from "./lib/systemGuards";
+import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBanned } from "./lib/systemGuards";
 import {
   NFLGame,
   NFLPickemPool,
@@ -34,6 +34,7 @@ export const createNFLPool = onCall(async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'User must be logged in.');
     }
+    assertNotBanned(request.auth.token.role);
 
     const uid = request.auth.uid;
     const db = admin.firestore();
@@ -84,7 +85,7 @@ export const createNFLPool = onCall(async (request) => {
 
       // 2. Upgrade role to POOL_MANAGER if they are a standard participant
       if (currentRole === 'PARTICIPANT') {
-        transaction.update(userRef, { role: 'POOL_MANAGER' });
+        transaction.update(userRef, { role: 'COMMISSIONER' });
       }
 
       // 3. Write Manager Index mapping
@@ -130,6 +131,7 @@ export const joinNFLPool = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be logged in.');
   }
+  assertNotBanned(request.auth.token.role);
   await assertNotMaintenance();
 
   const uid = request.auth.uid;

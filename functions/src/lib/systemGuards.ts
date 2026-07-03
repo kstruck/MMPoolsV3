@@ -6,6 +6,17 @@
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
 import { isPoolTypeEnabled, isMaintenanceMode, type FlagConfig } from "./featureFlags";
+import { normalizeRole } from "./roles";
+
+/**
+ * Reject a BANNED user from a state-changing action (T6). Reads the tamper-proof
+ * JWT claim role; pass request.auth?.token?.role.
+ */
+export function assertNotBanned(claimRole: unknown): void {
+  if (normalizeRole(typeof claimRole === "string" ? claimRole : undefined) === "BANNED") {
+    throw new HttpsError("permission-denied", "Your account is suspended.");
+  }
+}
 
 async function loadConfig(): Promise<FlagConfig | null> {
   try {

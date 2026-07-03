@@ -34,7 +34,7 @@ export const onUserCreated = functions.auth.user().onCreate(async (user: UserRec
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
 
                 lastLogin: admin.firestore.FieldValue.serverTimestamp(),
-                role: 'PARTICIPANT'
+                role: 'MEMBER'
             });
             console.log(`[UserSync] Successfully synced user ${uid} (${email}) to Firestore.`);
         } else {
