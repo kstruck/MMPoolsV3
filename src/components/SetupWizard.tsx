@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { useToast } from './ui/Toast';
 
 import type { GameState, PoolTheme } from "../types";
+import { themesForPoolType } from "../utils/themeScope";
 import type { User } from '../types';
 import type { ESPNGame, ESPNCompetitor } from '../types/espn';
 
@@ -95,13 +96,15 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
 
     useEffect(() => {
         const fetchThemes = async () => {
+            // This is the Gameday Squares wizard — only show themes scoped to
+            // SQUARES (or universal themes with no appliesTo). (T13)
             const themes = await dbService.getActiveThemes();
             if (themes && themes.length > 0) {
-                setAvailableThemes(themes as PoolTheme[]);
+                setAvailableThemes(themesForPoolType(themes as PoolTheme[], 'SQUARES'));
             } else {
                 // Fallback to presets
                 const { PRESET_THEMES } = await import('../constants/presetThemes');
-                setAvailableThemes(PRESET_THEMES as unknown as PoolTheme[]);
+                setAvailableThemes(themesForPoolType(PRESET_THEMES as unknown as PoolTheme[], 'SQUARES'));
             }
         };
         fetchThemes();
