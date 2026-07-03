@@ -47,6 +47,7 @@ const CreatePlayoffPool = React.lazy(() => import('./components/wizard/create/Cr
 const CreateNFLPickemPool = React.lazy(() => import('./components/wizard/create/CreateNFLPickemPool').then(m => ({ default: m.CreateNFLPickemPool })));
 const CreateNFLSurvivorPool = React.lazy(() => import('./components/wizard/create/CreateNFLSurvivorPool').then(m => ({ default: m.CreateNFLSurvivorPool })));
 const CreateNFLMarginPool = React.lazy(() => import('./components/wizard/create/CreateNFLMarginPool').then(m => ({ default: m.CreateNFLMarginPool })));
+const CreateBracketPool = React.lazy(() => import('./components/wizard/create/CreateBracketPool').then(m => ({ default: m.CreateBracketPool })));
 const PropsWizard = React.lazy(() => import('./components/PropsWizard/PropsWizard').then(m => ({ default: m.PropsWizard })));
 const SetupWizard = React.lazy(() => import('./components/SetupWizard').then(m => ({ default: m.SetupWizard })));
 const NFLPoolWizard = React.lazy(() => import('./components/NFLPoolWizard/NFLPoolWizard').then(m => ({ default: m.NFLPoolWizard })));
@@ -278,6 +279,7 @@ const App: React.FC = () => {
           <Route path="/create/pickem" element={user ? <CreateNFLPickemPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
           <Route path="/create/survivor" element={user ? <CreateNFLSurvivorPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
           <Route path="/create/margin" element={user ? <CreateNFLMarginPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
+          <Route path="/create/bracket" element={user ? <CreateBracketPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
 
           {/* Global Pages */}
           <Route path="/pricing" element={<PricingPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
