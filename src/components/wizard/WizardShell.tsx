@@ -67,12 +67,15 @@ export function WizardShell(props: WizardShellProps) {
     if (i <= maxVisited) setStepIndex(i);
   };
 
-  const submit = methods.handleSubmit(async (values) => {
+  const submit = methods.handleSubmit(async () => {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      // Strip the transient TOS field before handing values to the caller.
-      const { [TOS_FIELD]: _tos, ...clean } = values as Record<string, unknown>;
+      // handleSubmit gates on validation, but its argument is the zod-STRIPPED
+      // output (unknown keys removed) — that would drop legit config the schema
+      // doesn't enumerate (reminders, teams, lockDate…). Use the full form state
+      // instead; the callable re-gates and persists the original payload.
+      const { [TOS_FIELD]: _tos, ...clean } = methods.getValues() as Record<string, unknown>;
       void _tos;
       await onSubmit(clean);
       clear();

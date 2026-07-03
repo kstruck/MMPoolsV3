@@ -8,15 +8,22 @@
 // per-type wizard config the gate doesn't need to enumerate.
 import { z } from 'zod';
 
-// Mirrors shared/paymentHandles.ts PaymentHandles. Blank strings are a form
-// artifact, so require min-length when present; the adapter drops blanks anyway.
+// Forms submit '' (not undefined) for empty optional fields, which would fail a
+// bare .min(1)/.email() optional. Coerce blank/whitespace to undefined first so
+// an empty optional is genuinely "not provided" — for the client RHF resolver
+// AND the server gate (both use these schemas).
+const blankToUndefined = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
+export const optionalText = z.preprocess(blankToUndefined, z.string().trim().min(1).optional());
+export const optionalEmail = z.preprocess(blankToUndefined, z.string().trim().email().optional());
+
+// Mirrors shared/paymentHandles.ts PaymentHandles.
 export const paymentHandlesSchema = z
   .object({
-    venmo: z.string().trim().min(1).optional(),
-    zelle: z.string().trim().min(1).optional(),
-    cashapp: z.string().trim().min(1).optional(),
-    paypal: z.string().trim().min(1).optional(),
-    googlePay: z.string().trim().min(1).optional(),
+    venmo: optionalText,
+    zelle: optionalText,
+    cashapp: optionalText,
+    paypal: optionalText,
+    googlePay: optionalText,
   })
   .partial();
 
@@ -52,8 +59,8 @@ export const payoutsSchema = z
 
 export const basicsSchema = z.object({
   name: z.string().trim().min(1, 'Pool name is required.'),
-  managerName: z.string().trim().min(1).optional(),
-  contactEmail: z.string().trim().email().optional(),
+  managerName: optionalText,
+  contactEmail: optionalEmail,
   isPublic: z.boolean().optional(),
 });
 
@@ -61,15 +68,15 @@ export const basicsSchema = z.object({
 // top-level venmo/zelle/cashapp/paypal are accepted alongside nested
 // paymentHandles; the payment-handle adapter reconciles them on write.
 export const contactFieldsSchema = z.object({
-  managerName: z.string().trim().min(1).optional(),
-  contactEmail: z.string().trim().email().optional(),
-  contactPhone: z.string().trim().min(1).optional(),
+  managerName: optionalText,
+  contactEmail: optionalEmail,
+  contactPhone: optionalText,
   paymentInstructions: z.string().optional(),
   paymentHandles: paymentHandlesSchema.optional(),
-  venmo: z.string().trim().min(1).optional(),
-  zelle: z.string().trim().min(1).optional(),
-  cashapp: z.string().trim().min(1).optional(),
-  paypal: z.string().trim().min(1).optional(),
+  venmo: optionalText,
+  zelle: optionalText,
+  cashapp: optionalText,
+  paypal: optionalText,
 });
 
 export const brandingSchema = z
