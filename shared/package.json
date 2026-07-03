@@ -1,0 +1,7 @@
+{
+  "name": "@march-melee/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Canonical pool-type contracts shared by the app (src/) and Cloud Functions (functions/)."
+}
