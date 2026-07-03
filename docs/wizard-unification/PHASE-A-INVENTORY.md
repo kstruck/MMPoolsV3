@@ -91,13 +91,23 @@ upgrade via Stripe when they want more. Confirms PlayoffWizard already sends a
 client `billing.status='trial'` that `stripPrivilegedPoolFields` discards
 (PlayoffWizard.tsx:393-405 → poolOps.ts:22) — so nothing changes on the wire.
 
-## 6. Still needed before writing the remaining Phase A code
+## 6. Phase A progress / still needed
 
-- **Per-type `CreatePoolInput` schema archaeology:** exact submit payloads for the
-  Playoff and Props wizards (Squares/NFL/Bracket payloads are captured above).
+Done + verified (branch `feat/wizard-unification`, in worktree `D:/mmp-wizard`):
+- ✅ **Payment-handle adapter** — `shared/paymentHandles.ts` (self-check green).
+- ✅ **Pool-type enum** — `shared/poolTypes.ts`.
+- ✅ **CreatePoolInput schemas — all 7 types** — `shared/schemas/*` + registry
+  (self-check green). Payloads captured from every wizard build site.
+- ✅ **Billing decision** — free-default (§5 resolved).
+
+Still to do:
 - **Editability matrix source:** what each current dashboard actually lets a
   commissioner change, per lifecycle state, per type — read before encoding the matrix
-  (avoid guessing; plan risk).
-- **Billing decision** (§5) — hard blocker for the billing stamp + `settings/billing_config` unification.
-- **Predeploy-copy packaging validation:** wire `shared/` into the functions build and
-  confirm a deploy dry-run contains the copied modules (not done blind).
+  (avoid guessing; plan risk). Feeds `UpdatePoolSettings` schemas.
+- **Predeploy-copy packaging:** wire `shared/` into the functions build and confirm a
+  deploy dry-run contains the copied modules (not done blind).
+- **Consolidated `createPool` + `publishPool` + `updatePoolSettings`** (functions/) —
+  unblocked now that the parallel role-rename work has merged. Must accept both legacy
+  and new role values, stamp `free` billing, emit the side-effect bundle (§2), and use
+  the `shared/schemas` gates.
+- **`settings/billing_config` unification** + **`POOL_CREATED` activity writer** (§1, §5).
