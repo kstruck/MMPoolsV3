@@ -1,17 +1,30 @@
-// Per-type CreatePoolInput schema registry. Types not yet modeled return
-// undefined; the unified createPool treats an undefined schema as "no
-// server-side schema validation yet — fall back to the legacy per-type path"
-// so migration is incremental and never blocks a create.
+// Per-type CreatePoolInput schema registry. All seven live pool types are
+// modeled. The unified createPool uses these as validation GATES: .parse() to
+// throw on invalid input, then persist the original (privilege-stripped)
+// payload — unknown keys are legitimate per-type config, not errors.
 //
-// Archaeology status (see docs/wizard-unification/PHASE-A-INVENTORY.md §6):
-//   modeled:   BRACKET
-//   pending:   SQUARES, NFL_PLAYOFFS, PROPS, NFL_PICKEM, NFL_SURVIVOR, NFL_MARGIN
+// Payload sources: docs/wizard-unification/PHASE-A-INVENTORY.md §1 + the wizard
+// build sites (SetupWizard, BracketWizard, PlayoffWizard, PropsWizard, NFLPoolWizard).
 import type { ZodTypeAny } from 'zod';
 import type { PoolType } from '../poolTypes';
+import { squaresCreateInputSchema } from './squares';
 import { bracketCreateInputSchema } from './bracket';
+import { playoffCreateInputSchema } from './playoff';
+import { propsCreateInputSchema } from './props';
+import {
+  pickemCreateInputSchema,
+  survivorCreateInputSchema,
+  marginCreateInputSchema,
+} from './nfl';
 
-const CREATE_INPUT_SCHEMAS: Partial<Record<PoolType, ZodTypeAny>> = {
+const CREATE_INPUT_SCHEMAS: Record<PoolType, ZodTypeAny> = {
+  SQUARES: squaresCreateInputSchema,
   BRACKET: bracketCreateInputSchema,
+  NFL_PLAYOFFS: playoffCreateInputSchema,
+  PROPS: propsCreateInputSchema,
+  NFL_PICKEM: pickemCreateInputSchema,
+  NFL_SURVIVOR: survivorCreateInputSchema,
+  NFL_MARGIN: marginCreateInputSchema,
 };
 
 export function getCreateInputSchema(type: PoolType): ZodTypeAny | undefined {
@@ -23,4 +36,8 @@ export function hasCreateInputSchema(type: PoolType): boolean {
 }
 
 export * from './common';
+export * from './squares';
 export * from './bracket';
+export * from './playoff';
+export * from './props';
+export * from './nfl';
