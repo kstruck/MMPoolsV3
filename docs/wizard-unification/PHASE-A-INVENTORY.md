@@ -110,13 +110,24 @@ Done + verified (branch `feat/wizard-unification`, in worktree `D:/mmp-wizard`):
   lockAt / DRAFT→OPEN; kept as-is (only bracket has draft→publish; a `publishPool` rename
   is cosmetic, deferred).
 
-Still to do:
-- **`updatePoolSettings` callable + per-type editability matrix** — the edit-mode path.
-  Needs reading each dashboard's actual edit affordances before encoding the matrix
-  (avoid guessing). This is the last substantive Phase A code piece.
-- **Deploy dry-run** of the predeploy copy (validated locally: build+test green; a real
-  `firebase deploy --only functions` dry-run still recommended before merge).
+- ✅ **`updatePoolSettings` callable + editability matrix** — `shared/editability.ts`
+  (matrix grounded in real dashboard affordances) + `functions/src/lib/poolUpdate.ts`
+  (pure gate + handle reconciliation) + the callable. Locked pools freeze structural
+  money fields; unknown/phase-locked keys rejected. 9 unit tests.
+
+Phase A CODE complete. Remaining is env-dependent verification + minor follow-ups:
+- **Emulator tests** (plan-mandated, pre-merge): per-type create side-effect bundle
+  (pool doc, managedPools, participations[NFL], POOL_CREATED activity, role upgrade),
+  slug/publish, updatePoolSettings phase boundaries incl. negative cases. Needs the
+  Firestore emulator.
+- **Playwright** (Phase B, pre-merge): one create per type + Playoff/Props edit + a
+  negative locked-edit case.
+- **Deploy dry-run** of the predeploy copy (`firebase deploy --only functions`) — locally
+  validated (build+test green), not yet run against the live project.
+- **Per-value validation** on edit (updatePoolSettings) — reuse the create sub-schemas to
+  validate edited payouts/settings values (currently gates WHICH fields, not their values).
 - **`settings/billing_config` unification** — DEFERRED / off critical path: with
   free-default billing, `enforceBillingStatus` (reads `config/billing_config`) never
-  touches new pools, so the dual-path only matters for trial/grace pools that this branch
-  no longer creates. Fold into a later billing cleanup.
+  touches new pools. Fold into a later billing cleanup.
+- **`publishPool` rename** (cosmetic) + deleting the create-callable delegates — Phase B,
+  after the wizards migrate onto the shell.
