@@ -135,24 +135,34 @@ h1, h2, h3, h4, .display {
     print-color-adjust: exact !important;
   }
 
-  /* Force Squares background colors to print */
-  .bg-emerald-600 {
-    background-color: #10b981 !important;
+  /* Force Squares background colors to print (brand palette) */
+  /* Paid & confirmed */
+  .bg-navy-700 {
+    background-color: #1A3B62 !important;
     color: white !important;
   }
 
-  .bg-orange-500 {
-    background-color: #f97316 !important;
+  /* Reserved (unpaid) */
+  .bg-navy-800 {
+    background-color: #142A4C !important;
     color: white !important;
   }
 
-  .bg-amber-400 {
-    background-color: #fbbf24 !important;
-    color: black !important;
+  /* Winner / highlight (gold fill, navy text) */
+  .bg-gold-400 {
+    background-color: #D9BC80 !important;
+    color: #0B1526 !important;
   }
 
-  .bg-cyan-600 {
-    background-color: #0891b2 !important;
+  /* Current user's paid squares */
+  .bg-navy-600 {
+    background-color: #24507F !important;
+    color: white !important;
+  }
+
+  /* Every-score (score change) winner */
+  [class*="5B2A86"] {
+    background-color: #5B2A86 !important;
     color: white !important;
   }
 

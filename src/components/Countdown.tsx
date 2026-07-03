@@ -6,11 +6,11 @@ import { formatDeadline } from '../utils/formatTime';
 const NFL_KICKOFF = new Date('2026-09-09T18:20:00-06:00').getTime();
 
 const TimeBox = ({ value, label }: { value: number; label: string }) => (
-    <div className="flex flex-col items-center justify-center bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-lg py-3 w-20 md:w-24 shadow-xl">
-        <span className="text-3xl md:text-4xl font-black text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+    <div className="flex flex-col items-center justify-center bg-navy-900/80 backdrop-blur-sm border border-[rgba(230,206,150,0.2)] rounded-lg py-3 w-20 md:w-24 shadow-panel">
+        <span className="text-3xl md:text-4xl font-display font-bold text-gold-400 num leading-none">
             {value.toString().padStart(2, '0')}
         </span>
-        <span className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+        <span className="text-[10px] md:text-xs font-display font-bold text-[#9FB0CC] uppercase tracking-widest mt-1">
             {label}
         </span>
     </div>
@@ -40,7 +40,7 @@ export const Countdown: React.FC = () => {
                 <TimeBox value={minutes} label="Minutes" />
                 <TimeBox value={seconds} label="Seconds" />
             </div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+            <p className="text-xs font-display font-bold text-[#9FB0CC] uppercase tracking-widest">
                 NFL Season Kickoff · {formatDeadline(NFL_KICKOFF)}
             </p>
         </div>

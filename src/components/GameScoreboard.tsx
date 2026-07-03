@@ -126,34 +126,34 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
     const renderStatus = () => {
         if (gameStatus === 'in') {
             const pLabel = period === 1 ? '1st' : period === 2 ? '2nd' : period === 3 ? '3rd' : period === 4 ? '4th' : 'OT';
-            return <div className="text-emerald-400 font-bold uppercase tracking-wider animate-pulse flex items-center gap-2 text-sm"><span className="w-2 h-2 bg-emerald-400 rounded-full"></span> Live • {pLabel} Qtr • {clock || '0:00'}</div>;
+            return <div className="text-brandred-500 font-display font-bold uppercase tracking-wider flex items-center gap-2 text-sm num"><span className="w-2 h-2 bg-brandred-500 rounded-full animate-live-pulse"></span> Live • {pLabel} Qtr • {clock || '0:00'}</div>;
         }
         if (gameStatus === 'post') {
-            return <p className="text-sm text-slate-400 font-bold uppercase tracking-wider">Final Score</p>;
+            return <p className="text-sm text-[#9FB0CC] font-display font-bold uppercase tracking-wider">Final Score</p>;
         }
         if (startTime) {
             const dateObj = new Date(startTime);
             const dateStr = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
             const timeStr = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' });
-            return <p className="text-sm text-slate-500 font-bold uppercase tracking-wider">{dateStr} • {timeStr}</p>;
+            return <p className="text-sm text-[#9FB0CC] font-display font-bold uppercase tracking-wider num">{dateStr} • {timeStr}</p>;
         }
-        if (syncStatus === 'searching') return <p className="text-sm text-indigo-400 font-bold uppercase tracking-wider animate-pulse">Searching for Game...</p>;
-        if (syncStatus === 'not-found') return <p className="text-sm text-rose-500 font-bold uppercase tracking-wider" title="Ensure Home/Away teams match ESPN names">No Active Game Found</p>;
-        if (syncStatus === 'found' && !startTime) return <p className="text-sm text-amber-500 font-bold uppercase tracking-wider">Game Matched • Time TBD</p>;
+        if (syncStatus === 'searching') return <p className="text-sm text-gold-400 font-display font-bold uppercase tracking-wider animate-pulse">Searching for Game...</p>;
+        if (syncStatus === 'not-found') return <p className="text-sm text-brandred-500 font-display font-bold uppercase tracking-wider" title="Ensure Home/Away teams match ESPN names">No Active Game Found</p>;
+        if (syncStatus === 'found' && !startTime) return <p className="text-sm text-gold-500 font-display font-bold uppercase tracking-wider">Game Matched • Time TBD</p>;
 
-        return <p className="text-sm text-slate-600 font-bold uppercase tracking-wider">Status: Pending (Idle)</p>;
+        return <p className="text-sm text-[#9FB0CC]/60 font-display font-bold uppercase tracking-wider">Status: Pending (Idle)</p>;
     };
 
     return (
-        <div className="bg-black rounded-xl border border-slate-800 p-0 shadow-xl overflow-hidden relative mb-8 max-w-4xl mx-auto w-full">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-slate-800/20 rounded-full blur-3xl"></div>
-            <div className="p-4 border-b border-slate-800 text-center relative z-10 flex flex-col md:flex-row items-center justify-between px-8">
+        <div className="bg-navy-950 rounded-xl border border-[rgba(230,206,150,0.16)] p-0 shadow-panel overflow-hidden relative mb-8 max-w-4xl mx-auto w-full">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-navy-800/30 rounded-full blur-3xl"></div>
+            <div className="p-4 border-b border-[rgba(230,206,150,0.16)] text-center relative z-10 flex flex-col md:flex-row items-center justify-between px-8">
                 <div className="flex items-center gap-3">
-                    <h3 className="text-white font-bold text-xl tracking-tight">Game Scoreboard</h3>
+                    <h3 className="text-white font-display font-bold text-xl uppercase tracking-tight">Game Scoreboard</h3>
                     {onRepair && (
                         <button
                             onClick={onRepair}
-                            className="text-amber-500 hover:text-amber-400 p-1 rounded hover:bg-slate-800 transition-colors"
+                            className="text-gold-500 hover:text-gold-400 p-1 rounded hover:bg-navy-800 transition-colors duration-150"
                             title="Repair Scoreboard Sync"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9" /><path d="M17.64 15 22 10.64" /><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25V7.86c0-.55-.45-1-1-1H16.4c-.84 0-1.65-.33-2.25-.93L12.9 4.68" /><path d="M16.25 16.25 9 9" /></svg>
@@ -165,39 +165,39 @@ export const GameScoreboard: React.FC<GameScoreboardProps> = ({ gameState, onRep
 
             {/* Scoreboard Grid */}
             <div className="p-6">
-                <div className={`grid ${hasOvertime ? 'grid-cols-8' : 'grid-cols-7'} gap-4 text-center text-slate-500 font-bold uppercase text-xs mb-3`}>
+                <div className={`grid ${hasOvertime ? 'grid-cols-8' : 'grid-cols-7'} gap-4 text-center text-[#9FB0CC] font-display font-bold uppercase tracking-[0.08em] text-xs mb-3`}>
                     <div className="col-span-2 text-left pl-4">Team</div>
                     <div>1</div><div>2</div><div>3</div><div>4</div>
-                    {hasOvertime && <div className="text-amber-400">OT</div>}
+                    {hasOvertime && <div className="text-gold-400">OT</div>}
                     <div>T</div>
                 </div>
 
                 {/* Away Team Row */}
-                <div className={`grid ${hasOvertime ? 'grid-cols-8' : 'grid-cols-7'} gap-4 text-center text-white font-bold items-center mb-3 bg-slate-900 p-4 rounded-lg border border-slate-800/50`}>
+                <div className={`grid ${hasOvertime ? 'grid-cols-8' : 'grid-cols-7'} gap-4 text-center text-white font-bold items-center mb-3 bg-navy-900 p-4 rounded-lg border border-[rgba(230,206,150,0.12)]`}>
                     <div className="col-span-2 text-left pl-2 flex items-center gap-3">
-                        {awayLogo ? <img src={awayLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.awayTeam} /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{gameState.awayTeam?.charAt(0) || '?'}</div>}
-                        <span className="text-lg md:text-xl truncate">{gameState.awayTeam || 'TBD'}</span>
+                        {awayLogo ? <img src={awayLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.awayTeam} /> : <div className="w-10 h-10 bg-navy-800 rounded-full flex items-center justify-center text-xs text-[#9FB0CC]">{gameState.awayTeam?.charAt(0) || '?'}</div>}
+                        <span className="text-lg md:text-xl truncate font-display">{gameState.awayTeam || 'TBD'}</span>
                     </div>
-                    <div className="text-xl text-slate-400">{getScoreboardVal(1, 'away')}</div>
-                    <div className="text-xl text-slate-400">{getScoreboardVal(2, 'away')}</div>
-                    <div className="text-xl text-slate-400">{getScoreboardVal(3, 'away')}</div>
-                    <div className="text-xl text-slate-400">{getScoreboardVal(4, 'away')}</div>
-                    {hasOvertime && <div className="text-xl text-amber-400">{getOTScore('away')}</div>}
-                    <div className="text-3xl text-indigo-400 font-black">{sanitize(gameState.scores?.current?.away)}</div>
+                    <div className="text-xl text-[#9FB0CC] font-display num">{getScoreboardVal(1, 'away')}</div>
+                    <div className="text-xl text-[#9FB0CC] font-display num">{getScoreboardVal(2, 'away')}</div>
+                    <div className="text-xl text-[#9FB0CC] font-display num">{getScoreboardVal(3, 'away')}</div>
+                    <div className="text-xl text-[#9FB0CC] font-display num">{getScoreboardVal(4, 'away')}</div>
+                    {hasOvertime && <div className="text-xl text-gold-400 font-display num">{getOTScore('away')}</div>}
+                    <div className="text-3xl text-gold-400 font-display font-bold num leading-none">{sanitize(gameState.scores?.current?.away)}</div>
                 </div>
 
                 {/* Home Team Row */}
-                <div className={`grid ${hasOvertime ? 'grid-cols-8' : 'grid-cols-7'} gap-4 text-center text-white font-bold items-center bg-slate-900 p-4 rounded-lg border border-slate-800/50`}>
+                <div className={`grid ${hasOvertime ? 'grid-cols-8' : 'grid-cols-7'} gap-4 text-center text-white font-bold items-center bg-navy-900 p-4 rounded-lg border border-[rgba(230,206,150,0.12)]`}>
                     <div className="col-span-2 text-left pl-2 flex items-center gap-3">
-                        {homeLogo ? <img src={homeLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.homeTeam} /> : <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center text-xs">{gameState.homeTeam?.charAt(0) || '?'}</div>}
-                        <span className="text-lg md:text-xl truncate">{gameState.homeTeam || 'TBD'}</span>
+                        {homeLogo ? <img src={homeLogo} className="w-10 h-10 object-contain drop-shadow-md" alt={gameState.homeTeam} /> : <div className="w-10 h-10 bg-navy-800 rounded-full flex items-center justify-center text-xs text-[#9FB0CC]">{gameState.homeTeam?.charAt(0) || '?'}</div>}
+                        <span className="text-lg md:text-xl truncate font-display">{gameState.homeTeam || 'TBD'}</span>
                     </div>
-                    <div className="text-xl text-slate-400">{getScoreboardVal(1, 'home')}</div>
-                    <div className="text-xl text-slate-400">{getScoreboardVal(2, 'home')}</div>
-                    <div className="text-xl text-slate-400">{getScoreboardVal(3, 'home')}</div>
-                    <div className="text-xl text-slate-400">{getScoreboardVal(4, 'home')}</div>
-                    {hasOvertime && <div className="text-xl text-amber-400">{getOTScore('home')}</div>}
-                    <div className="text-3xl text-rose-400 font-black">{sanitize(gameState.scores?.current?.home)}</div>
+                    <div className="text-xl text-[#9FB0CC] font-display num">{getScoreboardVal(1, 'home')}</div>
+                    <div className="text-xl text-[#9FB0CC] font-display num">{getScoreboardVal(2, 'home')}</div>
+                    <div className="text-xl text-[#9FB0CC] font-display num">{getScoreboardVal(3, 'home')}</div>
+                    <div className="text-xl text-[#9FB0CC] font-display num">{getScoreboardVal(4, 'home')}</div>
+                    {hasOvertime && <div className="text-xl text-gold-400 font-display num">{getOTScore('home')}</div>}
+                    <div className="text-3xl text-gold-400 font-display font-bold num leading-none">{sanitize(gameState.scores?.current?.home)}</div>
                 </div>
             </div>
         </div>
