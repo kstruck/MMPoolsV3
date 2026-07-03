@@ -67,7 +67,7 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                     onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, graceMinutes: parseInt(e.target.value) || 0 } } })}
                                     className="w-full rounded-md border-[1.5px] border-line bg-page px-3 py-2 font-body text-[15px] text-[color:var(--text)] num transition-colors focus:border-navy-600 focus:outline-none"
                                 />
-                                <p className="text-[10px] text-slate-500 mt-1">Wait time after reservation before detailed reminder.</p>
+                                <p className="text-[10px] text-faint mt-1">Wait time after reservation before detailed reminder.</p>
                             </div>
                             <div>
                                 <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Repeat Every (Hours)</label>
@@ -77,10 +77,10 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                     onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, repeatEveryHours: parseInt(e.target.value) || 0 } } })}
                                     className="w-full rounded-md border-[1.5px] border-line bg-page px-3 py-2 font-body text-[15px] text-[color:var(--text)] num transition-colors focus:border-navy-600 focus:outline-none"
                                 />
-                                <p className="text-[10px] text-slate-500 mt-1">Frequency of follow-up emails.</p>
+                                <p className="text-[10px] text-faint mt-1">Frequency of follow-up emails.</p>
                             </div>
 
-                            <label className="md:col-span-2 flex items-center gap-3 cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800">
+                            <label className="md:col-span-2 flex items-center gap-3 cursor-pointer p-3 bg-surface rounded-lg border border-line">
                                 <input
                                     type="checkbox"
                                     checked={safeReminders.payment.notifyUsers}

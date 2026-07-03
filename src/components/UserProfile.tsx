@@ -355,7 +355,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
 
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">Phone Number <span className="text-slate-500 font-normal text-xs">(Optional)</span></label>
+                                <label className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">Phone Number <span className="text-faint font-normal text-xs">(Optional)</span></label>
                                 <div className="relative">
                                     <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
                                     <input
