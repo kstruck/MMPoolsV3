@@ -92,7 +92,8 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
         week,
         picks: {
           [week]: selectedTeam
-        }
+        },
+        requestId: crypto.randomUUID()
       });
       setSubmittedAt(serverNow());
       toast.success(`Margin pick locked in: ${selectedTeam}`);

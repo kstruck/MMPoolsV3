@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Settings, DollarSign, CheckCircle, XCircle, Users, Activity,
-  Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck
+  Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing
 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
+import { getUserMessage } from '../../utils/errorMessages';
 import { logger } from '../../utils/logger';
 import type { Pool, NFLGame, User } from '../../types';
 import { NFLManagerBentoDashboard } from './NFLManagerBentoDashboard';
@@ -30,6 +31,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const toast = useToast();
   const [isScoring, setIsScoring] = useState(false);
   const [isSavingPayment, setIsSavingPayment] = useState<string | null>(null);
+  const [remindingUid, setRemindingUid] = useState<string | null>(null);
+  const [bulkReminding, setBulkReminding] = useState<'PICKS' | 'PAYMENT' | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [settingsFeedback, setSettingsFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -91,7 +94,64 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const totalGamesCount = weeklyGames.length;
   const isWeekFullyFinal = totalGamesCount > 0 && finalGamesCount === totalGamesCount;
 
+  // --- Roster status ---
+  // Entry doc id == owner uid for NFL pools, but prefer ownerUid when present.
+  const targetUidOf = (entry: any): string => entry.ownerUid || entry.id;
+
+  // Picked-current-week: pick'em = every current-week game picked;
+  // survivor/margin = picks keyed by week number.
+  const pickedMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const entry of entries) {
+      const picks = entry.picks || {};
+      if (type === 'NFL_PICKEM') {
+        map[entry.id] = weeklyGames.length > 0 && weeklyGames.every(g => !!picks[g.id]);
+      } else {
+        map[entry.id] = !!picks[week];
+      }
+    }
+    return map;
+  }, [entries, weeklyGames, week, type]);
+
+  const unpickedCount = useMemo(() => entries.filter(e => !pickedMap[e.id]).length, [entries, pickedMap]);
+  const unpaidCount = useMemo(() => entries.filter(e => e.paidStatus !== 'PAID').length, [entries]);
+
   // --- Handlers ---
+  const handleRemindOne = async (entry: any, kind: 'PICKS' | 'PAYMENT') => {
+    const uid = targetUidOf(entry);
+    setRemindingUid(uid);
+    try {
+      const { sent, skipped } = await dbService.sendManualReminder(pool.id, [uid], kind);
+      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+    } catch (err) {
+      logger.error('Failed to send manual reminder:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setRemindingUid(null);
+    }
+  };
+
+  const handleRemindBulk = async (kind: 'PICKS' | 'PAYMENT') => {
+    const targets = (kind === 'PICKS'
+      ? entries.filter(e => !pickedMap[e.id])
+      : entries.filter(e => e.paidStatus !== 'PAID')
+    ).map(targetUidOf);
+    if (targets.length === 0) {
+      toast.info(kind === 'PICKS' ? 'Everyone has picked this week.' : 'Everyone has paid.');
+      return;
+    }
+    setBulkReminding(kind);
+    try {
+      const { sent, skipped } = await dbService.sendManualReminder(pool.id, targets, kind);
+      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+    } catch (err) {
+      logger.error('Failed to send bulk reminders:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setBulkReminding(null);
+    }
+  };
+
   const handleScoreWeek = async () => {
     const ok = await toast.confirm({
       title: `Score Week ${week}?`,
@@ -653,13 +713,33 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         {/* Participant Roster + Payment Tracker */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-sm">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/10">
-              <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Users size={14} className="text-indigo-400" /> Member Roster & Payments
-              </h4>
-              <span className="text-[10px] text-slate-500 font-bold bg-slate-950 px-2 py-0.5 border border-slate-800 rounded-full">
-                {entries.length} members
-              </span>
+            <div className="p-5 border-b border-slate-800 bg-slate-900/10 space-y-3">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Users size={14} className="text-indigo-400" /> Member Roster & Payments
+                </h4>
+                <span className="text-[10px] text-slate-500 font-bold bg-slate-950 px-2 py-0.5 border border-slate-800 rounded-full">
+                  {entries.length} members
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleRemindBulk('PICKS')}
+                  disabled={bulkReminding !== null || unpickedCount === 0}
+                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider bg-orange-500/10 border border-orange-500/25 text-orange-400 hover:bg-orange-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  <BellRing size={12} />
+                  {bulkReminding === 'PICKS' ? 'Sending...' : `Remind all unpicked (${unpickedCount})`}
+                </button>
+                <button
+                  onClick={() => handleRemindBulk('PAYMENT')}
+                  disabled={bulkReminding !== null || unpaidCount === 0}
+                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-500/10 border border-amber-500/25 text-amber-400 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  <DollarSign size={12} />
+                  {bulkReminding === 'PAYMENT' ? 'Sending...' : `Remind all unpaid (${unpaidCount})`}
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -677,7 +757,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     {type === 'NFL_MARGIN' && (
                       <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-right">Margin Score</th>
                     )}
+                    <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-center">Wk {week} Picks</th>
                     <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-right w-36">Payment</th>
+                    <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-right w-32">Remind</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/50">
@@ -707,6 +789,18 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                         </td>
                       )}
 
+                      <td className="py-3.5 px-5 text-center">
+                        {pickedMap[entry.id] ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                            <CheckCircle size={10} /> Picked
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                            <XCircle size={10} /> Missing
+                          </span>
+                        )}
+                      </td>
+
                       <td className="py-3.5 px-5 text-right">
                         <button
                           onClick={() => handleTogglePayment(entry.id, entry.paidStatus)}
@@ -719,6 +813,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                         >
                           <DollarSign size={10} />
                           {isSavingPayment === entry.id ? 'Saving...' : entry.paidStatus || 'UNPAID'}
+                        </button>
+                      </td>
+
+                      <td className="py-3.5 px-5 text-right">
+                        <button
+                          onClick={() => handleRemindOne(entry, !pickedMap[entry.id] ? 'PICKS' : 'PAYMENT')}
+                          disabled={
+                            remindingUid !== null ||
+                            bulkReminding !== null ||
+                            (pickedMap[entry.id] && entry.paidStatus === 'PAID')
+                          }
+                          title={!pickedMap[entry.id] ? 'Email a picks reminder' : entry.paidStatus !== 'PAID' ? 'Email a payment reminder' : 'Picked and paid — nothing to remind'}
+                          className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        >
+                          <BellRing size={10} />
+                          {remindingUid === targetUidOf(entry) ? 'Sending...' : 'Remind'}
                         </button>
                       </td>
                     </tr>

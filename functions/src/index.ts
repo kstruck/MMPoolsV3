@@ -35,6 +35,7 @@ export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring
 // --- NFL POOLS FUNCTIONS ---
 export { syncNFLScoresJob, importNFLSchedule } from "./nflSchedule";
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
+export { sendManualReminder } from "./manualReminders";
 
 // --- BILLING & MONETIZATION ---
 export { enforceBillingStatus, validateBillingAccess, redeemCoupon, onPoolParticipantChange } from "./billing";

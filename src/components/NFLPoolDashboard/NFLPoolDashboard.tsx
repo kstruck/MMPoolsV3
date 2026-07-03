@@ -16,6 +16,7 @@ import { NFLUserBentoDashboard } from './NFLUserBentoDashboard';
 import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { now as serverNow } from '../../utils/serverClock';
+import { WeekChecklist } from './WeekChecklist';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -224,6 +225,20 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           </div>
         </div>
 
+        {/* Week-by-week pending/done strip + "picks due" call-to-action */}
+        {!isLoading && (
+          <div className="mt-6">
+            <WeekChecklist
+              pool={pool}
+              entry={myEntry}
+              games={games}
+              selectedWeek={selectedWeek}
+              onSelectWeek={setSelectedWeek}
+              onPickNow={(week) => { setSelectedWeek(week); setActiveTab('picks'); }}
+            />
+          </div>
+        )}
+
         {/* Global tab routing headers */}
         <div className="flex border-b border-slate-800/80 mt-8 mb-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
           <button
@@ -347,6 +362,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             games={weeklyGames}
                             entry={myEntry}
                             isWeekLocked={isWeekLocked}
+                            onGoToWeek={setSelectedWeek}
                           />
                         )}
 

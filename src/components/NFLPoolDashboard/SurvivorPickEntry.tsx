@@ -107,7 +107,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
         week,
         picks: {
           [week]: selectedTeam
-        }
+        },
+        requestId: crypto.randomUUID()
       });
       setSubmittedAt(serverNow());
       toast.success(`Survivor pick locked in: ${selectedTeam}`);

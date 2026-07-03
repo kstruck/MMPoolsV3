@@ -1,7 +1,9 @@
 import { logger } from '../utils/logger';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings, PoolType } from '../types';
+import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings, PoolType, NFLGame } from '../types';
+import { isNFLSeasonPool, getMyNFLEntry, subscribeToSeasonGames, computePendingStatus, type PoolPendingStatus } from '../services/nflStatusService';
+import { formatDeadline } from '../utils/formatTime';
 import { isSuperAdmin } from '../utils/auth';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
@@ -60,10 +62,46 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const [poolWinners, setPoolWinners] = useState<Record<string, Winner[]>>({});
     const [bracketEntryCounts, setBracketEntryCounts] = useState<Record<string, number>>({});
     const [settings, setSettings] = useState<SystemSettings | null>(null);
+    // "Picks due" badges for NFL season pools: season schedule + my entry per pool
+    const [seasonGames, setSeasonGames] = useState<Record<string, NFLGame[]>>({});
+    const [myNflEntries, setMyNflEntries] = useState<Record<string, any>>({});
 
     useEffect(() => {
         return settingsService.subscribe(setSettings);
     }, []);
+
+    // Subscribe to the schedule of each distinct season among my NFL pools
+    useEffect(() => {
+        const seasons = [...new Set(myPools.filter(isNFLSeasonPool).map(p => String((p as any).season)))];
+        const unsubs = seasons.map(season =>
+            subscribeToSeasonGames(season, games => setSeasonGames(prev => ({ ...prev, [season]: games })))
+        );
+        return () => unsubs.forEach(u => u());
+    }, [myPools]);
+
+    // One-shot fetch of my entry in each NFL pool (enough for a badge; the pool
+    // dashboard has the live view)
+    useEffect(() => {
+        const nflPools = myPools.filter(isNFLSeasonPool);
+        if (nflPools.length === 0) return;
+        let cancelled = false;
+        void Promise.all(nflPools.map(async p => [p.id, await getMyNFLEntry(p.id, user.id)] as const)).then(pairs => {
+            if (!cancelled) setMyNflEntries(Object.fromEntries(pairs));
+        });
+        return () => { cancelled = true; };
+    }, [myPools, user.id]);
+
+    const pendingByPool = useMemo(() => {
+        const map: Record<string, PoolPendingStatus> = {};
+        for (const p of myPools) {
+            if (!isNFLSeasonPool(p)) continue;
+            const games = seasonGames[String((p as any).season)] ?? [];
+            if (games.length === 0) continue;
+            const status = computePendingStatus(p, myNflEntries[p.id] ?? null, games);
+            if (status) map[p.id] = status;
+        }
+        return map;
+    }, [myPools, seasonGames, myNflEntries]);
 
     const userLoyaltyTier = useMemo(() => {
         const tiers = settings?.loyaltyTiers || [
@@ -342,9 +380,14 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             if (activeTab === 'live') return status === 'live';
             if (activeTab === 'completed') return status === 'completed';
 
-            return true; 
+            return true;
+        }).sort((a, b) => {
+            // Pools that still need the user's picks float to the top
+            const aPending = pendingByPool[a.id] ? 0 : 1;
+            const bPending = pendingByPool[b.id] ? 0 : 1;
+            return aPending - bPending;
         });
-    }, [myPools, searchQuery, activeTab]);
+    }, [myPools, searchQuery, activeTab, pendingByPool]);
 
     const counts = useMemo(() => {
         const open = myPools.filter(p => getPoolTabStatus(p) === 'open').length;
@@ -710,10 +753,16 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                 </div>
                                                 <div>
                                                     <h3 className="font-extrabold text-white group-hover:text-orange-500 transition-colors line-clamp-1 text-sm uppercase">{pool.name}</h3>
-                                                    <div className="flex items-center gap-2 mt-1">
+                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                         {getStatusBadge(pool)}
                                                         <span className="text-[10px] text-slate-500 font-black font-mono">{costDisplay}</span>
                                                     </div>
+                                                    {pendingByPool[pool.id] && (
+                                                        <div className="flex items-center gap-1 mt-1.5 bg-amber-500/10 border border-amber-500/40 text-amber-400 text-[10px] font-black px-2 py-0.5 rounded-full w-fit">
+                                                            <AlertTriangle size={10} aria-hidden="true" />
+                                                            Week {pendingByPool[pool.id].dueWeek} picks due · {formatDeadline(pendingByPool[pool.id].deadline)}
+                                                        </div>
+                                                    )}
                                                     {(pool as GameState).scores?.startTime && (
                                                         <div className="text-[9px] text-slate-500 mt-1 font-bold flex items-center gap-1 uppercase">
                                                             <Calendar size={10} />

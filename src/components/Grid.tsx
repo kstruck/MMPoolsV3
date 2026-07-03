@@ -663,7 +663,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      <button
                         onClick={handleConfirmPayment}
                         disabled={isConfirmingPayment}
-                        className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all whitespace-nowrap"
+                        className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-3 min-h-[44px] rounded-lg font-bold shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all whitespace-nowrap"
                      >
                         {isConfirmingPayment ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
                         {isConfirmingPayment ? 'Sending...' : "I've Sent Payment"}
@@ -1096,7 +1096,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
                   {/* --- SECTION 3: THE GRID --- */}
                   <div id="printable-grid" className="relative bg-slate-950 p-2 sm:p-4 rounded-b-xl shadow-2xl overflow-x-auto overflow-y-hidden w-full max-w-[80vh] mx-auto border-x border-b border-slate-800">
-                     <div className="w-full transition-transform duration-200 origin-top-left" style={{ transform: `scale(${zoomLevel})`, width: zoomLevel !== 1 ? `${100 / zoomLevel}%` : '100%' }}>
+                     {/* Zoom works by widening the layout width; the parent overflow-x-auto container scrolls when zoomed in */}
+                     <div className="transition-[width] duration-200" style={{ width: `${zoomLevel * 100}%` }}>
                         {/* Grid Layout: BACK TO STANDARD 11x11 ALWAYS */}
                         <div className="grid grid-cols-11 gap-0.5 sm:gap-1 select-none">
 
@@ -1407,7 +1408,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   {/* --- STICKY FOOTER --- */}
                   {
                      selectedSquares.length > 0 && (
-                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-2xl border border-indigo-500/30 flex items-center gap-6 z-40 animate-in slide-in-from-bottom-10 ring-1 ring-white/10 print:hidden">
+                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 max-w-[calc(100vw-1rem)] bg-slate-900/90 backdrop-blur-md text-white px-4 sm:px-6 py-3 rounded-full shadow-2xl border border-indigo-500/30 flex items-center gap-3 sm:gap-6 z-40 animate-in slide-in-from-bottom-10 ring-1 ring-white/10 print:hidden">
                            <div className="flex flex-col">
                               <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Selected</span>
                               <span className="font-bold text-xl leading-none">{selectedSquares.length} <span className="text-sm font-normal text-slate-400">sq</span></span>
@@ -1418,9 +1419,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               <span className="font-mono text-emerald-400 font-bold text-xl leading-none">${selectedSquares.length * gameState.costPerSquare}</span>
                            </div>
 
-                           {/* LIMIT INDICATOR */}
-                           <div className="h-8 w-px bg-slate-700"></div>
-                           <div className="flex flex-col items-center min-w-[80px]">
+                           {/* LIMIT INDICATOR (hidden on narrow screens to keep the pill within 375px) */}
+                           <div className="h-8 w-px bg-slate-700 hidden sm:block"></div>
+                           <div className="hidden sm:flex flex-col items-center min-w-[80px]">
                               <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1 tracking-wider">
                                  Limit <Shield size={10} />
                               </span>
@@ -1439,17 +1440,17 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               </div>
                            </div>
 
-                           <div className="flex items-center gap-3 ml-2">
+                           <div className="flex items-center gap-2 sm:gap-3 sm:ml-2">
                               <button
                                  onClick={() => setSelectedSquares([])}
-                                 className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
+                                 className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
                                  title="Clear Selection"
                               >
                                  <X size={20} />
                               </button>
                               <button
                                  onClick={handleInitiateCheckout}
-                                 className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-full font-bold shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                                 className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 sm:px-6 py-2.5 min-h-[44px] rounded-full font-bold shadow-lg shadow-indigo-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
                               >
                                  Reserve <ArrowRight size={16} />
                               </button>

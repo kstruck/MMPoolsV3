@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { User as UserType, Pool, NFLGame } from '../../types';
 import { dbService, db } from '../../services/dbService';
+import { getUserMessage } from '../../utils/errorMessages';
 import { useToast } from '../ui/Toast';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
@@ -125,23 +126,25 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     ]);
   }, [topPlayerName]);
 
-  // Derived unsubmitted players list
+  // Derived unsubmitted players list.
+  // Pick'em: unsubmitted = at least one current-week game without a pick (picks keyed by gameId).
+  // Survivor/Margin: unsubmitted = no pick stored under the current week number.
+  const weeklyGames = useMemo(() => _games.filter(g => g.week === week), [_games, week]);
   const unsubmittedPlayers = useMemo(() => {
     const list = entries.filter(e => {
-      if (!e.picks) return true;
+      const picks = e.picks || {};
       if (pool.type === 'NFL_PICKEM') {
-        const keys = Object.keys(e.picks);
-        return !keys.some(k => k.includes(`week_${week}`) || k.includes(`_${week}`));
-      } else {
-        return !e.picks[week];
+        return weeklyGames.length > 0 && !weeklyGames.every(g => !!picks[g.id]);
       }
+      return !picks[week];
     });
     return list.map(e => ({
       id: e.id,
+      uid: e.ownerUid || e.id,
       name: e.userName || e.ownerName || 'User ' + e.id.substring(0, 4),
       email: e.email || 'user@example.com'
     }));
-  }, [entries, week, pool.type]);
+  }, [entries, week, pool.type, weeklyGames]);
 
   // 1. Calculations for Pick submissions status
   const submissionStats = useMemo(() => {
@@ -185,12 +188,17 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     });
   }, [entries, ledgerSearch, ledgerFilter]);
 
-  const handleNudge = (name: string) => {
-    setIsNudging(name);
-    setTimeout(() => {
-      toast.success(`Nudge notification dispatched successfully to ${name}!`);
+  const handleNudge = async (player: { uid: string; name: string }) => {
+    setIsNudging(player.uid);
+    try {
+      const { sent, skipped } = await dbService.sendManualReminder(pool.id, [player.uid], 'PICKS');
+      toast.success(`Sent ${sent} reminder(s), ${skipped} skipped (recently reminded)`);
+    } catch (err) {
+      console.error('Failed to send pick reminder:', err);
+      toast.error(getUserMessage(err));
+    } finally {
       setIsNudging(null);
-    }, 800);
+    }
   };
 
   const handleSendBanter = (e: React.FormEvent) => {
@@ -344,11 +352,11 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                   </div>
 
                   <button
-                    onClick={() => handleNudge(player.name)}
-                    disabled={isNudging === player.name}
-                    className="bg-orange-500/10 border border-orange-500/35 hover:bg-orange-500/20 text-orange-400 hover:text-white font-extrabold text-[10px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl transition-all disabled:opacity-50"
+                    onClick={() => handleNudge(player)}
+                    disabled={isNudging !== null}
+                    className="min-h-[44px] bg-orange-500/10 border border-orange-500/35 hover:bg-orange-500/20 text-orange-400 hover:text-white font-extrabold text-[10px] uppercase tracking-wider px-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isNudging === player.name ? 'Nudging...' : 'Nudge Email'}
+                    {isNudging === player.uid ? 'Sending...' : 'Nudge Email'}
                   </button>
                 </div>
               ))

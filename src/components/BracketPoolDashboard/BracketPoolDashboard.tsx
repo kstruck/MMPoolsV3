@@ -24,6 +24,7 @@ import { PoolAnalytics } from './PoolAnalytics';
 import { BracketAwards } from './BracketAwards';
 import { ChalkComparison } from './ChalkComparison';
 import { ReportsTab } from './ReportsTab';
+import { BracketRulesPanel } from './BracketRulesPanel';
 import { LiveScoreTicker } from './LiveScoreTicker';
 import { EliminationTracker } from './EliminationTracker';
 import { BracketCountdown } from './BracketCountdown';
@@ -33,7 +34,7 @@ import { PaymentLedger } from './PaymentLedger';
 import { ExportControls } from './ExportControls';
 import { useToast } from '../ui/Toast';
 
-type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'manager' | 'ledger';
+type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'rules' | 'manager' | 'ledger';
 type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'chalk' | 'analytics' | 'insights';
 
 interface BracketPoolDashboardProps {
@@ -653,6 +654,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         { id: 'entries' as DashboardTab, label: 'All Entries', icon: Users },
                         { id: 'brackets' as DashboardTab, label: 'Brackets', icon: GitBranch },
                         { id: 'reports' as DashboardTab, label: 'Reports', icon: FileText },
+                        { id: 'rules' as DashboardTab, label: 'Rules', icon: ClipboardList },
                         { id: 'ledger' as DashboardTab, label: 'Payment Ledger', icon: CreditCard, hidden: !isManager },
                         { id: 'manager' as DashboardTab, label: '⚙️ Settings', icon: ShieldCheck, hidden: !isManager },
                     ].map(tab => !tab.hidden && (
@@ -1276,6 +1278,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 {!loading && activeTab === 'reports' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4">
                         <ReportsTab entries={entries} tournament={tournament} pool={pool} />
+                    </div>
+                )}
+
+                {/* Rules Tab — visible to all members */}
+                {!loading && activeTab === 'rules' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-4">
+                        <BracketRulesPanel pool={pool} tournament={tournament} />
                     </div>
                 )}
 

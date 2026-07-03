@@ -199,7 +199,7 @@ export const submitNFLPicks = onCall(async (request) => {
   
   // deep clean input
   const data = JSON.parse(JSON.stringify(request.data || {}));
-  const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
+  const { poolId, week, picks, confidence, tiebreakerPrediction, requestId } = data;
 
   if (!poolId || !week || !picks) {
     throw new HttpsError('invalid-argument', 'Missing poolId, week, or picks.');
@@ -254,6 +254,12 @@ export const submitNFLPicks = onCall(async (request) => {
     const entrySnap = await transaction.get(entryRef);
     const existingEntry = entrySnap.exists ? entrySnap.data() : null;
 
+    // Idempotency: a retried submit (client resend after a lost response) whose
+    // requestId already landed is a no-op success, not a duplicate write
+    if (requestId && existingEntry?.lastRequestId === requestId) {
+      return;
+    }
+
     // --- LOCK CHECKS & POOL SPECIFIC VALIDATIONS ---
 
     if (type === 'NFL_PICKEM') {
@@ -304,7 +310,7 @@ export const submitNFLPicks = onCall(async (request) => {
         paidStatus: existingEntry?.paidStatus ?? 'UNPAID'
       };
 
-      transaction.set(entryRef, pickemEntry, { merge: true });
+      transaction.set(entryRef, { ...pickemEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
 
     } else if (type === 'NFL_SURVIVOR') {
       const survivorEntry = (existingEntry as SurvivorEntry) || {
@@ -359,7 +365,7 @@ export const submitNFLPicks = onCall(async (request) => {
       survivorEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
       survivorEntry.submittedAt = now;
 
-      transaction.set(entryRef, survivorEntry, { merge: true });
+      transaction.set(entryRef, { ...survivorEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
 
     } else if (type === 'NFL_MARGIN') {
       const marginEntry = (existingEntry as MarginEntry) || {
@@ -410,7 +416,7 @@ export const submitNFLPicks = onCall(async (request) => {
       marginEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
       marginEntry.submittedAt = now;
 
-      transaction.set(entryRef, marginEntry, { merge: true });
+      transaction.set(entryRef, { ...marginEntry, ...(requestId ? { lastRequestId: requestId } : {}) }, { merge: true });
     }
   });
 

@@ -3,7 +3,7 @@ import { Lock, AlertCircle, Save, CheckCircle2 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
-import { getUserMessage } from '../../utils/errorMessages';
+import { getUserMessage, isLockError } from '../../utils/errorMessages';
 import { now as serverNow } from '../../utils/serverClock';
 import { formatTimeWithZone } from '../../utils/formatTime';
 import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
@@ -22,6 +22,8 @@ interface PickemPickEntryProps {
   games: NFLGame[];
   entry: any; // NFLPickemEntry or null
   isWeekLocked: boolean;
+  /** Navigate the dashboard to another week (enables the post-submit "Next Week" CTA) */
+  onGoToWeek?: (week: number) => void;
 }
 
 export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
@@ -29,7 +31,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   week,
   games,
   entry,
-  isWeekLocked
+  isWeekLocked,
+  onGoToWeek
 }) => {
   const castPool = pool as any;
   const [picks, setPicks] = useState<Record<string, string>>({});
@@ -47,6 +50,14 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   const confidenceMode = castPool.settings?.confidenceMode ?? false;
   const bufferMinutes = castPool.settings?.lockBufferMinutes ?? 5;
   const draftKey = `pickem:${pool.id}:${week}`;
+
+  // Re-evaluate lock state every 30s so the UI flips to locked in place at T-0
+  // instead of accepting taps the server will reject
+  const [, setLockTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setLockTick(t => t + 1), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Load existing picks when week, games, or entry changes; unsaved drafts win over
   // the last submitted entry (they are newer edits the user never got to submit)
@@ -157,14 +168,32 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     setIsSubmitting(true);
     setValidationError(null);
 
+    // Same requestId on retry — the server treats a resend as a no-op success,
+    // so a lost response can never double-write
+    const payload = {
+      poolId: pool.id,
+      week,
+      picks,
+      confidence: confidenceMode ? confidence : undefined,
+      tiebreakerPrediction,
+      requestId: crypto.randomUUID()
+    };
+
+    // Inside the final 10 minutes a transient failure gets ONE automatic retry —
+    // "network blipped at T-30s" must not cost someone their week
+    const earliestKickoff = games.length ? Math.min(...games.map(g => g.startTime)) : Infinity;
+    const nearLock = earliestKickoff - serverNow() < 10 * 60 * 1000;
+
     try {
-      await dbService.submitNFLPicks({
-        poolId: pool.id,
-        week,
-        picks,
-        confidence: confidenceMode ? confidence : undefined,
-        tiebreakerPrediction
-      });
+      try {
+        await dbService.submitNFLPicks(payload);
+      } catch (firstErr: any) {
+        const retryable = nearLock && !isLockError(firstErr) && !String(firstErr?.code ?? '').includes('invalid-argument');
+        if (!retryable) throw firstErr;
+        logger.warn('Submit failed near lock — retrying once', firstErr);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        await dbService.submitNFLPicks(payload);
+      }
       clearDraft(draftKey);
       dirtyRef.current = false;
       setSubmittedAt(serverNow());
@@ -213,9 +242,19 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
 
       {/* Persistent receipt — survives the toast so the user can always verify */}
       {submittedAt && !validationError && (
-        <div role="status" className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
-          <CheckCircle2 size={18} aria-hidden="true" />
-          Week {week} picks submitted at {formatTimeWithZone(submittedAt)}. You can change unlocked picks and resubmit until kickoff.
+        <div role="status" className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-4 rounded-2xl text-xs font-bold flex flex-col sm:flex-row gap-3 sm:items-center">
+          <div className="flex gap-2 items-center flex-1">
+            <CheckCircle2 size={18} aria-hidden="true" />
+            <span>Week {week} picks submitted at {formatTimeWithZone(submittedAt)}. You can change unlocked picks and resubmit until kickoff.</span>
+          </div>
+          {onGoToWeek && week < ((Number(castPool.seasonType) === 1) ? 4 : 18) && (
+            <button
+              onClick={() => onGoToWeek(week + 1)}
+              className="shrink-0 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-black px-4 py-2.5 rounded-xl transition-all"
+            >
+              Pick Week {week + 1} →
+            </button>
+          )}
         </div>
       )}
 
