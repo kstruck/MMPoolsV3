@@ -6,18 +6,6 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
-    },
-    {
-      "name": "dev-worktree",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "D:/mmp-wizard", "run", "dev"],
-      "port": 5173
-    },
-    {
-      "name": "dev-worktree-e2e",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "D:/mmp-wizard", "run", "dev:e2e"],
-      "port": 5173
     }
   ]
 }
