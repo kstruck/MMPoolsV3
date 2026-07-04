@@ -87,11 +87,21 @@
         ]
     },
     "emulators": {
+        "auth": {
+            "port": 9099
+        },
+        "functions": {
+            "port": 5001
+        },
         "firestore": {
             "port": 8080
         },
+        "hub": {
+            "port": 4400
+        },
         "ui": {
-            "enabled": true
+            "enabled": true,
+            "port": 4000
         }
     }
 }

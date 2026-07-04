@@ -46,6 +46,8 @@ export default defineConfig({
   test: {
     // shared/ is a standalone package (own tsconfig + package.json); its
     // self-checks run via `npx tsc -p shared && node shared/dist/...`, not root vitest.
-    exclude: ['node_modules/**', 'functions/**', '**/.claude/**', 'shared/**']
+    // tests/e2e/** are Playwright specs (own `test`/`expect`, own runner via
+    // `npx playwright test`) — vitest's runner errors if it loads them.
+    exclude: ['node_modules/**', 'functions/**', '**/.claude/**', 'shared/**', 'tests/e2e/**']
   }
 })

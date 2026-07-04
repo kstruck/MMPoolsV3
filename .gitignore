@@ -34,6 +34,12 @@ dist-ssr
 test-*.html
 *-test.html
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # Debug & scratch files
 debug_*.cjs
 codemod.cjs
