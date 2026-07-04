@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 /**
  * Platform-revenue ledger (T14). Every Stripe charge (per-pool billing and
@@ -42,7 +43,7 @@ export async function recordBillingCharge(
         couponCode: charge.couponCode ?? null,
         stripeSessionId: charge.stripeSessionId,
         at: Date.now(),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );

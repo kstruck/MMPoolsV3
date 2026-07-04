@@ -1,5 +1,6 @@
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 import * as v1 from "firebase-functions/v1";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
@@ -209,7 +210,7 @@ export const claimByCode = onCall(async (request) => {
             t.update(poolRef, { squares: newSquares });
             // Increment uses
             t.update(claimDoc.ref, {
-                uses: admin.firestore.FieldValue.increment(1),
+                uses: FieldValue.increment(1),
                 lastUsedAt: Date.now()
             });
         }
@@ -265,7 +266,7 @@ export const syncParticipantIndices = onDocumentWritten("pools/{poolId}", async 
             squaresCount: data.count,
             squareIds: data.ids,
             paidCount: data.paid,
-            lastActiveAt: admin.firestore.FieldValue.serverTimestamp() // approximate
+            lastActiveAt: FieldValue.serverTimestamp() // approximate
         }, { merge: true }));
 
         // 2. /users/{uid}/participations/{poolId}
@@ -276,7 +277,7 @@ export const syncParticipantIndices = onDocumentWritten("pools/{poolId}", async 
             squaresCount: data.count,
             squareIds: data.ids,
             role: "PARTICIPANT",
-            joinedAt: admin.firestore.FieldValue.serverTimestamp() // This will update every time, maybe check existence?
+            joinedAt: FieldValue.serverTimestamp() // This will update every time, maybe check existence?
             // Actually `merge: true` preserves joinedAt if we don't send it? 
             // But we want to preserve original joinedAt. 
             // For now, let's just set updated fields.

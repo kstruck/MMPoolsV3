@@ -1,4 +1,5 @@
 import { onRequest } from "firebase-functions/v2/https";
+import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { getUnsubSecret, verifyUnsubToken, emailHash, getPrefs, EMAIL_CATEGORIES, EmailCategory, EmailCategoryPrefs } from "./emailPrefs";
 
@@ -105,7 +106,7 @@ export const manageEmailPrefs = onRequest({ timeoutSeconds: 15, memory: "256MiB"
         // isOptedOut() and the legacy unsubscribe flow treat it as block-all.
         await ref.set({
             email,
-            optedOutAt: admin.firestore.FieldValue.serverTimestamp(),
+            optedOutAt: FieldValue.serverTimestamp(),
         });
         res.status(200).send(messagePage(
             "You're unsubscribed",
@@ -123,7 +124,7 @@ export const manageEmailPrefs = onRequest({ timeoutSeconds: 15, memory: "256MiB"
     await ref.set({
         email,
         categories,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
     });
 
     const subscribed = EMAIL_CATEGORIES.filter((c) => categories[c]).map((c) => CATEGORY_LABELS[c].title);

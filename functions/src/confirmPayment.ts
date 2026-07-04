@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
@@ -92,7 +93,7 @@ export const confirmPayment = onCall(async (request) => {
 
         transaction.update(poolRef, {
             squares: updatedSquares,
-            updatedAt: admin.firestore.Timestamp.now()
+            updatedAt: Timestamp.now()
         });
 
         // Calculate total amount

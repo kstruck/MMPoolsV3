@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { writeAdminAudit } from "./lib/adminAudit";
 
@@ -43,7 +44,7 @@ export const backfillPools = onCall(async (request) => {
         const indexRef = usersRef.doc(ownerId).collection('managedPools').doc(poolId);
         batch.set(indexRef, {
             poolId,
-            createdAt: pool.createdAt || admin.firestore.Timestamp.now(),
+            createdAt: pool.createdAt || Timestamp.now(),
             name: pool.name,
             type: pool.type
         }, { merge: true });
@@ -66,10 +67,10 @@ export const backfillPools = onCall(async (request) => {
                 // Update user's historical stats safely using FieldValue increments
                 batch.set(userRef, {
                     historicalStats: {
-                        poolsEntered: admin.firestore.FieldValue.increment(1),
-                        poolsWon: admin.firestore.FieldValue.increment(isWinner ? 1 : 0),
-                        totalPoints: admin.firestore.FieldValue.increment(pointsEarned),
-                        totalEarnings: admin.firestore.FieldValue.increment(payoutEarned)
+                        poolsEntered: FieldValue.increment(1),
+                        poolsWon: FieldValue.increment(isWinner ? 1 : 0),
+                        totalPoints: FieldValue.increment(pointsEarned),
+                        totalEarnings: FieldValue.increment(payoutEarned)
                     }
                 }, { merge: true });
                 batchCount++;

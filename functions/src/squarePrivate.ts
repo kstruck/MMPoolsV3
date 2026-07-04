@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import { PlayerDetails } from "./types";
 
 // Player PII lives OUTSIDE the public pool doc (audit finding H1).
@@ -18,7 +19,7 @@ export function buildSquarePrivate(squareId: number, details: PlayerDetails = {}
     for (const [key, value] of Object.entries(details)) {
         if (value !== undefined && value !== null && value !== "") clean[key] = value;
     }
-    clean.updatedAt = admin.firestore.Timestamp.now();
+    clean.updatedAt = Timestamp.now();
     return clean as unknown as SquarePrivate;
 }
 

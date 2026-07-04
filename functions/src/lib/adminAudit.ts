@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
 /**
  * Admin Audit Log (T7). Top-level `admin_audit` collection keyed by actor —
@@ -69,7 +70,7 @@ export async function writeAdminAudit(entry: AdminAuditEntry): Promise<void> {
       metadata: capMetadata(entry.metadata),
       status: entry.status,
       error: entry.error ? String(entry.error).slice(0, 300) : null,
-      at: admin.firestore.Timestamp.now(),
+      at: Timestamp.now(),
     });
   } catch (e) {
     console.error("[adminAudit] write failed (non-fatal):", e);

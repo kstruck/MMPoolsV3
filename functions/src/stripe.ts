@@ -3,6 +3,7 @@
 //   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
 
 import * as functions from "firebase-functions/v2";
+import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -155,7 +156,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
             const userRef = db.collection("users").doc(userId);
             if (bundleType === "buy_3") {
                 await userRef.update({
-                    freePoolsAvailable: admin.firestore.FieldValue.increment(3),
+                    freePoolsAvailable: FieldValue.increment(3),
                     role: "POOL_MANAGER"
                 });
             } else if (bundleType === "unlimited_1yr") {
@@ -192,7 +193,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
                     }
                     
                     await userRef.update({
-                        poolCredits: admin.firestore.FieldValue.arrayUnion(...creditsSpawned),
+                        poolCredits: FieldValue.arrayUnion(...creditsSpawned),
                         role: "POOL_MANAGER"
                     });
                     console.log(`[Dynamic Bundle Mock] Credited user ${userId} with ${dynamicBundle.poolsIncluded} pool credits for bundle ${bundleType}`);
@@ -333,7 +334,7 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
                 console.log(`[Custom Credit] User ${userId} used custom credit ${customCreditId} for pool ${poolId}`);
             } else {
                 await db.collection("users").doc(userId).update({
-                    freePoolsAvailable: admin.firestore.FieldValue.increment(-1)
+                    freePoolsAvailable: FieldValue.increment(-1)
                 });
                 console.log(`[Pool Credit] User ${userId} used a credit to activate pool ${poolId}`);
             }
@@ -351,8 +352,8 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
                     const usageEntry = { userId, poolId, usedAt: Date.now() };
 
                     await couponDoc.ref.update({
-                        usesCount: admin.firestore.FieldValue.increment(1),
-                        usageLog: admin.firestore.FieldValue.arrayUnion(usageEntry),
+                        usesCount: FieldValue.increment(1),
+                        usageLog: FieldValue.arrayUnion(usageEntry),
                     });
                     console.log(`[Stripe Bypass] Coupon ${couponCode} recorded for user ${userId}`);
                 }
@@ -399,8 +400,8 @@ export const createCheckoutSession = functions.https.onCall({ cors: true, secret
                     const usageEntry = { userId, poolId, usedAt: Date.now() };
 
                     await couponDoc.ref.update({
-                        usesCount: admin.firestore.FieldValue.increment(1),
-                        usageLog: admin.firestore.FieldValue.arrayUnion(usageEntry),
+                        usesCount: FieldValue.increment(1),
+                        usageLog: FieldValue.arrayUnion(usageEntry),
                     });
                     console.log(`[Stripe Mockup] Coupon ${couponCode} usage simulated for user ${userId}`);
                 }
@@ -531,7 +532,7 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                     const userRef = db.collection("users").doc(userId);
                     if (bundleType === "buy_3") {
                         await userRef.update({
-                            freePoolsAvailable: admin.firestore.FieldValue.increment(3),
+                            freePoolsAvailable: FieldValue.increment(3),
                             role: "POOL_MANAGER"
                         });
                     } else if (bundleType === "unlimited_1yr") {
@@ -568,7 +569,7 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                             }
                             
                             await userRef.update({
-                                poolCredits: admin.firestore.FieldValue.arrayUnion(...creditsSpawned),
+                                poolCredits: FieldValue.arrayUnion(...creditsSpawned),
                                 role: "POOL_MANAGER"
                             });
                             console.log(`[Stripe Webhook] Credited user ${userId} with ${dynamicBundle.poolsIncluded} pool credits for bundle ${bundleType}`);
@@ -636,8 +637,8 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
                             const usageEntry = { userId, poolId, usedAt: Date.now() };
 
                             await couponDoc.ref.update({
-                                usesCount: admin.firestore.FieldValue.increment(1),
-                                usageLog: admin.firestore.FieldValue.arrayUnion(usageEntry),
+                                usesCount: FieldValue.increment(1),
+                                usageLog: FieldValue.arrayUnion(usageEntry),
                             });
 
                             console.log(`[Stripe Webhook] Coupon ${couponCode} usage recorded for user ${userId}`);

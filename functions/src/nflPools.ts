@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAuditEvent } from "./audit";
 import { checkBillingAccess } from "./billing";
@@ -168,7 +169,7 @@ export const joinNFLPool = onCall(async (request) => {
 
     // 1. Add participant to pool collection
     transaction.update(poolRef, {
-      participantIds: admin.firestore.FieldValue.arrayUnion(uid)
+      participantIds: FieldValue.arrayUnion(uid)
     });
 
     // 2. Add participation to user profile

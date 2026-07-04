@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -857,7 +858,7 @@ export const importTournamentFromESPN = onCall(async (request) => {
         await tournamentRef.set(sanitizeForFirestore({
             id: tournamentId,
             seasonYear: parseInt(seasonYear),
-            lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+            lastUpdated: FieldValue.serverTimestamp(),
             importedGames: games,
             importedTeams: teams,
             games: updatedGames,
@@ -924,7 +925,7 @@ export const updateTournamentScores = async (
                 await tournamentRef.set({
                     importedEvents: events,
                     games: updatedGames,
-                    lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+                    lastUpdated: FieldValue.serverTimestamp()
                 }, { merge: true });
 
                 try {
@@ -950,7 +951,7 @@ export const updateTournamentScores = async (
                 // The scorer only needs the mapped `games` object.
                 await tournamentRef.set(sanitizeForFirestore({
                     games: updatedGames,
-                    lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+                    lastUpdated: FieldValue.serverTimestamp(),
                     lastSyncStatus: `Synced ${mappedCount} games at ${new Date().toISOString()}`,
                 }), { merge: true });
 
@@ -1314,7 +1315,7 @@ export const importConferenceTournamentFromESPN = onCall(async (request) => {
         await tournamentRef.set({
             importedEvents: events,
             games: updatedGames,
-            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            lastUpdated: FieldValue.serverTimestamp()
         }, { merge: true });
 
         await scoreTournamentEntries(db, tournamentId);

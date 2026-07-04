@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
@@ -40,7 +41,7 @@ export const lockPool = onCall(async (request) => {
 
     const updates: any = {
         isLocked: true,
-        updatedAt: admin.firestore.Timestamp.now(),
+        updatedAt: Timestamp.now(),
     };
 
     if (type === 'SQUARES') {
