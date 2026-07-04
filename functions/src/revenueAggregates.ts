@@ -1,4 +1,5 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { summarizeCharges } from "./lib/billingCharges";
@@ -23,7 +24,7 @@ async function recompute(): Promise<{ totalRevenue: number; chargeCount: number 
   });
   const summary = summarizeCharges(charges, Date.now());
   await db.doc("admin_stats/revenue").set(
-    { ...summary, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+    { ...summary, updatedAt: FieldValue.serverTimestamp() },
     { merge: true }
   );
   return { totalRevenue: summary.totalRevenue, chargeCount: summary.chargeCount };

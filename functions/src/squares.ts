@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
 import { writeAuditEvent } from "./audit";
@@ -104,8 +105,8 @@ export const reserveSquare = onCall(async (request) => {
 
         transaction.update(poolRef, {
             squares: updatedSquares,
-            participantIds: userId !== "anonymous" ? admin.firestore.FieldValue.arrayUnion(userId) : admin.firestore.FieldValue.arrayUnion("guest"),
-            updatedAt: admin.firestore.Timestamp.now()
+            participantIds: userId !== "anonymous" ? FieldValue.arrayUnion(userId) : FieldValue.arrayUnion("guest"),
+            updatedAt: Timestamp.now()
         });
 
         // PII (email/phone/etc) is written to the restricted subcollection, NOT the pool doc.
@@ -193,7 +194,7 @@ export const markSquaresPaid = onCall(async (request) => {
 
         transaction.update(poolRef, {
             squares: newSquares,
-            updatedAt: admin.firestore.Timestamp.now()
+            updatedAt: Timestamp.now()
         });
 
         // Audit
@@ -262,7 +263,7 @@ export const updatePlayer = onCall(async (request) => {
         );
         transaction.update(poolRef, {
             squares: updatedSquares,
-            updatedAt: admin.firestore.Timestamp.now(),
+            updatedAt: Timestamp.now(),
         });
 
         // Upsert PII for each of the player's squares in the restricted subcollection.
@@ -345,7 +346,7 @@ export const releaseSquares = onCall(async (request) => {
         );
         transaction.update(poolRef, {
             squares: updatedSquares,
-            updatedAt: admin.firestore.Timestamp.now(),
+            updatedAt: Timestamp.now(),
         });
 
         // Delete PII for released squares.

@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { FieldValue } from "firebase-admin/firestore";
 import * as admin from 'firebase-admin';
 import { PropCard, GameState } from './types';
 import { writeAuditEvent } from './audit';
@@ -94,7 +95,7 @@ export const purchasePropCard = onCall(async (request) => {
 
     // Increment entryCount on the main pool document
     await poolRef.update({
-        entryCount: admin.firestore.FieldValue.increment(1)
+        entryCount: FieldValue.increment(1)
     });
 
     // Audit Log

@@ -1,4 +1,5 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { GameState, AxisNumbers, Winner } from "./types";
@@ -698,7 +699,7 @@ const processGameUpdate = async (
                     description: `${step.desc} (${state === 'pre' ? 'Pre' : 'Q' + period})`,
                     timestamp: Date.now()
                 };
-                transactionUpdates.scoreEvents = admin.firestore.FieldValue.arrayUnion(newEvent);
+                transactionUpdates.scoreEvents = FieldValue.arrayUnion(newEvent);
                 shouldUpdate = true;
             }
 
@@ -975,7 +976,7 @@ const processGameUpdate = async (
     if (shouldUpdate) {
         transaction.update(doc.ref, {
             ...transactionUpdates,
-            updatedAt: admin.firestore.Timestamp.now()
+            updatedAt: Timestamp.now()
         });
     }
 
@@ -1106,7 +1107,7 @@ export const syncGameStatus = onSchedule({
         const twoDaysAgo = Date.now() - (6 * 60 * 60 * 1000);
         const completedPoolsSnap = await db.collection("pools")
             .where("scores.gameStatus", "==", "post")
-            .where("updatedAt", ">=", admin.firestore.Timestamp.fromMillis(twoDaysAgo))
+            .where("updatedAt", ">=", Timestamp.fromMillis(twoDaysAgo))
             .get();
 
         // Combine both result sets
@@ -1160,7 +1161,7 @@ export const syncGameStatus = onSchedule({
                     if (!failureLogged.has(cacheKey)) {
                         failureLogged.add(cacheKey);
                         await db.collection('system_logs').add({
-                            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                            timestamp: FieldValue.serverTimestamp(),
                             type: 'ESPN_FETCH_FAIL',
                             status: 'error',
                             message: `Failed to fetch valid scores for GameID: ${pool.gameId}`,
@@ -1192,7 +1193,7 @@ export const syncGameStatus = onSchedule({
                 // No, reducing noise is better. Only log changes or errors.
                 if (result.updated) {
                     await db.collection('system_logs').add({
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        timestamp: FieldValue.serverTimestamp(),
                         type: 'ESPN_FETCH_SUCCESS',
                         status: 'success',
                         message: `Updated scores for Game ${pool.gameId} (Pool ${doc.id})`,
@@ -1209,7 +1210,7 @@ export const syncGameStatus = onSchedule({
             } catch (e: any) {
                 console.error(`Error processing pool ${doc.id}:`, e);
                 await db.collection('system_logs').add({
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    timestamp: FieldValue.serverTimestamp(),
                     type: 'POOL_SYNC_ERROR',
                     status: 'error',
                     message: `Error syncing pool ${doc.id}: ${e.message}`,
@@ -1221,7 +1222,7 @@ export const syncGameStatus = onSchedule({
 
         // 3. Log Execution Summary
         await db.collection('system_logs').add({
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            timestamp: FieldValue.serverTimestamp(),
             type: 'SYNC_GAME_STATUS',
             status: errorCount > 0 ? 'partial' : 'success',
             message: `Score Sync Cycle Completed: ${processedCount}/${allPools.length} pools processed.`,
@@ -1246,7 +1247,7 @@ export const syncGameStatus = onSchedule({
     } catch (globalError: any) {
         console.error("Critical Sync Failure:", globalError);
         await db.collection('system_logs').add({
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            timestamp: FieldValue.serverTimestamp(),
             type: 'SYNC_GAME_STATUS',
             status: 'critical_error',
             message: globalError.message || 'Unknown error',

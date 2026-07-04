@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions/v2";
+import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 
 interface JoinWaitlistData {
@@ -52,8 +53,8 @@ export const joinWaitlist = functions.https.onCall(async (request) => {
             };
 
             t.update(poolRef, {
-                waitlist: admin.firestore.FieldValue.arrayUnion(entry),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                waitlist: FieldValue.arrayUnion(entry),
+                updatedAt: FieldValue.serverTimestamp()
             });
         });
 

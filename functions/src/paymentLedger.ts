@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 /**
  * Append-only money ledger: pools/{poolId}/payments/{autoId}.
@@ -36,7 +37,7 @@ export async function writeLedgerEvent(
         await db.collection('pools').doc(poolId).collection('payments').add({
             ...event,
             at: Date.now(),
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
         });
     } catch (err) {
         // Ledger is an audit trail, not a gate — never block the money action itself

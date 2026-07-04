@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import type { Game, TournamentSlot } from "./types";
@@ -151,7 +152,7 @@ export const initializeBigEastTournament = async (
         lockAt: new Date('2026-03-11T12:00:00.000Z').getTime(),
         games,
         slots,
-        createdAt: admin.firestore.Timestamp.now().toMillis(),
+        createdAt: Timestamp.now().toMillis(),
     });
 
     logger.info(`Big East tournament ${tournamentId} initialized with ${Object.keys(games).length} games.`);
@@ -339,7 +340,7 @@ export const initializeBig12Tournament = async (
         lockAt: new Date('2026-03-10T12:00:00.000Z').getTime(),
         games,
         slots,
-        createdAt: admin.firestore.Timestamp.now().toMillis(),
+        createdAt: Timestamp.now().toMillis(),
     });
 
     logger.info(`Big 12 tournament ${tournamentId} initialized with ${Object.keys(games).length} games.`);

@@ -2,7 +2,7 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Tournament, BracketPool, BracketEntry } from "./types";
 import { checkBillingAccess } from "./billing";
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 
@@ -94,8 +94,8 @@ export const createBracketEntry = onCall(async (request) => {
 
         // Increment pool entry count and add user to participantIds
         transaction.update(poolRef, {
-            entryCount: admin.firestore.FieldValue.increment(1),
-            participantIds: admin.firestore.FieldValue.arrayUnion(uid)
+            entryCount: FieldValue.increment(1),
+            participantIds: FieldValue.arrayUnion(uid)
         });
 
         return newEntryRef.id;
@@ -386,7 +386,7 @@ export const deleteBracketEntry = onCall(async (request) => {
 
         // Decrement pool entry count
         transaction.update(poolRef, {
-            entryCount: admin.firestore.FieldValue.increment(-1)
+            entryCount: FieldValue.increment(-1)
         });
 
         // Log audit

@@ -1,5 +1,6 @@
 
 import * as functions from "firebase-functions/v2";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 // Fixed imports
 import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry, BracketPool, User, BracketEntry, NFLGame, NFLPickemPool, NFLSurvivorPool, NFLMarginPool, NFLPickemEntry, SurvivorEntry, MarginEntry } from "./types";
@@ -58,7 +59,7 @@ export async function sendEmail(db: admin.firestore.Firestore, to: string, subje
                 html: finalHtml,
             },
             ...context, // e.g. poolId, reason
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
         });
         console.log(`Email queued for ${to}: ${subject}`);
     } catch (error) {
@@ -347,7 +348,7 @@ export async function checkPaymentReminders(db: admin.firestore.Firestore, pool:
 
                     t.update(poolRef, {
                         squares: updatedSquares,
-                        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                        updatedAt: FieldValue.serverTimestamp()
                     });
                 });
 
@@ -562,7 +563,7 @@ async function executeAutoLock(db: admin.firestore.Firestore, pool: GameState) {
                 isLocked: true,
                 lockGrid: true, // Legacy/UI sync
                 axisNumbers,
-                updatedAt: admin.firestore.Timestamp.now(),
+                updatedAt: Timestamp.now(),
             };
 
             // Handle 4-Set initialization

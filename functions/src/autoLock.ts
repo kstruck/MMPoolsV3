@@ -1,5 +1,6 @@
 
 import * as functions from "firebase-functions/v2";
+import { Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
@@ -115,7 +116,7 @@ async function executeAutoLock(pool: GameState) {
 
             const updates: any = {
                 isLocked: true,
-                updatedAt: admin.firestore.Timestamp.now(),
+                updatedAt: Timestamp.now(),
             };
 
             const type = currentPool.type || 'SQUARES';
@@ -151,7 +152,7 @@ async function executeAutoLock(pool: GameState) {
                 }, t);
             } else if (type === 'BRACKET') {
                 updates.status = 'LOCKED';
-                updates.lockAt = admin.firestore.Timestamp.now(); // Ensure sync
+                updates.lockAt = Timestamp.now(); // Ensure sync
             }
             // PROPS and NFL_PLAYOFFS just use isLocked: true
 

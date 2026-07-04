@@ -1,5 +1,6 @@
 
 import * as functions from "firebase-functions/v2";
+import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { Pool, PoolBilling, Coupon, BillingConfig } from "./types";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -287,8 +288,8 @@ export const redeemCoupon = functions.https.onCall({ cors: true }, async (reques
         const usageEntry = { userId, poolId, usedAt: now };
 
         transaction.update(couponDoc.ref, {
-            usesCount: admin.firestore.FieldValue.increment(1),
-            usageLog: admin.firestore.FieldValue.arrayUnion(usageEntry),
+            usesCount: FieldValue.increment(1),
+            usageLog: FieldValue.arrayUnion(usageEntry),
         });
 
         return {

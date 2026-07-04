@@ -1,4 +1,5 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
@@ -52,7 +53,7 @@ export const creditReferralOnPayment = onDocumentUpdated('pools/{poolId}', async
 
     // If they've hit the free pool threshold, award a free pool token
     if (currentCredits >= config.creditsRequiredForFreePool) {
-      updates.freePoolsAvailable = admin.firestore.FieldValue.increment(1);
+      updates.freePoolsAvailable = FieldValue.increment(1);
       updates.referralCredits = currentCredits - config.creditsRequiredForFreePool;
     }
 

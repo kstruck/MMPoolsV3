@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { writeAuditEvent } from './audit';
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -211,7 +211,7 @@ export const updatePoolSettings = onCall(async (request) => {
         updatedAt: Timestamp.now(),
     };
     for (const key of clearLegacy) {
-        patch[key] = admin.firestore.FieldValue.delete();
+        patch[key] = FieldValue.delete();
     }
 
     await poolRef.update(patch);
@@ -273,7 +273,7 @@ export const recalculatePoolWinners = onCall(async (request) => {
         'scores.half': null,
         'scores.q3': null,
         'scores.final': null,
-        '_winnersCleared': admin.firestore.FieldValue.serverTimestamp(),
+        '_winnersCleared': FieldValue.serverTimestamp(),
         '_winnersManualFix': true
     });
 
@@ -283,7 +283,7 @@ export const recalculatePoolWinners = onCall(async (request) => {
         message: `Winners cleared and pool queued for resync. ${existingWinners.size} winners deleted.`,
         severity: 'WARNING',
         actor: { uid, role: 'SUPER_ADMIN', label: 'Manual Fix' },
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        timestamp: FieldValue.serverTimestamp(),
         payload: {
             clearedWinners: existingWinners.size,
             poolName: pool.name,
@@ -333,7 +333,7 @@ export const toggleWinnerPaid = onCall(async (request) => {
 
     await winnerRef.update({
         isPaid: isNowPaid,
-        paidAt: isNowPaid ? admin.firestore.FieldValue.serverTimestamp() : null,
+        paidAt: isNowPaid ? FieldValue.serverTimestamp() : null,
         paidByUid: isNowPaid ? uid : null
     });
 
@@ -403,7 +403,7 @@ export const fixParticipantIds = onCall(async (request) => {
             console.log(`Pool ${pool.name} (${doc.id}): Adding ${toAdd.length} participants.`);
             if (!dryRun) {
                 await doc.ref.update({
-                    participantIds: admin.firestore.FieldValue.arrayUnion(...toAdd)
+                    participantIds: FieldValue.arrayUnion(...toAdd)
                 });
                 updated++;
             }

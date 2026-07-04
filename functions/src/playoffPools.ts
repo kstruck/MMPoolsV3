@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
@@ -205,7 +206,7 @@ export const submitPlayoffPicks = onCall(async (request) => {
 
         t.update(poolRef, {
             [`entries.${key}`]: entryData,
-            participantIds: admin.firestore.FieldValue.arrayUnion(uid)
+            participantIds: FieldValue.arrayUnion(uid)
         });
     });
 
@@ -332,7 +333,7 @@ export const managePlayoffEntry = onCall(async (request) => {
         }
 
         await poolRef.update({
-            [`entries.${entryId}`]: admin.firestore.FieldValue.delete()
+            [`entries.${entryId}`]: FieldValue.delete()
         });
         return { success: true, message: 'Entry deleted' };
     }

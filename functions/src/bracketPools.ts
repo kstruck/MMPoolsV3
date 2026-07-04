@@ -2,7 +2,7 @@
 import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { BracketPool } from "./types";
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as crypto from "crypto";
 import { assertPoolCreationAllowed } from "./lib/systemGuards";
 import {
@@ -211,7 +211,7 @@ export const publishBracketPool = onCall(async (request) => {
             slugLower,
             isListedPublic: !!isListedPublic,
             isPublic: !!isListedPublic, // Sync for firestore rules
-            passwordHash: passwordHash || admin.firestore.FieldValue.delete(),
+            passwordHash: passwordHash || FieldValue.delete(),
             status: "OPEN",
             lockAt: lockAt,
             updatedAt: Timestamp.now().toMillis(),
@@ -280,8 +280,8 @@ export const joinBracketPool = onCall(async (request) => {
     // For now, let's just track in user profile for "My Pools" list logic.
     // Ideally we increment a counter on the pool safely.
     await poolRef.update({
-        participantCount: admin.firestore.FieldValue.increment(1),
-        participantIds: admin.firestore.FieldValue.arrayUnion(uid)
+        participantCount: FieldValue.increment(1),
+        participantIds: FieldValue.arrayUnion(uid)
     });
 
     return { success: true };

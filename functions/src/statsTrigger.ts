@@ -1,4 +1,5 @@
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import { onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
@@ -56,9 +57,9 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
 
             if (prizePot > 0 || charityAmount > 0) {
                 await db.doc("stats/global").set({
-                    totalPrizes: admin.firestore.FieldValue.increment(prizePot),
-                    totalDonated: admin.firestore.FieldValue.increment(charityAmount),
-                    lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+                    totalPrizes: FieldValue.increment(prizePot),
+                    totalDonated: FieldValue.increment(charityAmount),
+                    lastUpdated: FieldValue.serverTimestamp()
                 }, { merge: true });
 
                 console.log(`[Stats] Added $${prizePot} prizes / $${charityAmount} charity for pool ${event.params.poolId}`);
@@ -150,8 +151,8 @@ export const recalculateGlobalStats = onCall({
             totalPrizes: totalAllTimePrizes,
             totalRevenue: totalAllTimePrizes, // Backwards compat or Total Volume? Let's treat Revenue as Prizes for now or sum? Let's just track Prizes and Donated separately.
             totalDonated: totalAllTimeCharity,
-            lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-            recalculatedAt: admin.firestore.FieldValue.serverTimestamp()
+            lastUpdated: FieldValue.serverTimestamp(),
+            recalculatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
 
         return {

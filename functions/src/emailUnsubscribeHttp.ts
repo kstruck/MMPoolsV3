@@ -1,4 +1,5 @@
 import { onRequest } from "firebase-functions/v2/https";
+import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { getUnsubSecret, verifyUnsubToken, emailHash } from "./emailPrefs";
 
@@ -30,7 +31,7 @@ export const emailUnsubscribe = onRequest({ timeoutSeconds: 15, memory: "256MiB"
 
     await db.collection("email_optouts").doc(emailHash(email)).set({
         email,
-        optedOutAt: admin.firestore.FieldValue.serverTimestamp(),
+        optedOutAt: FieldValue.serverTimestamp(),
     });
 
     res.status(200).send(page(
