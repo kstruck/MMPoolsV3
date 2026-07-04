@@ -14,11 +14,12 @@ interface NFLPlayoffsLandingProps {
     isLoggedIn: boolean;
 }
 
-/* Marketing landing page is navy chrome end-to-end — always dark in both themes. */
+/* Nav / hero / footer stay navy chrome in both themes; the content sections
+   between them flip cream <-> navy via CSS-var surfaces (bg-page/surface/card). */
 
 export const NFLPlayoffsLanding: React.FC<NFLPlayoffsLandingProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool }) => {
     return (
-        <div className="min-h-screen bg-navy-950 text-white font-body">
+        <div className="min-h-screen bg-page text-[color:var(--text)] font-body">
             <Header
                 user={user || null}
                 isManager={isManager}
@@ -27,8 +28,8 @@ export const NFLPlayoffsLanding: React.FC<NFLPlayoffsLandingProps> = ({ user, is
                 onCreatePool={onCreatePool}
             />
 
-            {/* Hero Section */}
-            <section className="relative overflow-hidden pt-12 md:pt-20 pb-20 md:pb-32">
+            {/* Hero Section — navy chrome (always dark) */}
+            <section className="relative overflow-hidden bg-navy-950 text-white pt-12 md:pt-20 pb-20 md:pb-32">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none">
                     <div className="absolute top-20 right-0 w-[500px] h-[500px] rounded-full blur-[120px] bg-brandred-600/15"></div>
                     <div className="absolute bottom-0 left-0 w-[500px] h-[500px] rounded-full blur-[120px] bg-navy-600/25"></div>
@@ -51,11 +52,11 @@ export const NFLPlayoffsLanding: React.FC<NFLPlayoffsLandingProps> = ({ user, is
                 </div>
             </section>
 
-            {/* Features Grid */}
-            <section id="features" className="py-24 border-y border-[rgba(230,206,150,0.16)] bg-navy-900/60">
+            {/* Features Grid — flips */}
+            <section id="features" className="py-24 border-y border-line bg-surface">
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="text-center mb-16">
-                        <h2 className="font-display font-extrabold uppercase text-3xl md:text-4xl leading-[0.95] text-white mb-4">Why Host With Us?</h2>
+                        <h2 className="font-display font-extrabold uppercase text-3xl md:text-4xl leading-[0.95] text-[color:var(--text)] mb-4">Why Host With Us?</h2>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
@@ -65,12 +66,12 @@ export const NFLPlayoffsLanding: React.FC<NFLPlayoffsLandingProps> = ({ user, is
                             { icon: CheckCircle2, title: "Custom Rules", desc: "Set your own scoring system, payouts, and rules for every playoff game." },
                             { icon: Heart, title: "Charity Focus", desc: "Built-in tools to allocate a portion of the pot directly to a chosen charity." }
                         ].map((feature, i) => (
-                            <div key={i} className="p-8 rounded-2xl bg-navy-950 border border-[rgba(230,206,150,0.16)] transition-colors group flex flex-col h-full hover:border-gold-500/50">
+                            <div key={i} className="p-8 rounded-2xl bg-card border border-line transition-colors group flex flex-col h-full hover:border-gold-500/50">
                                 <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 bg-gold-500/15 border border-gold-500/25">
-                                    <feature.icon size={28} className="text-gold-400" />
+                                    <feature.icon size={28} className="text-gold-600 dark:text-gold-400" />
                                 </div>
-                                <h3 className="font-display font-bold uppercase text-xl text-white mb-3">{feature.title}</h3>
-                                <p className="font-body text-[#9FB0CC] leading-relaxed flex-grow">{feature.desc}</p>
+                                <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-3">{feature.title}</h3>
+                                <p className="font-body text-muted leading-relaxed flex-grow">{feature.desc}</p>
                             </div>
                         ))}
                     </div>
