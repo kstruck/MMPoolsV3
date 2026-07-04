@@ -65,7 +65,7 @@ export const InviteByEmail: React.FC<InviteByEmailProps> = ({ poolId }) => {
         <div>
             <label
                 htmlFor={`invite-emails-${poolId}`}
-                className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5"
+                className="text-[12px] font-display font-bold text-[color:var(--text)] uppercase tracking-[0.08em] mb-2 flex items-center gap-1.5"
             >
                 <Mail size={12} /> Invite by Email
             </label>
@@ -76,7 +76,7 @@ export const InviteByEmail: React.FC<InviteByEmailProps> = ({ poolId }) => {
                 placeholder="Paste emails, separated by commas or new lines"
                 rows={3}
                 disabled={isSending}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y disabled:opacity-60"
+                className="w-full rounded-md border-[1.5px] border-line bg-page px-3 py-2.5 font-body text-sm text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none resize-y disabled:opacity-60"
             />
             <input
                 type="text"
@@ -85,12 +85,12 @@ export const InviteByEmail: React.FC<InviteByEmailProps> = ({ poolId }) => {
                 placeholder="Add a personal note (optional)"
                 disabled={isSending}
                 maxLength={MAX_NOTE_LENGTH}
-                className="w-full mt-2 min-h-[44px] bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+                className="w-full mt-2 min-h-[44px] rounded-md border-[1.5px] border-line bg-page px-3 py-2.5 font-body text-sm text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none disabled:opacity-60"
             />
             <button
                 onClick={handleSend}
                 disabled={count === 0 || overLimit || isSending}
-                className="w-full mt-2 min-h-[44px] px-4 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all bg-indigo-600 hover:bg-indigo-500 text-white disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed"
+                className="w-full mt-2 min-h-[44px] px-4 py-2.5 rounded-md text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-all duration-150 bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)] disabled:bg-cream disabled:text-faint disabled:shadow-none disabled:cursor-not-allowed"
             >
                 <Send size={15} />
                 {isSending
@@ -100,7 +100,7 @@ export const InviteByEmail: React.FC<InviteByEmailProps> = ({ poolId }) => {
                         : `Send ${count} ${count === 1 ? 'invite' : 'invites'}`}
             </button>
             {overLimit && (
-                <p className="text-xs text-rose-400 mt-2">
+                <p className="text-xs text-brandred-600 mt-2">
                     Max {MAX_EMAILS} addresses per batch — remove {count - MAX_EMAILS} to continue.
                 </p>
             )}

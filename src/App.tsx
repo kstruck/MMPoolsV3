@@ -52,13 +52,13 @@ const TournamentSimulator = React.lazy(() => import('./components/TournamentSimu
 import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
-import { isSuperAdmin } from './utils/auth';
+import { isSuperAdmin, canAccessPoolCreation } from './utils/auth';
 import { logger } from './utils/logger';
 
 // Loading spinner for lazy-loaded routes
 const RouteLoader = () => (
-  <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-    <Loader className="animate-spin text-indigo-500 w-8 h-8" />
+  <div className="min-h-screen bg-page flex items-center justify-center">
+    <Loader className="animate-spin text-gold-500 w-8 h-8" />
   </div>
 );
 
@@ -195,7 +195,7 @@ const App: React.FC = () => {
   const isAdmin = isSuperAdmin(user);
 
   if (isAuthLoading) {
-    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-100"><Loader className="animate-spin text-indigo-500" /></div>;
+    return <div className="min-h-screen bg-page flex items-center justify-center text-[color:var(--text)]"><Loader className="animate-spin text-gold-500" /></div>;
   }
 
   return (
@@ -341,7 +341,7 @@ const App: React.FC = () => {
 
           <Route path="/super-admin" element={
             isAdmin ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+              <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-brandred-600 selection:text-white flex flex-col">
                 <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <SuperAdmin />
                 <Footer />
@@ -354,9 +354,9 @@ const App: React.FC = () => {
             <TournamentSimulator user={user} />
           } />
 
-          {/* Creation Wizards */}
+          {/* Creation Wizards — gated by POOL_CREATION_ENABLED (super admins bypass) */}
           <Route path="/create-pool" element={
-            user ? (
+            user && canAccessPoolCreation(user) ? (
               <CreatePoolSelection
                 user={user}
                 isManager={false}
@@ -371,8 +371,8 @@ const App: React.FC = () => {
             ) : <Navigate to="/" replace />
           } />
           <Route path="/bracket-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />
@@ -380,8 +380,8 @@ const App: React.FC = () => {
             ) : <Navigate to="/" replace />
           } />
           <Route path="/playoff-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />
@@ -389,8 +389,8 @@ const App: React.FC = () => {
             ) : <Navigate to="/" replace />
           } />
           <Route path="/props-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />
@@ -399,8 +399,8 @@ const App: React.FC = () => {
           } />
 
           <Route path="/grid-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
                 <Footer />
@@ -409,8 +409,8 @@ const App: React.FC = () => {
           } />
 
           <Route path="/nfl-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <NFLPoolWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
                 <Footer />

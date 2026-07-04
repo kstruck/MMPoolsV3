@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { RefreshCw, Calendar, CheckCircle } from 'lucide-react';
 import type { GameState } from '../types';
 import { getTeamLogo } from '../constants';
+import { Button } from './ui';
 
 interface ESPNCompetitor {
     homeAway: string;
@@ -131,13 +132,13 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
 
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="bg-card border border-line rounded-xl p-6 shadow-card">
 
                 {/* Header Section with "Find Game" Button */}
                 <div className="flex justify-between items-start mb-6">
                     <div>
-                        <h3 className="text-xl font-bold text-white mb-2">Game Details</h3>
-                        <p className="text-slate-400 text-sm">Select a game to auto-fill details, or enter manually.</p>
+                        <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Game Details</h3>
+                        <p className="text-muted font-body text-sm">Select a game to auto-fill details, or enter manually.</p>
                     </div>
                     <button
                         onClick={() => {
@@ -151,7 +152,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                 setWeek('1');
                             }
                         }}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${showSchedule ? 'bg-slate-800 text-slate-400' : 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:scale-105'}`}
+                        className={`px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex items-center gap-2 ${showSchedule ? 'bg-surface text-muted border border-line' : 'bg-brandred-600 text-white shadow-red-cta hover:bg-brandred-500 hover:-translate-y-px'}`}
                     >
                         <Calendar size={16} />
                         {showSchedule ? 'Hide Finder' : 'Find Game'}
@@ -160,12 +161,12 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
 
                 {/* GAME FINDER UI */}
                 {showSchedule && (
-                    <div className="mb-8 bg-slate-950 border border-slate-700 rounded-xl p-4 animate-in fade-in">
+                    <div className="mb-8 bg-surface border border-line rounded-xl p-4 animate-in fade-in">
                         <div className="flex flex-wrap items-center gap-2 mb-4">
                             <select
                                 value={gameState.league || 'nfl'}
                                 onChange={(e) => updateConfig({ league: e.target.value as 'nfl' | 'college' })}
-                                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm font-bold"
+                                className="rounded-md border-[1.5px] border-line bg-page px-2 py-1 font-body text-sm font-bold text-[color:var(--text)] transition-colors focus:border-navy-600 focus:outline-none cursor-pointer"
                             >
                                 <option value="nfl">NFL</option>
                                 <option value="college">College</option>
@@ -178,15 +179,15 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                     if (e.target.value === '2') setWeek(currentEstimatedWeek.toString());
                                     else setWeek('1');
                                 }}
-                                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                                className="rounded-md border-[1.5px] border-line bg-page px-2 py-1 font-body text-sm text-[color:var(--text)] transition-colors focus:border-navy-600 focus:outline-none cursor-pointer"
                             >
                                 <option value="1" disabled>Preseason</option>
                                 <option value="2" disabled>Regular</option>
                                 <option value="3">Postseason</option>
                             </select>
 
-                            <span className="text-slate-500 text-sm">Week</span>
-                            <select value={week} onChange={(e) => setWeek(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm">
+                            <span className="text-muted font-body text-sm">Week</span>
+                            <select value={week} onChange={(e) => setWeek(e.target.value)} className="rounded-md border-[1.5px] border-line bg-page px-2 py-1 font-body text-sm text-[color:var(--text)] transition-colors focus:border-navy-600 focus:outline-none cursor-pointer">
                                 {seasonType === '2' ? (
                                     Array.from({ length: 18 }).map((_, i) => {
                                         const w = i + 1;
@@ -210,7 +211,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                 <select
                                     value={cfbConference}
                                     onChange={(e) => setCfbConference(e.target.value)}
-                                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm max-w-[120px]"
+                                    className="rounded-md border-[1.5px] border-line bg-page px-2 py-1 font-body text-sm text-[color:var(--text)] transition-colors focus:border-navy-600 focus:outline-none cursor-pointer max-w-[120px]"
                                 >
                                     {CFB_CONFERENCES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
@@ -219,7 +220,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                             <button
                                 onClick={fetchSchedule}
                                 disabled={isLoadingSchedule}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-sm font-bold ml-auto flex items-center gap-2"
+                                className="bg-brandred-600 hover:bg-brandred-500 text-white px-3 py-1 rounded-[8px] text-sm font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 ml-auto flex items-center gap-2"
                             >
                                 {isLoadingSchedule ? 'Loading...' : <><RefreshCw size={14} /> Search</>}
                             </button>
@@ -228,7 +229,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                         {/* Results List */}
                         <div className="max-h-60 overflow-y-auto space-y-1 custom-scrollbar pr-1">
                             {scheduleGames.length === 0 && !isLoadingSchedule && (
-                                <div className="text-slate-500 text-sm text-center py-4">No future games found.</div>
+                                <div className="text-muted font-body text-sm text-center py-4">No future games found.</div>
                             )}
                             {scheduleGames.map((game) => {
                                 const comp = game.competitions[0];
@@ -237,20 +238,20 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                 if (!home || !away) return null;
                                 const dateStr = new Date(game.date).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                                 return (
-                                    <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-slate-800 cursor-pointer border border-transparent hover:border-indigo-500/30 group transition-all">
+                                    <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-card cursor-pointer border border-transparent hover:border-navy-600/30 group transition-all">
                                         <div className="flex items-center gap-3">
-                                            <span className="text-xs text-slate-500 w-28">{dateStr}</span>
+                                            <span className="text-xs text-muted num w-28">{dateStr}</span>
                                             <div className="flex items-center gap-2">
                                                 <img src={away.logo} className="w-5 h-5 object-contain" alt="" />
-                                                <span className="text-sm text-slate-300 font-bold">{away.abbreviation}</span>
+                                                <span className="text-sm text-[color:var(--text)] font-display font-bold">{away.abbreviation}</span>
                                             </div>
-                                            <span className="text-xs text-slate-600">@</span>
+                                            <span className="text-xs text-faint">@</span>
                                             <div className="flex items-center gap-2">
                                                 <img src={home.logo} className="w-5 h-5 object-contain" alt="" />
-                                                <span className="text-sm text-slate-300 font-bold">{home.abbreviation}</span>
+                                                <span className="text-sm text-[color:var(--text)] font-display font-bold">{home.abbreviation}</span>
                                             </div>
                                         </div>
-                                        <span className="text-xs text-indigo-400 opacity-0 group-hover:opacity-100 font-bold transition-opacity">Select</span>
+                                        <span className="text-xs text-gold-600 opacity-0 group-hover:opacity-100 font-display font-bold uppercase tracking-[0.05em] transition-opacity">Select</span>
                                     </div>
                                 );
                             })}
@@ -264,25 +265,25 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                     {(homeLogo || awayLogo) && (
                         <div className="flex justify-center items-center gap-8 py-4 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
                             {awayLogo && <img src={awayLogo} className="w-16 h-16 object-contain" alt="Away" />}
-                            <span className="text-2xl font-black text-slate-700">VS</span>
+                            <span className="text-2xl font-display font-extrabold uppercase text-faint">VS</span>
                             {homeLogo && <img src={homeLogo} className="w-16 h-16 object-contain" alt="Home" />}
                         </div>
                     )}
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label>
+                        <label className="block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Pool Name</label>
                         <input
                             type="text"
                             value={gameState.name || ''}
                             onChange={(e) => updateConfig({ name: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-lg"
+                            className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-lg font-bold text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                             placeholder="e.g. Super Bowl LIX Props"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lock Time (Game Start)</label>
-                        <p className="text-xs text-slate-500 mb-2">Players cannot submit or edit cards after this time.</p>
+                        <label className="block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Lock Time (Game Start)</label>
+                        <p className="text-xs font-body text-faint mb-2">Players cannot submit or edit cards after this time.</p>
                         <input
                             type="datetime-local"
                             value={(() => {
@@ -299,10 +300,10 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                 const date = new Date(val);
                                 updateConfig({ lockDate: date.getTime() });
                             }}
-                            className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                            className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] num transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                         />
                         {gameState.lockDate && (
-                            <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
+                            <p className="text-[10px] text-[#0F7B4A] font-body mt-2 flex items-center gap-1">
                                 <CheckCircle size={10} /> Auto-Lock enabled for this time.
                             </p>
                         )}
@@ -310,13 +311,13 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                 </div>
 
                 <div className="pt-8 flex justify-end">
-                    <button
+                    <Button
+                        variant="primary"
                         onClick={onNext}
                         disabled={!gameState.name || !gameState.lockDate}
-                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105"
                     >
                         Next: Grid Settings
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

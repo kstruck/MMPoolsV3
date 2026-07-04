@@ -49,37 +49,41 @@ export const PoolTimer: React.FC<PoolTimerProps> = ({ targetDate, gameStatus, is
     }, [targetDate, gameStatus]);
 
     if (gameStatus === 'post' || gameStatus === 'final') {
-        return <span className="text-blue-400 font-black uppercase tracking-widest text-lg">GAME FINAL</span>;
+        return <span className="text-gold-400 font-display font-extrabold uppercase tracking-widest text-lg">GAME FINAL</span>;
     }
 
     if (gameStatus === 'in') {
-        return <span className="text-rose-500 font-black uppercase tracking-widest text-lg animate-[pulse_2s_infinite]">LIVE</span>;
+        return (
+            <span className="text-brandred-500 font-display font-extrabold uppercase tracking-widest text-lg inline-flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-brandred-500 animate-live-pulse"></span>LIVE
+            </span>
+        );
     }
 
     if (isLocked) {
-        return <span className="text-amber-500 font-black uppercase tracking-widest text-lg">LOCKED</span>;
+        return <span className="text-gold-500 font-display font-extrabold uppercase tracking-widest text-lg">LOCKED</span>;
     }
 
     if (!targetDate || !timeLeft) {
-        return <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">Waiting for Schedule</span>;
+        return <span className="text-[#9FB0CC] font-display font-bold uppercase tracking-wider text-xs">Waiting for Schedule</span>;
     }
 
     // Determine color based on time remaining
     const totalHours = timeLeft.d * 24 + timeLeft.h;
-    let color = 'text-emerald-400';
+    let color = 'text-gold-400';
     if (totalHours === 0 && timeLeft.m < 10) {
-        color = 'text-rose-500 animate-pulse';
+        color = 'text-brandred-500 animate-pulse';
     } else if (totalHours === 0) {
-        color = 'text-amber-500';
+        color = 'text-brandred-500';
     }
 
     return (
-        <div className={`font-mono font-bold text-xl ${color}`}>
+        <div className={`font-display font-bold text-xl num ${color}`}>
             {timeLeft.d > 0 && <span>{timeLeft.d}d </span>}
             <span>{timeLeft.h.toString().padStart(2, '0')}h </span>
             <span>{timeLeft.m.toString().padStart(2, '0')}m </span>
             <span>{timeLeft.s.toString().padStart(2, '0')}s</span>
-            <p className="text-[10px] text-slate-500 font-sans uppercase tracking-widest mt-1">
+            <p className="text-[10px] text-[#9FB0CC] font-body font-bold uppercase tracking-widest mt-1">
                 Kickoff · {formatDeadline(new Date(targetDate).getTime())}
             </p>
         </div>

@@ -4,6 +4,7 @@ import { X, Lock, Unlock, Save, Loader } from 'lucide-react';
 import type { PlayoffPool } from '../../types';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { Button, Input, FieldLabel } from '../ui';
 
 interface PlayoffSettingsModalProps {
     isOpen: boolean;
@@ -58,21 +59,21 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
     };
 
     return (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-navy-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
             <div
                 ref={dialogRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="playoff-settings-title"
                 tabIndex={-1}
-                className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-xl shadow-2xl flex flex-col max-h-[90vh] outline-none"
+                className="bg-card border border-line w-full max-w-lg rounded-xl shadow-panel flex flex-col max-h-[90vh] outline-none"
             >
                 {/* Header */}
-                <div className="flex justify-between items-center p-6 border-b border-slate-800">
-                    <h2 id="playoff-settings-title" className="text-xl font-bold text-white flex items-center gap-2">
+                <div className="flex justify-between items-center p-6 border-b border-line">
+                    <h2 id="playoff-settings-title" className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
                         <SettingsIcon /> Pool Settings
                     </h2>
-                    <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white transition-colors">
+                    <button onClick={onClose} aria-label="Close" className="text-muted hover:text-[color:var(--text)] transition-colors">
                         <X size={24} />
                     </button>
                 </div>
@@ -81,40 +82,37 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
                 <div className="p-6 space-y-6 overflow-y-auto">
 
                     {/* Pool Name */}
-                    <div>
-                        <label className="block text-slate-400 text-sm font-bold uppercase mb-2">Pool Name</label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                        />
-                    </div>
+                    <Input
+                        label="Pool Name"
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                    />
 
                     {/* Locking Status */}
-                    <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
-                        <label className="block text-slate-400 text-sm font-bold uppercase mb-3">Pool Status</label>
+                    <div className="bg-surface p-4 rounded-lg border border-line">
+                        <FieldLabel>Pool Status</FieldLabel>
                         <div className="flex gap-4">
                             <button
                                 onClick={() => setIsLocked(false)}
-                                className={`flex-1 py-3 px-4 rounded-lg font-bold border transition-all flex items-center justify-center gap-2
+                                className={`flex-1 py-3 px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] border transition-all flex items-center justify-center gap-2
                                     ${!isLocked
-                                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
-                                        : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-slate-500'}`}
+                                        ? 'bg-[#E4F5EC] border-[#0F7B4A] text-[#0F7B4A]'
+                                        : 'bg-page border-line text-muted hover:border-navy-600'}`}
                             >
                                 <Unlock size={18} /> Open
                             </button>
                             <button
                                 onClick={() => setIsLocked(true)}
-                                className={`flex-1 py-3 px-4 rounded-lg font-bold border transition-all flex items-center justify-center gap-2
+                                className={`flex-1 py-3 px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] border transition-all flex items-center justify-center gap-2
                                     ${isLocked
-                                        ? 'bg-rose-500/10 border-rose-500 text-rose-400'
-                                        : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-slate-500'}`}
+                                        ? 'bg-cream border-line text-muted'
+                                        : 'bg-page border-line text-muted hover:border-navy-600'}`}
                             >
                                 <Lock size={18} /> Locked
                             </button>
                         </div>
-                        <p className="text-xs text-slate-500 mt-3">
+                        <p className="text-xs font-body text-muted mt-3">
                             {isLocked
                                 ? "Pool is currently LOCKED. Players cannot submit or edit entries."
                                 : "Pool is OPEN. Players can submit and edit their entries."}
@@ -125,12 +123,12 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
 
                     {/* Feedback */}
                     {error && (
-                        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-sm font-bold text-center">
+                        <div className="p-4 bg-[#FCEEED] border border-brandred-500/30 text-brandred-600 rounded-lg text-sm font-body font-bold text-center">
                             {error}
                         </div>
                     )}
                     {success && (
-                        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-sm font-bold text-center">
+                        <div className="p-4 bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A] rounded-lg text-sm font-body font-bold text-center">
                             Settings Saved Successfully!
                         </div>
                     )}
@@ -138,21 +136,14 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-slate-800 bg-slate-900/50 rounded-b-xl flex justify-end gap-3">
-                    <button
-                        onClick={onClose}
-                        className="px-6 py-2 text-slate-400 hover:text-white font-bold transition-colors"
-                    >
+                <div className="p-6 border-t border-line bg-surface rounded-b-xl flex justify-end gap-3">
+                    <Button variant="ghost" size="sm" onClick={onClose}>
                         Cancel
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-indigo-900/20 flex items-center gap-2 disabled:opacity-50 transition-all"
-                    >
+                    </Button>
+                    <Button variant="primary" size="sm" onClick={handleSave} disabled={isSaving}>
                         {isSaving ? <Loader className="animate-spin" size={18} /> : <Save size={18} />}
                         Save Changes
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

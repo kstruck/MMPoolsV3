@@ -7,9 +7,10 @@ import {
   Zap, 
   Percent, 
   Lock, 
-  Settings, 
-  ArrowLeft, 
-  ChevronRight 
+  Settings,
+  ArrowLeft,
+  ChevronRight,
+  Star
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -25,25 +26,9 @@ import {
   Radar, 
   PolarGrid, 
   PolarAngleAxis, 
-  PolarRadiusAxis 
+  PolarRadiusAxis
 } from 'recharts';
-
-// Brand Design Tokens
-const BRAND = {
-  navy: '#0A192F',
-  darkBlue: '#0E1E38',
-  slateDark: '#122543',
-  orange: '#FF6600',
-  orangeGlow: 'rgba(255, 102, 0, 0.15)',
-  emerald: '#10B981',
-  emeraldGlow: 'rgba(16, 185, 129, 0.15)',
-  blue: '#3B82F6',
-  blueGlow: 'rgba(59, 130, 246, 0.15)',
-  amber: '#FBBF24',
-  amberGlow: 'rgba(251, 191, 36, 0.15)',
-  white: '#FFFFFF',
-  lightGray: '#E5E7EB',
-};
+import { Badge, Button, RankChip, YouPill } from '../ui';
 
 interface NFLUserBentoDashboardProps {
   pool: Pool;
@@ -271,9 +256,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
     const trendType = Math.abs(hash) % 3;
-    if (trendType === 0) return { type: 'up', color: '#10B981' };
-    if (trendType === 1) return { type: 'down', color: '#FF6600' };
-    return { type: 'updown', color: '#3B82F6' };
+    if (trendType === 0) return { type: 'up', color: '#C9A867' };
+    if (trendType === 1) return { type: 'down', color: '#DA463F' };
+    return { type: 'updown', color: 'var(--faint)' };
   };
 
   const weeklyHistoryData = useMemo(() => {
@@ -355,8 +340,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     }
     
     return [
-      { name: 'Correct Picks', value: correct, color: '#10B981' },
-      { name: 'Incorrect Picks', value: incorrect, color: '#EF4444' }
+      { name: 'Correct Picks', value: correct, color: '#C9A867' },
+      { name: 'Incorrect Picks', value: incorrect, color: '#C4342E' }
     ];
   }, [myEntry, _pool.type, selectedWeek]);
 
@@ -418,9 +403,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   const userStats = useMemo(() => {
     if (!myEntry) {
       return [
-        { title: 'Weekly Pick', value: 'None', color: 'text-slate-400' },
-        { title: 'Season Total', value: '0', color: 'text-indigo-400' },
-        { title: 'Your Rank', value: 'N/A', color: 'text-orange-500' }
+        { title: 'Weekly Pick', value: 'None', color: 'text-muted' },
+        { title: 'Season Total', value: '0', color: 'text-navy-700 dark:text-gold-400' },
+        { title: 'Your Rank', value: 'N/A', color: 'text-gold-600 dark:text-gold-400' }
       ];
     }
 
@@ -445,9 +430,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     }
 
     return [
-      { title: 'Weekly Pick', value: weeklyVal, color: 'text-emerald-400' },
-      { title: seasonTitle, value: seasonVal, color: 'text-indigo-400' },
-      { title: 'Your Rank', value: userRank, color: 'text-orange-500' }
+      { title: 'Weekly Pick', value: weeklyVal, color: 'text-gold-600 dark:text-gold-400' },
+      { title: seasonTitle, value: seasonVal, color: 'text-navy-700 dark:text-gold-400' },
+      { title: 'Your Rank', value: userRank, color: 'text-gold-600 dark:text-gold-400' }
     ];
   }, [myEntry, _pool.type, selectedWeek, castPool.settings?.maxStrikes, userRank]);
 
@@ -475,22 +460,22 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     <div className="grid grid-cols-1 xl:grid-cols-5 gap-8 items-stretch">
       
       {/* 1. Sleek Left Navigation Sidebar (Bento Grid Block) */}
-      <div className="xl:col-span-1 flex flex-col justify-between bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80">
+      <div className="xl:col-span-1 flex flex-col justify-between bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150">
         <div className="space-y-8">
           {/* User Profile Card */}
-          <div className="flex items-center gap-4 bg-slate-950/60 p-4 border border-slate-800/50 rounded-2xl">
+          <div className="flex items-center gap-4 bg-page p-4 border border-line rounded-lg">
             <div className="relative">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-indigo-600 flex items-center justify-center font-black text-white text-lg shadow-lg">
+              <div className="w-12 h-12 rounded-xl bg-navy-800 flex items-center justify-center font-display font-bold uppercase text-white text-lg shadow-card">
                 {user?.name?.substring(0, 2).toUpperCase() || 'GS'}
               </div>
-              <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-slate-900 animate-pulse"></span>
+              <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-gold-500 border-2 border-[color:var(--page)] animate-live-pulse"></span>
             </div>
             <div className="flex-1 min-w-0">
-              <h4 className="font-extrabold text-white text-sm tracking-wide leading-tight uppercase break-words" title={user?.name || 'Guest Participant'}>
+              <h4 className="font-display font-bold text-[color:var(--text)] text-sm tracking-[0.05em] leading-tight uppercase break-words" title={user?.name || 'Guest Participant'}>
                 {user?.name || 'Guest'}
               </h4>
-              <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mt-0.5">
-                Rank <span style={{ color: BRAND.orange }}>{userRank}</span>
+              <p className="text-muted text-[10px] uppercase font-display font-bold tracking-[0.08em] mt-0.5">
+                Rank <span className="text-gold-600 dark:text-gold-400 num">{userRank}</span>
               </p>
             </div>
           </div>
@@ -510,13 +495,13 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                   setSidebarActive(item.id);
                   if (item.tab) onSelectTab(item.tab);
                 }}
-                className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 ${
+                className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl font-display font-bold uppercase text-[12px] tracking-[0.08em] transition-all duration-150 ${
                   sidebarActive === item.id
-                    ? 'bg-gradient-to-r from-orange-500/10 to-indigo-600/10 text-white border-l-4 border-orange-500 shadow-md'
-                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
+                    ? 'bg-gold-400/10 text-[color:var(--text)] border-l-4 border-gold-500 shadow-card'
+                    : 'text-muted hover:text-[color:var(--text)] hover:bg-page'
                 }`}
               >
-                <item.icon size={16} className={sidebarActive === item.id ? 'text-orange-500' : 'text-slate-500'} />
+                <item.icon size={16} className={sidebarActive === item.id ? 'text-gold-600 dark:text-gold-400' : 'text-muted'} />
                 {item.label}
               </button>
             ))}
@@ -524,21 +509,25 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         </div>
 
         {/* Action Panel / Logo */}
-        <div className="mt-8 pt-6 border-t border-slate-800/80 flex flex-col gap-2">
+        <div className="mt-8 pt-6 border-t border-line flex flex-col gap-2">
           {isManager && (
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => onSelectTab('manager')}
-              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-lg hover:scale-[1.02]"
+              className="w-full"
             >
               <Settings size={14} /> Commissioner
-            </button>
+            </Button>
           )}
-          <button 
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onBack}
-            className="w-full flex items-center justify-center gap-2 bg-slate-950 border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-white font-extrabold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all"
+            className="w-full"
           >
             <ArrowLeft size={14} /> Leave Pool
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -547,20 +536,19 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         
         {/* CARD A: LIVE WEEKLY PICK'EM (Top Left) */}
         <div 
-          className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
-          style={{ boxShadow: `inset 0 0 20px rgba(59, 130, 246, 0.05), 0 10px 40px rgba(0,0,0,0.4)` }}
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
+                <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">
                   {_pool.type === 'NFL_PICKEM' ? 'Live Weekly Pick\'em' : _pool.type === 'NFL_SURVIVOR' ? 'Weekly Survivor Match' : 'Margin Matchup'}
                 </h3>
-                <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Week {selectedWeek} Games</p>
+                <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">Week {selectedWeek} Games</p>
               </div>
               <button 
                 onClick={() => onSelectTab('picks')}
-                className="text-xs font-black uppercase text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+                className="font-display font-bold uppercase text-[12px] tracking-[0.05em] text-navy-700 dark:text-gold-400 hover:text-navy-600 dark:hover:text-gold-300 flex items-center gap-1 transition-colors duration-150"
               >
                 Upcoming <ChevronRight size={14} />
               </button>
@@ -569,18 +557,14 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             {focusGame ? (
               <>
                 {/* Live Match Helmets/Logos & Score Panel */}
-                <div className="bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800/80 p-5 rounded-2xl mb-5 flex justify-between items-center relative overflow-hidden">
+                <div className="bg-page border border-line p-5 rounded-lg mb-5 flex justify-between items-center relative overflow-hidden">
                   <div className="absolute top-2 left-2 z-10">
                     {focusGame.status === 'IN_PROGRESS' ? (
-                      <span className="flex items-center gap-1.5 bg-red-500/25 border border-red-500/30 px-2 py-0.5 rounded-full text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse">
-                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping"></span> Live
-                      </span>
+                      <Badge status="live" />
                     ) : focusGame.status === 'FINAL' ? (
-                      <span className="bg-slate-800/80 border border-slate-750 px-2 py-0.5 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                        Final
-                      </span>
+                      <Badge status="locked">Final</Badge>
                     ) : (
-                      <span className="bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full text-[9px] font-black text-amber-400 uppercase tracking-widest">
+                      <span className="bg-gold-400/10 border border-gold-500/40 px-2 py-0.5 rounded-full text-[9px] font-display font-bold text-gold-600 dark:text-gold-400 uppercase tracking-[0.08em]">
                         Scheduled
                       </span>
                     )}
@@ -589,7 +573,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                   {/* Logo Team 1 (Away) */}
                   <div className="flex flex-col items-center gap-1 select-none z-10">
                     {!awayLogoErr ? (
-                      <div className="w-20 h-20 flex items-center justify-center bg-slate-900/60 rounded-2xl p-2 border border-slate-800 filter drop-shadow-[0_0_12px_rgba(59,130,246,0.2)] hover:scale-105 transition-transform duration-300">
+                      <div className="w-20 h-20 flex items-center justify-center bg-card rounded-lg p-2 border border-line shadow-card hover:scale-105 transition-transform duration-150">
                         <img 
                           src={getTeamLogoUrl(focusGame.awayTeam.abbreviation, focusGame.awayTeam.name)} 
                           alt={focusGame.awayTeam.name} 
@@ -601,29 +585,29 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                       <FootballHelmet 
                         primaryColor={getTeamColors(focusGame.awayTeam.abbreviation || focusGame.awayTeam.name).primary} 
                         secondaryColor={getTeamColors(focusGame.awayTeam.abbreviation || focusGame.awayTeam.name).secondary} 
-                        className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(59,130,246,0.3)]" 
+                        className="w-20 h-20"
                       />
                     )}
-                    <span className="text-xs font-black text-white mt-1">
+                    <span className="text-xs font-display font-bold uppercase text-[color:var(--text)] mt-1 num">
                       {focusGame.awayTeam.abbreviation} {focusGame.scores?.away ?? 0}
                     </span>
-                    <span className="text-[9px] font-bold text-slate-500">
-                      {myPick === focusGame.awayTeam.name || myPick === focusGame.awayTeam.abbreviation ? '★ Picked' : ''}
+                    <span className="text-[9px] font-display font-bold uppercase tracking-[0.08em] text-gold-600 dark:text-gold-400 inline-flex items-center gap-0.5">
+                      {myPick === focusGame.awayTeam.name || myPick === focusGame.awayTeam.abbreviation ? (<><Star size={9} className="fill-current" /> Picked</>) : ''}
                     </span>
                   </div>
 
                   {/* Matchup Divider */}
                   <div className="text-center z-10">
-                    <span className="text-[10px] font-bold text-slate-600 block uppercase mb-1">
+                    <span className="text-[10px] font-display font-bold text-faint block uppercase tracking-[0.08em] mb-1 num">
                       {focusGame.status === 'IN_PROGRESS' ? (focusGame.clock || `Q${focusGame.period || 1}`) : focusGame.status === 'FINAL' ? 'FT' : 'Kickoff'}
                     </span>
-                    <span className="text-lg font-black text-slate-400">VS</span>
+                    <span className="text-lg font-display font-bold uppercase text-muted">VS</span>
                   </div>
 
                   {/* Logo Team 2 (Home) */}
                   <div className="flex flex-col items-center gap-1 select-none z-10">
                     {!homeLogoErr ? (
-                      <div className="w-20 h-20 flex items-center justify-center bg-slate-900/60 rounded-2xl p-2 border border-slate-800 filter drop-shadow-[0_0_12px_rgba(239,68,68,0.2)] hover:scale-105 transition-transform duration-300">
+                      <div className="w-20 h-20 flex items-center justify-center bg-card rounded-lg p-2 border border-line shadow-card hover:scale-105 transition-transform duration-150">
                         <img 
                           src={getTeamLogoUrl(focusGame.homeTeam.abbreviation, focusGame.homeTeam.name)} 
                           alt={focusGame.homeTeam.name} 
@@ -635,14 +619,14 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                       <FootballHelmet 
                         primaryColor={getTeamColors(focusGame.homeTeam.abbreviation || focusGame.homeTeam.name).primary} 
                         secondaryColor={getTeamColors(focusGame.homeTeam.abbreviation || focusGame.homeTeam.name).secondary} 
-                        className="w-20 h-20 filter drop-shadow-[0_0_12px_rgba(239,68,68,0.3)]" 
+                        className="w-20 h-20"
                       />
                     )}
-                    <span className="text-xs font-black text-white mt-1">
+                    <span className="text-xs font-display font-bold uppercase text-[color:var(--text)] mt-1 num">
                       {focusGame.homeTeam.abbreviation} {focusGame.scores?.home ?? 0}
                     </span>
-                    <span className="text-[9px] font-bold text-slate-500">
-                      {myPick === focusGame.homeTeam.name || myPick === focusGame.homeTeam.abbreviation ? '★ Picked' : ''}
+                    <span className="text-[9px] font-display font-bold uppercase tracking-[0.08em] text-gold-600 dark:text-gold-400 inline-flex items-center gap-0.5">
+                      {myPick === focusGame.homeTeam.name || myPick === focusGame.homeTeam.abbreviation ? (<><Star size={9} className="fill-current" /> Picked</>) : ''}
                     </span>
                   </div>
                 </div>
@@ -650,57 +634,57 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 {/* Live Match Stats / Win Probability Graph */}
                 <div className="grid grid-cols-2 gap-4">
                   {/* Win Probability Panel */}
-                  <div className="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between">
+                  <div className="bg-page border border-line p-3.5 rounded-xl flex flex-col justify-between">
                     <div>
-                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Win Probability</span>
-                      <span className="text-sm font-extrabold text-blue-400 leading-none">
+                      <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-0.5">Win Probability</span>
+                      <span className="text-sm font-display font-bold uppercase text-navy-700 dark:text-gold-400 leading-none num">
                         {focusGame.homeTeam.abbreviation} {liveWinProb}%
                       </span>
                     </div>
-                    <div className="relative h-12 w-full mt-2 overflow-hidden rounded-lg bg-slate-900 border border-slate-850">
+                    <div className="relative h-12 w-full mt-2 overflow-hidden rounded-lg bg-surface border border-line">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={winProbabilityHistory} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                           <defs>
                             <linearGradient id="colorProb" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.35}/>
-                              <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                              <stop offset="5%" stopColor="#C9A867" stopOpacity={0.35}/>
+                              <stop offset="95%" stopColor="#C9A867" stopOpacity={0}/>
                             </linearGradient>
                           </defs>
-                          <Area type="monotone" dataKey="probability" stroke="#3B82F6" strokeWidth={2} fillOpacity={1} fill="url(#colorProb)" />
+                          <Area type="monotone" dataKey="probability" stroke="#C9A867" strokeWidth={2} fillOpacity={1} fill="url(#colorProb)" />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
 
                   {/* Matchup Odds listings */}
-                  <div className="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between">
-                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Weekly Focus</span>
-                    <div className="space-y-1.5 text-xs font-bold text-slate-400">
+                  <div className="bg-page border border-line p-3.5 rounded-xl flex flex-col justify-between">
+                    <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-1">Weekly Focus</span>
+                    <div className="space-y-1.5 text-xs font-body font-bold text-muted">
                       <div className="flex justify-between">
                         <span>Picks Status:</span>
-                        <span className="text-white">{myPick ? 'Submitted' : 'Pending'}</span>
+                        <span className="text-[color:var(--text)]">{myPick ? 'Submitted' : 'Pending'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Pick Selection:</span>
-                        <span className="text-white">{myPick || 'None'}</span>
+                        <span className="text-[color:var(--text)]">{myPick || 'None'}</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 font-bold text-xs">
+              <div className="bg-page border border-line rounded-lg p-8 text-center text-muted font-body font-bold text-xs">
                 No active games scheduled for this week.
               </div>
             )}
           </div>
           
           {/* Locks Banner footer inside card */}
-          <div className="mt-5 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-            <span className="text-slate-500 font-bold uppercase flex items-center gap-1">
-              <Lock size={12} className="text-slate-600" /> Picks Deadline
+          <div className="mt-5 pt-4 border-t border-line flex justify-between items-center text-[10px]">
+            <span className="text-muted font-display font-bold uppercase tracking-[0.08em] flex items-center gap-1">
+              <Lock size={12} className="text-faint" /> Picks Deadline
             </span>
-            <span className="text-amber-400 font-extrabold uppercase animate-pulse">
+            <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] animate-pulse num">
               {_earliestGame ? new Date(_earliestGame.startTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : 'Kickoff'} Lock
             </span>
           </div>
@@ -708,20 +692,19 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
         {/* CARD B: SURVIVOR LEAGUE (Top Right) */}
         <div 
-          className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
-          style={{ boxShadow: `inset 0 0 20px rgba(16, 185, 129, 0.05), 0 10px 40px rgba(0,0,0,0.4)` }}
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Survivor Attrition</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">
+                <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Survivor Attrition</h3>
+                <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">
                   {survivalLeagueStats.alive} / {survivalLeagueStats.total} Players Alive
                 </p>
               </div>
               <button 
                 onClick={() => onSelectTab('standings')}
-                className="text-xs font-black uppercase text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors"
+                className="font-display font-bold uppercase text-[12px] tracking-[0.05em] text-navy-700 dark:text-gold-400 hover:text-navy-600 dark:hover:text-gold-300 flex items-center gap-1 transition-colors duration-150"
               >
                 View Grid <ChevronRight size={14} />
               </button>
@@ -733,38 +716,39 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 displayedMembers.map((member, i) => (
                   <div 
                     key={i} 
-                    className={`flex justify-between items-center p-3 rounded-2xl border transition-all ${
-                      member.highlight 
-                        ? 'bg-gradient-to-r from-emerald-500/10 to-indigo-600/10 border-emerald-500/40 shadow-md' 
-                        : 'bg-slate-950/60 border-slate-800'
+                    className={`flex justify-between items-center p-3 rounded-lg border transition-all duration-150 ${
+                      member.highlight
+                        ? 'bg-brandred-600/[0.07] border-brandred-600/30 shadow-card'
+                        : 'bg-page border-line'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center ${
-                        member.highlight ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-900 text-slate-400'
+                      <div className={`w-8 h-8 rounded-xl font-display font-bold text-xs flex items-center justify-center ${
+                        member.highlight ? 'bg-navy-800 text-white' : 'bg-surface text-muted'
                       }`}>
                         {member.avatar}
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-extrabold text-white uppercase">{member.name}</span>
-                          {member.check && <CheckCircle2 size={12} className="text-emerald-500" />}
+                          <span className="text-xs font-display font-bold text-[color:var(--text)] uppercase">{member.name}</span>
+                          {member.highlight && <YouPill />}
+                          {member.check && <CheckCircle2 size={12} className="text-gold-600 dark:text-gold-400" />}
                         </div>
-                        <span className="text-[9px] font-bold text-slate-500 uppercase">{member.week}</span>
+                        <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] num">{member.week}</span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-wider border ${
-                        member.status === 'ELIMINATED' 
-                          ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' 
-                          : 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-display font-bold uppercase tracking-[0.08em] border ${
+                        member.status === 'ELIMINATED'
+                          ? 'bg-brandred-600/10 border-brandred-600/30 text-brandred-600 dark:text-brandred-500'
+                          : 'bg-[#E4F5EC] text-[#0F7B4A] border-[#BEE7D0]'
                       }`}>
                         {member.status}
                       </span>
                       <div className="text-right">
-                        <span className="text-[9px] font-bold text-slate-500 block uppercase leading-none">Strikes</span>
-                        <span className={`text-xs font-black ${member.strikes > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
+                        <span className="text-[9px] font-display font-bold text-muted block uppercase tracking-[0.08em] leading-none">Strikes</span>
+                        <span className={`text-xs font-display font-bold num ${member.strikes > 0 ? 'text-gold-600 dark:text-gold-400' : 'text-muted'}`}>
                           {member.strikes}
                         </span>
                       </div>
@@ -772,38 +756,38 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                   </div>
                 ))
               ) : (
-                <div className="text-slate-500 text-xs text-center py-6 font-bold bg-slate-950/40 border border-slate-800 rounded-2xl">
+                <div className="text-muted font-body text-xs text-center py-6 font-bold bg-page border border-line rounded-lg">
                   No active entries.
                 </div>
               )}
             </div>
 
             {/* Attrition/Survival Chart */}
-            <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl relative">
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Attrition Trend Line</span>
+            <div className="bg-page border border-line p-4 rounded-lg relative">
+              <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">Attrition Trend Line</span>
               <div className="h-16 w-full relative">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={attritionHistoryData} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
                     <defs>
                       <linearGradient id="colorAlive" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.25}/>
-                        <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#C9A867" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="#C9A867" stopOpacity={0}/>
                       </linearGradient>
                       <linearGradient id="colorStrikes" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#FF6600" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#FF6600" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#DA463F" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#DA463F" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <Area type="monotone" dataKey="alive" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorAlive)" name="Players Alive" />
-                    <Area type="monotone" dataKey="strikes" stroke="#FF6600" strokeWidth={1.5} strokeDasharray="3,3" fillOpacity={1} fill="url(#colorStrikes)" name="Total Strikes" />
+                    <Area type="monotone" dataKey="alive" stroke="#C9A867" strokeWidth={2} fillOpacity={1} fill="url(#colorAlive)" name="Players Alive" />
+                    <Area type="monotone" dataKey="strikes" stroke="#DA463F" strokeWidth={1.5} strokeDasharray="3,3" fillOpacity={1} fill="url(#colorStrikes)" name="Total Strikes" />
                     <Tooltip 
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           return (
-                            <div className="bg-slate-950/90 border border-slate-800 p-2 rounded-xl text-[10px] font-black text-white shadow-xl">
-                              <p className="uppercase text-slate-400 mb-0.5">{payload[0].payload.week}</p>
-                              <p className="text-emerald-400">Alive: {payload[0].value}</p>
-                              {payload[1] && <p className="text-orange-400">Strikes: {payload[1].value}</p>}
+                            <div className="bg-card border border-line p-2 rounded-xl text-[10px] font-display font-bold text-[color:var(--text)] shadow-panel">
+                              <p className="uppercase text-muted mb-0.5 num">{payload[0].payload.week}</p>
+                              <p className="text-gold-600 dark:text-gold-400 num">Alive: {payload[0].value}</p>
+                              {payload[1] && <p className="text-brandred-600 dark:text-brandred-500 num">Strikes: {payload[1].value}</p>}
                             </div>
                           );
                         }
@@ -816,18 +800,18 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             </div>
           </div>
 
-          <div className="mt-5 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-            <span className="text-slate-500 font-bold uppercase">Survivor status</span>
-            <span className="text-emerald-400 font-black uppercase">
+          <div className="mt-5 pt-4 border-t border-line flex justify-between items-center text-[10px]">
+            <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Survivor status</span>
+            <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em]">
               {myEntry ? (
                 _pool.type === 'NFL_SURVIVOR' ? (
                   myEntry.status === 'ELIMINATED' ? (
-                    <span className="text-rose-500">Eliminated</span>
+                    <span className="text-brandred-600 dark:text-brandred-500">Eliminated</span>
                   ) : (
                     <span>You are Alive</span>
                   )
                 ) : (
-                  myEntry.paidStatus === 'PAID' ? 'Buy-in: Paid' : <span className="text-amber-500">Buy-in: Unpaid</span>
+                  myEntry.paidStatus === 'PAID' ? 'Buy-in: Paid' : <span className="text-brandred-600 dark:text-brandred-500">Buy-in: Unpaid</span>
                 )
               ) : 'No entry in this pool'}
             </span>
@@ -836,16 +820,15 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
         {/* CARD C: MARGIN POOL STATS (Bottom Left) */}
         <div 
-          className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
-          style={{ boxShadow: `inset 0 0 20px rgba(251, 191, 36, 0.05), 0 10px 40px rgba(0,0,0,0.4)` }}
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Margin Pool Stats</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Current Week Performance</p>
+                <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Margin Pool Stats</h3>
+                <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">Current Week Performance</p>
               </div>
-              <span className="bg-slate-950 border border-slate-800 px-3 py-1 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest">
+              <span className="bg-page border border-line px-3 py-1 rounded-full text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] num">
                 Week {selectedWeek}
               </span>
             </div>
@@ -853,11 +836,11 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             {/* Margin Pool Metric blocks */}
             <div className="grid grid-cols-3 gap-3 mb-5">
               {userStats.map((stat, i) => (
-                <div key={i} className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-2xl text-center">
-                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">
+                <div key={i} className="bg-page border border-line p-3 rounded-lg text-center">
+                  <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-0.5">
                     {stat.title}
                   </span>
-                  <span className={`text-xs sm:text-sm font-black ${stat.color} tracking-wide truncate block`}>
+                  <span className={`text-xs sm:text-sm font-display font-bold uppercase ${stat.color} tracking-wide truncate block num`}>
                     {stat.value}
                   </span>
                 </div>
@@ -865,8 +848,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             </div>
 
             {/* Weekly Margin Bar Chart using Recharts */}
-            <div className="bg-slate-950/60 border border-slate-800/80 p-4 rounded-2xl mb-5">
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3">Weekly Net History</span>
+            <div className="bg-page border border-line p-4 rounded-lg mb-5">
+              <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-3">Weekly Net History</span>
               <div className="h-16 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={weeklyHistoryData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
@@ -877,7 +860,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                         return (
                           <Cell 
                             key={`cell-${index}`} 
-                            fill={isSelected ? '#6366F1' : (isPositive ? '#10B981' : '#EF4444')} 
+                            fill={isSelected ? '#C9A867' : (isPositive ? '#24507F' : '#C4342E')}
                             opacity={isSelected ? 1 : 0.7}
                           />
                         );
@@ -889,9 +872,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                         if (active && payload && payload.length) {
                           const val = payload[0].value as number;
                           return (
-                            <div className="bg-slate-950/90 border border-slate-800 p-2 rounded-xl text-[10px] font-black text-white shadow-xl">
-                              <p className="uppercase text-slate-400 mb-0.5">Week {payload[0].payload.week}</p>
-                              <p className={val >= 0 ? "text-emerald-400" : "text-rose-450"}>
+                            <div className="bg-card border border-line p-2 rounded-xl text-[10px] font-display font-bold text-[color:var(--text)] shadow-panel">
+                              <p className="uppercase text-muted mb-0.5 num">Week {payload[0].payload.week}</p>
+                              <p className={`num ${val >= 0 ? "text-gold-600 dark:text-gold-400" : "text-brandred-600 dark:text-brandred-500"}`}>
                                 {val >= 0 ? `+${val} Net` : `${val} Net`}
                               </p>
                             </div>
@@ -907,31 +890,31 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
             {/* Recent Pool Activity Feed */}
             <div className="space-y-2.5">
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Recent Pool Activity</span>
+              <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block">Recent Pool Activity</span>
               {entries.length > 0 ? (
-                <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/40 text-xs">
+                <div className="flex justify-between items-center bg-page p-2.5 rounded-xl border border-line text-xs">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-slate-850 flex items-center justify-center font-bold text-[9px] text-slate-400 border border-slate-800">
+                    <div className="w-5 h-5 rounded-full bg-surface flex items-center justify-center font-display font-bold text-[9px] text-muted border border-line">
                       {(entries[0]?.userName || 'U').substring(0, 2).toUpperCase()}
                     </div>
-                    <span className="font-extrabold text-white text-[10px] uppercase truncate max-w-[80px]">
+                    <span className="font-display font-bold text-[color:var(--text)] text-[10px] uppercase truncate max-w-[80px]">
                       {entries[0]?.userName || 'Anonymous'}
                     </span>
-                    <span className="text-slate-500 text-[10px]">active in pool</span>
+                    <span className="text-muted font-body text-[10px]">active in pool</span>
                   </div>
-                  <span className="text-emerald-400 font-bold text-[10px]">
+                  <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] text-[10px]">
                     {_pool.type === 'NFL_SURVIVOR' ? 'Alive' : 'Joined'}
                   </span>
                 </div>
               ) : (
-                <div className="text-slate-600 text-[10px] italic">No recent pool activity.</div>
+                <div className="text-faint font-body text-[10px] italic">No recent pool activity.</div>
               )}
             </div>
           </div>
 
-          <div className="mt-5 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-            <span className="text-slate-500 font-bold uppercase">Performance Rating</span>
-            <span className="text-emerald-400 font-black uppercase">
+          <div className="mt-5 pt-4 border-t border-line flex justify-between items-center text-[10px]">
+            <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Performance Rating</span>
+            <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] num">
               {myEntry ? (
                 _pool.type === 'NFL_PICKEM' ? (
                   `${myEntry.totalScore || 0} Points Accumulated`
@@ -947,18 +930,17 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
         {/* CARD D: GLOBAL STANDINGS (Bottom Right) */}
         <div 
-          className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
-          style={{ boxShadow: `inset 0 0 20px rgba(99, 102, 241, 0.05), 0 10px 40px rgba(0,0,0,0.4)` }}
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Global Standings</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Leaderboard Positions</p>
+                <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Global Standings</h3>
+                <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">Leaderboard Positions</p>
               </div>
               <button 
                 onClick={() => onSelectTab('standings')}
-                className="text-xs font-black uppercase text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+                className="font-display font-bold uppercase text-[12px] tracking-[0.05em] text-navy-700 dark:text-gold-400 hover:text-navy-600 dark:hover:text-gold-300 flex items-center gap-1 transition-colors duration-150"
               >
                 Full Standings <ChevronRight size={14} />
               </button>
@@ -972,22 +954,22 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                   return (
                     <div 
                       key={i} 
-                      className={`flex justify-between items-center p-3 rounded-2xl border transition-all ${
-                        row.highlight 
-                          ? 'bg-gradient-to-r from-orange-500/10 to-indigo-600/10 border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.25)] scale-[1.02]' 
-                          : 'bg-slate-950/60 border-slate-800'
+                      className={`flex justify-between items-center p-3 rounded-lg border transition-all duration-150 ${
+                        row.highlight
+                          ? 'bg-brandred-600/[0.07] border-brandred-600/30 shadow-card'
+                          : 'bg-page border-line'
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black text-slate-500 w-3 text-center">{row.rank}</span>
-                        <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center ${
-                          row.highlight ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-900 text-slate-400'
+                        <RankChip rank={row.rank} />
+                        <div className={`w-8 h-8 rounded-xl font-display font-bold text-xs flex items-center justify-center ${
+                          row.highlight ? 'bg-navy-800 text-white' : 'bg-surface text-muted'
                         }`}>
                           {row.avatar}
                         </div>
                         <div>
-                          <span className="text-xs font-extrabold text-white block uppercase leading-none mb-1">{row.name}</span>
-                          <span className="text-[9px] font-bold text-slate-500 uppercase">{row.detail}</span>
+                          <span className="text-xs font-display font-bold text-[color:var(--text)] flex items-center gap-1.5 uppercase leading-none mb-1">{row.name}{row.highlight && <YouPill />}</span>
+                          <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em]">{row.detail}</span>
                         </div>
                       </div>
 
@@ -1008,24 +990,24 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                         </div>
 
                         <div className="text-right w-12">
-                          <span className="text-[9px] font-bold text-slate-500 block uppercase leading-none">Score</span>
-                          <span className="text-xs font-black text-white font-mono">{row.pts}</span>
+                          <span className="text-[9px] font-display font-bold text-muted block uppercase tracking-[0.08em] leading-none">Score</span>
+                          <span className="text-xs font-display font-bold text-[color:var(--text)] num">{row.pts}</span>
                         </div>
                       </div>
                     </div>
                   );
                 })
               ) : (
-                <div className="text-slate-500 text-xs text-center py-6 font-bold bg-slate-950/40 border border-slate-800 rounded-2xl">
+                <div className="text-muted font-body text-xs text-center py-6 font-bold bg-page border border-line rounded-lg">
                   No active rankings.
                 </div>
               )}
             </div>
           </div>
 
-          <div className="mt-5 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-            <span className="text-slate-500 font-bold uppercase">Standings Status</span>
-            <span className="text-indigo-400 font-black uppercase">
+          <div className="mt-5 pt-4 border-t border-line flex justify-between items-center text-[10px]">
+            <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Standings Status</span>
+            <span className="text-navy-700 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] num">
               {userRank !== 'N/A' ? `You are Ranked ${userRank}` : 'Unranked (Submit Pick)'}
             </span>
           </div>
@@ -1033,48 +1015,47 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
         {/* CARD E: MY PERFORMANCE RADAR & PICK ANALYTICS (Bottom Spanning Bento Box) */}
         <div 
-          className="md:col-span-2 bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 grid grid-cols-1 md:grid-cols-2 gap-8"
-          style={{ boxShadow: `inset 0 0 25px rgba(99, 102, 241, 0.08), 0 10px 40px rgba(0,0,0,0.5)` }}
+          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 grid grid-cols-1 md:grid-cols-2 gap-8"
         >
           {/* Radar Chart section */}
           <div className="flex flex-col justify-between">
             <div>
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Performance Radar</h3>
-              <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Skills comparison vs League Average</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Performance Radar</h3>
+              <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">Skills comparison vs League Average</p>
             </div>
             
             <div className="h-56 w-full flex items-center justify-center mt-4">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="80%" data={userPerformanceData}>
-                  <PolarGrid stroke="#1E293B" />
-                  <PolarAngleAxis dataKey="subject" stroke="#64748b" tick={{ fontSize: 9, fontWeight: 900, fill: '#94a3b8' }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#1E293B" tick={false} />
-                  <Radar name="You" dataKey="User" stroke="#FF6600" fill="#FF6600" fillOpacity={0.25} />
-                  <Radar name="League Average" dataKey="Average" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.1} />
+                  <PolarGrid stroke="var(--line)" />
+                  <PolarAngleAxis dataKey="subject" stroke="var(--text-muted)" tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--text-muted)' }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="var(--line)" tick={false} />
+                  <Radar name="You" dataKey="User" stroke="#C9A867" fill="#C9A867" fillOpacity={0.25} />
+                  <Radar name="League Average" dataKey="Average" stroke="#24507F" fill="#24507F" fillOpacity={0.1} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: '12px' }}
+                    contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--line)', borderRadius: '12px', color: 'var(--text)' }}
                     itemStyle={{ fontSize: '10px', fontWeight: 'bold' }}
-                    labelStyle={{ color: '#94a3b8', fontSize: '9px', fontWeight: '900', textTransform: 'uppercase' }}
+                    labelStyle={{ color: 'var(--text-muted)', fontSize: '9px', fontWeight: '700', textTransform: 'uppercase' }}
                   />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
             
-            <div className="flex justify-center gap-6 text-[10px] font-black uppercase tracking-wider mt-4">
-              <div className="flex items-center gap-1.5 text-orange-500">
-                <span className="h-2 w-2 rounded-full bg-orange-500"></span> You
+            <div className="flex justify-center gap-6 text-[10px] font-display font-bold uppercase tracking-[0.08em] mt-4">
+              <div className="flex items-center gap-1.5 text-gold-600 dark:text-gold-400">
+                <span className="h-2 w-2 rounded-full bg-gold-500"></span> You
               </div>
-              <div className="flex items-center gap-1.5 text-blue-400">
-                <span className="h-2 w-2 rounded-full bg-blue-500"></span> League Avg
+              <div className="flex items-center gap-1.5 text-muted">
+                <span className="h-2 w-2 rounded-full bg-navy-600"></span> League Avg
               </div>
             </div>
           </div>
 
           {/* Pie Chart section */}
-          <div className="flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-800/80 pt-6 md:pt-0 md:pl-8">
+          <div className="flex flex-col justify-between border-t md:border-t-0 md:border-l border-line pt-6 md:pt-0 md:pl-8">
             <div>
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Pick Accuracy ratio</h3>
-              <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Proportion of correct selections</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Pick Accuracy ratio</h3>
+              <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">Proportion of correct selections</p>
             </div>
 
             <div className="h-48 w-full relative flex items-center justify-center mt-4">
@@ -1094,28 +1075,28 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: '12px' }}
+                    contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--line)', borderRadius: '12px', color: 'var(--text)' }}
                     itemStyle={{ fontSize: '10px', fontWeight: 'bold' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
               
               <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
-                <span className="text-xl font-black text-white leading-none">
+                <span className="text-xl font-display font-bold text-[color:var(--text)] leading-none num">
                   {Math.round((pickAccuracyRatio[0].value / (pickAccuracyRatio[0].value + pickAccuracyRatio[1].value)) * 100)}%
                 </span>
-                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Accuracy</span>
+                <span className="text-[8px] font-display font-bold text-muted uppercase tracking-[0.08em] mt-0.5">Accuracy</span>
               </div>
             </div>
 
-            <div className="flex justify-around text-[10px] font-black uppercase tracking-wider mt-4">
+            <div className="flex justify-around text-[10px] font-display font-bold uppercase tracking-[0.08em] mt-4">
               <div className="text-center">
-                <span className="text-emerald-400 block text-sm font-black">{pickAccuracyRatio[0].value}</span>
-                <span className="text-slate-500">Correct</span>
+                <span className="text-gold-600 dark:text-gold-400 block text-sm font-display font-bold num">{pickAccuracyRatio[0].value}</span>
+                <span className="text-muted">Correct</span>
               </div>
               <div className="text-center">
-                <span className="text-rose-500 block text-sm font-black">{pickAccuracyRatio[1].value}</span>
-                <span className="text-slate-500">Incorrect</span>
+                <span className="text-brandred-600 dark:text-brandred-500 block text-sm font-display font-bold num">{pickAccuracyRatio[1].value}</span>
+                <span className="text-muted">Incorrect</span>
               </div>
             </div>
           </div>
@@ -1124,53 +1105,55 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       </div>
 
       {/* 3. Floating Bottom Timeline Block */}
-      <div className="xl:col-span-5 bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-5 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80">
+      <div className="xl:col-span-5 bg-card border border-line rounded-xl p-5 shadow-card relative overflow-hidden transition-all duration-150">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 overflow-x-auto select-none py-2 px-4 whitespace-nowrap">
           
           {/* Timeline Node 1 */}
           <div className="flex flex-col items-center sm:items-start text-center sm:text-left group">
-            <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest block mb-0.5 transition-colors group-hover:text-slate-400">
+            <span className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] block mb-0.5 transition-colors duration-150 group-hover:text-[color:var(--text)]">
               NFL Kickoff
             </span>
-            <span className="text-emerald-400 font-black text-sm uppercase tracking-wider flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span> Sep 10
+            <span className="text-gold-600 dark:text-gold-400 font-display font-bold text-sm uppercase tracking-[0.05em] flex items-center gap-1.5 num">
+              <span className="h-2 w-2 rounded-full bg-gold-500 animate-live-pulse"></span> Sep 10
             </span>
           </div>
 
           {/* Spacer Line */}
-          <div className="hidden sm:block w-px h-8 bg-slate-800/80"></div>
+          <div className="hidden sm:block w-px h-8 bg-line"></div>
 
           {/* Timeline Node 2 */}
           <div className="flex flex-col items-center sm:items-start text-center sm:text-left group">
-            <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest block mb-0.5 transition-colors group-hover:text-slate-400">
+            <span className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] block mb-0.5 transition-colors duration-150 group-hover:text-[color:var(--text)]">
               Mid-Season Rebuy
             </span>
-            <span className="text-amber-400 font-black text-sm uppercase tracking-wider flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-amber-400"></span> Week 4-6 Cutoff
+            <span className="text-gold-600 dark:text-gold-400 font-display font-bold text-sm uppercase tracking-[0.05em] flex items-center gap-1.5 num">
+              <span className="h-2 w-2 rounded-full bg-gold-500"></span> Week 4-6 Cutoff
             </span>
           </div>
 
           {/* Spacer Line */}
-          <div className="hidden sm:block w-px h-8 bg-slate-800/80"></div>
+          <div className="hidden sm:block w-px h-8 bg-line"></div>
 
           {/* Timeline Node 3 */}
           <div className="flex flex-col items-center sm:items-start text-center sm:text-left group">
-            <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest block mb-0.5 transition-colors group-hover:text-slate-400">
+            <span className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] block mb-0.5 transition-colors duration-150 group-hover:text-[color:var(--text)]">
               Super Bowl LX
             </span>
-            <span className="text-white font-black text-sm uppercase tracking-wider flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-white"></span> Feb 8
+            <span className="text-[color:var(--text)] font-display font-bold text-sm uppercase tracking-[0.05em] flex items-center gap-1.5 num">
+              <span className="h-2 w-2 rounded-full bg-[color:var(--text)]"></span> Feb 8
             </span>
           </div>
 
           {/* Action Call to join */}
           <div className="sm:ml-auto w-full sm:w-auto">
-            <button 
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => onSelectTab('picks')}
-              className="w-full sm:w-auto bg-gradient-to-r from-orange-500 to-indigo-600 hover:from-orange-600 hover:to-indigo-700 text-white font-black text-xs uppercase tracking-widest py-3 px-6 rounded-2xl transition-all shadow-lg hover:shadow-orange-500/20 hover:scale-[1.03]"
+              className="w-full sm:w-auto"
             >
               Submit My Picks Now
-            </button>
+            </Button>
           </div>
         </div>
       </div>

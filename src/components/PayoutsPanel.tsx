@@ -53,7 +53,7 @@ const PAYOUT_MODE_COPY: Record<string, { label: string; explanation: string }> =
 const FOOTER_COPY = 'Prizes are paid out by your commissioner, not by March Melee Pools.';
 
 const Footer: React.FC = () => (
-    <p className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800/60 pt-3">
+    <p className="text-[10px] font-body text-faint leading-relaxed border-t border-line pt-3">
         {FOOTER_COPY}
     </p>
 );
@@ -73,30 +73,30 @@ const PotBreakdown: React.FC<{
     if (grossPot === undefined && !charityEnabled) return null;
 
     return (
-        <div className="space-y-2 text-xs">
+        <div className="space-y-2 text-xs font-body">
             {grossPot !== undefined && (
-                <div className="flex justify-between items-center border-b border-slate-800/60 pb-2">
-                    <span className="font-bold text-slate-300">
-                        Total Pot{potBasisLabel ? <span className="text-slate-500 font-normal"> ({potBasisLabel})</span> : null}
+                <div className="flex justify-between items-center border-b border-line pb-2">
+                    <span className="font-bold text-[color:var(--text)]">
+                        Total Pot{potBasisLabel ? <span className="text-faint font-normal num"> ({potBasisLabel})</span> : null}
                     </span>
-                    <span className="text-white font-black font-mono">{money(grossPot)}</span>
+                    <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">{money(grossPot)}</span>
                 </div>
             )}
             {charityEnabled && (
-                <div className="flex justify-between items-center border-b border-slate-800/60 pb-2 text-rose-300">
+                <div className="flex justify-between items-center border-b border-line pb-2 text-brandred-600 dark:text-brandred-500">
                     <span className="font-bold flex items-center gap-1.5">
                         <Heart size={12} />
                         {(charity as CharityConfig).percentage}% to {(charity as CharityConfig).name || 'charity'} before payouts
                     </span>
                     {charityCut !== undefined && (
-                        <span className="font-extrabold font-mono">-{money(charityCut)}</span>
+                        <span className="font-display font-bold num">-{money(charityCut)}</span>
                     )}
                 </div>
             )}
             {netPot !== undefined && charityEnabled && (
-                <div className="flex justify-between items-center border-b border-slate-800/60 pb-2">
-                    <span className="font-bold text-white">Prize Pool After Donation</span>
-                    <span className="text-emerald-400 font-black font-mono">{money(netPot)}</span>
+                <div className="flex justify-between items-center border-b border-line pb-2">
+                    <span className="font-bold text-[color:var(--text)]">Prize Pool After Donation</span>
+                    <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">{money(netPot)}</span>
                 </div>
             )}
         </div>
@@ -136,12 +136,12 @@ const SquaresPayouts: React.FC<{ gameState: GameState; compact: boolean }> = ({ 
     if (compact) {
         return (
             <div className="space-y-3 text-left">
-                <div className="flex justify-between items-center text-xs border-b border-slate-800/60 pb-2">
-                    <span className="font-bold text-slate-300">Cost Per Square</span>
-                    <span className="text-white font-black font-mono">{money(costPerSquare)}</span>
+                <div className="flex justify-between items-center text-xs font-body border-b border-line pb-2">
+                    <span className="font-bold text-[color:var(--text)]">Cost Per Square</span>
+                    <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">{money(costPerSquare)}</span>
                 </div>
                 <PotBreakdown grossPot={grossPot} potBasisLabel={potBasisLabel} charity={charity} />
-                <p className="text-xs text-slate-300 leading-relaxed">
+                <p className="text-xs font-body text-[color:var(--text)] leading-relaxed num">
                     {everyScorePays
                         ? 'Every score pays: someone wins money every time the score changes.'
                         : QUARTER_LABELS
@@ -156,44 +156,44 @@ const SquaresPayouts: React.FC<{ gameState: GameState; compact: boolean }> = ({ 
 
     return (
         <div className="space-y-4">
-            <div className="space-y-2 text-xs">
+            <div className="space-y-2 text-xs font-body">
                 {costPerSquare > 0 && (
-                    <div className="flex justify-between items-center border-b border-slate-800/60 pb-2">
-                        <span className="font-bold text-slate-300">Cost Per Square</span>
-                        <span className="text-white font-black font-mono">{money(costPerSquare)}</span>
+                    <div className="flex justify-between items-center border-b border-line pb-2">
+                        <span className="font-bold text-[color:var(--text)]">Cost Per Square</span>
+                        <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">{money(costPerSquare)}</span>
                     </div>
                 )}
             </div>
             <PotBreakdown grossPot={grossPot} potBasisLabel={potBasisLabel} charity={charity} />
             {soldCount !== undefined && (
-                <p className="text-[11px] text-slate-500 leading-relaxed">
+                <p className="text-[11px] font-body text-faint leading-relaxed">
                     The pot grows as more squares sell — dollar amounts below are estimates based on squares sold so far.
                 </p>
             )}
 
             {!everyScorePays && (
                 <>
-                    <ul className="space-y-2.5 text-xs text-slate-300">
+                    <ul className="space-y-2.5 text-xs font-body text-[color:var(--text)]">
                         {QUARTER_LABELS
                             .filter(({ key }) => (gameState.payouts?.[key] ?? 0) > 0)
                             .map(({ key, label }) => (
-                                <li key={key} className="flex justify-between border-b border-slate-800/60 pb-1.5">
+                                <li key={key} className="flex justify-between border-b border-line pb-1.5">
                                     <span className="font-bold">{label}</span>
-                                    <span className="text-emerald-400 font-extrabold font-mono">
+                                    <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">
                                         {gameState.payouts[key]}% of the pot{dollarFor(gameState.payouts[key])}
                                     </span>
                                 </li>
                             ))}
                     </ul>
                     {rules.quarterlyRollover ? (
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                        <p className="text-[11px] font-body text-muted leading-relaxed">
                             If a winning square is unsold, that prize rolls over into the next quarter.
                             {rules.unclaimedFinalPrizeStrategy === 'random'
                                 ? ' If the Final prize is unclaimed, a random sold square is drawn to win it.'
                                 : ' If the Final prize is unclaimed, it goes to the most recent previous winner.'}
                         </p>
                     ) : (
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                        <p className="text-[11px] font-body text-muted leading-relaxed">
                             Unclaimed prizes do not roll over in this pool.
                         </p>
                     )}
@@ -202,15 +202,15 @@ const SquaresPayouts: React.FC<{ gameState: GameState; compact: boolean }> = ({ 
 
             {everyScorePays && (
                 <div className="space-y-3">
-                    <p className="text-xs text-slate-300 leading-relaxed flex items-start gap-2">
-                        <Zap size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                    <p className="text-xs font-body text-[color:var(--text)] leading-relaxed flex items-start gap-2">
+                        <Zap size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                         <span>
-                            <span className="font-bold text-white">Every score pays.</span> Someone wins money every time
+                            <span className="font-bold text-[color:var(--text)]">Every score pays.</span> Someone wins money every time
                             the score changes — touchdowns, field goals, extra points, safeties.
                         </span>
                     </p>
                     {rules.scoreChangePayoutStrategy === 'equal_split' ? (
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                        <p className="text-[11px] font-body text-muted leading-relaxed">
                             The prize pool is split evenly across every scoring event in the game, so each score is worth
                             the same amount. The exact amount per score depends on how many scores happen.
                         </p>
@@ -219,31 +219,31 @@ const SquaresPayouts: React.FC<{ gameState: GameState; compact: boolean }> = ({ 
                             const w = rules.scoreChangeHybridWeights;
                             if (!w) {
                                 return (
-                                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                                    <p className="text-[11px] font-body text-muted leading-relaxed">
                                         Larger shares of the pot are reserved for Halftime and the Final score; the rest is
                                         split across all other scoring events.
                                     </p>
                                 );
                             }
                             return (
-                                <ul className="space-y-2 text-xs text-slate-300">
-                                    <li className="flex justify-between border-b border-slate-800/60 pb-1.5">
+                                <ul className="space-y-2 text-xs font-body text-[color:var(--text)]">
+                                    <li className="flex justify-between border-b border-line pb-1.5">
                                         <span className="font-bold">Final Score</span>
-                                        <span className="text-emerald-400 font-extrabold font-mono">{w.final}% of the pot{dollarFor(w.final)}</span>
+                                        <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">{w.final}% of the pot{dollarFor(w.final)}</span>
                                     </li>
-                                    <li className="flex justify-between border-b border-slate-800/60 pb-1.5">
+                                    <li className="flex justify-between border-b border-line pb-1.5">
                                         <span className="font-bold">Halftime</span>
-                                        <span className="text-emerald-400 font-extrabold font-mono">{w.halftime}% of the pot{dollarFor(w.halftime)}</span>
+                                        <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">{w.halftime}% of the pot{dollarFor(w.halftime)}</span>
                                     </li>
-                                    <li className="flex justify-between border-b border-slate-800/60 pb-1.5">
+                                    <li className="flex justify-between border-b border-line pb-1.5">
                                         <span className="font-bold">All Other Scores (split evenly)</span>
-                                        <span className="text-emerald-400 font-extrabold font-mono">{w.other}% of the pot{dollarFor(w.other)}</span>
+                                        <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">{w.other}% of the pot{dollarFor(w.other)}</span>
                                     </li>
                                 </ul>
                             );
                         })()
                     )}
-                    <ul className="space-y-1.5 text-[11px] text-slate-400 leading-relaxed list-disc list-inside">
+                    <ul className="space-y-1.5 text-[11px] font-body text-muted leading-relaxed list-disc list-inside">
                         {rules.scoreChangeHandleUnsold && UNSOLD_LABELS[rules.scoreChangeHandleUnsold] && (
                             <li>If a winning square is unsold, {UNSOLD_LABELS[rules.scoreChangeHandleUnsold]}.</li>
                         )}
@@ -266,7 +266,7 @@ const SquaresPayouts: React.FC<{ gameState: GameState; compact: boolean }> = ({ 
             )}
 
             {rules.reverseWinners && (
-                <p className="text-[11px] text-indigo-300 leading-relaxed">
+                <p className="text-[11px] font-body text-navy-600 dark:text-gold-400 leading-relaxed">
                     Reverse winners is active: each prize is split 50/50 with the square matching the reversed digits.
                 </p>
             )}
@@ -313,7 +313,7 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
         if (compact) return null;
         return (
             <div className="space-y-4">
-                <p className="text-xs text-slate-400 leading-relaxed">
+                <p className="text-xs font-body text-muted leading-relaxed">
                     No entry fee or prize structure has been configured for this pool. If you're expecting
                     payouts, check with your commissioner.
                 </p>
@@ -326,11 +326,11 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
 
     return (
         <div className="space-y-4 text-left">
-            <div className="space-y-2 text-xs">
+            <div className="space-y-2 text-xs font-body">
                 {entryFee > 0 && (
-                    <div className="flex justify-between items-center border-b border-slate-800/60 pb-2">
-                        <span className="font-bold text-slate-300">Entry Fee</span>
-                        <span className="text-white font-black font-mono">{money(entryFee)} per {entryNoun}</span>
+                    <div className="flex justify-between items-center border-b border-line pb-2">
+                        <span className="font-bold text-[color:var(--text)]">Entry Fee</span>
+                        <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">{money(entryFee)} per {entryNoun}</span>
                     </div>
                 )}
             </div>
@@ -343,26 +343,26 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
 
             {!compact && modeCopy && (
                 <div className="space-y-1">
-                    <div className="flex justify-between items-center text-xs border-b border-slate-800/60 pb-2">
-                        <span className="font-bold text-slate-300">Payout Format</span>
-                        <span className="text-white font-black uppercase text-[10px] tracking-wider">{modeCopy.label}</span>
+                    <div className="flex justify-between items-center text-xs font-body border-b border-line pb-2">
+                        <span className="font-bold text-[color:var(--text)]">Payout Format</span>
+                        <span className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-[color:var(--text)]">{modeCopy.label}</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">{modeCopy.explanation}</p>
+                    <p className="text-[11px] font-body text-muted leading-relaxed">{modeCopy.explanation}</p>
                 </div>
             )}
 
             {topPlaces.length > 0 && (
-                <ul className="space-y-2.5 text-xs text-slate-300">
+                <ul className="space-y-2.5 text-xs font-body text-[color:var(--text)]">
                     {topPlaces.map((p) => (
-                        <li key={p.rank} className="flex justify-between border-b border-slate-800/60 pb-1.5">
-                            <span className="font-bold">{ordinal(p.rank)} Place</span>
-                            <span className="text-emerald-400 font-extrabold font-mono">
+                        <li key={p.rank} className="flex justify-between border-b border-line pb-1.5">
+                            <span className="font-bold num">{ordinal(p.rank)} Place</span>
+                            <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">
                                 {p.percentage}% of the pot{dollarFor(p.percentage)}
                             </span>
                         </li>
                     ))}
                     {compact && places.length > topPlaces.length && (
-                        <li className="text-[11px] text-slate-500">
+                        <li className="text-[11px] text-faint num">
                             +{places.length - topPlaces.length} more paid place{places.length - topPlaces.length !== 1 ? 's' : ''} — see the pool's Rules tab.
                         </li>
                     )}
@@ -370,13 +370,13 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
             )}
 
             {!compact && bonuses.length > 0 && (
-                <ul className="space-y-2.5 text-xs text-slate-300">
+                <ul className="space-y-2.5 text-xs font-body text-[color:var(--text)]">
                     {bonuses.map((b, i) => (
-                        <li key={i} className="flex justify-between border-b border-slate-800/60 pb-1.5">
+                        <li key={i} className="flex justify-between border-b border-line pb-1.5">
                             <span className="font-bold flex items-center gap-1.5">
-                                <Trophy size={12} className="text-amber-400" /> {b.name || 'Bonus'}
+                                <Trophy size={12} className="text-gold-600 dark:text-gold-400" /> {b.name || 'Bonus'}
                             </span>
-                            <span className="text-amber-400 font-extrabold font-mono">
+                            <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">
                                 {b.percentage}% of the pot{dollarFor(b.percentage)}
                             </span>
                         </li>
@@ -385,7 +385,7 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
             )}
 
             {grossPot === undefined && entryFee > 0 && (places.length > 0 || bonuses.length > 0) && (
-                <p className="text-[11px] text-slate-500 leading-relaxed">
+                <p className="text-[11px] font-body text-faint leading-relaxed">
                     Dollar amounts depend on how many entries join — percentages above are guaranteed by the pool's rules.
                 </p>
             )}
@@ -416,9 +416,9 @@ export const PayoutsPanel: React.FC<PayoutsPanelProps> = ({ pool, entryCount, co
     }
 
     return (
-        <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm space-y-4">
-            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <DollarSign size={14} className="text-emerald-400" /> Prizes
+        <div className="bg-card border border-line rounded-3xl p-6 shadow-card space-y-4">
+            <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted flex items-center gap-2">
+                <DollarSign size={14} className="text-gold-600 dark:text-gold-400" /> Prizes
             </h4>
             {body}
         </div>

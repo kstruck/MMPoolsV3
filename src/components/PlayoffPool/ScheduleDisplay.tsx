@@ -52,8 +52,8 @@ export const ScheduleDisplay: React.FC<ScheduleDisplayProps> = ({ teams }) => {
     };
 
     return (
-        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-sm text-slate-800">
-            <h3 className="font-bold text-center text-lg mb-6 border-b border-slate-200 pb-2">Post Season Week 1 schedule</h3>
+        <div className="bg-card p-6 rounded-xl border border-line shadow-card text-[color:var(--text)]">
+            <h3 className="font-display font-bold uppercase tracking-[0.05em] text-center text-lg mb-6 border-b border-line pb-2">Post Season Week 1 schedule</h3>
 
             <div className="space-y-6">
                 {DEMO_SCHEDULE.map((game, idx) => {
@@ -63,24 +63,24 @@ export const ScheduleDisplay: React.FC<ScheduleDisplayProps> = ({ teams }) => {
                     const homeLogo = getTeamLogo(homeTeam.name) || getTeamLogo(homeTeam.id);
 
                     return (
-                        <div key={idx} className="flex items-center justify-between gap-4">
+                        <div key={idx} className="flex items-center justify-between gap-4 font-body">
                             {/* Away */}
                             <div className="flex-1 flex flex-col items-end text-right">
                                 <span className="font-bold text-sm md:text-base leading-tight">{awayTeam.name}</span>
-                                <span className="text-xs text-slate-500">({awayTeam.seed ? `${awayTeam.seed} Seed` : '12-5'})</span>
+                                <span className="text-xs text-muted num">({awayTeam.seed ? `${awayTeam.seed} Seed` : '12-5'})</span>
                             </div>
 
                             {/* Center */}
                             <div className="flex items-center gap-3 shrink-0">
                                 {awayLogo && <img src={awayLogo} alt={awayTeam.name} className="w-8 h-8 md:w-10 md:h-10 object-contain" />}
-                                <span className="font-bold text-slate-400 text-sm">at</span>
+                                <span className="font-display font-bold uppercase text-muted text-sm">at</span>
                                 {homeLogo && <img src={homeLogo} alt={homeTeam.name} className="w-8 h-8 md:w-10 md:h-10 object-contain" />}
                             </div>
 
                             {/* Home */}
                             <div className="flex-1 flex flex-col items-start text-left">
                                 <span className="font-bold text-sm md:text-base leading-tight">{homeTeam.name}</span>
-                                <span className="text-xs text-slate-500">({homeTeam.seed ? `${homeTeam.seed} Seed` : '11-6'})</span>
+                                <span className="text-xs text-muted num">({homeTeam.seed ? `${homeTeam.seed} Seed` : '11-6'})</span>
                             </div>
                         </div>
                     );
@@ -88,14 +88,14 @@ export const ScheduleDisplay: React.FC<ScheduleDisplayProps> = ({ teams }) => {
             </div>
 
             {/* Byes */}
-            <div className="mt-8 pt-4 border-t border-slate-200">
-                <h4 className="font-bold text-sm mb-2">Teams with Byes:</h4>
+            <div className="mt-8 pt-4 border-t border-line">
+                <h4 className="font-display font-bold uppercase tracking-[0.08em] text-sm mb-2">Teams with Byes:</h4>
                 <div className="flex flex-col gap-1">
                     {BYE_TEAMS.map(teamId => {
                         const team = resolveTeam(teamId);
                         return (
-                            <div key={teamId} className="text-sm font-medium text-slate-600 flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
+                            <div key={teamId} className="text-sm font-body font-medium text-muted flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 bg-gold-500 rounded-full"></span>
                                 {team.name}
                             </div>
                         );

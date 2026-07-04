@@ -116,16 +116,16 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95">
+            <div className="bg-card border border-line rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-card-hover animate-in zoom-in-95">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-800">
+                <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-line">
                     <div>
-                        <h2 className="text-lg font-bold text-white">Share This Pool</h2>
-                        <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[280px]">{poolName}</p>
+                        <h2 className="text-lg font-display font-bold uppercase text-[color:var(--text)]">Share This Pool</h2>
+                        <p className="text-xs text-muted mt-0.5 truncate max-w-[280px]">{poolName}</p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                        className="p-2 hover:bg-surface rounded-lg text-muted hover:text-[color:var(--text)] transition-colors"
                     >
                         <X size={18} />
                     </button>
@@ -134,7 +134,7 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
                 <div className="p-6 space-y-5">
                     {/* Pool URL Copy */}
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                        <label className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2 flex items-center gap-1.5">
                             <Link size={12} /> Pool Link
                         </label>
                         <div className="flex gap-2">
@@ -142,13 +142,13 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
                                 readOnly
                                 value={poolUrl}
                                 onClick={(e) => (e.target as HTMLInputElement).select()}
-                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono truncate focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                className="flex-1 bg-surface border border-line rounded-lg px-3 py-2.5 text-[color:var(--text)] text-sm font-mono truncate focus:outline-none focus:ring-2 focus:ring-gold-500"
                             />
                             <button
                                 onClick={handleCopy}
-                                className={`px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-all ${copied
-                                        ? 'bg-emerald-600 text-white'
-                                        : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                className={`px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 transition-all ${copied
+                                        ? 'bg-[#0F7B4A] text-white'
+                                        : 'bg-brandred-600 hover:bg-brandred-500 text-white'
                                     }`}
                             >
                                 {copied ? <><Check size={15} /> Copied!</> : <><Copy size={15} /> Copy</>}
@@ -158,7 +158,7 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
 
                     {/* Social Platforms */}
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">
+                        <label className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em] block mb-3">
                             Share Via
                         </label>
                         <div className="grid grid-cols-2 gap-2">
@@ -184,7 +184,7 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
                                     const body = encodeURIComponent(`${shareText}\n\n${poolUrl}`);
                                     window.location.href = `mailto:?subject=${subject}&body=${body}`;
                                 }}
-                                className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2.5 transition-all active:scale-95"
+                                className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2.5 transition-all active:scale-95"
                             >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -192,7 +192,7 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
                                 <span>Email</span>
                             </button>
                         </div>
-                        <p className="text-[10px] text-slate-600 mt-3 text-center">
+                        <p className="text-[10px] text-faint mt-3 text-center">
                             Instagram: link will be copied — paste it into your Story or bio link.
                         </p>
                     </div>

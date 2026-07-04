@@ -26,6 +26,9 @@ import Clock from 'lucide-react/dist/esm/icons/clock';
 import Download from 'lucide-react/dist/esm/icons/download';
 import TrendingUp from 'lucide-react/dist/esm/icons/trending-up';
 import Hammer from 'lucide-react/dist/esm/icons/hammer';
+import Dices from 'lucide-react/dist/esm/icons/dices';
+
+import { Badge, Button, StatTile } from './ui';
 
 
 
@@ -578,16 +581,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-20">
-      <div className="bg-slate-900 border-b border-slate-800 sticky top-0 z-20 shadow-lg">
+    <div className="min-h-screen bg-page text-[color:var(--text)] pb-20">
+      <div className="bg-surface border-b border-line sticky top-0 z-20 shadow-panel">
         <div className="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"><ArrowLeft size={20} /></button>
-            <div><h1 className="text-xl font-bold text-white flex items-center gap-2"><Settings className="text-indigo-400" size={20} /> {gameState.name} {gameState.charity?.enabled && <span className="text-xs bg-rose-500 text-white px-2 py-0.5 rounded-full">Charity</span>}</h1><p className="text-xs text-slate-500">Admin Editor</p></div>
+            <button onClick={onBack} className="p-2 rounded-full hover:bg-card text-muted hover:text-[color:var(--text)] transition-colors"><ArrowLeft size={20} /></button>
+            <div><h1 className="text-xl font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] flex items-center gap-2"><Settings className="text-gold-500" size={20} /> {gameState.name} {gameState.charity?.enabled && <span className="text-xs font-display font-bold uppercase tracking-[0.08em] bg-[#FBF3E0] text-gold-700 border border-[#EAD9A8] px-2 py-0.5 rounded-full">Charity</span>}</h1><p className="text-xs font-body text-muted">Admin Editor</p></div>
           </div>
           <div className="flex gap-2">
-            <button onClick={onShare} className="text-xs bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-600 px-3 py-2 rounded font-bold cursor-pointer flex items-center gap-2"><Share2 size={14} /> Share</button>
-            <button onClick={() => window.location.href = `/pool/${gameState.id}`} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded font-bold cursor-pointer">Open Public View</button>
+            <Button onClick={onShare} variant="ghost" size="sm"><Share2 size={14} /> Share</Button>
+            <Button onClick={() => window.location.href = `/pool/${gameState.id}`} variant="secondary" size="sm">Open Public View</Button>
           </div>
         </div>
         <div className="max-w-5xl mx-auto px-6 flex gap-6 text-sm">
@@ -596,7 +599,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`py-3 border-b-2 transition-colors font-medium whitespace-nowrap ${activeTab === tab ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                className={`py-3 border-b-2 transition-colors font-display font-bold uppercase tracking-[0.05em] whitespace-nowrap ${activeTab === tab ? 'border-gold-500 text-gold-600 dark:text-gold-400' : 'border-transparent text-muted hover:text-[color:var(--text)]'}`}
               >
                 {tab === 'settings' ? 'Setup Wizard' : tab === 'reminders' ? 'Smart Reminders' : tab === 'game' ? 'Game Status' : tab === 'stats' ? 'Statistics' : tab === 'payouts' ? 'Payouts' : tab === 'props' ? 'Side Hustle' : tab === 'grading' ? 'Grading' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
@@ -605,14 +608,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
       <div className="max-w-4xl mx-auto p-6 space-y-8">
-        {saveMessage && (<div className="fixed top-24 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-in fade-in slide-in-from-top-4 flex items-center gap-2"><CheckCircle size={20} />{saveMessage}</div>)}
+        {saveMessage && (<div className="fixed top-24 left-1/2 -translate-x-1/2 bg-[#0F7B4A] text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-in fade-in slide-in-from-top-4 flex items-center gap-2 font-display font-bold uppercase tracking-[0.05em]"><CheckCircle size={20} />{saveMessage}</div>)}
 
         {/* SETTINGS (WIZARD) TAB */}
         {activeTab === 'settings' && (
           <div className="space-y-6">
             <div className="mb-8">
               {/* Clickable Wizard Progress Indicators */}
-              <div className="flex justify-between text-xs font-bold uppercase text-slate-500 mb-2">
+              <div className="flex justify-between text-xs font-display font-bold uppercase tracking-[0.08em] text-muted mb-2">
                 {[
                   { step: 1, label: '1. Matchup' },
                   { step: 2, label: '2. Basics' },
@@ -627,14 +630,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <button
                     key={s.step}
                     onClick={() => setWizardStep(s.step)}
-                    className={`uppercase font-bold transition-colors hover:text-white ${wizardStep >= s.step ? 'text-indigo-400' : ''}`}
+                    className={`uppercase font-bold transition-colors hover:text-[color:var(--text)] ${wizardStep >= s.step ? 'text-gold-600 dark:text-gold-400' : ''}`}
                   >
                     {s.label}
                   </button>
                 ))}
               </div>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-600 transition-all duration-500 ease-out" style={{ width: `${(wizardStep / TOTAL_STEPS) * 100}%` }}></div>
+              <div className="h-2 bg-line rounded-full overflow-hidden">
+                <div className="h-full bg-gold-foil transition-all duration-500 ease-out" style={{ width: `${(wizardStep / TOTAL_STEPS) * 100}%` }}></div>
               </div>
             </div>
 
@@ -715,12 +718,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               />
             )}
 
-            <div className="flex justify-between pt-6 border-t border-slate-800">
-              <button onClick={() => setWizardStep(Math.max(1, wizardStep - 1))} disabled={wizardStep === 1} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all"><ArrowLeft size={18} /> Previous</button>
+            <div className="flex justify-between pt-6 border-t border-line">
+              <Button onClick={() => setWizardStep(Math.max(1, wizardStep - 1))} disabled={wizardStep === 1} variant="ghost"><ArrowLeft size={18} /> Previous</Button>
               {wizardStep < TOTAL_STEPS ? (
-                <button onClick={() => setWizardStep(Math.min(TOTAL_STEPS, wizardStep + 1))} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/20">Next Step <ArrowRight size={18} /></button>
+                <Button onClick={() => setWizardStep(Math.min(TOTAL_STEPS, wizardStep + 1))} variant="secondary">Next Step <ArrowRight size={18} /></Button>
               ) : (
-                <button onClick={handleSave} className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 py-3 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20"><Save size={18} /> Save Complete Pool</button>
+                <Button onClick={handleSave}><Save size={18} /> Save Complete Pool</Button>
               )}
             </div>
           </div>
@@ -729,8 +732,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* GAME STATUS TAB */}
         {activeTab === 'game' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-sm"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-bold text-white">Game Status</h3><p className="text-sm text-slate-500">Control the betting and number generation.</p></div><span className={`text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide ${gameState.isLocked ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>{gameState.isLocked ? 'Locked' : 'Open'}</span></div><button onClick={toggleLock} className={`w-full py-4 rounded-lg font-bold flex items-center justify-center gap-2 transition-all text-lg ${gameState.isLocked ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock & Start Game</>}</button></div>
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800"><h3 className="text-lg font-bold text-white mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><button onClick={generateNumbers} disabled={gameState.isLocked} className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-medium flex items-center gap-2 border border-slate-700"><Shuffle size={16} />{gameState.axisNumbers ? 'Regenerate' : 'Generate'} Numbers</button></div>{gameState.axisNumbers && (<div className="text-emerald-400 bg-emerald-500/10 p-4 rounded-full border border-emerald-500/20"><Sparkles size={24} /></div>)}</div></div>
+            <div className="bg-card p-6 rounded-xl border border-line shadow-card"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Game Status</h3><p className="text-sm font-body text-muted">Control the betting and number generation.</p></div>{gameState.isLocked ? <Badge status="locked" /> : <Badge status="open" />}</div><button onClick={toggleLock} className={`w-full py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-all duration-150 hover:-translate-y-px text-lg ${gameState.isLocked ? 'bg-card hover:bg-surface text-[color:var(--text)] border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock & Start Game</>}</button></div>
+            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><button onClick={generateNumbers} disabled={gameState.isLocked} className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150"><Shuffle size={16} />{gameState.axisNumbers ? 'Regenerate' : 'Generate'} Numbers</button></div>{gameState.axisNumbers && (<div className="text-gold-500 bg-gold-500/10 p-4 rounded-full border border-gold-500/20"><Sparkles size={24} /></div>)}</div></div>
             {/* <div className="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 p-6 rounded-xl border border-indigo-500/30"><div className="flex items-center gap-2 mb-4"><Sparkles className="text-indigo-400" size={20} /><h3 className="text-lg font-bold text-indigo-100">AI Commissioner</h3></div>{aiIdea && (<div className="bg-slate-950/80 p-4 rounded-lg border border-indigo-500/30 mb-4 shadow-inner"><p className="text-lg text-indigo-200 font-serif italic">"{aiIdea}"</p></div>)}<button onClick={askGeminiForIdeas} disabled={isThinking} className="bg-indigo-600/80 hover:bg-indigo-500 text-white py-2 px-4 rounded-lg text-sm font-bold uppercase tracking-wide transition-colors">{isThinking ? 'Thinking...' : 'Suggest Rule Variation'}</button></div> */}
 
             {/* RANDOMIZER SECTION */}
@@ -755,32 +758,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 const randomizerAvailable = gameIsOver && finalSquareIsEmpty;
 
                 return (
-                  <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 border-t-4 border-t-amber-500 shadow-xl">
+                  <div className="bg-card p-6 rounded-xl border border-line border-t-4 border-t-gold-500 shadow-card">
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h3 className="text-lg font-bold text-white flex items-center gap-2"><Sparkles className="text-amber-400" /> Final Prize Randomizer</h3>
-                        <p className="text-sm text-slate-400">Randomly select a square for the unclaimed rollover pot.</p>
+                        <h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] flex items-center gap-2"><Sparkles className="text-gold-500" /> Final Prize Randomizer</h3>
+                        <p className="text-sm font-body text-muted">Randomly select a square for the unclaimed rollover pot.</p>
                       </div>
                       {gameState.randomWinner ? (
-                        <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Winner Selected</div>
+                        <Badge status="winner">Winner Selected</Badge>
                       ) : randomizerAvailable ? (
-                        <div className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Ready to Roll</div>
+                        <div className="bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30 px-3 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em]">Ready to Roll</div>
                       ) : (
-                        <div className="bg-slate-700/50 text-slate-400 border border-slate-600/30 px-3 py-1 rounded-full text-xs font-bold uppercase">Waiting</div>
+                        <Badge status="locked">Waiting</Badge>
                       )}
                     </div>
 
                     {/* Condition Checklist - show when not yet available */}
                     {!randomizerAvailable && !gameState.randomWinner && (
-                      <div className="bg-slate-950 border border-slate-700 rounded-lg p-4 mb-4">
-                        <p className="text-xs text-slate-400 font-bold uppercase mb-3">This feature will unlock when:</p>
-                        <ul className="space-y-2 text-sm">
-                          <li className={`flex items-center gap-2 ${gameIsOver ? 'text-emerald-400' : 'text-slate-500'}`}>
-                            {gameIsOver ? <CheckCircle size={16} className="text-emerald-400" /> : <div className="w-4 h-4 border-2 border-slate-600 rounded-full" />}
+                      <div className="bg-surface border border-line rounded-lg p-4 mb-4">
+                        <p className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mb-3">This feature will unlock when:</p>
+                        <ul className="space-y-2 text-sm font-body">
+                          <li className={`flex items-center gap-2 ${gameIsOver ? 'text-[#0F7B4A]' : 'text-muted'}`}>
+                            {gameIsOver ? <CheckCircle size={16} className="text-[#0F7B4A]" /> : <div className="w-4 h-4 border-2 border-line rounded-full" />}
                             The game has ended (Final score recorded)
                           </li>
-                          <li className={`flex items-center gap-2 ${finalSquareIsEmpty ? 'text-emerald-400' : 'text-slate-500'}`}>
-                            {finalSquareIsEmpty ? <CheckCircle size={16} className="text-emerald-400" /> : <div className="w-4 h-4 border-2 border-slate-600 rounded-full" />}
+                          <li className={`flex items-center gap-2 ${finalSquareIsEmpty ? 'text-[#0F7B4A]' : 'text-muted'}`}>
+                            {finalSquareIsEmpty ? <CheckCircle size={16} className="text-[#0F7B4A]" /> : <div className="w-4 h-4 border-2 border-line rounded-full" />}
                             The final winning square is unclaimed (empty)
                           </li>
                         </ul>
@@ -791,25 +794,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <button
                         onClick={handleRandomizeWinner}
                         disabled={!randomizerAvailable || isRandomizing}
-                        className={`w-full py-6 rounded-xl font-bold text-xl shadow-lg transition-all flex flex-col items-center gap-2 ${randomizerAvailable
-                          ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-orange-500/20'
-                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                        className={`w-full py-6 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-xl transition-all duration-150 flex flex-col items-center gap-2 ${randomizerAvailable
+                          ? 'bg-gold-foil text-navy-900 hover:brightness-105 hover:-translate-y-px shadow-[0_6px_16px_rgba(140,109,51,0.28)]'
+                          : 'bg-card text-faint border border-line cursor-not-allowed'
                           }`}
                       >
-                        {isRandomizing ? 'ROLLING THE DICE...' : '🎲 CLICK TO PICK RANDOM WINNER'}
+                        {isRandomizing ? 'ROLLING THE DICE...' : <span className="flex items-center gap-2"><Dices size={24} /> CLICK TO PICK RANDOM WINNER</span>}
                         {!isRandomizing && randomizerAvailable && <span className="text-xs font-normal opacity-80 uppercase tracking-widest">Hold Your Breath</span>}
                         {!randomizerAvailable && <span className="text-xs font-normal opacity-60 uppercase tracking-widest">Conditions Not Met</span>}
                       </button>
                     ) : (
-                      <div className="bg-slate-950 rounded-xl p-6 text-center border border-emerald-500/30 relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
-                        <p className="text-slate-500 text-xs font-bold uppercase mb-2">The Lucky Square Is</p>
-                        <div className="text-6xl font-black text-white font-mono mb-2">#{gameState.randomWinner.squareId}</div>
-                        <div className="text-xl text-emerald-400 font-bold mb-4">{gameState.randomWinner.owner}</div>
-                        <p className="text-xs text-slate-600">Selected at {new Date(gameState.randomWinner.timestamp).toLocaleTimeString()}</p>
+                      <div className="bg-surface rounded-xl p-6 text-center border border-gold-500/40 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gold-foil"></div>
+                        <p className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em] mb-2">The Lucky Square Is</p>
+                        <div className="text-6xl font-display font-bold text-[color:var(--text)] num mb-2">#{gameState.randomWinner.squareId}</div>
+                        <div className="text-xl text-gold-700 dark:text-gold-400 font-display font-bold uppercase mb-4">{gameState.randomWinner.owner}</div>
+                        <p className="text-xs text-faint num">Selected at {new Date(gameState.randomWinner.timestamp).toLocaleTimeString()}</p>
                         <button
                           onClick={() => updateConfig({ randomWinner: undefined })}
-                          className="mt-4 text-xs text-slate-500 hover:text-rose-500 underline"
+                          className="mt-4 text-xs text-faint hover:text-brandred-600 underline"
                         >
                           Reset (Admin Only)
                         </button>
@@ -826,11 +829,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* PAYOUTS TAB */}
         {activeTab === 'payouts' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800">
-              <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                <DollarSign size={20} className="text-emerald-400" /> Winner Payout Tracking
+            <div className="bg-card p-6 rounded-xl border border-line shadow-card">
+              <h3 className="text-xl font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-2 flex items-center gap-2">
+                <DollarSign size={20} className="text-gold-500" /> Winner Payout Tracking
               </h3>
-              <p className="text-slate-400 text-sm mb-6">Track which winners have been paid out.</p>
+              <p className="text-muted font-body text-sm mb-6">Track which winners have been paid out.</p>
 
               {(() => {
                 // Calculate all winners from gameState
@@ -896,65 +899,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <>
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <div className="bg-slate-950 border border-slate-700 p-4 rounded-lg">
-                        <p className="text-slate-400 text-xs font-bold uppercase mb-1">Total Prize Pool</p>
-                        <div className="text-2xl font-bold text-white font-mono">${totalOwed.toLocaleString()}</div>
-                      </div>
-                      <div className="bg-slate-950 border border-emerald-500/30 p-4 rounded-lg">
-                        <p className="text-emerald-400 text-xs font-bold uppercase mb-1">Paid Out</p>
-                        <div className="text-2xl font-bold text-emerald-400 font-mono">${totalPaid.toLocaleString()}</div>
-                      </div>
-                      <div className="bg-slate-950 border border-amber-500/30 p-4 rounded-lg">
-                        <p className="text-amber-400 text-xs font-bold uppercase mb-1">Pending</p>
-                        <div className="text-2xl font-bold text-amber-400 font-mono">${(totalOwed - totalPaid).toLocaleString()}</div>
-                      </div>
+                      <StatTile label="Total Prize Pool" value={`$${totalOwed.toLocaleString()}`} accent="gold" />
+                      <StatTile label="Paid Out" value={`$${totalPaid.toLocaleString()}`} accent="gold" />
+                      <StatTile label="Pending" value={`$${(totalOwed - totalPaid).toLocaleString()}`} accent="gold" />
                     </div>
 
                     {/* Winners Table */}
                     {winners.length === 0 ? (
-                      <div className="text-center py-12 text-slate-500">
+                      <div className="text-center py-12 text-muted">
                         <DollarSign size={40} className="mx-auto mb-4 opacity-50" />
-                        <p className="font-bold">No winners yet</p>
-                        <p className="text-sm">Winners will appear here once quarterly scores are recorded.</p>
+                        <p className="font-display font-bold uppercase tracking-[0.05em]">No winners yet</p>
+                        <p className="text-sm font-body">Winners will appear here once quarterly scores are recorded.</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
                         {winners.map((win) => (
                           <div
                             key={win.period}
-                            className={`p-4 rounded-lg border flex items-center justify-between transition-all ${win.isPaid ? 'bg-emerald-900/10 border-emerald-500/30' : 'bg-slate-950 border-slate-700'}`}
+                            className={`p-4 rounded-lg border flex items-center justify-between transition-all ${win.isPaid ? 'bg-[#0F7B4A]/5 border-[#0F7B4A]/30' : 'bg-surface border-line'}`}
                           >
                             <div className="flex items-center gap-4">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${win.isPaid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-display font-bold text-sm ${win.isPaid ? 'bg-[#E4F5EC] text-[#0F7B4A]' : 'bg-card text-muted border border-line'}`}>
                                 {(win.owner || '??').substring(0, 2).toUpperCase()}
                               </div>
                               <div>
-                                <div className="font-bold text-white flex items-center gap-2">
+                                <div className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] flex items-center gap-2">
                                   {win.label}
-                                  <span className="text-xs font-mono text-slate-500">({win.homeDigit}-{win.awayDigit})</span>
+                                  <span className="text-xs text-muted num">({win.homeDigit}-{win.awayDigit})</span>
                                 </div>
-                                <div className="text-sm text-slate-400">
-                                  {win.owner || <span className="text-rose-400 italic">Unclaimed Square</span>}
-                                  <span className="text-slate-600 ml-2">• Square #{win.squareId}</span>
+                                <div className="text-sm font-body text-muted">
+                                  {win.owner || <span className="text-brandred-600 italic">Unclaimed Square</span>}
+                                  <span className="text-faint ml-2 num">• Square #{win.squareId}</span>
                                 </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-4">
                               <div className="text-right">
-                                <div className="font-bold text-lg text-emerald-400 font-mono">${win.amount.toLocaleString()}</div>
+                                <div className="font-display font-bold text-lg text-gold-700 dark:text-gold-400 num">${win.amount.toLocaleString()}</div>
                                 {win.isPaid && win.paidAt && (
-                                  <div className="text-[10px] text-slate-500">Paid {new Date(win.paidAt).toLocaleDateString()}</div>
+                                  <div className="text-[10px] text-faint num">Paid {new Date(win.paidAt).toLocaleDateString()}</div>
                                 )}
                               </div>
                               <button
                                 onClick={async () => {
                                   await dbService.markSquarePaid(gameState.id, [win.squareId], !win.isPaid);
                                 }}
-                                className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${win.isPaid
-                                  ? 'bg-emerald-600 text-white'
-                                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`}
+                                className={`px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 ${win.isPaid
+                                  ? 'bg-[#0F7B4A] text-white'
+                                  : 'bg-navy-800 hover:bg-navy-700 text-white'}`}
                               >
-                                {win.isPaid ? '✓ Paid' : 'Mark Paid'}
+                                {win.isPaid ? <span className="flex items-center gap-1"><CheckCircle size={14} /> Paid</span> : 'Mark Paid'}
                               </button>
                             </div>
                           </div>
@@ -971,11 +965,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* COMMUNICATIONS TAB (ANNOUNCEMENTS) */}
         {activeTab === 'communications' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="bg-card border border-line rounded-xl p-6">
               {currentUser ? (
                 <AnnouncementManager pool={gameState} currentUser={currentUser} />
               ) : (
-                <div className="text-center text-slate-500 py-8">Please log in to send announcements.</div>
+                <div className="text-center text-muted py-8">Please log in to send announcements.</div>
               )}
             </div>
           </div>
@@ -992,7 +986,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {activeTab === 'grading' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="bg-card border border-line rounded-xl p-6">
               <PropGradingDashboard gameState={gameState} />
             </div>
           </div>
@@ -1002,32 +996,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {activeTab === 'scoring' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* MANUAL OVERRIDE TOGGLE */}
-            <div className={`p-6 rounded-xl border transition-all ${gameState.manualScoreOverride ? 'bg-amber-900/20 border-amber-500/50' : 'bg-slate-900 border-slate-800'}`}>
+            <div className={`p-6 rounded-xl border transition-all ${gameState.manualScoreOverride ? 'bg-gold-500/10 border-gold-500/50' : 'bg-card border-line'}`}>
               <div className="flex justify-between items-center">
                 <div>
-                  <h3 className={`font-bold text-lg ${gameState.manualScoreOverride ? 'text-amber-400' : 'text-slate-200'}`}>Manual Score Override</h3>
-                  <p className="text-sm text-slate-400">Disable auto-updates and manually set scores in the database.</p>
+                  <h3 className={`font-display font-bold uppercase tracking-[0.02em] text-lg ${gameState.manualScoreOverride ? 'text-gold-600 dark:text-gold-400' : 'text-[color:var(--text)]'}`}>Manual Score Override</h3>
+                  <p className="text-sm font-body text-muted">Disable auto-updates and manually set scores in the database.</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" checked={!!gameState.manualScoreOverride} onChange={(e) => updateConfig({ manualScoreOverride: e.target.checked })} className="sr-only peer" />
-                  <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                  <div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gold-500"></div>
                 </label>
               </div>
             </div>
 
-            <div className={`bg-slate-900 p-6 rounded-xl border border-slate-800 relative overflow-hidden ${gameState.manualScoreOverride ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+            <div className={`bg-card p-6 rounded-xl border border-line relative overflow-hidden ${gameState.manualScoreOverride ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2"><Wifi className="text-indigo-400" size={20} /><h3 className="font-bold text-white">Live Updates</h3></div>
-                {fetchStatus && (<span className={`text-xs px-2 py-1 rounded font-bold ${fetchStatus.type === 'success' ? 'text-emerald-400 bg-emerald-900/30' : fetchStatus.type === 'error' ? 'text-rose-400 bg-rose-900/30' : 'text-slate-400'}`}>{fetchStatus.msg}</span>)}
+                <div className="flex items-center gap-2"><Wifi className="text-gold-500" size={20} /><h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Live Updates</h3></div>
+                {fetchStatus && (<span className={`text-xs px-2 py-1 rounded font-display font-bold uppercase tracking-[0.05em] ${fetchStatus.type === 'success' ? 'text-[#0F7B4A] bg-[#0F7B4A]/10' : fetchStatus.type === 'error' ? 'text-brandred-600 bg-brandred-600/10' : 'text-muted'}`}>{fetchStatus.msg}</span>)}
               </div>
-              <p className="text-slate-400 text-sm mb-6">{gameState.gameId ? `Linked to Game ID: ${gameState.gameId}. Updates will be precise.` : `Fuzzy matching active.`}</p>
-              <button onClick={handleFetchLiveScores} disabled={isFetchingScores} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition-all"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button>
-              <button onClick={handleFixSync} disabled={isFixing} className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all ml-2"><Hammer size={18} className={isFixing ? 'animate-spin' : ''} />{isFixing ? 'Repairing...' : 'Fix Sync'}</button>
+              <p className="text-muted font-body text-sm mb-6">{gameState.gameId ? `Linked to Game ID: ${gameState.gameId}. Updates will be precise.` : `Fuzzy matching active.`}</p>
+              <button onClick={handleFetchLiveScores} disabled={isFetchingScores} className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 shadow-red-cta transition-all duration-150 hover:-translate-y-px"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button>
+              <button onClick={handleFixSync} disabled={isFixing} className="border border-brandred-600/40 bg-brandred-600/5 hover:bg-brandred-600/10 disabled:opacity-50 disabled:cursor-wait text-brandred-600 px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 ml-2"><Hammer size={18} className={isFixing ? 'animate-spin' : ''} />{isFixing ? 'Repairing...' : 'Fix Sync'}</button>
             </div>
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800"><h3 className="font-bold text-white mb-4">Quarterly Scores</h3><div className="grid gap-4">{(['q1', 'half', 'q3', 'final'] as const).map((period) => {
+            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Quarterly Scores</h3><div className="grid gap-4">{(['q1', 'half', 'q3', 'final'] as const).map((period) => {
               const isActive = !!gameState.scores[period];
               const label = period === 'q1' ? '1st Quarter' : period === 'half' ? 'Halftime' : period === 'q3' ? '3rd Quarter' : 'Final Score';
-              return (<div key={period} className={`p-5 rounded-xl border transition-all ${isActive ? 'bg-slate-800 border-indigo-500/50 shadow-lg shadow-indigo-500/10' : 'bg-slate-900 border-slate-800 opacity-60'}`}><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg text-slate-200">{label}</h3><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={isActive} onChange={() => togglePeriodActive(period)} className="sr-only peer" /><div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div></label></div>{isActive && (<div className="flex items-center gap-4"><div className="flex-1"><label className="block text-xs text-slate-500 mb-1 uppercase font-bold tracking-wider">{gameState.homeTeam}</label><input type="number" value={gameState.scores[period]?.home || 0} onChange={(e) => handleScoreChange(period, 'home', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white font-mono text-xl text-center focus:ring-2 focus:ring-indigo-500 outline-none" /></div><div className="text-slate-600 font-bold text-xl mt-4">-</div><div className="flex-1"><label className="block text-xs text-slate-500 mb-1 uppercase font-bold tracking-wider">{gameState.awayTeam}</label><input type="number" value={gameState.scores[period]?.away || 0} onChange={(e) => handleScoreChange(period, 'away', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white font-mono text-xl text-center focus:ring-2 focus:ring-indigo-500 outline-none" /></div></div>)}</div>);
+              return (<div key={period} className={`p-5 rounded-xl border transition-all ${isActive ? 'bg-surface border-gold-500/50 shadow-card' : 'bg-card border-line opacity-60'}`}><div className="flex justify-between items-center mb-4"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-lg text-[color:var(--text)]">{label}</h3><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={isActive} onChange={() => togglePeriodActive(period)} className="sr-only peer" /><div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gold-500"></div></label></div>{isActive && (<div className="flex items-center gap-4"><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.homeTeam}</label><input type="number" value={gameState.scores[period]?.home || 0} onChange={(e) => handleScoreChange(period, 'home', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div><div className="text-faint font-bold text-xl mt-4">-</div><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.awayTeam}</label><input type="number" value={gameState.scores[period]?.away || 0} onChange={(e) => handleScoreChange(period, 'away', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div></div>)}</div>);
             })}</div></div>
           </div>
         )}
@@ -1047,49 +1041,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                <p className="text-slate-400 text-xs font-bold uppercase mb-1">Total Players</p>
-                <div className="text-3xl font-bold text-white">{getPlayers().length}</div>
-              </div>
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                <p className="text-slate-400 text-xs font-bold uppercase mb-1">Squares Sold</p>
-                <div className="text-3xl font-bold text-white">{gameState.squares.filter(s => s.owner).length} <span className="text-sm font-normal text-slate-500">/ 100</span></div>
-              </div>
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                <p className="text-slate-400 text-xs font-bold uppercase mb-1">Revenue Collected</p>
-                <div className="text-3xl font-bold text-emerald-400 font-mono">
+              <StatTile label="Total Players" value={getPlayers().length} />
+              <StatTile label="Squares Sold" value={<>{gameState.squares.filter(s => s.owner).length} <span className="text-sm font-normal text-muted">/ 100</span></>} />
+              <StatTile
+                label="Revenue Collected"
+                accent="gold"
+                value={<>
                   ${getPlayers().reduce((acc, p) => acc + p.totalPaid, 0).toLocaleString()}
-                  <span className="text-sm text-slate-500 font-sans font-normal ml-2">/ ${gameState.squares.filter(s => s.owner).length * gameState.costPerSquare}</span>
-                </div>
-              </div>
+                  <span className="text-sm text-muted font-body font-normal ml-2">/ ${gameState.squares.filter(s => s.owner).length * gameState.costPerSquare}</span>
+                </>}
+              />
             </div>
 
             {/* Waitlist Section - Added for visibility */}
             {gameState.waitlist && gameState.waitlist.length > 0 && (
-              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden mb-6">
-                <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
-                  <h3 className="font-bold text-white flex items-center gap-2">
-                    <Clock size={18} className="text-amber-400" /> Waitlist
-                    <span className="bg-amber-500/10 text-amber-400 text-xs px-2 py-0.5 rounded-full border border-amber-500/20">{gameState.waitlist.length}</span>
+              <div className="bg-card border border-line rounded-xl overflow-hidden mb-6">
+                <div className="p-4 border-b border-line bg-surface flex justify-between items-center">
+                  <h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] flex items-center gap-2">
+                    <Clock size={18} className="text-gold-500" /> Waitlist
+                    <span className="bg-gold-500/10 text-gold-700 dark:text-gold-400 text-xs px-2 py-0.5 rounded-full border border-gold-500/20 num">{gameState.waitlist.length}</span>
                   </h3>
-                  <button onClick={() => updateConfig({ waitlist: [] })} className="text-xs text-rose-400 hover:text-rose-300">Clear List</button>
+                  <button onClick={() => updateConfig({ waitlist: [] })} className="text-xs font-display font-bold uppercase tracking-[0.05em] text-brandred-600 hover:text-brandred-500">Clear List</button>
                 </div>
-                <div className="divide-y divide-slate-800">
+                <div className="divide-y divide-line">
                   {gameState.waitlist.map((entry: WaitlistEntry, idx: number) => (
-                    <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-800/20 transition-colors">
+                    <div key={idx} className="p-4 flex items-center justify-between hover:bg-surface transition-colors">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 text-xs font-bold">
+                        <div className="w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-muted text-xs font-display font-bold num">
                           {idx + 1}
                         </div>
                         <div>
-                          <div className="font-bold text-white text-sm">{entry.name}</div>
-                          <div className="text-xs text-slate-500">{entry.email}</div>
+                          <div className="font-body font-bold text-[color:var(--text)] text-sm">{entry.name}</div>
+                          <div className="text-xs text-muted">{entry.email}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <div className="text-[10px] slate-500 uppercase font-bold text-slate-600">Joined</div>
-                          <div className="text-xs text-slate-400">{new Date(entry.timestamp).toLocaleDateString()}</div>
+                          <div className="text-[10px] uppercase font-display font-bold tracking-[0.08em] text-faint">Joined</div>
+                          <div className="text-xs text-muted num">{new Date(entry.timestamp).toLocaleDateString()}</div>
                         </div>
                         <button
                           onClick={() => {
@@ -1097,7 +1086,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             newList.splice(idx, 1);
                             updateConfig({ waitlist: newList });
                           }}
-                          className="text-slate-600 hover:text-rose-500 transition-colors p-2"
+                          className="text-faint hover:text-brandred-600 transition-colors p-2"
                           title="Remove from waitlist"
                         >
                           <Trash2 size={14} />
@@ -1109,21 +1098,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             )}
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="bg-card border border-line rounded-xl overflow-hidden">
+              <div className="p-4 border-b border-line bg-surface flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-4">
-                  <h3 className="font-bold text-white flex items-center gap-2"><Users size={18} className="text-indigo-400" /> Player List</h3>
+                  <h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] flex items-center gap-2"><Users size={18} className="text-gold-500" /> Player List</h3>
                   {gameState.props?.enabled && (
-                    <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
+                    <div className="flex bg-card rounded-lg p-1 border border-line">
                       <button
                         onClick={() => setPlayerTab('grid')}
-                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${playerTab === 'grid' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                        className={`px-3 py-1 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-md transition-colors ${playerTab === 'grid' ? 'bg-navy-800 text-white shadow' : 'text-muted hover:text-[color:var(--text)]'}`}
                       >
                         Grid
                       </button>
                       <button
                         onClick={() => setPlayerTab('props')}
-                        className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${playerTab === 'props' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                        className={`px-3 py-1 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-md transition-colors ${playerTab === 'props' ? 'bg-navy-800 text-white shadow' : 'text-muted hover:text-[color:var(--text)]'}`}
                       >
                         Side Hustle
                       </button>
@@ -1131,90 +1120,90 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleExportUsers} className="text-xs bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1"><Download size={12} /> Export CSV</button>
+                  <button onClick={handleExportUsers} className="text-xs bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-gold-400 px-3 py-1.5 rounded font-display font-bold uppercase tracking-[0.05em] transition-colors flex items-center gap-1"><Download size={12} /> Export CSV</button>
                   {playerTab === 'grid' && (
                     <button onClick={async () => {
                       const ids = gameState.squares.filter(s => s.owner && !s.isPaid).map(s => s.id);
                       if (ids.length) await dbService.markSquarePaid(gameState.id, ids, true);
-                    }} className="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded font-bold transition-colors">Mark All Paid</button>
+                    }} className="text-xs bg-[#0F7B4A]/10 hover:bg-[#0F7B4A]/20 text-[#0F7B4A] px-3 py-1.5 rounded font-display font-bold uppercase tracking-[0.05em] transition-colors">Mark All Paid</button>
                   )}
                 </div>
               </div>
 
               {playerTab === 'grid' ? (
                 getPlayers().length === 0 ? (
-                  <div className="p-8 text-center text-slate-500">No players yet. Share the pool link!</div>
+                  <div className="p-8 text-center text-muted">No players yet. Share the pool link!</div>
                 ) : (
-                  <div className="divide-y divide-slate-800">
+                  <div className="divide-y divide-line">
                     {getPlayers().map((player: PlayerSummary) => (
 
-                      <div key={player.name} className="bg-slate-900 hover:bg-slate-800/50 transition-colors">
+                      <div key={player.name} className="bg-card hover:bg-surface transition-colors">
                         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.name ? null : player.name)}>
                           <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
-                              <UserIcon size={20} className="text-slate-400" />
+                            <div className="w-10 h-10 bg-surface rounded-full flex items-center justify-center border border-line">
+                              <UserIcon size={20} className="text-muted" />
                             </div>
                             <div>
-                              <h4 className="font-bold text-white text-sm">{player.name}</h4>
+                              <h4 className="font-body font-bold text-[color:var(--text)] text-sm">{player.name}</h4>
                               <div className="flex gap-2 text-xs">
                                 {!!gameState.charity?.enabled && (
-                                  <div className="flex items-center gap-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
-                                    <div className="w-8 h-8 rounded-full bg-rose-500/10 flex items-center justify-center">
-                                      <Heart size={16} className="text-rose-500" />
+                                  <div className="flex items-center gap-2 p-3 bg-surface rounded-lg border border-line">
+                                    <div className="w-8 h-8 rounded-full bg-gold-500/10 flex items-center justify-center">
+                                      <Heart size={16} className="text-gold-600 dark:text-gold-400" />
                                     </div>
                                     <div>
-                                      <div className="text-xs text-slate-500 font-bold uppercase">Charity</div>
-                                      <div className="text-sm font-bold text-white">{gameState.charity?.name || 'Not Set'}</div>
+                                      <div className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em]">Charity</div>
+                                      <div className="text-sm font-bold text-[color:var(--text)]">{gameState.charity?.name || 'Not Set'}</div>
                                     </div>
                                   </div>
                                 )}
-                                <span className="text-slate-400">{player.squares.length} Squares</span>
-                                {player.totalOwed > 0 && <span className="text-rose-400 font-bold">Owes ${player.totalOwed}</span>}
-                                {player.totalOwed === 0 && <span className="text-emerald-400 font-bold">Paid in Full</span>}
+                                <span className="text-muted num">{player.squares.length} Squares</span>
+                                {player.totalOwed > 0 && <span className="text-[#B4530A] font-bold num">Owes ${player.totalOwed}</span>}
+                                {player.totalOwed === 0 && <span className="text-[#0F7B4A] font-bold">Paid in Full</span>}
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
                             {player.contact?.email && (
-                              <a href={`mailto:${player.contact.email}?subject=${encodeURIComponent(gameState.name)} Payment Reminder`} onClick={(e) => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Email Player"><Mail size={16} /></a>
+                              <a href={`mailto:${player.contact.email}?subject=${encodeURIComponent(gameState.name)} Payment Reminder`} onClick={(e) => e.stopPropagation()} className="p-2 text-muted hover:text-gold-600 dark:hover:text-gold-400 transition-colors" title="Email Player"><Mail size={16} /></a>
                             )}
-                            <button onClick={(e) => { e.stopPropagation(); setEditingPlayer({ originalName: player.name, name: player.name, email: player.contact?.email || '', phone: player.contact?.phone || '', notes: player.contact?.notes || '' }) }} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Edit Player"><Settings size={16} /></button>
-                            <div className={`transition-transform duration-200 ${expandedPlayer === player.name ? 'rotate-180' : ''}`}><ArrowRight size={16} className="text-slate-600 rotate-90" /></div>
+                            <button onClick={(e) => { e.stopPropagation(); setEditingPlayer({ originalName: player.name, name: player.name, email: player.contact?.email || '', phone: player.contact?.phone || '', notes: player.contact?.notes || '' }) }} className="p-2 text-muted hover:text-gold-600 dark:hover:text-gold-400 transition-colors" title="Edit Player"><Settings size={16} /></button>
+                            <div className={`transition-transform duration-200 ${expandedPlayer === player.name ? 'rotate-180' : ''}`}><ArrowRight size={16} className="text-faint rotate-90" /></div>
                           </div>
                         </div>
 
                         {expandedPlayer === player.name && (
                           <div className="px-4 pb-4 pl-16 animate-in slide-in-from-top-2">
-                            <div className="bg-slate-950 rounded-lg p-4 border border-slate-800">
+                            <div className="bg-surface rounded-lg p-4 border border-line">
                               {player.contact && (
-                                <div className="mb-4 text-xs text-slate-400 grid grid-cols-2 gap-2 pb-4 border-b border-slate-800">
-                                  {player.contact.email && <div><span className="font-bold block text-slate-500 uppercase">Email</span>{player.contact.email}</div>}
-                                  {player.contact.phone && <div><span className="font-bold block text-slate-500 uppercase">Phone</span>{player.contact.phone}</div>}
-                                  {player.contact.notes && player.contact.notes !== 'Test' && player.contact.notes !== 'test' && <div className="col-span-2"><span className="font-bold block text-slate-500 uppercase">Notes</span>{player.contact.notes}</div>}
+                                <div className="mb-4 text-xs text-muted grid grid-cols-2 gap-2 pb-4 border-b border-line">
+                                  {player.contact.email && <div><span className="font-display font-bold block text-faint uppercase tracking-[0.08em]">Email</span>{player.contact.email}</div>}
+                                  {player.contact.phone && <div><span className="font-display font-bold block text-faint uppercase tracking-[0.08em]">Phone</span>{player.contact.phone}</div>}
+                                  {player.contact.notes && player.contact.notes !== 'Test' && player.contact.notes !== 'test' && <div className="col-span-2"><span className="font-display font-bold block text-faint uppercase tracking-[0.08em]">Notes</span>{player.contact.notes}</div>}
                                 </div>
                               )}
 
                               <div className="space-y-2">
                                 <div className="flex justify-between items-center mb-2">
-                                  <span className="text-xs font-bold text-slate-500 uppercase">Squares Owned</span>
+                                  <span className="text-xs font-display font-bold text-muted uppercase tracking-[0.08em]">Squares Owned</span>
                                   <button onClick={async () => {
                                     const ids = player.squares.map((s: Square) => s.id);
                                     if (ids.length) await dbService.markSquarePaid(gameState.id, ids, true);
-                                  }} className="text-xs text-emerald-400 hover:text-emerald-300 font-bold">Mark All Paid</button>
+                                  }} className="text-xs text-[#0F7B4A] hover:opacity-80 font-display font-bold uppercase tracking-[0.05em]">Mark All Paid</button>
                                 </div>
                                 {player.squares.map((sq: Square) => (
-                                  <div key={sq.id} className="flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-800">
-                                    <span className="text-sm font-mono text-slate-300">Square #{sq.id}</span>
+                                  <div key={sq.id} className="flex justify-between items-center bg-card p-2 rounded border border-line">
+                                    <span className="text-sm font-body text-[color:var(--text)] num">Square #{sq.id}</span>
                                     <div className="flex items-center gap-3">
                                       <button
                                         onClick={async () => await dbService.markSquarePaid(gameState.id, [sq.id], !sq.isPaid)}
-                                        className={`text-xs px-2 py-1 rounded font-bold border transition-colors ${sq.isPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}
+                                        className={`text-xs px-2 py-1 rounded-full font-display font-bold uppercase tracking-[0.08em] border transition-colors ${sq.isPaid ? 'bg-[#E4F5EC] text-[#0F7B4A] border-[#BEE7D0]' : 'bg-[#FBEEDD] text-[#B4530A] border-[#F2D6B0]'}`}
                                       >
                                         {sq.isPaid ? 'PAID' : 'UNPAID'}
                                       </button>
                                       <button
                                         onClick={async () => { await dbService.releaseSquares(gameState.id, { squareIds: [sq.id] }); }}
-                                        className="text-slate-600 hover:text-rose-500 transition-colors"
+                                        className="text-faint hover:text-brandred-600 transition-colors"
                                         title="Release Square"
                                       >
                                         <Trash2 size={14} />
@@ -1224,8 +1213,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 ))}
                               </div>
 
-                              <div className="mt-4 pt-4 border-t border-slate-800 flex justify-end">
-                                <button onClick={() => releasePlayer(player.name)} className="text-xs text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1"><Trash2 size={12} /> Remove Player & Release All Squares</button>
+                              <div className="mt-4 pt-4 border-t border-line flex justify-end">
+                                <button onClick={() => releasePlayer(player.name)} className="text-xs text-brandred-600 hover:text-brandred-500 font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"><Trash2 size={12} /> Remove Player & Release All Squares</button>
                               </div>
                             </div>
                           </div>
@@ -1237,29 +1226,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               ) : (
                 // SIDE HUSTLE PLAYERS VIEW
                 getPropPlayers().length === 0 ? (
-                  <div className="p-8 text-center text-slate-500">No prop cards purchased yet.</div>
+                  <div className="p-8 text-center text-muted">No prop cards purchased yet.</div>
                 ) : (
-                  <div className="divide-y divide-slate-800">
+                  <div className="divide-y divide-line">
                     {getPropPlayers().map((player: PropPlayerSummary) => (
-                      <div key={player.uid} className="bg-slate-900 hover:bg-slate-800/50 transition-colors">
+                      <div key={player.uid} className="bg-card hover:bg-surface transition-colors">
                         <div className="p-4 flex items-center justify-between cursor-pointer" onClick={() => setExpandedPlayer(expandedPlayer === player.uid ? null : player.uid)}>
                           <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
-                              <UserIcon size={20} className="text-slate-400" />
+                            <div className="w-10 h-10 bg-surface rounded-full flex items-center justify-center border border-line">
+                              <UserIcon size={20} className="text-muted" />
                             </div>
                             <div>
-                              <h4 className="font-bold text-white text-sm">{player.name}</h4>
+                              <h4 className="font-body font-bold text-[color:var(--text)] text-sm">{player.name}</h4>
                               <div className="flex gap-2 text-xs">
-                                <span className="text-slate-400">{player.cards.length} Cards</span>
-                                {player.totalOwed > 0 && <span className="text-rose-400 font-bold">Owes ${player.totalOwed}</span>}
-                                {player.totalOwed === 0 && <span className="text-emerald-400 font-bold">Paid in Full</span>}
+                                <span className="text-muted num">{player.cards.length} Cards</span>
+                                {player.totalOwed > 0 && <span className="text-[#B4530A] font-bold num">Owes ${player.totalOwed}</span>}
+                                {player.totalOwed === 0 && <span className="text-[#0F7B4A] font-bold">Paid in Full</span>}
                               </div>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-4">
                             {player.email && (
-                              <a href={`mailto:${player.email}?subject=${encodeURIComponent(gameState.name)} Payment Reminder`} onClick={(e) => e.stopPropagation()} className="p-2 text-slate-400 hover:text-indigo-400 transition-colors" title="Email Player"><Mail size={16} /></a>
+                              <a href={`mailto:${player.email}?subject=${encodeURIComponent(gameState.name)} Payment Reminder`} onClick={(e) => e.stopPropagation()} className="p-2 text-muted hover:text-gold-600 dark:hover:text-gold-400 transition-colors" title="Email Player"><Mail size={16} /></a>
                             )}
                             <button
                               onClick={(e) => {
@@ -1272,35 +1261,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   notes: ''
                                 });
                               }}
-                              className="p-2 text-slate-400 hover:text-indigo-400 transition-colors"
+                              className="p-2 text-muted hover:text-gold-600 dark:hover:text-gold-400 transition-colors"
                               title="Edit Player"
                             >
                               <Settings size={16} />
                             </button>
                             <div className={`transition-transform duration-200 ${expandedPlayer === player.uid ? 'rotate-180' : ''}`}>
-                              <ArrowRight size={16} className="text-slate-600 rotate-90" />
+                              <ArrowRight size={16} className="text-faint rotate-90" />
                             </div>
                           </div>
                         </div>
 
                         {expandedPlayer === player.uid && (
                           <div className="px-4 pb-4 pl-16 animate-in slide-in-from-top-2">
-                            <div className="bg-slate-950 rounded-lg p-4 border border-slate-800">
+                            <div className="bg-surface rounded-lg p-4 border border-line">
                               <div className="space-y-2">
                                 {player.cards.map((card: PropCard, idx: number) => (
-                                  <div key={card.id} className="bg-slate-900 border border-slate-800 rounded p-3">
+                                  <div key={card.id} className="bg-card border border-line rounded p-3">
                                     <div className="flex justify-between items-center mb-2">
-                                      <span className="text-sm font-bold text-slate-300">Card #{idx + 1}</span>
+                                      <span className="text-sm font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] num">Card #{idx + 1}</span>
                                       <div className="flex gap-2">
                                         <button
                                           onClick={() => dbService.updatePropCard(gameState.id, card.id!, { isPaid: !card.isPaid })}
-                                          className={`text-xs px-2 py-1 rounded font-bold border transition-colors ${card.isPaid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}
+                                          className={`text-xs px-2 py-1 rounded-full font-display font-bold uppercase tracking-[0.08em] border transition-colors ${card.isPaid ? 'bg-[#E4F5EC] text-[#0F7B4A] border-[#BEE7D0]' : 'bg-[#FBEEDD] text-[#B4530A] border-[#F2D6B0]'}`}
                                         >
                                           {card.isPaid ? 'PAID' : 'UNPAID'}
                                         </button>
                                         <button
                                           onClick={() => dbService.deletePropCard(gameState.id, card.id!)}
-                                          className="text-slate-600 hover:text-rose-500 transition-colors"
+                                          className="text-faint hover:text-brandred-600 transition-colors"
                                           title="Delete Card"
                                         >
                                           <Trash2 size={14} />
@@ -1308,11 +1297,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                       </div>
                                     </div>
                                     {/* Answers Summary */}
-                                    <div className="text-xs text-slate-500 grid grid-cols-2 gap-x-4 gap-y-1">
+                                    <div className="text-xs text-muted grid grid-cols-2 gap-x-4 gap-y-1">
                                       {gameState.props?.questions.map((q, i) => (
                                         <div key={q.id} className="truncate">
-                                          <span className="font-bold text-slate-600 mr-1">{i + 1}.</span>
-                                          <span className={card.answers?.[q.id] ? 'text-slate-400' : 'text-slate-700 italic'}>
+                                          <span className="font-bold text-faint mr-1 num">{i + 1}.</span>
+                                          <span className={card.answers?.[q.id] ? 'text-muted' : 'text-faint italic'}>
                                             {card.answers?.[q.id] || 'No Answer'}
                                           </span>
                                         </div>
@@ -1321,8 +1310,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   </div>
                                 ))}
                               </div>
-                              <div className="mt-4 pt-4 border-t border-slate-800 flex justify-end">
-                                <button onClick={() => removePropPlayer(player.uid)} className="text-xs text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1"><Trash2 size={12} /> Remove Player & Delete All Cards</button>
+                              <div className="mt-4 pt-4 border-t border-line flex justify-end">
+                                <button onClick={() => removePropPlayer(player.uid)} className="text-xs text-brandred-600 hover:text-brandred-500 font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1"><Trash2 size={12} /> Remove Player & Delete All Cards</button>
                               </div>
                             </div>
                           </div>
@@ -1338,28 +1327,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {/* EDIT PLAYER MODAL */}
             {editingPlayer && (
               <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl shadow-2xl max-w-md w-full">
-                  <h3 className="text-xl font-bold text-white mb-4">Edit Player Details</h3>
+                <div className="bg-card border border-line p-6 rounded-xl shadow-panel max-w-md w-full">
+                  <h3 className="text-xl font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Edit Player Details</h3>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Name</label>
-                      <input type="text" value={editingPlayer.name} onChange={(e) => setEditingPlayer({ ...editingPlayer, name: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500" />
+                      <label className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Name</label>
+                      <input type="text" value={editingPlayer.name} onChange={(e) => setEditingPlayer({ ...editingPlayer, name: e.target.value })} className="w-full bg-surface border border-line rounded px-3 py-2 font-body text-[color:var(--text)] outline-none focus:border-gold-500" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Email</label>
-                      <input type="email" value={editingPlayer.email} onChange={(e) => setEditingPlayer({ ...editingPlayer, email: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500" />
+                      <label className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Email</label>
+                      <input type="email" value={editingPlayer.email} onChange={(e) => setEditingPlayer({ ...editingPlayer, email: e.target.value })} className="w-full bg-surface border border-line rounded px-3 py-2 font-body text-[color:var(--text)] outline-none focus:border-gold-500" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Phone</label>
-                      <input type="text" value={editingPlayer.phone} onChange={(e) => setEditingPlayer({ ...editingPlayer, phone: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500" />
+                      <label className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Phone</label>
+                      <input type="text" value={editingPlayer.phone} onChange={(e) => setEditingPlayer({ ...editingPlayer, phone: e.target.value })} className="w-full bg-surface border border-line rounded px-3 py-2 font-body text-[color:var(--text)] outline-none focus:border-gold-500" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Notes</label>
-                      <textarea value={editingPlayer.notes} onChange={(e) => setEditingPlayer({ ...editingPlayer, notes: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500 h-24 resize-none" />
+                      <label className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Notes</label>
+                      <textarea value={editingPlayer.notes} onChange={(e) => setEditingPlayer({ ...editingPlayer, notes: e.target.value })} className="w-full bg-surface border border-line rounded px-3 py-2 font-body text-[color:var(--text)] outline-none focus:border-gold-500 h-24 resize-none" />
                     </div>
                     <div className="flex justify-end gap-2 pt-4">
-                      <button onClick={() => setEditingPlayer(null)} className="px-4 py-2 text-slate-300 hover:text-white font-bold">Cancel</button>
-                      <button
+                      <button onClick={() => setEditingPlayer(null)} className="px-4 py-2 text-muted hover:text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em]">Cancel</button>
+                      <Button
                         onClick={() => {
                           if (playerTab === 'props') {
                             updatePropPlayerDetails(editingPlayer.originalName, editingPlayer);
@@ -1367,10 +1356,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             updatePlayerDetails(editingPlayer.originalName, editingPlayer);
                           }
                         }}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold"
+                        size="sm"
                       >
                         Save Changes
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1384,12 +1373,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {activeTab === 'stats' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/30">
-                <TrendingUp size={24} className="text-indigo-400" />
+              <div className="bg-gold-500/10 p-3 rounded-xl border border-gold-500/30">
+                <TrendingUp size={24} className="text-gold-600 dark:text-gold-400" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">Pool Statistics</h2>
-                <p className="text-sm text-slate-500">Revenue, participation, and performance metrics</p>
+                <h2 className="text-xl font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Pool Statistics</h2>
+                <p className="text-sm font-body text-muted">Revenue, participation, and performance metrics</p>
               </div>
             </div>
             <PoolStatistics pool={gameState} />
@@ -1400,13 +1389,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {
         isRandomizing && (
           <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center backdrop-blur-md cursor-wait">
-            <h2 className="text-4xl md:text-6xl font-black text-white mb-8 animate-pulse text-center">PICKING A WINNER</h2>
-            <div className="w-64 h-64 bg-slate-900 rounded-3xl border-4 border-amber-500 flex items-center justify-center shadow-[0_0_100px_rgba(245,158,11,0.5)]">
-              <span className="text-8xl font-mono font-bold text-white tabular-nums">
+            <h2 className="text-4xl md:text-6xl font-display font-extrabold uppercase leading-[0.9] text-white mb-8 animate-pulse text-center">PICKING A WINNER</h2>
+            <div className="w-64 h-64 bg-navy-900 rounded-3xl border-4 border-gold-500 flex items-center justify-center shadow-[0_0_100px_rgba(201,168,103,0.5)]">
+              <span className="text-8xl font-display font-bold text-white tabular-nums">
                 {randomizingNumber}
               </span>
             </div>
-            <p className="text-amber-400 mt-8 font-bold animate-bounce tracking-widest">GOOD LUCK...</p>
+            <p className="text-gold-400 mt-8 font-display font-bold uppercase animate-bounce tracking-widest">GOOD LUCK...</p>
           </div>
         )
       }

@@ -388,7 +388,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     }, [formData.tournamentType]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100">
+        <div className="min-h-screen bg-page text-[color:var(--text)]">
             <div className="max-w-4xl mx-auto p-6 py-12">
                 {/* Header */}
                 <div className="mb-8">
@@ -396,23 +396,23 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                         <div className="flex items-center gap-3">
                             <button
                                 onClick={onCancel}
-                                className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                                className="p-2 rounded-full hover:bg-card text-muted hover:text-[color:var(--text)] transition-colors"
                             >
                                 <ArrowLeft size={20} />
                             </button>
                             <div>
-                                <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-                                    <Trophy className="text-amber-400" size={28} />
+                                <h1 className="text-3xl font-display font-extrabold uppercase leading-none text-[color:var(--text)] flex items-center gap-2">
+                                    <Trophy className="text-gold-500" size={28} />
                                     Create Bracket Pool
                                 </h1>
-                                <p className="text-sm text-slate-400">March Madness Tournament</p>
+                                <p className="text-sm text-muted font-body">March Madness Tournament</p>
                             </div>
                         </div>
                     </div>
 
                     {/* Progress Indicator */}
                     <div className="mb-6">
-                        <div className="flex justify-between text-xs font-bold uppercase text-slate-500 mb-2">
+                        <div className="flex justify-between text-xs font-display font-bold uppercase tracking-[0.08em] text-muted mb-2">
                             {[
                                 '1. Basics',
                                 '2. Rules',
@@ -426,23 +426,23 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 <button
                                     key={i}
                                     onClick={() => setStep(i + 1)}
-                                    className={`uppercase font-bold transition-colors hover:text-white ${step >= i + 1 ? 'text-indigo-400' : ''
+                                    className={`uppercase font-bold transition-colors hover:text-[color:var(--text)] ${step >= i + 1 ? 'text-gold-600 dark:text-gold-400' : ''
                                         }`}
                                 >
                                     {label}
                                 </button>
                             ))}
                         </div>
-                        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-2 bg-card rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-indigo-600 transition-all duration-500"
+                                className="h-full bg-gold-foil transition-all duration-500"
                                 style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
                             />
                         </div>
                     </div>
 
                     {error && (
-                        <div className="bg-rose-500/20 border border-rose-500 rounded-lg p-4 text-rose-300 text-sm">
+                        <div className="bg-brandred-600/10 border border-brandred-500 rounded-lg p-4 text-brandred-600 dark:text-brandred-500 text-sm font-body">
                             {error}
                         </div>
                     )}
@@ -459,18 +459,18 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                 {step === 8 && renderStep8()}
 
                 {/* Navigation */}
-                <div className="flex justify-between pt-6 border-t border-slate-800 mt-8">
+                <div className="flex justify-between pt-6 border-t border-line mt-8">
                     <button
                         onClick={handleBack}
                         disabled={step === 1}
-                        className="bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all"
+                        className="border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-[color:var(--line)] dark:text-[color:var(--text)] dark:hover:bg-white/10 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 hover:-translate-y-px"
                     >
                         <ArrowLeft size={18} /> Previous
                     </button>
                     {step < TOTAL_STEPS ? (
                         <button
                             onClick={handleNext}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/20"
+                            className="bg-brandred-600 hover:bg-brandred-500 text-white px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 hover:-translate-y-px shadow-red-cta"
                         >
                             Next Step <ArrowRight size={18} />
                         </button>
@@ -478,7 +478,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                         <button
                             onClick={handlePublish}
                             disabled={loading || !tosAccepted}
-                            className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
+                            className="bg-gold-foil text-navy-900 hover:brightness-105 disabled:opacity-50 px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 hover:-translate-y-px shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
                         >
                             {loading ? 'Creating...' : (
                                 <>
@@ -497,21 +497,21 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     function renderStep1() {
         return (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-xl font-bold text-white mb-2">Pool Basics</h3>
-                    <p className="text-slate-400 text-sm mb-6">Let's set up your bracket pool with the essential details.</p>
+                <div className="bg-surface border border-line rounded-xl p-6">
+                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Pool Basics</h3>
+                    <p className="text-muted text-sm mb-6 font-body">Let's set up your bracket pool with the essential details.</p>
 
                     {/* Public Visibility Toggle */}
-                    <div className="mb-6 bg-slate-950 border border-slate-800 rounded-lg p-4 flex items-center justify-between">
+                    <div className="mb-6 bg-card border border-line rounded-lg p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${formData.isListedPublic ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
+                            <div className={`p-2 rounded-lg ${formData.isListedPublic ? 'bg-gold-500/15 text-gold-500' : 'bg-page text-muted'}`}>
                                 <Globe size={24} />
                             </div>
                             <div>
-                                <h4 className={`font-bold ${formData.isListedPublic ? 'text-white' : 'text-slate-400'}`}>
+                                <h4 className={`font-bold ${formData.isListedPublic ? 'text-[color:var(--text)]' : 'text-muted'}`}>
                                     Public Visibility
                                 </h4>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-muted font-body">
                                     {formData.isListedPublic
                                         ? "Your pool is listed in the 'Browse Pools' directory."
                                         : "Only people with the link can access this pool."}
@@ -525,30 +525,30 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 onChange={(e) => update({ isListedPublic: e.target.checked })}
                                 className="sr-only peer"
                             />
-                            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600" />
+                            <div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600" />
                         </label>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="md:col-span-2">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name <span className="text-rose-500">*</span></label>
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Pool Name <span className="text-brandred-500">*</span></label>
                             <input
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => update({ name: e.target.value })}
                                 onBlur={() => handleBlur('name')}
-                                className={`w-full bg-slate-950 border ${touched.name && !formData.name.trim() ? 'border-rose-500 bg-rose-500/5 focus:ring-rose-500' : 'border-slate-700 focus:ring-indigo-500'} rounded px-4 py-3 text-white focus:ring-1 outline-none transition-colors`}
+                                className={`w-full bg-page border-[1.5px] ${touched.name && !formData.name.trim() ? 'border-brandred-500 bg-[#FCEEED] focus:border-brandred-500 dark:text-ink' : 'border-line focus:border-navy-600 focus:bg-surface'} rounded-md px-4 py-3 font-body text-[color:var(--text)] placeholder:text-faint outline-none transition-colors`}
                                 placeholder="e.g., The Office Pool 2026"
                             />
                             {touched.name && !formData.name.trim() && (
-                                <p className="text-xs text-rose-400 mt-1">Pool name is required.</p>
+                                <p className="text-xs text-brandred-600 dark:text-brandred-500 mt-1 font-body">Pool name is required.</p>
                             )}
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">URL Slug</label>
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">URL Slug</label>
                             <div className="relative">
-                                <span className="absolute left-3 top-3 text-slate-600 font-mono text-sm">/</span>
+                                <span className="absolute left-3 top-3 text-faint font-mono text-sm">/</span>
                                 <input
                                     type="text"
                                     value={formData.slug}
@@ -556,15 +556,15 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                         const safe = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
                                         update({ slug: safe });
                                     }}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded pl-6 pr-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    className="w-full bg-page border-[1.5px] border-line rounded-md pl-6 pr-4 py-3 font-body text-[color:var(--text)] placeholder:text-faint focus:border-navy-600 focus:bg-surface outline-none transition-colors"
                                     placeholder="e.g., office-pool-26"
                                 />
                             </div>
-                            <p className="text-slate-500 text-[10px] mt-1">Lowercase letters, numbers, and dashes only.</p>
+                            <p className="text-muted text-[10px] mt-1">Lowercase letters, numbers, and dashes only.</p>
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tournament Type</label>
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Tournament Type</label>
                             <select
                                 value={formData.tournamentType}
                                 onChange={(e) => {
@@ -577,27 +577,27 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                     }
                                     update({ tournamentType: type, lockAt });
                                 }}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                                className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] outline-none focus:border-navy-600 focus:bg-surface transition-colors cursor-pointer"
                             >
                                 <option value="ncaa">NCAA March Madness 2026</option>
                                 <option value="bigeast">Big East Championship 2026</option>
                                 <option value="big12">Big 12 Championship 2026</option>
                             </select>
                             {formData.tournamentType === 'bigeast' && (
-                                <p className="text-[10px] text-amber-400 mt-1">🏀 Big East: 11 teams, 10 picks, lock date auto-set to Mar 11</p>
+                                <p className="text-[10px] text-gold-600 dark:text-gold-400 mt-1">Big East: 11 teams, 10 picks, lock date auto-set to Mar 11</p>
                             )}
                             {formData.tournamentType === 'big12' && (
-                                <p className="text-[10px] text-amber-400 mt-1">🏀 Big 12: 16 teams, 15 picks, lock date auto-set to Mar 10</p>
+                                <p className="text-[10px] text-gold-600 dark:text-gold-400 mt-1">Big 12: 16 teams, 15 picks, lock date auto-set to Mar 10</p>
                             )}
                         </div>
 
                         {formData.tournamentType === 'ncaa' && (
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Gender</label>
+                                <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Gender</label>
                                 <select
                                     value={formData.gender}
                                     onChange={(e) => update({ gender: e.target.value as 'mens' | 'womens' })}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                                    className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] outline-none focus:border-navy-600 focus:bg-surface transition-colors cursor-pointer"
                                 >
                                     <option value="mens">Men's</option>
                                     <option value="womens">Women's</option>
@@ -606,30 +606,30 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                         )}
 
                         <div className="md:col-span-1">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Manager Name</label>
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Pool Manager Name</label>
                             <input
                                 type="text"
                                 value={formData.managerName}
                                 onChange={(e) => update({ managerName: e.target.value })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] placeholder:text-faint focus:border-navy-600 focus:bg-surface outline-none transition-colors"
                                 placeholder="Your Name"
                             />
                         </div>
 
                         <div className="md:col-span-1">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contact Email <span className="text-rose-500">*</span></label>
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Contact Email <span className="text-brandred-500">*</span></label>
                             <input
                                 type="email"
                                 value={formData.contactEmail}
                                 onChange={(e) => update({ contactEmail: e.target.value })}
                                 onBlur={() => handleBlur('contactEmail')}
-                                className={`w-full bg-slate-950 border ${touched.contactEmail && !formData.contactEmail.trim() ? 'border-rose-500 bg-rose-500/5 focus:ring-rose-500' : 'border-slate-700 focus:ring-indigo-500'} rounded px-4 py-3 text-white focus:ring-1 outline-none transition-colors`}
+                                className={`w-full bg-page border-[1.5px] ${touched.contactEmail && !formData.contactEmail.trim() ? 'border-brandred-500 bg-[#FCEEED] focus:border-brandred-500 dark:text-ink' : 'border-line focus:border-navy-600 focus:bg-surface'} rounded-md px-4 py-3 font-body text-[color:var(--text)] placeholder:text-faint outline-none transition-colors`}
                                 placeholder="email@example.com"
                             />
                             {touched.contactEmail && !formData.contactEmail.trim() && (
-                                <p className="text-xs text-rose-400 mt-1">Contact email is required.</p>
+                                <p className="text-xs text-brandred-600 dark:text-brandred-500 mt-1 font-body">Contact email is required.</p>
                             )}
-                            <p className="text-slate-500 text-[10px] mt-1">Visible to pool members so they can contact you.</p>
+                            <p className="text-muted text-[10px] mt-1">Visible to pool members so they can contact you.</p>
                         </div>
                     </div>
                 </div>
@@ -640,50 +640,50 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     function renderStep2() {
         return (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-xl font-bold text-white mb-2">Pool Rules</h3>
-                    <p className="text-slate-400 text-sm mb-6">Configure entry fees, limits, and scoring system.</p>
+                <div className="bg-surface border border-line rounded-xl p-6">
+                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Pool Rules</h3>
+                    <p className="text-muted text-sm mb-6 font-body">Configure entry fees, limits, and scoring system.</p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Entry Fee</label>
+                        <div className="bg-card p-4 rounded-lg border border-line">
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-2">Entry Fee</label>
                             <div className="flex items-center gap-3">
-                                <div className="bg-emerald-500/20 p-3 rounded-lg text-emerald-400">
+                                <div className="bg-gold-500/15 p-3 rounded-lg text-gold-500">
                                     <DollarSign size={24} />
                                 </div>
                                 <input
                                     type="number"
                                     value={formData.entryFee}
                                     onChange={(e) => update({ entryFee: parseInt(e.target.value) || 0 })}
-                                    className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-emerald-500 py-1"
+                                    className="bg-transparent border-b-[1.5px] border-line text-2xl font-display font-bold text-[color:var(--text)] num w-full outline-none focus:border-navy-600 py-1 transition-colors"
                                     min="0"
                                 />
                             </div>
                         </div>
 
-                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Max Entries Per User</label>
+                        <div className="bg-card p-4 rounded-lg border border-line">
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-2">Max Entries Per User</label>
                             <div className="flex items-center gap-3">
-                                <div className="bg-indigo-500/20 p-3 rounded-lg text-indigo-400">
+                                <div className="bg-gold-500/15 p-3 rounded-lg text-gold-500">
                                     <Users size={24} />
                                 </div>
                                 <input
                                     type="number"
                                     value={formData.maxEntriesPerUser}
                                     onChange={(e) => update({ maxEntriesPerUser: parseInt(e.target.value) || 1 })}
-                                    className="bg-transparent border-b border-slate-600 text-2xl font-bold text-white w-full outline-none focus:border-indigo-500 py-1"
+                                    className="bg-transparent border-b-[1.5px] border-line text-2xl font-display font-bold text-[color:var(--text)] num w-full outline-none focus:border-navy-600 py-1 transition-colors"
                                     min="1"
                                 />
                             </div>
-                            <p className="text-xs text-slate-500 mt-2">How many brackets can one person submit?</p>
+                            <p className="text-xs text-muted mt-2">How many brackets can one person submit?</p>
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Total Entry Limit</label>
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Total Entry Limit</label>
                             <select
                                 value={formData.maxEntriesTotal}
                                 onChange={(e) => update({ maxEntriesTotal: parseInt(e.target.value) })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                                className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] outline-none focus:border-navy-600 focus:bg-surface transition-colors cursor-pointer"
                             >
                                 <option value="-1">Unlimited</option>
                                 <option value="10">10 Brackets</option>
@@ -691,26 +691,26 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                 <option value="50">50 Brackets</option>
                                 <option value="100">100 Brackets</option>
                             </select>
-                            <p className="text-xs text-slate-500 mt-2">The total number of brackets allowed for the entire pool.</p>
+                            <p className="text-xs text-muted mt-2">The total number of brackets allowed for the entire pool.</p>
                             
-                            <div className="mt-3.5 p-3.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
-                                <Sparkles size={16} className="text-indigo-400 shrink-0 mt-0.5" />
+                            <div className="mt-3.5 p-3.5 bg-navy-600/10 border border-navy-600/25 text-muted text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
+                                <Sparkles size={16} className="text-gold-500 shrink-0 mt-0.5" />
                                 <div>
-                                    <strong className="text-white block mb-0.5">💡 Start Small, Upgrade Later!</strong>
+                                    <strong className="text-[color:var(--text)] block mb-0.5">Start Small, Upgrade Later!</strong>
                                     Not sure how many players will join? Choose a lower estimate to minimize upfront costs. You can instantly upgrade with one click later for only the pro-rated difference!
                                 </div>
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Scoring System</label>
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Scoring System</label>
                             {(() => {
                                 const cfg = getRoundConfig(formData.tournamentType);
                                 return (
                                     <select
                                         value={formData.scoringSystem}
                                         onChange={(e) => update({ scoringSystem: e.target.value as 'CLASSIC' | 'ESPN' | 'FIBONACCI' | 'CUSTOM' })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                                        className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] outline-none focus:border-navy-600 focus:bg-surface transition-colors cursor-pointer"
                                     >
                                         <option value="CLASSIC">Classic ({cfg.classic.join('-')})</option>
                                         <option value="ESPN">ESPN ({cfg.espn.join('-')})</option>
@@ -725,12 +725,12 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                             const cfg = getRoundConfig(formData.tournamentType);
                             const roundCount = cfg.labels.length;
                             return (
-                                <div className="md:col-span-2 bg-slate-950 p-4 rounded-lg border border-amber-500/30">
-                                    <label className="block text-xs font-bold text-amber-400 uppercase mb-3">⚡ Custom Points Per Round ({roundCount} rounds)</label>
+                                <div className="md:col-span-2 bg-card p-4 rounded-lg border border-gold-500/40">
+                                    <label className="block text-[12px] font-display font-bold text-gold-600 dark:text-gold-400 uppercase tracking-[0.08em] mb-3">Custom Points Per Round ({roundCount} rounds)</label>
                                     <div className={`grid grid-cols-3 sm:grid-cols-${Math.min(roundCount, 6)} gap-3`}>
                                         {cfg.labels.map((label, i) => (
                                             <div key={i}>
-                                                <label className="block text-[10px] text-slate-500 mb-1 text-center">{label}</label>
+                                                <label className="block text-[10px] text-muted mb-1 text-center">{label}</label>
                                                 <input
                                                     type="number"
                                                     min="1"
@@ -740,22 +740,22 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                                         newScoring[i] = parseInt(e.target.value) || 0;
                                                         update({ customScoring: newScoring });
                                                     }}
-                                                    className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-2 text-white text-sm text-center outline-none focus:border-amber-500"
+                                                    className="w-full bg-page border-[1.5px] border-line rounded-md px-2 py-2 font-body text-[color:var(--text)] text-sm text-center num outline-none focus:border-navy-600 focus:bg-surface transition-colors"
                                                 />
                                             </div>
                                         ))}
                                     </div>
-                                    <p className="text-[10px] text-slate-500 mt-2">Points awarded per correct pick in each round.</p>
+                                    <p className="text-[10px] text-muted mt-2">Points awarded per correct pick in each round.</p>
                                 </div>
                             );
                         })()}
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Upset Bonuses</label>
-                            <div className="flex items-center justify-between bg-slate-950 border border-slate-700 rounded-lg p-3">
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Upset Bonuses</label>
+                            <div className="flex items-center justify-between bg-card border border-line rounded-lg p-3">
                                 <div>
                                     <h4 className="font-bold text-white text-sm">Enable Upset Bonus</h4>
-                                    <p className="text-xs text-slate-500">Reward players for bolder predictions.</p>
+                                    <p className="text-xs text-muted">Reward players for bolder predictions.</p>
                                 </div>
                                 <label className="relative inline-flex items-center cursor-pointer">
                                     <input
@@ -764,30 +764,30 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                         onChange={(e) => update({ upsetBonus: { ...(formData.upsetBonus || { multiplier: 5 }), enabled: e.target.checked } })}
                                         className="sr-only peer"
                                     />
-                                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500" />
+                                    <div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600" />
                                 </label>
                             </div>
 
                             {formData.upsetBonus?.enabled && (
-                                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mt-3 animate-in fade-in slide-in-from-top-2">
-                                    <label className="block text-[10px] font-bold text-amber-500/80 uppercase mb-1">Points Per Seed Difference</label>
+                                <div className="bg-gold-500/10 border border-gold-500/30 rounded-lg p-3 mt-3 animate-in fade-in slide-in-from-top-2">
+                                    <label className="block text-[10px] font-display font-bold text-gold-600 dark:text-gold-400 uppercase tracking-[0.08em] mb-1">Points Per Seed Difference</label>
                                     <input
                                         type="number"
                                         min="1"
                                         value={formData.upsetBonus.multiplier}
                                         onChange={(e) => update({ upsetBonus: { ...formData.upsetBonus, multiplier: parseInt(e.target.value) || 0, enabled: true } })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-sm outline-none focus:border-amber-500"
+                                        className="w-full bg-page border-[1.5px] border-line rounded-md px-3 py-2 font-body text-[color:var(--text)] text-sm num outline-none focus:border-navy-600 focus:bg-surface transition-colors"
                                     />
-                                    <p className="text-[10px] text-amber-500/60 mt-2 leading-snug">
+                                    <p className="text-[10px] text-gold-700 dark:text-gold-400/70 mt-2 leading-snug">
                                         E.g. A 12-seed beats a 5-seed = difference of 7. <br />
-                                        7 × {formData.upsetBonus.multiplier || 0} = <strong className="text-amber-400">+{7 * (formData.upsetBonus.multiplier || 0)} Bonus Points</strong>.
+                                        7 × {formData.upsetBonus.multiplier || 0} = <strong className="text-gold-600 dark:text-gold-400">+{7 * (formData.upsetBonus.multiplier || 0)} Bonus Points</strong>.
                                     </p>
                                 </div>
                             )}
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lock Date/Time</label>
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Lock Date/Time</label>
                             <input
                                 type="datetime-local"
                                 value={(() => {
@@ -797,17 +797,17 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                         .slice(0, 16);
                                 })()}
                                 onChange={(e) => update({ lockAt: new Date(e.target.value).getTime() })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                                className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] outline-none focus:border-navy-600 focus:bg-surface transition-colors cursor-pointer"
                             />
-                            <p className="text-xs text-slate-500 mt-1">When should the pool lock? (your local time)</p>
+                            <p className="text-xs text-muted mt-1">When should the pool lock? (your local time)</p>
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Entry Payment Enforcement</label>
-                            <div className="flex items-center justify-between bg-slate-950 border border-slate-700 rounded-lg p-3">
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Entry Payment Enforcement</label>
+                            <div className="flex items-center justify-between bg-card border border-line rounded-lg p-3">
                                 <div>
                                     <h4 className="font-bold text-white text-sm">Lock Unpaid Brackets</h4>
-                                    <p className="text-xs text-slate-500">Prevent members from submitting picks until marked paid.</p>
+                                    <p className="text-xs text-muted">Prevent members from submitting picks until marked paid.</p>
                                 </div>
                                 <label className="relative inline-flex items-center cursor-pointer">
                                     <input
@@ -816,22 +816,22 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                         onChange={(e) => update({ lockUnpaid: e.target.checked })}
                                         className="sr-only peer"
                                     />
-                                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600" />
+                                    <div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600" />
                                 </label>
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tiebreaker Rule</label>
+                            <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Tiebreaker Rule</label>
                             <select
                                 value={formData.tieBreaker}
                                 onChange={(e) => update({ tieBreaker: e.target.value as 'CLOSEST_ABSOLUTE' | 'CLOSEST_UNDER' })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white outline-none focus:border-indigo-500"
+                                className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] outline-none focus:border-navy-600 focus:bg-surface transition-colors cursor-pointer"
                             >
                                 <option value="CLOSEST_ABSOLUTE">Closest (Over/Under)</option>
                                 <option value="CLOSEST_UNDER">Closest Without Going Over</option>
                             </select>
-                            <p className="text-xs text-slate-500 mt-1">
+                            <p className="text-xs text-muted mt-1">
                                 {formData.tieBreaker === 'CLOSEST_ABSOLUTE' && 'Wins if they are closest to the total score, regardless if they go over.'}
                                 {formData.tieBreaker === 'CLOSEST_UNDER' && 'Standard Price is Right rules. If everyone goes over, closest to total wins.'}
                             </p>
@@ -839,37 +839,37 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     </div>
 
                     {formData.entryFee > 0 && (
-                        <div className="mt-6 pt-6 border-t border-slate-800 animate-in slide-in-from-top duration-300">
-                            <h4 className="text-sm font-bold text-white mb-4">Payment Information</h4>
+                        <div className="mt-6 pt-6 border-t border-line animate-in slide-in-from-top duration-300">
+                            <h4 className="text-sm font-display font-bold uppercase text-[color:var(--text)] mb-4">Payment Information</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="md:col-span-1">
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Venmo (@username)</label>
+                                    <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Venmo (@username)</label>
                                     <input
                                         type="text"
                                         value={formData.venmo}
                                         onChange={(e) => update({ venmo: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                        className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] placeholder:text-faint focus:border-navy-600 focus:bg-surface outline-none transition-colors"
                                         placeholder="@YourVenmo"
                                     />
                                 </div>
 
                                 <div className="md:col-span-1">
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Zelle (@username/phone)</label>
+                                    <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Zelle (@username/phone)</label>
                                     <input
                                         type="text"
                                         value={formData.zelle}
                                         onChange={(e) => update({ zelle: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                        className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] placeholder:text-faint focus:border-navy-600 focus:bg-surface outline-none transition-colors"
                                         placeholder="Enter Zelle Info"
                                     />
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payment Instructions</label>
+                                    <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Payment Instructions</label>
                                     <textarea
                                         value={formData.paymentInstructions}
                                         onChange={(e) => update({ paymentInstructions: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-24 resize-none"
+                                        className="w-full bg-page border-[1.5px] border-line rounded-md px-4 py-3 font-body text-[color:var(--text)] placeholder:text-faint focus:border-navy-600 focus:bg-surface outline-none transition-colors h-24 resize-none"
                                         placeholder="e.g., &quot;Venmo @Michael-Scott and put your bracket name in the memo. No refunds!&quot;"
                                     />
                                 </div>
@@ -888,20 +888,20 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
         return (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-xl font-bold text-white mb-2">Payout Structure</h3>
-                    <p className="text-slate-400 text-sm mb-6">Define how winnings will be distributed.</p>
+                <div className="bg-surface border border-line rounded-xl p-6">
+                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Payout Structure</h3>
+                    <p className="text-muted text-sm mb-6 font-body">Define how winnings will be distributed.</p>
 
                     {/* Total Indicator */}
-                    <div className={`mb-6 p-4 rounded-lg border-2 ${isValid ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-rose-500/10 border-rose-500/30'}`}>
+                    <div className={`mb-6 p-4 rounded-lg border-2 ${isValid ? 'bg-[#0F7B4A]/10 border-[#0F7B4A]/40' : 'bg-brandred-600/10 border-brandred-500/40'}`}>
                         <div className="flex justify-between items-center">
-                            <span className="font-bold text-white">Total Payout</span>
-                            <span className={`text-2xl font-black ${isValid ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            <span className="font-display font-bold uppercase text-[color:var(--text)]">Total Payout</span>
+                            <span className={`text-2xl font-display font-black num ${isValid ? 'text-[#0F7B4A]' : 'text-brandred-500'}`}>
                                 {total.toFixed(1)}%
                             </span>
                         </div>
                         {!isValid && (
-                            <p className="text-xs text-rose-300 mt-2">
+                            <p className="text-xs text-brandred-600 dark:text-brandred-500 mt-2 font-body">
                                 Must equal exactly 100% to proceed
                             </p>
                         )}
@@ -910,10 +910,10 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     {/* Place Payouts */}
                     <div className="mb-6">
                         <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-bold text-white">Place Payouts</h4>
+                            <h4 className="font-display font-bold uppercase text-[color:var(--text)]">Place Payouts</h4>
                             <button
                                 onClick={addPlace}
-                                className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded font-bold"
+                                className="text-xs bg-navy-800 hover:bg-navy-700 text-white px-3 py-1 rounded font-display font-bold uppercase tracking-[0.05em] transition-colors"
                                 type="button"
                             >
                                 + Add Place
@@ -921,8 +921,8 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                         </div>
                         <div className="space-y-2">
                             {formData.payouts.places.map((place, i) => (
-                                <div key={i} className="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-700">
-                                    <span className="text-sm font-bold text-slate-400 w-16">#{place.rank}</span>
+                                <div key={i} className="flex items-center gap-3 bg-card p-3 rounded-lg border border-line">
+                                    <span className="text-sm font-bold text-muted w-16 num">#{place.rank}</span>
                                     <input
                                         type="range"
                                         min="0"
@@ -930,22 +930,22 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                         step="1"
                                         value={place.percentage}
                                         onChange={(e) => updatePlace(i, parseFloat(e.target.value))}
-                                        className="flex-1"
+                                        className="flex-1 accent-gold-600 cursor-pointer"
                                     />
                                     <input
                                         type="number"
                                         value={place.percentage}
                                         onChange={(e) => updatePlace(i, parseFloat(e.target.value) || 0)}
-                                        className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm text-center"
+                                        className="w-20 bg-page border-[1.5px] border-line rounded-md px-2 py-1 font-body text-[color:var(--text)] text-sm text-center num outline-none focus:border-navy-600 focus:bg-surface transition-colors"
                                         min="0"
                                         max="100"
                                         step="0.1"
                                     />
-                                    <span className="text-sm text-slate-400">%</span>
+                                    <span className="text-sm text-muted">%</span>
                                     {formData.payouts.places.length > 1 && (
                                         <button
                                             onClick={() => removePlace(i)}
-                                            className="text-rose-400 hover:text-rose-300 text-sm"
+                                            className="text-brandred-500 hover:text-brandred-600 text-sm"
                                             type="button"
                                         >
                                             ✕
@@ -959,26 +959,26 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     {/* Bonus Payouts */}
                     <div>
                         <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-bold text-white">Bonus Payouts</h4>
+                            <h4 className="font-display font-bold uppercase text-[color:var(--text)]">Bonus Payouts</h4>
                             <button
                                 onClick={addBonus}
-                                className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded font-bold"
+                                className="text-xs bg-gold-foil hover:brightness-105 text-navy-900 px-3 py-1 rounded font-display font-bold uppercase tracking-[0.05em] transition-all"
                                 type="button"
                             >
                                 + Add Bonus
                             </button>
                         </div>
                         {formData.payouts.bonuses.length === 0 ? (
-                            <p className="text-sm text-slate-500 text-center py-4">No bonus payouts configured</p>
+                            <p className="text-sm text-muted text-center py-4">No bonus payouts configured</p>
                         ) : (
                             <div className="space-y-2">
                                 {formData.payouts.bonuses.map((bonus, i) => (
-                                    <div key={i} className="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-700">
+                                    <div key={i} className="flex items-center gap-3 bg-card p-3 rounded-lg border border-line">
                                         <input
                                             type="text"
                                             value={bonus.name}
                                             onChange={(e) => updateBonus(i, 'name', e.target.value)}
-                                            className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+                                            className="flex-1 bg-page border-[1.5px] border-line rounded-md px-2 py-1 font-body text-[color:var(--text)] text-sm placeholder:text-faint outline-none focus:border-navy-600 focus:bg-surface transition-colors"
                                             placeholder="Bonus Name"
                                         />
                                         <input
@@ -988,21 +988,21 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                                             step="1"
                                             value={bonus.percentage}
                                             onChange={(e) => updateBonus(i, 'percentage', parseFloat(e.target.value))}
-                                            className="flex-1"
+                                            className="flex-1 accent-gold-600 cursor-pointer"
                                         />
                                         <input
                                             type="number"
                                             value={bonus.percentage}
                                             onChange={(e) => updateBonus(i, 'percentage', parseFloat(e.target.value) || 0)}
-                                            className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm text-center"
+                                            className="w-20 bg-page border-[1.5px] border-line rounded-md px-2 py-1 font-body text-[color:var(--text)] text-sm text-center num outline-none focus:border-navy-600 focus:bg-surface transition-colors"
                                             min="0"
                                             max="100"
                                             step="0.1"
                                         />
-                                        <span className="text-sm text-slate-400">%</span>
+                                        <span className="text-sm text-muted">%</span>
                                         <button
                                             onClick={() => removeBonus(i)}
-                                            className="text-rose-400 hover:text-rose-300 text-sm"
+                                            className="text-brandred-500 hover:text-brandred-600 text-sm"
                                             type="button"
                                         >
                                             ✕
@@ -1014,69 +1014,69 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     </div>
 
                     {/* Charity / Fundraising Section */}
-                    <div className="mt-8 pt-8 border-t border-slate-800">
-                        <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                            <Sparkles size={20} className="text-indigo-400" /> Charity / Fundraising
+                    <div className="mt-8 pt-8 border-t border-line">
+                        <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2 flex items-center gap-2">
+                            <Sparkles size={20} className="text-gold-500" /> Charity / Fundraising
                         </h3>
-                        <p className="text-slate-400 text-sm mb-6">Allocate a percentage of the pot to a cause.</p>
+                        <p className="text-muted text-sm mb-6 font-body">Allocate a percentage of the pot to a cause.</p>
 
-                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors mb-4">
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-card rounded-lg border border-line hover:border-navy-600/50 transition-colors mb-4">
                             <div>
-                                <span className="font-bold text-slate-200 block">Enable Fundraising</span>
-                                <span className="text-xs text-slate-500">Deduct a percentage from determining the payouts.</span>
+                                <span className="font-bold text-[color:var(--text)] block">Enable Fundraising</span>
+                                <span className="text-xs text-muted">Deduct a percentage from determining the payouts.</span>
                             </div>
                             <input
                                 type="checkbox"
                                 checked={formData.charity.enabled}
                                 onChange={(e) => update({ charity: { ...formData.charity, enabled: e.target.checked } })}
-                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                                className="w-6 h-6 rounded border-line bg-page text-navy-800 accent-navy-800 focus:ring-navy-600"
                             />
                         </label>
 
                         {formData.charity.enabled && (
-                            <div className="space-y-4 animate-in fade-in bg-slate-950 p-4 rounded-lg border border-slate-800">
+                            <div className="space-y-4 animate-in fade-in bg-card p-4 rounded-lg border border-line">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Organization Name</label>
+                                    <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Organization Name</label>
                                     <input
                                         type="text"
                                         value={formData.charity.name}
                                         onChange={(e) => update({ charity: { ...formData.charity, name: e.target.value } })}
                                         placeholder="e.g. Red Cross"
-                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                        className="w-full bg-page border-[1.5px] border-line rounded-md px-3 py-2 font-body text-[color:var(--text)] placeholder:text-faint outline-none focus:border-navy-600 focus:bg-surface transition-colors"
                                     />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Percentage %</label>
+                                        <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Percentage %</label>
                                         <div className="relative">
                                             <input
                                                 type="number"
                                                 value={formData.charity.percentage}
                                                 onChange={(e) => update({ charity: { ...formData.charity, percentage: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) } })}
-                                                className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500 pr-8"
+                                                className="w-full bg-page border-[1.5px] border-line rounded-md px-3 py-2 font-body text-[color:var(--text)] num outline-none focus:border-navy-600 focus:bg-surface transition-colors pr-8"
                                             />
-                                            <span className="absolute right-3 top-2 text-slate-500">%</span>
+                                            <span className="absolute right-3 top-2 text-muted">%</span>
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Link (Optional)</label>
+                                        <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Link (Optional)</label>
                                         <input
                                             type="url"
                                             value={formData.charity.url || ''}
                                             onChange={(e) => update({ charity: { ...formData.charity, url: e.target.value } })}
                                             placeholder="https://..."
-                                            className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                            className="w-full bg-page border-[1.5px] border-line rounded-md px-3 py-2 font-body text-[color:var(--text)] placeholder:text-faint outline-none focus:border-navy-600 focus:bg-surface transition-colors"
                                         />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Description</label>
+                                    <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-1">Description</label>
                                     <textarea
                                         value={formData.charity.description || ''}
                                         onChange={(e) => update({ charity: { ...formData.charity, description: e.target.value } })}
                                         rows={2}
                                         placeholder="Briefly describe the cause..."
-                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                        className="w-full bg-page border-[1.5px] border-line rounded-md px-3 py-2 font-body text-[color:var(--text)] placeholder:text-faint outline-none focus:border-navy-600 focus:bg-surface transition-colors"
                                     />
                                 </div>
                             </div>
@@ -1099,76 +1099,76 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     function renderStep5() {
         return (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                        <Calendar size={20} className="text-emerald-400" />
+                <div className="bg-surface border border-line rounded-xl p-6">
+                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2 flex items-center gap-2">
+                        <Calendar size={20} className="text-gold-500" />
                         Smart Reminders
                     </h3>
-                    <p className="text-slate-400 text-sm mb-6">Automatically notify players at key moments.</p>
+                    <p className="text-muted text-sm mb-6 font-body">Automatically notify players at key moments.</p>
 
                     <div className="space-y-4">
-                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-card rounded-lg border border-line hover:border-navy-600/50 transition-colors">
                             <div>
-                                <span className="font-bold text-slate-200 block">24-Hour Reminder</span>
-                                <span className="text-xs text-slate-500">Email all players 24h before lock</span>
+                                <span className="font-bold text-[color:var(--text)] block">24-Hour Reminder</span>
+                                <span className="text-xs text-muted">Email all players 24h before lock</span>
                             </div>
                             <input
                                 type="checkbox"
                                 checked={formData.reminders.auto24h}
                                 onChange={(e) => update({ reminders: { ...formData.reminders, auto24h: e.target.checked } })}
-                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                                className="w-6 h-6 rounded border-line bg-page text-navy-800 accent-navy-800 focus:ring-navy-600"
                             />
                         </label>
 
-                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-card rounded-lg border border-line hover:border-navy-600/50 transition-colors">
                             <div>
-                                <span className="font-bold text-slate-200 block">1-Hour Reminder</span>
-                                <span className="text-xs text-slate-500">Final reminder 1h before lock</span>
+                                <span className="font-bold text-[color:var(--text)] block">1-Hour Reminder</span>
+                                <span className="text-xs text-muted">Final reminder 1h before lock</span>
                             </div>
                             <input
                                 type="checkbox"
                                 checked={formData.reminders.auto1h}
                                 onChange={(e) => update({ reminders: { ...formData.reminders, auto1h: e.target.checked } })}
-                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                                className="w-6 h-6 rounded border-line bg-page text-navy-800 accent-navy-800 focus:ring-navy-600"
                             />
                         </label>
 
-                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-card rounded-lg border border-line hover:border-navy-600/50 transition-colors">
                             <div>
-                                <span className="font-bold text-slate-200 block">Auto-Lock Pool</span>
-                                <span className="text-xs text-slate-500">Automatically lock at tournament start</span>
+                                <span className="font-bold text-[color:var(--text)] block">Auto-Lock Pool</span>
+                                <span className="text-xs text-muted">Automatically lock at tournament start</span>
                             </div>
                             <input
                                 type="checkbox"
                                 checked={formData.reminders.autoLock}
                                 onChange={(e) => update({ reminders: { ...formData.reminders, autoLock: e.target.checked } })}
-                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                                className="w-6 h-6 rounded border-line bg-page text-navy-800 accent-navy-800 focus:ring-navy-600"
                             />
                         </label>
 
-                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-card rounded-lg border border-line hover:border-navy-600/50 transition-colors">
                             <div>
-                                <span className="font-bold text-slate-200 block">Winner Announcements</span>
-                                <span className="text-xs text-slate-500">Auto-email when winners are finalized</span>
+                                <span className="font-bold text-[color:var(--text)] block">Winner Announcements</span>
+                                <span className="text-xs text-muted">Auto-email when winners are finalized</span>
                             </div>
                             <input
                                 type="checkbox"
                                 checked={formData.reminders.announceWinner}
                                 onChange={(e) => update({ reminders: { ...formData.reminders, announceWinner: e.target.checked } })}
-                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                                className="w-6 h-6 rounded border-line bg-page text-navy-800 accent-navy-800 focus:ring-navy-600"
                             />
                         </label>
 
-                        <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                        <label className="flex items-center justify-between cursor-pointer p-3 bg-card rounded-lg border border-line hover:border-navy-600/50 transition-colors">
                             <div>
-                                <span className="font-bold text-slate-200 block">SMS Notifications</span>
-                                <span className="text-xs text-slate-500">Send text messages to players who opt-in</span>
+                                <span className="font-bold text-[color:var(--text)] block">SMS Notifications</span>
+                                <span className="text-xs text-muted">Send text messages to players who opt-in</span>
                             </div>
                             <input
                                 type="checkbox"
                                 checked={formData.reminders.smsEnabled || false}
                                 onChange={(e) => update({ reminders: { ...formData.reminders, smsEnabled: e.target.checked } })}
-                                className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                                className="w-6 h-6 rounded border-line bg-page text-navy-800 accent-navy-800 focus:ring-navy-600"
                             />
                         </label>
                     </div>
@@ -1243,30 +1243,30 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
         return (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <div className="bg-surface border border-line rounded-xl p-6">
                     <div className="flex items-center gap-3 mb-2">
-                        <Share2 size={24} className="text-indigo-400" />
-                        <h3 className="text-xl font-bold text-white">Share Your Pool</h3>
+                        <Share2 size={24} className="text-gold-500" />
+                        <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)]">Share Your Pool</h3>
                     </div>
-                    <p className="text-slate-400 text-sm mb-6">Invite players to join your bracket pool via social media.</p>
+                    <p className="text-muted text-sm mb-6 font-body">Invite players to join your bracket pool via social media.</p>
 
                     {/* Custom Message Editor */}
                     <div className="mb-6">
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Customize Your Message</label>
+                        <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-2">Customize Your Message</label>
                         <textarea
                             value={shareMessage || defaultMessage}
                             onChange={(e) => setShareMessage(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white text-sm outline-none focus:border-indigo-500 h-24 resize-none"
+                            className="w-full bg-page border-[1.5px] border-line rounded-lg px-4 py-3 font-body text-[color:var(--text)] text-sm placeholder:text-faint outline-none focus:border-navy-600 focus:bg-surface transition-colors h-24 resize-none"
                             placeholder="Write your invite message..."
                         />
-                        <p className="text-[10px] text-slate-500 mt-1">This message will be included when sharing to each platform.</p>
+                        <p className="text-[10px] text-muted mt-1">This message will be included when sharing to each platform.</p>
                     </div>
 
                     {/* Share Buttons */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
                         <button
                             onClick={shareToFacebook}
-                            className="flex items-center justify-center gap-2 bg-[#1877F2] hover:bg-[#166FE5] text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                            className="flex items-center justify-center gap-2 bg-[#1877F2] hover:bg-[#166FE5] text-white px-4 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all"
                         >
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" /></svg>
                             Facebook
@@ -1274,7 +1274,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
                         <button
                             onClick={shareToX}
-                            className="flex items-center justify-center gap-2 bg-black hover:bg-slate-800 text-white px-4 py-3 rounded-lg font-bold text-sm transition-all border border-slate-700"
+                            className="flex items-center justify-center gap-2 bg-black hover:bg-navy-900 text-white px-4 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all border border-line"
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
                             X (Twitter)
@@ -1282,7 +1282,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
                         <button
                             onClick={shareToReddit}
-                            className="flex items-center justify-center gap-2 bg-[#FF4500] hover:bg-[#E03D00] text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                            className="flex items-center justify-center gap-2 bg-[#FF4500] hover:bg-[#E03D00] text-white px-4 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all"
                         >
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z" /></svg>
                             Reddit
@@ -1290,7 +1290,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
                         <button
                             onClick={() => copyToClipboard('discord')}
-                            className="flex items-center justify-center gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                            className="flex items-center justify-center gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white px-4 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all"
                         >
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286z" /></svg>
                             Discord
@@ -1298,7 +1298,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
                         <button
                             onClick={shareToEmail}
-                            className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                            className="flex items-center justify-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-4 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all"
                         >
                             <Mail size={18} />
                             Email
@@ -1306,7 +1306,7 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
 
                         <button
                             onClick={() => copyToClipboard('copy')}
-                            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-lg font-bold text-sm transition-all"
+                            className="flex items-center justify-center gap-2 bg-gold-foil hover:brightness-105 text-navy-900 px-4 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all"
                         >
                             <Copy size={16} />
                             {copied ? '✓ Copied!' : 'Copy Link'}
@@ -1314,36 +1314,36 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                     </div>
 
                     {/* Instagram — No Tracking */}
-                    <div className="bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-amber-500/10 border border-purple-500/20 rounded-lg p-4 mb-6">
+                    <div className="bg-card border border-line rounded-lg p-4 mb-6">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-pink-400"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" /></svg>
                                 <div>
-                                    <p className="text-white text-sm font-bold">Instagram</p>
-                                    <p className="text-[10px] text-slate-400">Paste the copied link in your bio, story, or DM</p>
+                                    <p className="text-[color:var(--text)] text-sm font-bold">Instagram</p>
+                                    <p className="text-[10px] text-muted">Paste the copied link in your bio, story, or DM</p>
                                 </div>
                             </div>
                             <button
                                 onClick={() => copyToClipboard('instagram')}
-                                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all"
+                                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white px-4 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] transition-all"
                             >
                                 {copied ? '✓ Copied!' : 'Copy for Instagram'}
                             </button>
                         </div>
-                        <div className="flex items-center gap-2 mt-3 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
-                            <AlertTriangle size={14} className="text-amber-400 shrink-0" />
-                            <p className="text-[10px] text-amber-300">No click tracking available for Instagram — links shared on Instagram bypass UTM parameters.</p>
+                        <div className="flex items-center gap-2 mt-3 bg-gold-500/10 border border-gold-500/25 rounded-md px-3 py-2">
+                            <AlertTriangle size={14} className="text-gold-500 shrink-0" />
+                            <p className="text-[10px] text-gold-700 dark:text-gold-300">No click tracking available for Instagram — links shared on Instagram bypass UTM parameters.</p>
                         </div>
                     </div>
 
                     {/* URL Preview */}
-                    <div className="bg-slate-950 border border-slate-700 rounded-lg p-4">
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Tracked URL Preview</label>
+                    <div className="bg-card border border-line rounded-lg p-4">
+                        <label className="block text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-2">Tracked URL Preview</label>
                         <div className="flex items-center gap-2">
-                            <ExternalLink size={14} className="text-indigo-400 shrink-0" />
-                            <code className="text-xs text-indigo-300 break-all">{makeUrl('platform')}</code>
+                            <ExternalLink size={14} className="text-gold-500 shrink-0" />
+                            <code className="text-xs text-gold-700 dark:text-gold-300 break-all">{makeUrl('platform')}</code>
                         </div>
-                        <p className="text-[10px] text-slate-500 mt-2">Each platform generates a unique tracked URL so you can see which channels drive the most signups.</p>
+                        <p className="text-[10px] text-muted mt-2">Each platform generates a unique tracked URL so you can see which channels drive the most signups.</p>
                     </div>
                 </div>
             </div>
@@ -1353,62 +1353,62 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
     function renderStep8() {
         return (
             <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-xl font-bold text-white mb-2">Review & Launch</h3>
-                    <p className="text-slate-400 text-sm mb-6">Double-check everything before publishing your pool.</p>
+                <div className="bg-surface border border-line rounded-xl p-6">
+                    <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Review & Launch</h3>
+                    <p className="text-muted text-sm mb-6 font-body">Double-check everything before publishing your pool.</p>
 
                     <div className="space-y-4">
-                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                            <h4 className="font-bold text-white text-sm mb-2">Pool Details</h4>
+                        <div className="bg-card p-4 rounded-lg border border-line">
+                            <h4 className="font-display font-bold uppercase text-[color:var(--text)] text-sm mb-2">Pool Details</h4>
                             <div className="grid grid-cols-2 gap-2 text-sm">
-                                <div className="text-slate-400">Name:</div>
-                                <div className="text-white font-mono">{formData.name}</div>
-                                <div className="text-slate-400">Slug:</div>
-                                <div className="text-white font-mono">/{formData.slug}</div>
-                                <div className="text-slate-400">Tournament:</div>
-                                <div className="text-white">{formData.gender === 'mens' ? "Men's" : "Women's"} {formData.seasonYear}</div>
-                                <div className="text-slate-400">Manager:</div>
-                                <div className="text-white">{formData.managerName}</div>
-                                <div className="text-slate-400">Email:</div>
-                                <div className="text-white">{formData.contactEmail}</div>
+                                <div className="text-muted">Name:</div>
+                                <div className="text-[color:var(--text)] font-mono">{formData.name}</div>
+                                <div className="text-muted">Slug:</div>
+                                <div className="text-[color:var(--text)] font-mono">/{formData.slug}</div>
+                                <div className="text-muted">Tournament:</div>
+                                <div className="text-[color:var(--text)]">{formData.gender === 'mens' ? "Men's" : "Women's"} {formData.seasonYear}</div>
+                                <div className="text-muted">Manager:</div>
+                                <div className="text-[color:var(--text)]">{formData.managerName}</div>
+                                <div className="text-muted">Email:</div>
+                                <div className="text-[color:var(--text)]">{formData.contactEmail}</div>
                             </div>
                         </div>
 
-                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                            <h4 className="font-bold text-white text-sm mb-2">Rules</h4>
+                        <div className="bg-card p-4 rounded-lg border border-line">
+                            <h4 className="font-display font-bold uppercase text-[color:var(--text)] text-sm mb-2">Rules</h4>
                             <div className="grid grid-cols-2 gap-2 text-sm">
-                                <div className="text-slate-400">Entry Fee:</div>
-                                <div className="text-emerald-400 font-bold">${formData.entryFee}</div>
-                                <div className="text-slate-400">Max Per User:</div>
-                                <div className="text-white">{formData.maxEntriesPerUser} entries</div>
-                                <div className="text-slate-400">Total Limit:</div>
-                                <div className="text-white">{formData.maxEntriesTotal === -1 ? 'Unlimited' : formData.maxEntriesTotal}</div>
-                                <div className="text-slate-400">Scoring:</div>
-                                <div className="text-white">{formData.scoringSystem}</div>
-                                <div className="text-slate-400">Lock Unpaid:</div>
-                                <div className="text-white">{formData.lockUnpaid ? 'Yes' : 'No'}</div>
+                                <div className="text-muted">Entry Fee:</div>
+                                <div className="text-gold-600 dark:text-gold-400 font-bold num">${formData.entryFee}</div>
+                                <div className="text-muted">Max Per User:</div>
+                                <div className="text-[color:var(--text)]">{formData.maxEntriesPerUser} entries</div>
+                                <div className="text-muted">Total Limit:</div>
+                                <div className="text-[color:var(--text)]">{formData.maxEntriesTotal === -1 ? 'Unlimited' : formData.maxEntriesTotal}</div>
+                                <div className="text-muted">Scoring:</div>
+                                <div className="text-[color:var(--text)]">{formData.scoringSystem}</div>
+                                <div className="text-muted">Lock Unpaid:</div>
+                                <div className="text-[color:var(--text)]">{formData.lockUnpaid ? 'Yes' : 'No'}</div>
                             </div>
                         </div>
 
-                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-700">
-                            <h4 className="font-bold text-white text-sm mb-2">Payouts</h4>
+                        <div className="bg-card p-4 rounded-lg border border-line">
+                            <h4 className="font-display font-bold uppercase text-[color:var(--text)] text-sm mb-2">Payouts</h4>
                             <div className="space-y-1 text-sm">
                                 {formData.payouts.places.map(p => (
                                     <div key={p.rank} className="flex justify-between">
-                                        <span className="text-slate-400">#{p.rank}</span>
-                                        <span className="text-emerald-400 font-mono">{p.percentage}%</span>
+                                        <span className="text-muted num">#{p.rank}</span>
+                                        <span className="text-gold-600 dark:text-gold-400 font-mono num">{p.percentage}%</span>
                                     </div>
                                 ))}
                                 {formData.payouts.bonuses.map((b, i) => (
                                     <div key={i} className="flex justify-between">
-                                        <span className="text-amber-400">{b.name}</span>
-                                        <span className="text-amber-400 font-mono">{b.percentage}%</span>
+                                        <span className="text-gold-600 dark:text-gold-400">{b.name}</span>
+                                        <span className="text-gold-600 dark:text-gold-400 font-mono num">{b.percentage}%</span>
                                     </div>
                                 ))}
                                 {formData.charity.enabled && (
-                                    <div className="flex justify-between border-t border-slate-800 pt-1 mt-1">
-                                        <span className="text-indigo-400">Charity ({formData.charity.name || 'Unnamed'})</span>
-                                        <span className="text-indigo-400 font-mono">{formData.charity.percentage}%</span>
+                                    <div className="flex justify-between border-t border-line pt-1 mt-1">
+                                        <span className="text-navy-600 dark:text-gold-300">Charity ({formData.charity.name || 'Unnamed'})</span>
+                                        <span className="text-navy-600 dark:text-gold-300 font-mono num">{formData.charity.percentage}%</span>
                                     </div>
                                 )}
                             </div>
@@ -1436,10 +1436,10 @@ export const BracketWizard: React.FC<BracketWizardProps> = ({ user, onCancel, on
                             initialCouponCode={(formData as any).billing?.couponCode || ''}
                         />
                         
-                        <div className="mt-4 p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-slate-400 text-xs">
-                            <ShieldCheck className="text-indigo-400 shrink-0 mt-0.5" size={20} />
+                        <div className="mt-4 p-4 bg-card border border-line rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-muted text-xs">
+                            <ShieldCheck className="text-gold-500 shrink-0 mt-0.5" size={20} />
                             <div>
-                                <strong className="text-white block mb-0.5">🚀 100% Free Trial Setup</strong>
+                                <strong className="text-[color:var(--text)] block mb-0.5">100% Free Trial Setup</strong>
                                 Set up rules, invite participants, and run your pool completely free for 14 days! Pay only when you are ready to upgrade.
                             </div>
                         </div>

@@ -6,21 +6,22 @@ import { Footer } from './Footer';
 import { db } from '../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { dbService } from '../services/dbService';
-import { 
-    CheckCircle, Sparkles, Zap, 
+import {
+    CheckCircle, Sparkles, Zap,
     ArrowRight, LayoutGrid, Users, HelpCircle,
-    ChevronRight, HelpCircle as InfoIcon
+    ChevronRight, HelpCircle as InfoIcon, X
 } from 'lucide-react';
 import { BillingInvoiceCard } from './billing/BillingInvoiceCard';
+import { canAccessPoolCreation } from '../utils/auth';
 
 const UpgradeTooltip: React.FC<{ title: string; description: string }> = ({ title, description }) => {
     return (
         <span className="relative group inline-block ml-1">
-            <HelpCircle size={14} className="text-slate-500 hover:text-slate-350 cursor-help inline shrink-0 transition-colors" />
-            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-900 border border-slate-800 p-3.5 rounded-xl text-[11px] leading-relaxed text-slate-300 font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-2xl z-50 backdrop-blur-md">
-                <strong className="text-indigo-400 block mb-1 uppercase tracking-wider text-[10px]">{title}</strong>
+            <HelpCircle size={14} className="text-faint hover:text-muted cursor-help inline shrink-0 transition-colors" />
+            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-card border border-line p-3.5 rounded-xl text-[11px] leading-relaxed text-[color:var(--text)] font-body opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-panel z-50 backdrop-blur-md">
+                <strong className="text-gold-600 dark:text-gold-400 block mb-1 font-display font-bold uppercase tracking-[0.08em] text-[10px]">{title}</strong>
                 {description}
-                <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[color:var(--card)]" />
             </span>
         </span>
     );
@@ -87,14 +88,20 @@ const ACTIVE_PROMO = {
     blurb: 'Pre-season launch — lock in 30% off your NFL or NCAA pool before July 31.'
 };
 
-export const PricingPage: React.FC<PricingPageProps> = ({ 
-    user, 
-    isManager = false, 
-    onLogin, 
-    onLogout, 
-    onCreatePool 
+/* Hero band stays navy chrome (always dark); the pricing content below flips light/dark. */
+
+const contentCard = 'bg-card border border-line';
+const contentLabel = 'block font-display font-bold text-[10px] text-faint uppercase tracking-[0.16em]';
+
+export const PricingPage: React.FC<PricingPageProps> = ({
+    user,
+    isManager = false,
+    onLogin,
+    onLogout,
+    onCreatePool
 }) => {
     const navigate = useNavigate();
+    const canCreate = canAccessPoolCreation(user);
     const [searchParams] = useSearchParams();
     const targetPoolId = searchParams.get('poolId');
 
@@ -128,7 +135,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
     useEffect(() => {
         if (!user?.id) return;
         const unsubscribe = dbService.subscribeToPools((poolsList) => {
-            const trialsOnly = poolsList.filter(p => 
+            const trialsOnly = poolsList.filter(p =>
                 p.billing?.status === 'trial' || p.billing?.status === 'grace_period'
             );
             setUserPools(trialsOnly);
@@ -163,7 +170,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
     }, [selectedPoolId, targetPoolId]);
 
     return (
-        <div className="min-h-screen text-slate-100 font-sans selection:bg-orange-500 selection:text-white bg-slate-950 flex flex-col">
+        <div className="min-h-screen text-[color:var(--text)] font-body bg-page flex flex-col">
             <Header
                 user={user || null}
                 isManager={isManager}
@@ -172,42 +179,42 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                 onCreatePool={onCreatePool}
             />
 
-            {/* Hero Header Section */}
-            <section className="relative overflow-hidden pt-24 pb-20 border-b border-slate-900 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900">
+            {/* Hero Header Section — navy chrome (always dark) */}
+            <section className="relative overflow-hidden pt-24 pb-20 border-b border-[rgba(230,206,150,0.16)] text-white bg-gradient-to-b from-navy-950 via-navy-950 to-navy-900">
                 <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute top-10 right-0 w-[550px] h-[550px] rounded-full blur-[140px] bg-indigo-500/10 opacity-70" />
-                    <div className="absolute bottom-0 left-0 w-[550px] h-[550px] rounded-full blur-[140px] bg-orange-500/5 opacity-50" />
+                    <div className="absolute top-10 right-0 w-[550px] h-[550px] rounded-full blur-[140px] bg-navy-600/25 opacity-70" />
+                    <div className="absolute bottom-0 left-0 w-[550px] h-[550px] rounded-full blur-[140px] bg-gold-500/10 opacity-50" />
                 </div>
 
                 <div className="max-w-5xl mx-auto px-6 relative z-10 text-center space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                    <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 shadow-md bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 backdrop-blur-md">
-                        <Sparkles size={14} className="text-indigo-400 animate-spin-slow" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Monetization Dashboard V3</span>
+                    <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 shadow-md bg-gold-500/10 border border-gold-500/25 backdrop-blur-md">
+                        <Sparkles size={14} className="text-gold-400 animate-spin-slow" />
+                        <span className="font-display font-bold text-[10px] uppercase tracking-[0.16em] text-gold-400">Monetization Dashboard V3</span>
                     </div>
 
-                    <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                    <h1 className="font-display font-extrabold uppercase text-4xl md:text-6xl text-white tracking-tight leading-[0.9]">
                         Flexible Pricing for <br />
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-400 to-indigo-400">Pool Commissioners</span>
+                        <span className="text-gold-400">Pool Commissioners</span>
                     </h1>
-                    
-                    <p className="text-base md:text-lg max-w-2xl mx-auto text-slate-400 leading-relaxed font-medium">
+
+                    <p className="text-base md:text-lg max-w-2xl mx-auto font-body text-[#9FB0CC] leading-relaxed">
                         Start every pool with a <strong className="text-white">14-day free trial</strong>. Upgrade anytime to unlock premium tools, live scoring syncs, AI updates, and SMS alerts.
                     </p>
 
                     {ACTIVE_PROMO.endsAt > Date.now() && (
-                        <div className="mt-6 inline-flex flex-col sm:flex-row items-center gap-3.5 px-6 py-4 rounded-3xl border border-amber-500/25 bg-slate-900/60 backdrop-blur-md shadow-2xl relative overflow-hidden group max-w-3xl mx-auto">
+                        <div className="mt-6 inline-flex flex-col sm:flex-row items-center gap-3.5 px-6 py-4 rounded-3xl border border-gold-500/25 bg-navy-900/60 backdrop-blur-md shadow-panel relative overflow-hidden group max-w-3xl mx-auto">
                             {/* Inner soft glow */}
-                            <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-amber-500/5 opacity-50 pointer-events-none" />
-                            
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-400/35 text-[10px] font-black uppercase tracking-wider text-amber-300 shadow-sm shrink-0">
-                                <Sparkles size={12} className="animate-pulse" /> {ACTIVE_PROMO.label}
+                            <div className="absolute inset-0 bg-gradient-to-r from-gold-500/5 via-gold-400/5 to-gold-500/5 opacity-50 pointer-events-none" />
+
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold-500/10 border border-gold-400/35 font-display font-bold text-[10px] uppercase tracking-[0.08em] text-gold-300 shadow-sm shrink-0">
+                                <Sparkles size={12} className="animate-live-pulse" /> {ACTIVE_PROMO.label}
                             </span>
-                            <span className="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed text-left">
+                            <span className="text-xs sm:text-sm text-[#EDF1F8] font-body leading-relaxed text-left">
                                 {ACTIVE_PROMO.blurb} Use code{' '}
-                                <code className="px-2 py-0.5 rounded-md bg-slate-950 border border-amber-400/40 text-amber-300 font-mono font-black text-xs shadow-inner">
+                                <code className="px-2 py-0.5 rounded-md bg-navy-950 border border-gold-400/40 text-gold-300 font-mono font-black text-xs shadow-inner">
                                     {ACTIVE_PROMO.code}
                                 </code>{' '}
-                                at checkout — save {ACTIVE_PROMO.discount}%.
+                                at checkout — save <span className="num">{ACTIVE_PROMO.discount}%</span>.
                             </span>
                         </div>
                     )}
@@ -217,18 +224,18 @@ export const PricingPage: React.FC<PricingPageProps> = ({
             {/* Main Interactive Bento Layout */}
             <main className="flex-grow max-w-7xl mx-auto px-4 md:px-8 py-16 w-full">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    
+
                     {/* LEFT COLUMN: Pricing Calculator Settings & User Pools */}
                     <div className="lg:col-span-7 space-y-8">
-                        
+
                         {/* Pool Upgrade Select (If Logged In & Has Trial Pools) */}
                         {user && userPools.length > 0 && (
-                            <div className="bg-slate-900/40 border border-indigo-500/20 rounded-3xl p-6 space-y-4 shadow-xl">
-                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                    <Sparkles className="text-amber-400" size={20} />
+                            <div className="bg-card border border-gold-500/25 rounded-3xl p-6 space-y-4 shadow-panel">
+                                <h3 className="font-display font-bold uppercase text-lg text-[color:var(--text)] flex items-center gap-2">
+                                    <Sparkles className="text-gold-600 dark:text-gold-400" size={20} />
                                     Your Trial Pools Awaiting Activation
                                 </h3>
-                                <p className="text-xs text-slate-400">
+                                <p className="text-xs font-body text-muted">
                                     Select one of your trial pools below to complete standard hosting payment and activate permanently.
                                 </p>
                                 <div className="grid grid-cols-1 gap-2.5">
@@ -237,48 +244,48 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                             key={pool.id}
                                             onClick={() => setSelectedPoolId(pool.id)}
                                             className={`w-full flex items-center justify-between p-4 rounded-xl border text-left transition-all ${
-                                                selectedPoolId === pool.id 
-                                                    ? 'bg-indigo-600/10 border-indigo-500 shadow-lg' 
-                                                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                                                selectedPoolId === pool.id
+                                                    ? 'bg-gold-500/10 border-gold-500 shadow-lg'
+                                                    : 'bg-surface border-line hover:border-gold-500/40'
                                             }`}
                                         >
                                             <div className="space-y-1">
-                                                <span className="text-sm font-bold text-white block">{pool.name}</span>
-                                                <span className="text-xs text-slate-500 font-mono capitalize">
+                                                <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block">{pool.name}</span>
+                                                <span className="text-xs text-faint font-mono capitalize">
                                                     Format: {pool.type.toLowerCase().replace('_', ' ')}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <span className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+                                                <span className="bg-gold-500/10 border border-gold-500/25 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full">
                                                     Trial State
                                                 </span>
-                                                <ChevronRight size={16} className="text-slate-400" />
+                                                <ChevronRight size={16} className="text-muted" />
                                             </div>
                                         </button>
                                     ))}
                                 </div>
                                 {selectedPoolId && (
-                                    <button 
+                                    <button
                                         onClick={() => setSelectedPoolId(null)}
-                                        className="text-xs text-slate-500 hover:text-white transition-colors"
+                                        className="inline-flex items-center gap-1 text-xs font-body text-faint hover:text-[color:var(--text)] transition-colors"
                                     >
-                                        ✕ Clear selection and show calculator
+                                        <X size={12} /> Clear selection and show calculator
                                     </button>
                                 )}
                             </div>
                         )}
 
                         {/* Interactive Billing Calculator Panel */}
-                        <div className="bg-slate-900/40 border border-slate-800/80 p-6 md:p-8 rounded-3xl space-y-6 shadow-2xl backdrop-blur-md hover:border-slate-700/60 transition-all duration-300 relative overflow-hidden group">
+                        <div className={`${contentCard} p-6 md:p-8 rounded-3xl space-y-6 shadow-panel backdrop-blur-md hover:border-gold-500/40 transition-all duration-300 relative overflow-hidden group`}>
                             {/* Inner background blob */}
-                            <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-indigo-500/5 blur-2xl pointer-events-none" />
-                            
+                            <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
+
                             <div className="space-y-2 relative z-10">
-                                <h3 className="text-xl font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Montserrat', sans-serif" }}>
-                                    <LayoutGrid size={22} className="text-indigo-400" />
+                                <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] flex items-center gap-2">
+                                    <LayoutGrid size={22} className="text-gold-600 dark:text-gold-400" />
                                     Interactive Price Estimator
                                 </h3>
-                                <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                                <p className="text-xs font-body text-muted leading-relaxed">
                                     Estimate your custom hosting plan based on format, estimated participant size, and premium additions.
                                 </p>
                             </div>
@@ -286,7 +293,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                             <div className="space-y-6 relative z-10">
                                 {/* 1. Format Select */}
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">
+                                    <label className={`${contentLabel} mb-3`}>
                                         Select Pool Format
                                     </label>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
@@ -304,10 +311,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     setCalcPoolType(f.k);
                                                     if (f.k === 'SQUARES') setCalcPlayers(100);
                                                 }}
-                                                className={`py-3.5 px-3 rounded-2xl text-xs font-bold transition-all border ${
-                                                    calcPoolType === f.k 
-                                                        ? 'bg-gradient-to-r from-indigo-500/15 to-purple-500/10 text-white border-indigo-500 shadow-lg shadow-indigo-500/10' 
-                                                        : 'bg-slate-950/90 text-slate-400 border-slate-850 hover:border-indigo-500/30 hover:text-slate-200'
+                                                className={`py-3.5 px-3 rounded-2xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border ${
+                                                    calcPoolType === f.k
+                                                        ? 'bg-gold-500/15 text-[color:var(--text)] border-gold-500 shadow-lg shadow-gold-500/10'
+                                                        : 'bg-surface text-muted border-line hover:border-gold-500/30 hover:text-[color:var(--text)]'
                                                 }`}
                                             >
                                                 {f.label}
@@ -318,10 +325,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
 
                                 {/* 2. Player Input Slider (if not Squares which is locked at 100) */}
                                 {calcPoolType !== 'SQUARES' && (
-                                    <div className="space-y-4 bg-slate-950/40 p-5 rounded-2xl border border-slate-850">
-                                        <div className="flex justify-between items-center text-xs font-bold text-slate-400">
-                                            <span className="uppercase tracking-widest text-[10px]">Estimated Participants</span>
-                                            <span className="text-indigo-400 text-sm font-mono font-black bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">{calcPlayers} Players</span>
+                                    <div className="space-y-4 bg-surface p-5 rounded-2xl border border-line">
+                                        <div className="flex justify-between items-center text-xs font-display font-bold uppercase text-muted">
+                                            <span className="tracking-[0.16em] text-[10px]">Estimated Participants</span>
+                                            <span className="text-gold-600 dark:text-gold-400 text-sm font-mono font-black bg-gold-500/10 px-3 py-1 rounded-full border border-gold-500/25 num">{calcPlayers} Players</span>
                                         </div>
                                         <div className="flex gap-4 items-center">
                                             <input
@@ -330,20 +337,20 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 max="150"
                                                 value={calcPlayers}
                                                 onChange={(e) => setCalcPlayers(Number(e.target.value))}
-                                                className="flex-grow h-2 rounded-lg appearance-none cursor-pointer bg-slate-800 accent-indigo-500 focus:outline-none"
+                                                className="flex-grow h-2 rounded-lg appearance-none cursor-pointer bg-line accent-gold-600 focus:outline-none"
                                             />
                                             <input
                                                 type="number"
                                                 value={calcPlayers}
                                                 min={1}
                                                 onChange={(e) => setCalcPlayers(Math.max(1, Number(e.target.value) || 1))}
-                                                className="w-16 bg-slate-950 border border-slate-800 rounded-xl px-2 py-2 text-center text-white font-bold outline-none font-mono focus:border-indigo-500/50 transition-colors"
+                                                className="w-16 bg-card border border-line rounded-xl px-2 py-2 text-center text-[color:var(--text)] font-bold outline-none font-mono num focus:border-gold-500/50 transition-colors"
                                             />
                                         </div>
                                         {calcPlayers <= config.freePlayerThreshold && (
-                                            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl flex items-center gap-2.5 animate-in fade-in duration-300">
-                                                <Sparkles size={14} className="animate-pulse" />
-                                                <span>Under {config.freePlayerThreshold} players? This pool qualifies for the <strong className="text-white">Free Tier</strong>!</span>
+                                            <div className="p-3.5 bg-[#0F7B4A]/15 border border-[#0F7B4A]/40 text-emerald-600 dark:text-emerald-400 text-xs rounded-xl flex items-center gap-2.5 animate-in fade-in duration-300">
+                                                <Sparkles size={14} className="animate-live-pulse" />
+                                                <span>Under <span className="num">{config.freePlayerThreshold}</span> players? This pool qualifies for the <strong className="text-[color:var(--text)]">Free Tier</strong>!</span>
                                             </div>
                                         )}
                                     </div>
@@ -351,90 +358,90 @@ export const PricingPage: React.FC<PricingPageProps> = ({
 
                                 {/* 3. Feature Add-ons selection */}
                                 <div className="space-y-3">
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                    <label className={contentLabel}>
                                         Premium Upgrades (Optional)
                                     </label>
                                     <div className="space-y-2.5">
                                         {config.features.aiCommissioner.isPremium && (
-                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-slate-950/80 border rounded-2xl hover:border-indigo-500/20 hover:bg-slate-950 transition-all duration-300 ${
-                                                calcAi ? 'border-indigo-500 bg-gradient-to-r from-indigo-500/5 to-transparent' : 'border-slate-850'
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
+                                                calcAi ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
                                             }`}>
                                                 <div className="flex gap-3 items-center">
-                                                    <div className={`p-2.5 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20`}>
+                                                    <div className={`p-2.5 rounded-xl bg-gold-500/10 text-gold-600 dark:text-gold-400 border border-gold-500/25`}>
                                                         <Zap size={16} />
                                                     </div>
                                                     <div>
-                                                        <span className="text-sm font-bold text-slate-200 block flex items-center gap-1">
+                                                        <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block flex items-center gap-1">
                                                             AI Commissioner Newsletter
-                                                            <UpgradeTooltip 
-                                                                title="AI commissioner" 
+                                                            <UpgradeTooltip
+                                                                title="AI commissioner"
                                                                 description="Generates weekly recaps, round-by-round highlights, and humorous trash-talking articles automatically. Uses state-of-the-art Gemini AI tailored exactly to your pool's rules and active standings."
                                                             />
                                                         </span>
-                                                        <span className="text-xs text-slate-500">Auto-generate trash-talk posts & round recaps (+${config.features.aiCommissioner.addonPrice})</span>
+                                                        <span className="text-xs font-body text-muted">Auto-generate trash-talk posts & round recaps (+<span className="num">${config.features.aiCommissioner.addonPrice}</span>)</span>
                                                     </div>
                                                 </div>
                                                 <input
                                                     type="checkbox"
                                                     checked={calcAi}
                                                     onChange={(e) => setCalcAi(e.target.checked)}
-                                                    className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                                    className="w-5 h-5 rounded border-line bg-surface text-gold-500 focus:ring-gold-500 cursor-pointer"
                                                 />
                                             </label>
                                         )}
- 
+
                                         {config.features.smsNotifications?.isPremium && (
-                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-slate-950/80 border rounded-2xl hover:border-indigo-500/20 hover:bg-slate-950 transition-all duration-300 ${
-                                                calcSms ? 'border-indigo-500 bg-gradient-to-r from-indigo-500/5 to-transparent' : 'border-slate-850'
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
+                                                calcSms ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
                                             }`}>
                                                 <div className="flex gap-3 items-center">
-                                                    <div className={`p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20`}>
+                                                    <div className={`p-2.5 rounded-xl bg-navy-600/15 text-navy-700 dark:text-[#9FB0CC] border border-line`}>
                                                         <Users size={16} />
                                                     </div>
                                                     <div>
-                                                        <span className="text-sm font-bold text-slate-200 block flex items-center gap-1">
+                                                        <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block flex items-center gap-1">
                                                             Smart SMS Broadcasts
-                                                            <UpgradeTooltip 
-                                                                title="smart sms broadcasts" 
+                                                            <UpgradeTooltip
+                                                                title="smart sms broadcasts"
                                                                 description="Keeps your players active and engaged! Automatically sends SMS notifications to all players when bracket locks are near, pick deadlines approach, payouts are declared, or scores change."
                                                             />
                                                         </span>
-                                                        <span className="text-xs text-slate-500">Deliver text alert pick deadlines & payouts (+${config.features.smsNotifications?.addonPrice})</span>
+                                                        <span className="text-xs font-body text-muted">Deliver text alert pick deadlines & payouts (+<span className="num">${config.features.smsNotifications?.addonPrice}</span>)</span>
                                                     </div>
                                                 </div>
                                                 <input
                                                     type="checkbox"
                                                     checked={calcSms}
                                                     onChange={(e) => setCalcSms(e.target.checked)}
-                                                    className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                                    className="w-5 h-5 rounded border-line bg-surface text-gold-500 focus:ring-gold-500 cursor-pointer"
                                                 />
                                             </label>
                                         )}
- 
+
                                         {config.features.whatIfSimulator.isPremium && (
-                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-slate-950/80 border rounded-2xl hover:border-indigo-500/20 hover:bg-slate-950 transition-all duration-300 ${
-                                                calcSim ? 'border-indigo-500 bg-gradient-to-r from-indigo-500/5 to-transparent' : 'border-slate-850'
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
+                                                calcSim ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
                                             }`}>
                                                 <div className="flex gap-3 items-center">
-                                                    <div className={`p-2.5 rounded-xl bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20`}>
+                                                    <div className={`p-2.5 rounded-xl bg-navy-600/15 text-navy-700 dark:text-[#9FB0CC] border border-line`}>
                                                         <CheckCircle size={16} />
                                                     </div>
                                                     <div>
-                                                        <span className="text-sm font-bold text-slate-200 block flex items-center gap-1">
+                                                        <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block flex items-center gap-1">
                                                             Standings What-If Simulator
-                                                            <UpgradeTooltip 
-                                                                title="what-if standings simulator" 
+                                                            <UpgradeTooltip
+                                                                title="what-if standings simulator"
                                                                 description="Enables the interactive simulator dashboard for all players! Participants can model future match outcomes and instantly visualize changes in standings and potential cash payouts."
                                                             />
                                                         </span>
-                                                        <span className="text-xs text-slate-500">Interactive live scenarios modeling standings (+${config.features.whatIfSimulator.addonPrice})</span>
+                                                        <span className="text-xs font-body text-muted">Interactive live scenarios modeling standings (+<span className="num">${config.features.whatIfSimulator.addonPrice}</span>)</span>
                                                     </div>
                                                 </div>
                                                 <input
                                                     type="checkbox"
                                                     checked={calcSim}
                                                     onChange={(e) => setCalcSim(e.target.checked)}
-                                                    className="w-5 h-5 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                                                    className="w-5 h-5 rounded border-line bg-surface text-gold-500 focus:ring-gold-500 cursor-pointer"
                                                 />
                                             </label>
                                         )}
@@ -446,24 +453,24 @@ export const PricingPage: React.FC<PricingPageProps> = ({
 
                     {/* RIGHT COLUMN: Real-Time Quote & Invoice checkout */}
                     <div className="lg:col-span-5 space-y-6">
-                        
+
                         {/* Title Context depending on selected / calculator mode */}
                         {selectedPoolData ? (
-                            <div className="bg-gradient-to-r from-emerald-600/10 to-indigo-600/10 border border-emerald-500/20 p-5 rounded-2xl space-y-2">
-                                <h4 className="text-sm font-black text-white uppercase flex items-center gap-1.5">
-                                    <Sparkles size={16} className="text-amber-400" /> Pay For Selected Pool
+                            <div className="bg-card border border-gold-500/25 p-5 rounded-2xl space-y-2">
+                                <h4 className="text-sm font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-1.5">
+                                    <Sparkles size={16} className="text-gold-600 dark:text-gold-400" /> Pay For Selected Pool
                                 </h4>
-                                <div className="text-xs text-slate-400 leading-relaxed">
-                                    You are preparing checkout for: <strong className="text-white font-mono">{selectedPoolData.name}</strong>.
+                                <div className="text-xs font-body text-muted leading-relaxed">
+                                    You are preparing checkout for: <strong className="text-[color:var(--text)] font-mono">{selectedPoolData.name}</strong>.
                                     Applying a validated coupon below updates your Stripe session total immediately!
                                 </div>
                             </div>
                         ) : (
-                            <div className="bg-slate-900 border border-slate-850 p-5 rounded-2xl space-y-2">
-                                <h4 className="text-xs font-black text-slate-500 uppercase flex items-center gap-1.5">
-                                    <InfoIcon size={14} className="text-indigo-400" /> Interactive Quote Mode
+                            <div className={`${contentCard} p-5 rounded-2xl space-y-2`}>
+                                <h4 className="text-xs font-display font-bold uppercase tracking-[0.08em] text-faint flex items-center gap-1.5">
+                                    <InfoIcon size={14} className="text-gold-600 dark:text-gold-400" /> Interactive Quote Mode
                                 </h4>
-                                <p className="text-xs text-slate-400 leading-relaxed">
+                                <p className="text-xs font-body text-muted leading-relaxed">
                                     This quote reflects estimated hosting plans. To complete actual payment, select one of your trial pools above or launch a new pool!
                                 </p>
                             </div>
@@ -485,30 +492,32 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                         {/* Direct Create CTA if not paying for existing pool */}
                         {!selectedPoolId && (
                             <button
-                                onClick={() => {
+                                onClick={canCreate ? () => {
                                     if (user) navigate('/create-pool');
                                     else onLogin();
-                                }}
-                                className="w-full bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800 hover:border-slate-700 py-4 px-6 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 group hover:scale-[1.01]"
+                                } : undefined}
+                                disabled={!canCreate}
+                                className="w-full bg-surface hover:bg-card text-[color:var(--text)] border border-line hover:border-gold-500/40 py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line"
+                                title={canCreate ? 'Launch a new pool' : 'Pool creation is coming soon'}
                             >
-                                Launch a New Pool Instead
-                                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                                {canCreate ? <>Launch a New Pool Instead
+                                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" /></> : 'Pool Creation Coming Soon'}
                             </button>
                         )}
                     </div>
                 </div>
 
                 {/* Packages & Bundles Section */}
-                <div className="mt-20 border-t border-slate-900 pt-16 space-y-10 animate-in fade-in duration-300">
+                <div className="mt-20 border-t border-line pt-16 space-y-10 animate-in fade-in duration-300">
                     <div className="text-center max-w-2xl mx-auto space-y-3">
-                        <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 shadow-sm bg-amber-500/10 border border-amber-500/20">
-                            <Sparkles size={14} className="text-amber-400" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">Commissioner Packages</span>
+                        <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 shadow-sm bg-gold-500/10 border border-gold-500/25">
+                            <Sparkles size={14} className="text-gold-600 dark:text-gold-400" />
+                            <span className="font-display font-bold text-[10px] uppercase tracking-[0.16em] text-gold-600 dark:text-gold-400">Commissioner Packages</span>
                         </div>
-                        <h2 className="text-3xl font-black text-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+                        <h2 className="font-display font-extrabold uppercase text-3xl leading-[0.95] text-[color:var(--text)]">
                             Multi-Pool Bundles & Commissioner Packages
                         </h2>
-                        <p className="text-sm text-slate-400 leading-relaxed font-medium">
+                        <p className="text-sm font-body text-muted leading-relaxed">
                             Are you a professional pool manager? Save big by purchasing reusable pool credits upfront or unlocking unlimited annual hosting for all your pool formats.
                         </p>
                     </div>
@@ -520,32 +529,32 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                 const isUnlimited = b.poolsIncluded >= 9999;
 
                                 const badgeLabel = isUnlimited ? 'Unlimited Pass' : b.poolType === 'ALL' ? 'Universal Pack' : `${b.poolType} Pack`;
-                                const pricePerPoolLabel = isUnlimited 
-                                    ? 'unlimited hosting' 
+                                const pricePerPoolLabel = isUnlimited
+                                    ? 'unlimited hosting'
                                     : `$${(b.price / b.poolsIncluded).toFixed(2)} / pool`;
 
                                 return (
-                                    <div key={b.id} className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 md:p-8 relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-indigo-500/40 transition-all duration-300 shadow-xl group hover:scale-[1.02] hover:-translate-y-1">
-                                        <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-indigo-500/5 blur-2xl pointer-events-none" />
+                                    <div key={b.id} className={`${contentCard} rounded-3xl p-6 md:p-8 relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-gold-500/40 transition-all duration-300 shadow-panel group hover:-translate-y-1`}>
+                                        <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
                                         <div className="space-y-4">
-                                            <span className="bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full inline-block">
+                                            <span className="bg-gold-500/10 border border-gold-500/25 text-gold-600 dark:text-gold-300 font-display font-bold text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full inline-block">
                                                 {badgeLabel}
                                             </span>
-                                            <h3 className="text-xl font-bold text-white">{b.name}</h3>
-                                            <p className="text-xs text-slate-400 leading-relaxed min-h-[48px]">
+                                            <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)]">{b.name}</h3>
+                                            <p className="text-xs font-body text-muted leading-relaxed min-h-[48px]">
                                                 {b.description}
                                             </p>
-                                            
+
                                             {/* Constraints Info */}
-                                            <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-850 space-y-2 text-[10px] font-mono text-slate-400">
-                                                <div className="flex justify-between">Format: <strong className="text-white">{b.poolType}</strong></div>
-                                                <div className="flex justify-between">Max size per pool: <strong className="text-white">{b.maxPlayersPerPool === 9999 ? 'Unlimited' : `${b.maxPlayersPerPool} players`}</strong></div>
-                                                <div className="flex justify-between">Validity: <strong className="text-white">{b.durationDays === 0 ? 'No expiration' : `${b.durationDays} days`}</strong></div>
+                                            <div className="bg-surface p-4 rounded-2xl border border-line space-y-2 text-[10px] font-mono text-muted num">
+                                                <div className="flex justify-between">Format: <strong className="text-[color:var(--text)]">{b.poolType}</strong></div>
+                                                <div className="flex justify-between">Max size per pool: <strong className="text-[color:var(--text)]">{b.maxPlayersPerPool === 9999 ? 'Unlimited' : `${b.maxPlayersPerPool} players`}</strong></div>
+                                                <div className="flex justify-between">Validity: <strong className="text-[color:var(--text)]">{b.durationDays === 0 ? 'No expiration' : `${b.durationDays} days`}</strong></div>
                                             </div>
 
                                             <div className="pt-2 flex items-baseline gap-1.5">
-                                                <span className="text-3xl font-black text-white">${Number(b.price).toFixed(2)}</span>
-                                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                                <span className="font-display font-extrabold text-3xl text-[color:var(--text)] num">${Number(b.price).toFixed(2)}</span>
+                                                <span className="font-display font-bold text-[10px] text-faint uppercase tracking-[0.08em] num">
                                                     ({pricePerPoolLabel})
                                                 </span>
                                             </div>
@@ -575,7 +584,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                         console.error("Bundle purchase failed:", err);
                                                     }
                                                 }}
-                                                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-1.5 group/btn"
+                                                className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-1.5 group/btn"
                                             >
                                                 Purchase {b.name}
                                                 <ArrowRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
@@ -587,26 +596,26 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                         ) : (
                             <>
                                 {/* Package 1: 3-Pool Bundle */}
-                                <div className="bg-slate-900/40 border border-indigo-500/15 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-indigo-500/40 transition-all duration-300 shadow-xl group hover:scale-[1.02] hover:-translate-y-1">
-                                    <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-indigo-500/5 blur-2xl pointer-events-none" />
+                                <div className={`${contentCard} p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-gold-500/40 transition-all duration-300 shadow-panel group hover:-translate-y-1`}>
+                                    <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
                                     <div className="space-y-4">
-                                        <span className="bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full inline-block">
+                                        <span className="bg-gold-500/10 border border-gold-500/25 text-gold-600 dark:text-gold-300 font-display font-bold text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full inline-block">
                                             Most Popular Bundle
                                         </span>
-                                        <h3 className="text-xl font-bold text-white">3-Pool Credits Package</h3>
-                                        <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                                        <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)]">3-Pool Credits Package</h3>
+                                        <p className="text-xs font-body text-muted leading-relaxed">
                                             Purchase 3 premium pool hosting credits upfront. Use them anytime to instantly upgrade any format (Season, Bracket, Squares, Props) to Premium. Credits never expire!
                                         </p>
-                                        
-                                        <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-850 space-y-2 text-[10px] font-mono text-slate-400">
-                                            <div className="flex justify-between">Credits: <strong className="text-white">3 Pools Included</strong></div>
-                                            <div className="flex justify-between">Validity: <strong className="text-white">Never Expires</strong></div>
-                                            <div className="flex justify-between">Pool Formats: <strong className="text-white">Universal</strong></div>
+
+                                        <div className="bg-surface p-4 rounded-2xl border border-line space-y-2 text-[10px] font-mono text-muted num">
+                                            <div className="flex justify-between">Credits: <strong className="text-[color:var(--text)]">3 Pools Included</strong></div>
+                                            <div className="flex justify-between">Validity: <strong className="text-[color:var(--text)]">Never Expires</strong></div>
+                                            <div className="flex justify-between">Pool Formats: <strong className="text-[color:var(--text)]">Universal</strong></div>
                                         </div>
 
                                         <div className="pt-2 flex items-baseline gap-1.5">
-                                            <span className="text-3xl font-black text-white">${(config.packages?.buy_3 ?? 49.00).toFixed(2)}</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">one-time (${((config.packages?.buy_3 ?? 49.00) / 3).toFixed(2)} / pool)</span>
+                                            <span className="font-display font-extrabold text-3xl text-[color:var(--text)] num">${(config.packages?.buy_3 ?? 49.00).toFixed(2)}</span>
+                                            <span className="font-display font-bold text-[10px] text-faint uppercase tracking-[0.08em] num">one-time (${((config.packages?.buy_3 ?? 49.00) / 3).toFixed(2)} / pool)</span>
                                         </div>
                                     </div>
                                     <div className="pt-6">
@@ -634,7 +643,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     console.error("Bundle purchase failed:", err);
                                                 }
                                             }}
-                                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-1.5 group/btn"
+                                            className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-1.5 group/btn"
                                         >
                                             Purchase 3-Pool Credits Bundle
                                             <ArrowRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
@@ -643,26 +652,26 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                 </div>
 
                                 {/* Package 2: Unlimited Annual Pass */}
-                                <div className="bg-slate-900/40 border border-amber-500/15 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-amber-500/40 transition-all duration-300 shadow-xl group hover:scale-[1.02] hover:-translate-y-1">
-                                    <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-amber-500/5 blur-2xl pointer-events-none" />
+                                <div className="bg-card border border-gold-500/35 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-gold-500/70 transition-all duration-300 shadow-panel group hover:-translate-y-1">
+                                    <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/10 blur-2xl pointer-events-none" />
                                     <div className="space-y-4">
-                                        <span className="bg-amber-500/10 border border-amber-500/25 text-amber-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full inline-block">
+                                        <span className="bg-gold-foil text-navy-900 font-display font-bold text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full inline-block">
                                             Unlimited Access
                                         </span>
-                                        <h3 className="text-xl font-bold text-white">1-Year Unlimited Pool Pass</h3>
-                                        <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                                        <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)]">1-Year Unlimited Pool Pass</h3>
+                                        <p className="text-xs font-body text-muted leading-relaxed">
                                             Unlock absolute freedom! Create and host unlimited pools of any format with unlimited participants for a full 365 days. Perfect for corporate leagues and multi-format clubs.
                                         </p>
 
-                                        <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-850 space-y-2 text-[10px] font-mono text-slate-400">
-                                            <div className="flex justify-between">Pool Limit: <strong className="text-white">Unlimited pools</strong></div>
-                                            <div className="flex justify-between">Duration: <strong className="text-white">365 Days</strong></div>
-                                            <div className="flex justify-between">Size Limit: <strong className="text-white">Unlimited players</strong></div>
+                                        <div className="bg-surface p-4 rounded-2xl border border-line space-y-2 text-[10px] font-mono text-muted num">
+                                            <div className="flex justify-between">Pool Limit: <strong className="text-[color:var(--text)]">Unlimited pools</strong></div>
+                                            <div className="flex justify-between">Duration: <strong className="text-[color:var(--text)]">365 Days</strong></div>
+                                            <div className="flex justify-between">Size Limit: <strong className="text-[color:var(--text)]">Unlimited players</strong></div>
                                         </div>
 
                                         <div className="pt-2 flex items-baseline gap-1.5">
-                                            <span className="text-3xl font-black text-white">${(config.packages?.unlimited_1yr ?? 129.00).toFixed(2)}</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">billed annually</span>
+                                            <span className="font-display font-extrabold text-3xl text-[color:var(--text)] num">${(config.packages?.unlimited_1yr ?? 129.00).toFixed(2)}</span>
+                                            <span className="font-display font-bold text-[10px] text-faint uppercase tracking-[0.08em]">billed annually</span>
                                         </div>
                                     </div>
                                     <div className="pt-6">
@@ -690,7 +699,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     console.error("Bundle purchase failed:", err);
                                                 }
                                             }}
-                                            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition-all shadow-md shadow-amber-500/10 flex items-center justify-center gap-1.5 group/btn"
+                                            className="w-full bg-gold-foil text-navy-900 font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition-all duration-150 hover:-translate-y-px hover:brightness-105 shadow-[0_6px_16px_rgba(140,109,51,0.28)] flex items-center justify-center gap-1.5 group/btn"
                                         >
                                             Unlock 1-Year Unlimited Pass
                                             <ArrowRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />

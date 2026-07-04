@@ -129,56 +129,56 @@ export const LiveScoreTicker: React.FC<LiveScoreTickerProps> = ({ tournament }) 
     const GameCard = ({ game, idx }: { game: typeof activeGames[0]; idx: string }) => (
         <div
             key={idx}
-            className={`flex items-center gap-4 bg-slate-900/50 border ${
+            className={`flex items-center gap-4 bg-card border ${
                 game.status === 'IN_PROGRESS'
-                    ? 'border-emerald-500/50 bg-emerald-500/5'
-                    : 'border-slate-800'
+                    ? 'border-brandred-600/50 bg-brandred-600/5'
+                    : 'border-line'
             } px-4 py-2 rounded-lg min-w-[280px] transition-colors relative overflow-hidden`}
         >
             {game.status === 'IN_PROGRESS' && (
-                <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+                <div className="absolute top-0 left-0 w-1 h-full bg-brandred-600" />
             )}
 
             <div className="flex-1 space-y-1">
                 <div className="flex justify-between items-center text-sm">
                     <span className={`font-bold flex items-center gap-2 ${
-                        game.winnerTeamId === game.awayTeamId ? 'text-emerald-400' : 'text-slate-200'
+                        game.winnerTeamId === game.awayTeamId ? 'text-gold-600' : 'text-[color:var(--text)]'
                     }`}>
                         <img src={game.awayTeam?.logoUrl || '/placeholder-team.png'} alt="" className="w-5 h-5 object-contain" />
                         {game.awayTeam?.name || 'TBD'}
                     </span>
-                    <span className="font-mono font-bold">{game.awayScore}</span>
+                    <span className="num font-display font-bold text-[color:var(--text)]">{game.awayScore}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                     <span className={`font-bold flex items-center gap-2 ${
-                        game.winnerTeamId === game.homeTeamId ? 'text-emerald-400' : 'text-slate-200'
+                        game.winnerTeamId === game.homeTeamId ? 'text-gold-600' : 'text-[color:var(--text)]'
                     }`}>
                         <img src={game.homeTeam?.logoUrl || '/placeholder-team.png'} alt="" className="w-5 h-5 object-contain" />
                         {game.homeTeam?.name || 'TBD'}
                     </span>
-                    <span className="font-mono font-bold">{game.homeScore}</span>
+                    <span className="num font-display font-bold text-[color:var(--text)]">{game.homeScore}</span>
                 </div>
             </div>
 
-            <div className="flex flex-col items-end gap-1 text-[10px] text-slate-400 border-l border-slate-800 pl-3 ml-1 min-w-[70px]">
+            <div className="flex flex-col items-end gap-1 text-[10px] text-muted border-l border-line pl-3 ml-1 min-w-[70px]">
                 {game.status === 'IN_PROGRESS' ? (
                     <>
-                        <span className="text-emerald-400 font-bold flex items-center gap-1">
+                        <span className="text-brandred-600 font-display font-bold flex items-center gap-1">
                             <PlayCircle size={10} /> {game.period ? (game.period <= 2 ? `${game.period}H` : 'OT') : 'LIVE'}
                         </span>
-                        <span className="font-mono text-slate-300">{game.clock}</span>
+                        <span className="num text-muted">{game.clock}</span>
                     </>
                 ) : game.status === 'FINAL' ? (
-                    <span className="text-slate-500 font-bold flex items-center gap-1">
+                    <span className="text-faint font-display font-bold flex items-center gap-1">
                         <Trophy size={10} /> FINAL
                     </span>
                 ) : (
-                    <span className="text-slate-400 flex items-center gap-1">
+                    <span className="text-muted num flex items-center gap-1">
                         <Clock size={10} /> {new Date(game.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                     </span>
                 )}
                 {game.broadcast && (
-                    <span className="text-indigo-400 flex items-center gap-1 uppercase tracking-wider">
+                    <span className="text-gold-600 flex items-center gap-1 uppercase tracking-wider">
                         <Tv size={10} /> {game.broadcast}
                     </span>
                 )}
@@ -187,10 +187,10 @@ export const LiveScoreTicker: React.FC<LiveScoreTickerProps> = ({ tournament }) 
     );
 
     return (
-        <div className="bg-slate-950 border-y border-slate-800 py-3 flex items-center gap-3">
+        <div className="bg-surface border-y border-line py-3 flex items-center gap-3">
             {/* Badge pinned to left - outside scroll region so it's never clipped */}
-            <div className="hidden md:flex items-center gap-2 text-emerald-500 font-bold text-xs uppercase animate-pulse border border-emerald-500/30 px-2 py-0.5 rounded-full bg-emerald-500/10 whitespace-nowrap pl-4 shrink-0">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+            <div className="hidden md:flex items-center gap-2 text-brandred-600 font-display font-bold text-xs uppercase tracking-[0.08em] border border-brandred-600/30 px-2 py-0.5 rounded-full bg-brandred-600/10 whitespace-nowrap pl-4 shrink-0">
+                <span className="w-1.5 h-1.5 bg-brandred-600 rounded-full animate-live-pulse" />
                 NCAA Live
             </div>
 

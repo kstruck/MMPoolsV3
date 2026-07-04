@@ -1,4 +1,5 @@
 import type { User } from '../types';
+import { POOLS_OPEN } from '../config/season';
 
 /**
  * Centralized role-check utilities.
@@ -26,6 +27,20 @@ export const isPoolManager = (user: User | null | undefined, pool: { ownerId?: s
 export const canCreatePool = (user: User | null | undefined): boolean => {
     if (!user) return false;
     return user.role === 'POOL_MANAGER' || user.role === 'SUPER_ADMIN';
+};
+
+/**
+ * Master switch for public pool creation, sourced from the season config
+ * (`POOLS_OPEN`). Flip that flag to `true` when 2026 pool creation opens.
+ * While closed, only super admins can reach creation flows (for internal
+ * setup/testing); everyone else sees grayed-out, "coming soon" entry points.
+ * Re-exported here so components have a single import for creation gating.
+ */
+export const POOL_CREATION_ENABLED = POOLS_OPEN;
+
+/** Whether this user may access pool-creation flows given the master switch. */
+export const canAccessPoolCreation = (user: User | null | undefined): boolean => {
+    return POOLS_OPEN || isSuperAdmin(user);
 };
 
 /** Check if user can manage entries (owner or super admin, used in bracket/playoff pools) */

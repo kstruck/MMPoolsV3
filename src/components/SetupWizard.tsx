@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { logger } from '../utils/logger';
 import { useToast } from './ui/Toast';
+import { Button } from './ui';
 
 import type { GameState, PoolTheme } from "../types";
 import type { User } from '../types';
@@ -280,9 +281,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
 
 
     return (
-        <div className="flex-grow bg-slate-950 text-slate-100 flex flex-col items-center py-10 px-4">
+        <div className="flex-grow bg-page text-[color:var(--text)] flex flex-col items-center py-10 px-4">
             <div className="max-w-4xl w-full">
-                <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-white mb-6 transition-colors font-bold text-sm">
+                <button onClick={onBack} className="flex items-center gap-2 text-muted hover:text-[color:var(--text)] mb-6 transition-colors font-display font-bold uppercase tracking-[0.05em] text-sm">
                     <ArrowLeft size={16} /> Back to Selection
                 </button>
 
@@ -292,12 +293,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                         {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
                             const s = i + 1;
                             return (
-                                <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${step >= s ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'bg-slate-800'}`}></div>
+                                <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${step >= s ? 'bg-gold-foil shadow-[0_0_10px_rgba(212,175,90,0.45)]' : 'bg-line'}`}></div>
                             );
                         })}
                     </div>
                     <div className="flex justify-between items-end">
-                        <h1 className="text-3xl font-bold text-white transition-all drop-shadow-lg">
+                        <h1 className="text-3xl font-display font-extrabold uppercase leading-none text-[color:var(--text)] transition-all">
                             {step === 1 && 'The Matchup'}
                             {step === 2 && 'Pool Basics'}
                             {step === 3 && 'Grid Rules'}
@@ -308,7 +309,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                             {step === 8 && 'Summary'}
                             {step === 9 && 'Final Review'}
                         </h1>
-                        <span className="text-slate-500 font-bold font-mono">Step {step} of {TOTAL_STEPS}</span>
+                        <span className="text-muted font-display font-bold uppercase tracking-[0.08em] num">Step {step} of {TOTAL_STEPS}</span>
                     </div>
                 </div>
 
@@ -409,30 +410,34 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ user, onComplete, onBa
                 </div>
 
                 {/* Footer Navigation */}
-                <div className="flex justify-between items-center pt-8 border-t border-slate-800 mt-8">
-                    <button
+                <div className="flex justify-between items-center pt-8 border-t border-line mt-8">
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => setStep(s => Math.max(1, s - 1))}
                         disabled={step === 1}
-                        className={`text-slate-400 hover:text-white font-bold text-sm flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-slate-900 transition-colors ${step === 1 ? 'opacity-0 pointer-events-none' : ''}`}
+                        className={step === 1 ? 'opacity-0 pointer-events-none' : ''}
                     >
                         <ChevronLeft size={16} /> Back
-                    </button>
+                    </Button>
 
                     {step < TOTAL_STEPS ? (
-                        <button
+                        <Button
+                            variant="primary"
+                            size="lg"
                             onClick={() => setStep(s => Math.min(TOTAL_STEPS, s + 1))}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-indigo-500/20 flex items-center gap-2 transition-all hover:scale-105"
                         >
                             Next Step <ChevronRight size={20} strokeWidth={3} />
-                        </button>
+                        </Button>
                     ) : (
-                        <button
+                        <Button
+                            variant="premium"
+                            size="lg"
                             onClick={handleCreate}
                             disabled={isCreating || !tosAccepted}
-                            className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100"
                         >
                             {isCreating ? 'Creating Pool...' : <>Launch Pool <Check size={20} strokeWidth={3} /></>}
-                        </button>
+                        </Button>
                     )}
                 </div>
             </div>

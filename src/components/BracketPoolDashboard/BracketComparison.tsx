@@ -3,7 +3,7 @@ import type { BracketEntry, Tournament } from '../../types';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StatsHeader } from '../BracketBuilder/ESPNBracket';
-import { Users, Info } from 'lucide-react';
+import { Users, Info, AlertTriangle, Check } from 'lucide-react';
 
 interface BracketComparisonProps {
     tournament: Tournament;
@@ -89,9 +89,9 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
 
     if (validEntries.length < 2) {
         return (
-            <div className="bg-slate-800 rounded-xl p-8 text-center text-slate-400 border border-slate-700">
+            <div className="bg-card rounded-xl p-8 text-center text-muted border border-line shadow-card">
                 <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <h3 className="text-xl font-bold text-white mb-2">Not enough brackets to compare</h3>
+                <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Not enough brackets to compare</h3>
                 <p>Wait for more entries to be submitted before comparing picks.</p>
             </div>
         );
@@ -101,20 +101,20 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
         <div className="flex flex-col gap-6">
             {/* Header / Selectors */}
             {!hideSelectors && (
-                <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 md:p-6 shadow-xl">
-                    <div className="flex gap-2 items-center mb-6 text-slate-300">
-                        <Info className="w-5 h-5 text-indigo-400" />
-                        <h2 className="text-lg font-bold text-white">Compare Brackets</h2>
+                <div className="bg-card rounded-xl border border-line p-4 md:p-6 shadow-card">
+                    <div className="flex gap-2 items-center mb-6 text-muted">
+                        <Info className="w-5 h-5 text-gold-500" />
+                        <h2 className="text-lg font-display font-bold uppercase text-[color:var(--text)]">Compare Brackets</h2>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                         {/* Entry 1 Selector */}
                         <div className="flex flex-col gap-2">
-                            <label className="text-sm font-bold text-slate-400">First Bracket (Green = Match)</label>
+                            <label className="text-sm font-display font-bold uppercase tracking-[0.08em] text-muted">First Bracket (Green = Match)</label>
                             <select
                                 value={entry1Id}
                                 onChange={(e) => setEntry1Id(e.target.value)}
-                                className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 font-medium"
+                                className="bg-surface border border-line rounded-lg px-4 py-2.5 text-[color:var(--text)] focus:outline-none focus:border-gold-500 font-body font-medium"
                             >
                                 {validEntries.map(entry => (
                                     <option key={entry.id} value={entry.id}>{entry.name}</option>
@@ -124,11 +124,11 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
 
                         {/* Entry 2 Selector */}
                         <div className="flex flex-col gap-2">
-                            <label className="text-sm font-bold text-slate-400">Second Bracket (Red = Difference)</label>
+                            <label className="text-sm font-display font-bold uppercase tracking-[0.08em] text-muted">Second Bracket (Red = Difference)</label>
                             <select
                                 value={entry2Id}
                                 onChange={(e) => setEntry2Id(e.target.value)}
-                                className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-rose-500 font-medium"
+                                className="bg-surface border border-line rounded-lg px-4 py-2.5 text-[color:var(--text)] focus:outline-none focus:border-brandred-500 font-body font-medium"
                             >
                                 {validEntries.map(entry => (
                                     <option key={entry.id} value={entry.id} disabled={entry.id === entry1Id}>
@@ -143,22 +143,22 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
 
             {/* Stats Summary */}
             {comparisonStats && (
-                <div className="mt-2 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 flex flex-col md:flex-row gap-4 justify-between items-center text-sm">
+                <div className="mt-2 p-4 bg-surface rounded-lg border border-line flex flex-col md:flex-row gap-4 justify-between items-center text-sm font-body">
                     <div className="flex items-center gap-2">
-                        <span className="font-mono text-xl font-bold text-white">{comparisonStats.matchCount}</span>
-                        <span className="text-slate-400">/ {comparisonStats.totalPicks} matching picks</span>
-                        <span className="ml-2 px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-300">
+                        <span className="num font-display text-xl font-bold text-[color:var(--text)]">{comparisonStats.matchCount}</span>
+                        <span className="text-muted num">/ {comparisonStats.totalPicks} matching picks</span>
+                        <span className="ml-2 px-2 py-0.5 rounded text-xs font-bold num bg-page border border-line text-muted">
                             {Math.round((comparisonStats.matchCount / Math.max(1, comparisonStats.totalPicks)) * 100)}% Similarity
                         </span>
                     </div>
                     {comparisonStats.champDiff && (
-                        <div className="text-rose-400 font-semibold px-3 py-1 bg-rose-500/10 rounded border border-rose-500/20">
-                            ⚠ Different Champion Picks
+                        <div className="text-brandred-600 font-semibold px-3 py-1 bg-brandred-600/10 rounded border border-brandred-600/20 flex items-center gap-1.5">
+                            <AlertTriangle size={14} /> Different Champion Picks
                         </div>
                     )}
                     {!comparisonStats.champDiff && (
-                        <div className="text-emerald-400 font-semibold px-3 py-1 bg-emerald-500/10 rounded border border-emerald-500/20">
-                            ✓ Same Champion Pick
+                        <div className="text-[#0F7B4A] font-semibold px-3 py-1 bg-[#E4F5EC] rounded border border-[#BEE7D0] flex items-center gap-1.5">
+                            <Check size={14} /> Same Champion Pick
                         </div>
                     )}
                 </div>
@@ -168,8 +168,8 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
             {entry1 && entry2 && (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
                     {/* Entry 1 */}
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-w-0 overflow-hidden">
-                        <div className="bg-slate-900/80 p-3 border-b border-slate-700 text-center font-bold truncate">
+                    <div className="bg-card rounded-xl border border-line flex flex-col min-w-0 overflow-hidden shadow-card">
+                        <div className="bg-surface p-3 border-b border-line text-center font-display font-bold uppercase text-[color:var(--text)] truncate">
                             {entry1.name}
                         </div>
                         {/* Stats Header for Entry 1 */}
@@ -206,8 +206,8 @@ export const BracketComparison: React.FC<BracketComparisonProps> = ({ tournament
                     </div>
 
                     {/* Entry 2 */}
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 flex flex-col min-w-0 overflow-hidden">
-                        <div className="bg-slate-900/80 p-3 border-b border-slate-700 text-center font-bold truncate">
+                    <div className="bg-card rounded-xl border border-line flex flex-col min-w-0 overflow-hidden shadow-card">
+                        <div className="bg-surface p-3 border-b border-line text-center font-display font-bold uppercase text-[color:var(--text)] truncate">
                             {entry2.name}
                         </div>
                         {/* Stats Header for Entry 2 */}

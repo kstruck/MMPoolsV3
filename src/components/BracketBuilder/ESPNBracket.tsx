@@ -96,12 +96,12 @@ const TeamRow: React.FC<TeamRowProps> = ({
     // A team that lost and was NOT this slot's pick
     const isEliminatedUnpicked = isEliminated && !isPicked;
 
-    let bg = 'hover:bg-slate-800/80 text-slate-300';
-    if (isCorrectPick)    bg = 'bg-emerald-500/25 text-emerald-100';
-    else if (isWrongPick) bg = 'bg-red-500/20 text-red-300';
-    else if (isPicked)    bg = 'bg-amber-500/20 text-amber-100';  // pending pick
-    else if (isWinner)    bg = 'bg-emerald-500/10 text-slate-200'; // actual winner, not picked
-    else if (isEliminatedUnpicked) bg = 'text-slate-600';
+    let bg = 'hover:bg-page text-[color:var(--text)]';
+    if (isCorrectPick)    bg = 'bg-[#0F7B4A]/20 text-[color:var(--text)]';
+    else if (isWrongPick) bg = 'bg-brandred-600/15 text-brandred-500';
+    else if (isPicked)    bg = 'bg-gold-500/25 text-[color:var(--text)]';  // pending pick
+    else if (isWinner)    bg = 'bg-[#0F7B4A]/10 text-[color:var(--text)]'; // actual winner, not picked
+    else if (isEliminatedUnpicked) bg = 'text-faint';
 
     return (
         <button
@@ -116,12 +116,12 @@ const TeamRow: React.FC<TeamRowProps> = ({
         >
             {/* Seed number */}
             <span className={`
-                text-[11px] font-black w-[20px] text-center flex-shrink-0 leading-none
+                text-[11px] font-black w-[20px] text-center flex-shrink-0 leading-none num
                 ${seed != null
-                    ? isCorrectPick ? 'text-emerald-300'
-                    : isWrongPick   ? 'text-red-400'
-                    : isPicked      ? 'text-amber-300'
-                    : 'text-slate-500'
+                    ? isCorrectPick ? 'text-[#0F7B4A]'
+                    : isWrongPick   ? 'text-brandred-500'
+                    : isPicked      ? 'text-gold-600 dark:text-gold-400'
+                    : 'text-muted'
                     : 'invisible'
                 }
             `}>
@@ -147,16 +147,16 @@ const TeamRow: React.FC<TeamRowProps> = ({
             <span className={`
                 text-[11px] font-semibold truncate flex-1 tracking-tight leading-none
                 ${!teamId ? 'italic opacity-30' : ''}
-                ${isEliminatedUnpicked ? 'line-through decoration-red-600/80 decoration-[1.5px]' : ''}
-                ${isWrongPick          ? 'line-through decoration-red-500 decoration-[1.5px]' : ''}
+                ${isEliminatedUnpicked ? 'line-through decoration-brandred-600/80 decoration-[1.5px]' : ''}
+                ${isWrongPick          ? 'line-through decoration-brandred-500 decoration-[1.5px]' : ''}
             `}>
                 {teamId ? name : 'TBD'}
             </span>
 
             {/* Win-loss record */}
             {record && !isEliminatedUnpicked && !isWrongPick && (
-                <span className={`text-[9px] flex-shrink-0 leading-none ${
-                    isPicked ? 'text-amber-300/70' : 'text-slate-600'
+                <span className={`text-[9px] flex-shrink-0 leading-none num ${
+                    isPicked ? 'text-gold-600/80 dark:text-gold-400/80' : 'text-faint'
                 }`}>
                     {record}
                 </span>
@@ -164,29 +164,29 @@ const TeamRow: React.FC<TeamRowProps> = ({
 
             {/* Status icon badges */}
             {isCorrectPick && (
-                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
+                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-[#0F7B4A] flex items-center justify-center">
                     <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
                 </span>
             )}
             {isWrongPick && (
-                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-red-500/80 flex items-center justify-center">
+                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-brandred-600/80 flex items-center justify-center">
                     <X className="w-2.5 h-2.5 text-white" strokeWidth={3} />
                 </span>
             )}
             {isWinner && !isPicked && !pickStatus && (
-                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-emerald-600/50 flex items-center justify-center">
-                    <Check className="w-2.5 h-2.5 text-emerald-200" strokeWidth={3} />
+                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-[#0F7B4A]/50 flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-white/90" strokeWidth={3} />
                 </span>
             )}
             {isPicked && !pickStatus && !isEliminated && (
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-gold-500 flex-shrink-0" />
             )}
 
             {/* Left accent bar */}
-            {isCorrectPick && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-emerald-400" />}
-            {isWrongPick   && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-red-500" />}
-            {isPicked && !pickStatus && !isEliminated && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-amber-400" />}
-            {isWinner && !isPicked && !pickStatus && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-emerald-600" />}
+            {isCorrectPick && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#0F7B4A]" />}
+            {isWrongPick   && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-brandred-500" />}
+            {isPicked && !pickStatus && !isEliminated && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-gold-500" />}
+            {isWinner && !isPicked && !pickStatus && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#0F7B4A]/70" />}
         </button>
     );
 };
@@ -216,11 +216,11 @@ const MatchupCard: React.FC<MatchupCardProps> = ({
     if (!game) {
         return (
             <div
-                className="border border-slate-800/50 rounded-sm bg-slate-900/20 flex flex-col overflow-hidden opacity-30 flex-shrink-0"
+                className="border border-line rounded-sm bg-card flex flex-col overflow-hidden opacity-30 flex-shrink-0"
                 style={style}
             >
                 <div style={{ height: 28 }} />
-                <div className="border-t border-slate-800/50 mx-2" />
+                <div className="border-t border-line mx-2" />
                 <div style={{ height: 28 }} />
             </div>
         );
@@ -243,34 +243,34 @@ const MatchupCard: React.FC<MatchupCardProps> = ({
     const isWrongGame   = isFinal && picked && game.winnerTeamId && game.winnerTeamId !== picked;
 
     // Card border: green glow = correct pick, red tint = wrong pick, subtle pulse if live
-    let cardBorder = 'border-slate-700/70 hover:border-slate-600/80';
-    if (isCorrectGame) cardBorder = 'border-emerald-500/80 shadow-emerald-500/20 shadow-md';
-    else if (isWrongGame) cardBorder = 'border-red-500/40';
-    else if (isInProgress) cardBorder = 'border-amber-500/50';
+    let cardBorder = 'border-line hover:border-gold-500/50';
+    if (isCorrectGame) cardBorder = 'border-[#0F7B4A]/80 shadow-[0_2px_8px_rgba(15,123,74,0.2)]';
+    else if (isWrongGame) cardBorder = 'border-brandred-500/40';
+    else if (isInProgress) cardBorder = 'border-brandred-500/50';
 
     return (
         <div
-            className={`flex flex-col border rounded-sm bg-[#111b2e] overflow-hidden flex-shrink-0 transition-all relative ${cardBorder}`}
+            className={`flex flex-col border rounded-sm bg-card overflow-hidden flex-shrink-0 transition-all relative ${cardBorder}`}
             style={style}
         >
             {/* Green glow overlay for correct picks */}
             {isCorrectGame && (
                 <div className="absolute inset-0 pointer-events-none rounded-sm"
-                    style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(16,185,129,0.03) 100%)' }}
+                    style={{ background: 'linear-gradient(135deg, rgba(15,123,74,0.08) 0%, rgba(15,123,74,0.03) 100%)' }}
                 />
             )}
 
             {/* FINAL / LIVE badge — sits in divider space */}
             {isFinal && (
                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10">
-                    <span className="text-[7px] font-black uppercase tracking-wider px-1 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700/50">
+                    <span className="text-[7px] font-display font-black uppercase tracking-wider px-1 py-0.5 rounded bg-surface text-muted border border-line">
                         FINAL
                     </span>
                 </div>
             )}
             {isInProgress && (
                 <div className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10">
-                    <span className="text-[7px] font-black uppercase tracking-wider px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse">
+                    <span className="text-[7px] font-display font-black uppercase tracking-wider px-1 py-0.5 rounded bg-brandred-600/15 text-brandred-500 border border-brandred-500/40 animate-pulse">
                         LIVE
                     </span>
                 </div>
@@ -286,9 +286,9 @@ const MatchupCard: React.FC<MatchupCardProps> = ({
                 disabled={!!(readOnly || !homeTeamId)}
             />
             <div className={`border-t mx-2 flex-shrink-0 ${
-                isCorrectGame ? 'border-emerald-500/30' :
-                isWrongGame   ? 'border-red-500/20' :
-                                'border-slate-700/40'
+                isCorrectGame ? 'border-[#0F7B4A]/30' :
+                isWrongGame   ? 'border-brandred-500/20' :
+                                'border-line'
             }`} />
             <TeamRow
                 teamId={awayTeamId}
@@ -346,10 +346,10 @@ const BracketColumn: React.FC<BracketColumnProps> = ({
 // ─── Region Panel ──────────────────────────────────────────────────────────
 
 const REGION_COLORS: Record<string, string> = {
-    East: '#60a5fa',
-    West: '#fb923c',
-    South: '#4ade80',
-    Midwest: '#c084fc',
+    East: '#C9A867',
+    West: '#C9A867',
+    South: '#C9A867',
+    Midwest: '#C9A867',
 };
 
 interface RegionPanelProps extends ESPNBracketProps {
@@ -360,7 +360,7 @@ interface RegionPanelProps extends ESPNBracketProps {
 const RegionPanel: React.FC<RegionPanelProps> = ({
     region, align, tournament, picks, onPick, readOnly, eliminatedTeamIds
 }) => {
-    const color = REGION_COLORS[region] ?? '#60a5fa';
+    const color = REGION_COLORS[region] ?? '#C9A867';
     const elims = eliminatedTeamIds ?? new Set<string>();
 
     const getGames = (round: number): (Game | undefined)[] => {
@@ -400,7 +400,7 @@ const RegionPanel: React.FC<RegionPanelProps> = ({
         <div className="flex flex-col flex-shrink-0">
             {/* Region name */}
             <div
-                className="text-center text-[11px] font-black uppercase tracking-[0.18em] mb-1.5 pb-1"
+                className="text-center text-[11px] font-display font-black uppercase tracking-[0.18em] mb-1.5 pb-1"
                 style={{ color, borderBottom: `2px solid ${color}25` }}
             >
                 {region}
@@ -411,7 +411,7 @@ const RegionPanel: React.FC<RegionPanelProps> = ({
                 {orderedCols.map((c, i) => (
                     <div
                         key={i}
-                        className="text-center text-[8px] font-bold text-slate-600 uppercase tracking-widest"
+                        className="text-center text-[8px] font-display font-bold text-faint uppercase tracking-widest"
                         style={{ width: COL_W, flexShrink: 0 }}
                     >
                         {c.label}
@@ -463,10 +463,10 @@ const ChampionBanner: React.FC<ChampionBannerProps> = ({ picks, champGameId }) =
     if (!champPick) {
         return (
             <div className="mt-3 mb-1 flex flex-col items-center gap-1.5 w-[160px]">
-                <div className="w-[2px] h-5 bg-amber-500/20" />
-                <div className="rounded-lg border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 flex flex-col items-center gap-1 w-full">
-                    <Trophy className="w-5 h-5 text-amber-500/50" />
-                    <div className="text-[9px] text-amber-400/70 uppercase tracking-widest font-bold text-center">
+                <div className="w-[2px] h-5 bg-gold-500/20" />
+                <div className="rounded-lg border border-dashed border-gold-500/30 bg-gold-500/5 px-3 py-2 flex flex-col items-center gap-1 w-full">
+                    <Trophy className="w-5 h-5 text-gold-500/50" />
+                    <div className="text-[9px] text-gold-600 dark:text-gold-400/70 uppercase tracking-widest font-display font-bold text-center">
                         Pick Your Champion
                     </div>
                 </div>
@@ -477,19 +477,19 @@ const ChampionBanner: React.FC<ChampionBannerProps> = ({ picks, champGameId }) =
     return (
         <div className="mt-3 mb-1 flex flex-col items-center gap-1 w-[160px]">
             {/* Connector line */}
-            <div className="w-[2px] h-5 bg-amber-500/40" />
+            <div className="w-[2px] h-5 bg-gold-500/40" />
 
             {/* Banner card */}
             <div
-                className="relative w-full rounded-xl overflow-hidden border border-amber-500/50 shadow-lg shadow-amber-500/20"
-                style={{ background: 'linear-gradient(145deg, #1a2f4a 0%, #0e1929 60%, #1a2f4a 100%)' }}
+                className="relative w-full rounded-xl overflow-hidden border border-gold-500/50 shadow-lg shadow-[rgba(140,109,51,0.25)]"
+                style={{ background: 'linear-gradient(145deg, #142A4C 0%, #0B1526 60%, #142A4C 100%)' }}
             >
                 {/* Gold accent top bar */}
-                <div className="h-[3px] w-full bg-gradient-to-r from-amber-600 via-amber-400 to-amber-600" />
+                <div className="h-[3px] w-full bg-gradient-to-r from-gold-600 via-gold-400 to-gold-600" />
 
                 <div className="flex flex-col items-center px-2 py-3 gap-2">
                     {/* MY CHAMPIONSHIP PICK label */}
-                    <div className="text-[8px] font-black text-amber-400 uppercase tracking-[0.2em] text-center leading-none">
+                    <div className="text-[8px] font-display font-black text-gold-400 uppercase tracking-[0.2em] text-center leading-none">
                         My Championship Pick
                     </div>
 
@@ -503,22 +503,22 @@ const ChampionBanner: React.FC<ChampionBannerProps> = ({ picks, champGameId }) =
                                 crossOrigin="anonymous"
                             />
                         ) : (
-                            <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
-                                <Trophy className="w-6 h-6 text-amber-400" />
+                            <div className="w-12 h-12 rounded-full bg-gold-500/20 flex items-center justify-center">
+                                <Trophy className="w-6 h-6 text-gold-400" />
                             </div>
                         )}
                         {/* Glow ring */}
-                        <div className="absolute inset-0 rounded-full ring-2 ring-amber-400/30 pointer-events-none" />
+                        <div className="absolute inset-0 rounded-full ring-2 ring-gold-400/30 pointer-events-none" />
                     </div>
 
                     {/* Team name */}
-                    <div className="text-[11px] font-black text-white text-center leading-tight tracking-tight line-clamp-2">
+                    <div className="text-[11px] font-display font-black text-white text-center leading-tight tracking-tight line-clamp-2">
                         {champName}
                     </div>
                 </div>
 
                 {/* Gold accent bottom bar */}
-                <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
+                <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-gold-500/60 to-transparent" />
             </div>
         </div>
     );
@@ -566,12 +566,12 @@ const FinalFourCenter: React.FC<ESPNBracketProps> = ({
             style={{ width: 160 }}
         >
             {/* Final Four label */}
-            <div className="text-[9px] font-bold text-amber-400 uppercase tracking-[0.18em] mb-2 text-center">
+            <div className="text-[9px] font-display font-bold text-gold-500 uppercase tracking-[0.18em] mb-2 text-center">
                 Final Four
             </div>
 
             {/* FF Game 1 */}
-            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1 text-center">
+            <div className="text-[8px] text-faint uppercase tracking-widest mb-1 text-center">
                 East vs West
             </div>
             <MatchupCard
@@ -586,15 +586,15 @@ const FinalFourCenter: React.FC<ESPNBracketProps> = ({
 
             {/* Spacer */}
             <div className="my-3 flex flex-col items-center">
-                <div className="w-px h-3 bg-amber-600/30" />
+                <div className="w-px h-3 bg-gold-600/30" />
             </div>
 
             {/* Championship */}
-            <div className="text-[9px] font-bold text-amber-500 uppercase tracking-[0.12em] mb-1 text-center">
+            <div className="text-[9px] font-display font-bold text-gold-500 uppercase tracking-[0.12em] mb-1 text-center">
                 National Championship
             </div>
             <div className="relative">
-                <div className="absolute -inset-[2px] rounded bg-amber-500/5 border border-amber-500/25 pointer-events-none" />
+                <div className="absolute -inset-[2px] rounded bg-gold-500/5 border border-gold-500/25 pointer-events-none" />
                 <MatchupCard
                     game={champGame}
                     homeTeamId={champHome}
@@ -611,11 +611,11 @@ const FinalFourCenter: React.FC<ESPNBracketProps> = ({
 
             {/* Spacer */}
             <div className="my-4 flex flex-col items-center">
-                <div className="w-px h-4 bg-amber-600/30" />
+                <div className="w-px h-4 bg-gold-600/30" />
             </div>
 
             {/* FF Game 2 */}
-            <div className="text-[8px] text-slate-600 uppercase tracking-widest mb-1 text-center">
+            <div className="text-[8px] text-faint uppercase tracking-widest mb-1 text-center">
                 South vs Midwest
             </div>
             <MatchupCard
@@ -654,19 +654,19 @@ const DonutChart: React.FC<DonutProps> = ({ earned, unplayed, max, size = 90 }) 
     const lostOff      = -(circ * (earnedPct + unplayedPct)) + startOffset;
     return (
         <svg width={size} height={size}>
-            <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth={11} />
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line)" strokeWidth={11} />
             {lostPct > 0.001 && (
-                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#ef4444" strokeWidth={11}
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#C4342E" strokeWidth={11}
                     strokeDasharray={`${lostDash} ${circ - lostDash}`}
                     strokeDashoffset={lostOff} strokeLinecap="butt" />
             )}
             {unplayedPct > 0.001 && (
-                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#475569" strokeWidth={11}
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--faint)" strokeWidth={11}
                     strokeDasharray={`${unplayedDash} ${circ - unplayedDash}`}
                     strokeDashoffset={unplayedOff} strokeLinecap="butt" />
             )}
             {earnedPct > 0.001 && (
-                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#22c55e" strokeWidth={11}
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#0F7B4A" strokeWidth={11}
                     strokeDasharray={`${earnedDash} ${circ - earnedDash}`}
                     strokeDashoffset={startOffset} strokeLinecap="butt" />
             )}
@@ -710,78 +710,78 @@ export const StatsHeader: React.FC<StatsHeaderProps> = ({
     const printBracket = useCallback(() => window.print(), []);
 
     return (
-        <div className="bg-[#0d1b2a] border-b-2 border-slate-700/50 px-6 py-5 shadow-xl">
+        <div className="bg-surface border-b-2 border-line px-6 py-5 shadow-panel">
             <div className="max-w-screen-xl mx-auto flex items-center gap-8 flex-wrap">
 
                 {/* Champion logo + entry name */}
                 <div className="flex items-center gap-4">
-                    <div className="w-[72px] h-[72px] rounded-xl bg-slate-800 flex items-center justify-center ring-2 ring-slate-600 overflow-hidden flex-shrink-0">
+                    <div className="w-[72px] h-[72px] rounded-xl bg-card flex items-center justify-center ring-2 ring-[color:var(--line)] overflow-hidden flex-shrink-0">
                         {champLogo
                             ? <img src={champLogo} alt={champName} className="w-14 h-14 object-contain" crossOrigin="anonymous" />
-                            : <Trophy className="w-8 h-8 text-amber-400" />}
+                            : <Trophy className="w-8 h-8 text-gold-500" />}
                     </div>
                     <div>
-                        {entryName && <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">{entryName}</div>}
-                        <div className="text-xl font-black text-white leading-tight">{champName}</div>
-                        <div className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Champion Pick</div>
+                        {entryName && <div className="text-[10px] font-display font-bold text-muted uppercase tracking-widest mb-0.5">{entryName}</div>}
+                        <div className="text-xl font-display font-black text-[color:var(--text)] leading-tight">{champName}</div>
+                        <div className="text-[10px] text-muted uppercase tracking-widest mt-1">Champion Pick</div>
                     </div>
                 </div>
 
-                <div className="w-px h-14 bg-slate-700 hidden sm:block" />
+                <div className="w-px h-14 bg-line hidden sm:block" />
 
                 {/* RANK / PCT / PTS */}
                 <div className="flex items-center gap-8">
                     <div className="text-center">
-                        <div className="text-4xl font-black text-white leading-none">{rank ?? '--'}</div>
-                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-2">Rank</div>
+                        <div className="text-4xl font-display font-black text-[color:var(--text)] leading-none num">{rank ?? '--'}</div>
+                        <div className="text-[11px] font-display font-bold text-muted uppercase tracking-widest mt-2">Rank</div>
                     </div>
                     <div className="text-center">
-                        <div className="text-4xl font-black text-white leading-none">{pct !== null ? `${pct}%` : '--'}</div>
-                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-2">PCT</div>
+                        <div className="text-4xl font-display font-black text-[color:var(--text)] leading-none num">{pct !== null ? `${pct}%` : '--'}</div>
+                        <div className="text-[11px] font-display font-bold text-muted uppercase tracking-widest mt-2">PCT</div>
                     </div>
                     <div className="text-center">
-                        <div className="text-4xl font-black text-emerald-400 leading-none">{entryScore}</div>
-                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-2">PTS</div>
+                        <div className="text-4xl font-display font-black text-gold-500 leading-none num">{entryScore}</div>
+                        <div className="text-[11px] font-display font-bold text-muted uppercase tracking-widest mt-2">PTS</div>
                     </div>
                 </div>
 
-                <div className="w-px h-14 bg-slate-700 hidden lg:block" />
+                <div className="w-px h-14 bg-line hidden lg:block" />
 
                 {/* Donut + legend */}
                 <div className="items-center gap-5 hidden lg:flex">
                     <div className="relative">
                         <DonutChart earned={entryScore} unplayed={unplayed} max={maxPts} size={90} />
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                            <div className="text-[16px] font-black text-white leading-none">{entryScore}</div>
-                            <div className="text-[9px] text-slate-400 font-bold leading-none mt-0.5">{maxPts} MAX</div>
+                            <div className="text-[16px] font-display font-black text-[color:var(--text)] leading-none num">{entryScore}</div>
+                            <div className="text-[9px] text-muted font-bold leading-none mt-0.5 num">{maxPts} MAX</div>
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-emerald-500" /><span className="text-xs text-slate-300 font-medium">Points Gained</span></div>
-                        <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-slate-500" /><span className="text-xs text-slate-300 font-medium">Points Unplayed</span></div>
-                        <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-red-500" /><span className="text-xs text-slate-300 font-medium">Points Lost</span></div>
+                        <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-[#0F7B4A]" /><span className="text-xs text-[color:var(--text)] font-medium">Points Gained</span></div>
+                        <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-faint" /><span className="text-xs text-[color:var(--text)] font-medium">Points Unplayed</span></div>
+                        <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-brandred-600" /><span className="text-xs text-[color:var(--text)] font-medium">Points Lost</span></div>
                     </div>
                 </div>
 
                 {/* Picks bar + buttons */}
                 <div className="flex flex-col gap-3 ml-auto">
                     <div className="hidden md:block w-48">
-                        <div className="flex justify-between text-[11px] text-slate-500 mb-1.5">
+                        <div className="flex justify-between text-[11px] text-muted mb-1.5 num">
                             <span>{pickCount}/{totalPicks} Picks Made</span>
                             <span>{totalPicks > 0 ? Math.round((pickCount / totalPicks) * 100) : 0}%</span>
                         </div>
-                        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                        <div className="h-2 bg-card rounded-full overflow-hidden">
+                            <div className="h-full bg-gold-foil rounded-full transition-all duration-500"
                                 style={{ width: `${totalPicks > 0 ? (pickCount / totalPicks) * 100 : 0}%` }} />
                         </div>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={copyLink}
-                            className="flex items-center gap-1.5 px-4 py-2 border border-slate-600 rounded-lg text-[12px] font-semibold text-slate-300 hover:text-white hover:border-slate-400 hover:bg-slate-800 transition-all">
+                            className="flex items-center gap-1.5 px-4 py-2 border-[1.5px] border-line rounded-lg text-[12px] font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] hover:border-navy-600 hover:bg-card transition-all duration-150 hover:-translate-y-px">
                             <Link className="w-3.5 h-3.5" /> Copy Link
                         </button>
                         <button onClick={printBracket}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-slate-700 rounded-lg text-[12px] font-semibold text-slate-300 hover:text-white hover:bg-slate-600 transition-all">
+                            className="flex items-center gap-1.5 px-4 py-2 bg-navy-800 rounded-lg text-[12px] font-display font-bold uppercase tracking-[0.05em] text-white hover:bg-navy-700 transition-all duration-150 hover:-translate-y-px">
                             <Printer className="w-3.5 h-3.5" /> Print Bracket
                         </button>
                     </div>
@@ -834,7 +834,7 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
 
     return (
         <TeamDataContext.Provider value={importedTeams}>
-        <div id="bracket-printable-area" className="w-full bg-[#0b1421]">
+        <div id="bracket-printable-area" className="w-full bg-page">
             {/* Stats header — full width */}
             <StatsHeader
                 tournament={tournament}
@@ -869,22 +869,22 @@ export const ESPNBracket: React.FC<ESPNBracketProps> = ({
                     </div>
 
                     {/* Legend */}
-                    <div className="flex items-center justify-center gap-5 mt-4 pt-3 border-t border-slate-800/50">
+                    <div className="flex items-center justify-center gap-5 mt-4 pt-3 border-t border-line">
                         <div className="flex items-center gap-1.5">
-                            <span className="w-3 h-3 rounded-sm border border-emerald-500/80 bg-emerald-500/15" />
-                            <span className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">Correct Pick</span>
+                            <span className="w-3 h-3 rounded-sm border border-[#0F7B4A]/80 bg-[#0F7B4A]/15" />
+                            <span className="text-[9px] text-muted uppercase tracking-wider font-semibold">Correct Pick</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <span className="w-3 h-3 rounded-sm border border-red-500/40 bg-red-500/10" />
-                            <span className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">Wrong Pick</span>
+                            <span className="w-3 h-3 rounded-sm border border-brandred-500/40 bg-brandred-500/10" />
+                            <span className="text-[9px] text-muted uppercase tracking-wider font-semibold">Wrong Pick</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <span className="w-3 h-3 rounded-sm border border-amber-500/50 bg-amber-500/10" />
-                            <span className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">Your Pick (Pending)</span>
+                            <span className="w-3 h-3 rounded-sm border border-gold-500/50 bg-gold-500/10" />
+                            <span className="text-[9px] text-muted uppercase tracking-wider font-semibold">Your Pick (Pending)</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <span className="w-3 h-1 bg-red-600/70" style={{ textDecoration: 'line-through' }} />
-                            <span className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">Eliminated</span>
+                            <span className="w-3 h-1 bg-brandred-600/70" style={{ textDecoration: 'line-through' }} />
+                            <span className="text-[9px] text-muted uppercase tracking-wider font-semibold">Eliminated</span>
                         </div>
                     </div>
                 </div>

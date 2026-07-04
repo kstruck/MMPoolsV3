@@ -3,6 +3,7 @@ import { DollarSign, CheckCircle2, AlertCircle, Receipt, History } from 'lucide-
 import type { Pool, User } from '../types';
 import { subscribeToPaymentLedger, type PaymentLedgerEvent } from '../services/paymentService';
 import { formatDeadline } from '../utils/formatTime';
+import { Badge } from './ui';
 
 interface PaymentsPanelProps {
     pool: Pool;
@@ -16,17 +17,17 @@ const linkify = (text: string): React.ReactNode[] => {
     const parts = text.split(/(https?:\/\/[^\s]+)/g);
     return parts.map((part, i) =>
         /^https?:\/\//.test(part)
-            ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline break-all">{part}</a>
+            ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-gold-700 dark:text-gold-400 underline break-all">{part}</a>
             : <span key={i}>{part}</span>
     );
 };
 
 const EVENT_LABELS: Record<PaymentLedgerEvent['type'], { label: string; tone: string }> = {
-    MARKED_PAID: { label: 'marked PAID', tone: 'text-emerald-400' },
-    MARKED_UNPAID: { label: 'marked UNPAID', tone: 'text-rose-400' },
-    REBUY_DUE: { label: 'rebuy — dues added', tone: 'text-amber-400' },
-    PAYOUT_PAID: { label: 'payout sent', tone: 'text-emerald-400' },
-    PAYOUT_UNPAID: { label: 'payout mark reversed', tone: 'text-rose-400' },
+    MARKED_PAID: { label: 'marked PAID', tone: 'text-[#0F7B4A] dark:text-[#3FB77F]' },
+    MARKED_UNPAID: { label: 'marked UNPAID', tone: 'text-[#B4530A] dark:text-[#E8853D]' },
+    REBUY_DUE: { label: 'rebuy — dues added', tone: 'text-gold-700 dark:text-gold-400' },
+    PAYOUT_PAID: { label: 'payout sent', tone: 'text-[#0F7B4A] dark:text-[#3FB77F]' },
+    PAYOUT_UNPAID: { label: 'payout mark reversed', tone: 'text-[#B4530A] dark:text-[#E8853D]' },
 };
 
 /**
@@ -64,103 +65,103 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
     return (
         <div className="space-y-6">
             {/* My status */}
-            <div className={`rounded-3xl border p-6 ${isPaid ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-amber-500/5 border-amber-500/30'}`}>
+            <div className={`rounded-3xl border p-6 ${isPaid ? 'bg-[#0F7B4A]/5 border-[#0F7B4A]/30' : 'bg-[#B4530A]/5 border-[#B4530A]/30'}`}>
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">Your Payment Status</span>
+                        <span className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted block mb-1">Your Payment Status</span>
                         <div className="flex items-center gap-2">
                             {isPaid
-                                ? <CheckCircle2 size={20} className="text-emerald-400" aria-hidden="true" />
-                                : <AlertCircle size={20} className="text-amber-400" aria-hidden="true" />}
-                            <span className={`text-xl font-black ${isPaid ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                ? <CheckCircle2 size={20} className="text-[#0F7B4A] dark:text-[#3FB77F]" aria-hidden="true" />
+                                : <AlertCircle size={20} className="text-[#B4530A] dark:text-[#E8853D]" aria-hidden="true" />}
+                            <Badge status={isPaid ? 'paid' : 'unpaid'} className="text-[15px]">
                                 {isPaid ? 'PAID' : 'UNPAID'}
-                            </span>
+                            </Badge>
                         </div>
                         {!isPaid && myTotalDue > 0 && (
-                            <p className="text-sm font-bold text-slate-300 mt-2">
-                                You owe <span className="text-white">${myTotalDue}</span>
-                                {myRebuys > 0 && <span className="text-slate-400"> (${entryFee} entry + {myRebuys} rebuy{myRebuys > 1 ? 's' : ''} × ${rebuyCost})</span>}
+                            <p className="text-sm font-body font-bold text-[color:var(--text)] mt-2">
+                                You owe <span className="text-gold-700 dark:text-gold-400 num">${myTotalDue}</span>
+                                {myRebuys > 0 && <span className="text-muted num"> (${entryFee} entry + {myRebuys} rebuy{myRebuys > 1 ? 's' : ''} × ${rebuyCost})</span>}
                                 {' '}to the commissioner.
                             </p>
                         )}
                         {isPaid && (
-                            <p className="text-xs text-slate-400 mt-2">
+                            <p className="text-xs font-body text-muted mt-2">
                                 Marked paid by the commissioner — see the ledger below for the timestamped record.
                             </p>
                         )}
                     </div>
                     {entryFee > 0 && (
                         <div className="text-right">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Entry Fee</span>
-                            <span className="text-2xl font-black text-white">${entryFee}</span>
+                            <span className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted block">Entry Fee</span>
+                            <span className="font-display font-bold text-2xl text-gold-700 dark:text-gold-400 num">${entryFee}</span>
                         </div>
                     )}
                 </div>
 
                 {!isPaid && paymentInstructions && (
-                    <div className="mt-4 pt-4 border-t border-slate-800">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">How to Pay</span>
-                        <p className="text-sm text-slate-300 leading-relaxed">{linkify(paymentInstructions)}</p>
+                    <div className="mt-4 pt-4 border-t border-line">
+                        <span className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted block mb-1">How to Pay</span>
+                        <p className="text-sm font-body text-[color:var(--text)] leading-relaxed">{linkify(paymentInstructions)}</p>
                     </div>
                 )}
             </div>
 
             {/* Pool pot */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6">
+            <div className="bg-card border border-line rounded-3xl p-6 shadow-card">
                 <div className="flex items-center gap-2 mb-4">
-                    <DollarSign size={16} className="text-slate-500" aria-hidden="true" />
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Pool Pot</h3>
+                    <DollarSign size={16} className="text-gold-600 dark:text-gold-400" aria-hidden="true" />
+                    <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted">Pool Pot</h3>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Collected</span>
-                        <span className="text-xl font-black text-emerald-400">${pot.collected}</span>
+                        <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block">Collected</span>
+                        <span className="font-display font-bold text-xl text-gold-700 dark:text-gold-400 num">${pot.collected}</span>
                     </div>
                     <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Expected</span>
-                        <span className="text-xl font-black text-white">${pot.expected}</span>
+                        <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block">Expected</span>
+                        <span className="font-display font-bold text-xl text-gold-700 dark:text-gold-400 num">${pot.expected}</span>
                     </div>
                     <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Paid Members</span>
-                        <span className="text-xl font-black text-white">{pot.paidCount}</span>
+                        <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block">Paid Members</span>
+                        <span className="font-display font-bold text-xl text-[color:var(--text)] num">{pot.paidCount}</span>
                     </div>
                     <div>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase block">Unpaid</span>
-                        <span className={`text-xl font-black ${pot.unpaidCount > 0 ? 'text-amber-400' : 'text-slate-500'}`}>{pot.unpaidCount}</span>
+                        <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block">Unpaid</span>
+                        <span className={`font-display font-bold text-xl num ${pot.unpaidCount > 0 ? 'text-[#B4530A] dark:text-[#E8853D]' : 'text-faint'}`}>{pot.unpaidCount}</span>
                     </div>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-4">
+                <p className="text-[11px] font-body text-faint mt-4">
                     Dues are collected and prizes paid out by your commissioner, not by March Melee Pools.
                 </p>
             </div>
 
             {/* Ledger */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6">
+            <div className="bg-card border border-line rounded-3xl p-6 shadow-card">
                 <div className="flex items-center gap-2 mb-4">
-                    <History size={16} className="text-slate-500" aria-hidden="true" />
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Payment Ledger</h3>
+                    <History size={16} className="text-gold-600 dark:text-gold-400" aria-hidden="true" />
+                    <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted">Payment Ledger</h3>
                 </div>
                 {ledger.length === 0 ? (
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm font-body text-muted">
                         No payment activity recorded yet. Every paid/unpaid mark and rebuy shows up here with a timestamp.
                     </p>
                 ) : (
-                    <ul className="divide-y divide-slate-800/60">
+                    <ul className="divide-y divide-line">
                         {ledger.map(ev => {
-                            const meta = EVENT_LABELS[ev.type] ?? { label: ev.type, tone: 'text-slate-400' };
+                            const meta = EVENT_LABELS[ev.type] ?? { label: ev.type, tone: 'text-muted' };
                             const mine = ev.uid === user.id;
                             return (
-                                <li key={ev.id} className={`py-2.5 flex items-center gap-3 text-sm ${mine ? '' : 'opacity-80'}`}>
-                                    <Receipt size={14} className="text-slate-600 shrink-0" aria-hidden="true" />
+                                <li key={ev.id} className={`py-2.5 flex items-center gap-3 text-sm font-body ${mine ? '' : 'opacity-80'}`}>
+                                    <Receipt size={14} className="text-faint shrink-0" aria-hidden="true" />
                                     <span className="flex-1 min-w-0">
-                                        <span className={`font-bold ${mine ? 'text-white' : 'text-slate-300'}`}>
+                                        <span className={`font-bold ${mine ? 'text-[color:var(--text)]' : 'text-muted'}`}>
                                             {mine ? 'You' : (ev.entryName || 'A member')}
                                         </span>{' '}
                                         <span className={`font-bold ${meta.tone}`}>{meta.label}</span>
-                                        {typeof ev.amount === 'number' && <span className="text-slate-400"> · ${ev.amount}</span>}
-                                        {ev.note && <span className="text-slate-500"> · {ev.note}</span>}
+                                        {typeof ev.amount === 'number' && <span className="text-gold-700 dark:text-gold-400 num"> · ${ev.amount}</span>}
+                                        {ev.note && <span className="text-faint"> · {ev.note}</span>}
                                     </span>
-                                    <span className="text-[11px] text-slate-500 whitespace-nowrap shrink-0">{formatDeadline(ev.at)}</span>
+                                    <span className="text-[11px] text-faint whitespace-nowrap shrink-0 num">{formatDeadline(ev.at)}</span>
                                 </li>
                             );
                         })}

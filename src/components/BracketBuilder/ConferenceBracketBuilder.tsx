@@ -95,13 +95,13 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
     return (
         <div className="flex flex-col w-full">
             {/* Header */}
-            <div className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-800 pt-4 px-4 pb-3">
+            <div className="sticky top-0 z-10 bg-surface backdrop-blur border-b border-line pt-4 px-4 pb-3">
                 <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <Trophy className="text-amber-500" size={20} />
+                    <h2 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                        <Trophy className="text-gold-500" size={20} />
                         {tournament.conferenceName || 'Conference'} Championship
                     </h2>
-                    <div className="text-sm text-slate-400 font-mono">
+                    <div className="text-sm text-muted num">
                         {totalPicks} / {requiredPicks} picks
                     </div>
                 </div>
@@ -119,8 +119,8 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
                         if (r === maxRound) {
                             return (
                                 <div key={r} className="flex flex-col items-center justify-center gap-4 py-24">
-                                    <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-2">Championship</p>
-                                    <Trophy className="text-amber-400 animate-pulse mb-2" size={28} />
+                                    <p className="text-xs font-display font-bold uppercase tracking-widest text-gold-500 mb-2">Championship</p>
+                                    <Trophy className="text-gold-500 animate-pulse mb-2" size={28} />
                                     {roundGames[0] && (
                                         <MatchNode
                                             game={roundGames[0]}
@@ -134,7 +134,7 @@ export const ConferenceBracketBuilder: React.FC<ConferenceBracketBuilderProps> =
                                             eliminatedTeamIds={eliminatedTeamIds}
                                         />
                                     )}
-                                    <p className="text-[10px] uppercase tracking-widest text-slate-500 mt-2">Champion</p>
+                                    <p className="text-[10px] font-display font-bold uppercase tracking-widest text-muted mt-2">Champion</p>
                                 </div>
                             );
                         }
@@ -272,8 +272,8 @@ const RoundColumn: React.FC<RoundColumnProps> = ({
         <div className={`flex flex-col items-center ${mtClass}`}>
             {/* Round label */}
             <div className="mb-4 text-center h-10">
-                <p className="text-xs font-bold uppercase tracking-widest text-indigo-400">{label}</p>
-                {sublabel && <p className="text-[10px] text-slate-500">{sublabel}</p>}
+                <p className="text-xs font-display font-bold uppercase tracking-widest text-gold-500">{label}</p>
+                {sublabel && <p className="text-[10px] text-muted">{sublabel}</p>}
             </div>
 
             <div className={`flex flex-col justify-around ${verticalSpacing} py-2 flex-grow`}>

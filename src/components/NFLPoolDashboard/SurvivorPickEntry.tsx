@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Lock, AlertCircle, Save, RotateCcw, Shield, ShieldAlert, Heart, Check, CheckCircle2 } from 'lucide-react';
+import { Button } from '../ui';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
@@ -129,7 +130,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
       message: (
         <>
           <p>This restores your ALIVE status and adds <strong>${rebuyCost}</strong> to what you owe the commissioner.</p>
-          <p className="mt-2 text-slate-400">Rebuys used: {(entry?.rebuysUsed ?? 0)} of {maxRebuys}. Available through Week {rebuyDeadlineWeek}.</p>
+          <p className="mt-2 text-muted num">Rebuys used: {(entry?.rebuysUsed ?? 0)} of {maxRebuys}. Available through Week {rebuyDeadlineWeek}.</p>
         </>
       ),
       confirmLabel: `Rebuy — $${rebuyCost}`,
@@ -162,10 +163,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
 
   if (!allSpreadsLocked) {
     return (
-      <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-8 rounded-3xl text-center">
+      <div className="bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 p-8 rounded-xl text-center">
         <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
-        <h3 className="font-black text-xl mb-2">Spreads Not Yet Finalized</h3>
-        <p className="font-bold text-sm">Pick sheets for this week are locked until all spreads have been fully incorporated. Please check back later.</p>
+        <h3 className="font-display font-bold uppercase text-xl mb-2">Spreads Not Yet Finalized</h3>
+        <p className="font-body font-semibold text-sm">Pick sheets for this week are locked until all spreads have been fully incorporated. Please check back later.</p>
       </div>
     );
   }
@@ -174,37 +175,37 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     <div className="space-y-6">
       {/* 1. Status Panel Card */}
       {entry && (
-        <div className="relative overflow-hidden bg-slate-900/50 border border-slate-800 rounded-3xl p-6 backdrop-blur-md">
+        <div className="relative overflow-hidden bg-card border border-line rounded-xl p-6 shadow-card">
           {/* Decorative background glow */}
           <div
-            className="absolute -right-16 -top-16 w-40 h-40 rounded-full blur-3xl opacity-20 pointer-events-none"
+            className="absolute -right-16 -top-16 w-40 h-40 rounded-full blur-3xl opacity-10 pointer-events-none"
             style={{ backgroundColor: primaryAccent }}
           />
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Your Entry:</span>
-                <span className="text-white font-extrabold text-sm">{entry.userName}</span>
+                <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Your Entry:</span>
+                <span className="text-[color:var(--text)] font-display font-bold text-sm">{entry.userName}</span>
               </div>
               <div className="flex items-center gap-3">
                 {entry.status === 'ALIVE' ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-xs font-black tracking-wide uppercase animate-pulse">
-                    <Heart size={12} className="fill-emerald-400/20" /> Active & Alive
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A] rounded-full text-xs font-display font-bold tracking-[0.08em] uppercase animate-pulse">
+                    <Heart size={12} className="fill-[#0F7B4A]/20" /> Active & Alive
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full text-xs font-black tracking-wide uppercase">
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-brandred-600/10 border border-brandred-600/20 text-brandred-600 rounded-full text-xs font-display font-bold tracking-[0.08em] uppercase">
                     <ShieldAlert size={12} /> Eliminated
                   </div>
                 )}
 
                 {entry.strikesUsed > 0 && (
-                  <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 border border-amber-500/20 rounded-md">
+                  <span className="text-xs font-display font-bold uppercase tracking-[0.05em] num text-gold-600 dark:text-gold-400 bg-gold-400/10 px-2 py-0.5 border border-gold-500/40 rounded-md">
                     Strikes: {entry.strikesUsed} / {maxStrikes}
                   </span>
                 )}
                 {maxRebuys > 0 && (
-                  <span className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 border border-indigo-500/20 rounded-md">
+                  <span className="text-xs font-display font-bold uppercase tracking-[0.05em] num text-navy-700 dark:text-gold-400 bg-navy-700/10 dark:bg-gold-400/10 px-2 py-0.5 border border-line rounded-md">
                     Rebuys: {entry.rebuysUsed ?? 0} / {maxRebuys}
                   </span>
                 )}
@@ -213,43 +214,44 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
 
             {/* Rebuy CTA */}
             {canRebuy && (
-              <button
+              <Button
+                variant="premium"
                 onClick={handleRebuy}
                 disabled={isRebuying}
-                className="w-full md:w-auto bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black px-6 py-3 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-orange-500/10 transition-all hover:scale-[1.02] cursor-pointer"
+                className="w-full md:w-auto num"
               >
                 <RotateCcw size={16} className={isRebuying ? 'animate-spin' : ''} />
                 Rebuy / Buy-Back (${rebuyCost})
-              </button>
+              </Button>
             )}
           </div>
         </div>
       )}
 
       {error && (
-        <div role="alert" className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
+        <div role="alert" className="bg-brandred-600/10 border border-brandred-600/20 text-brandred-600 p-4 rounded-lg text-xs font-body font-bold flex gap-2 items-center">
           <AlertCircle size={18} aria-hidden="true" /> {error}
         </div>
       )}
 
       {/* Persistent receipt — survives the toast so the user can always verify */}
       {submittedAt && !error && (
-        <div role="status" className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
+        <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
           <CheckCircle2 size={18} aria-hidden="true" />
           Week {week} pick ({selectedTeam}) submitted at {formatTimeWithZone(submittedAt)}. You can change it until the game locks.
         </div>
       )}
 
       {/* 2. Mode Header */}
-      <div className="bg-slate-900/30 border border-slate-800 rounded-2xl px-5 py-4 flex items-center gap-3">
-        <div className="p-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl">
+      <div className="bg-card border border-line rounded-lg px-5 py-4 flex items-center gap-3">
+        <div className="p-2 bg-navy-700/10 text-navy-700 dark:bg-gold-400/10 dark:text-gold-400 border border-line rounded-xl">
           <Shield size={18} />
         </div>
         <div>
-          <h4 className="text-sm font-extrabold text-white uppercase tracking-wider">
+          <h4 className="text-sm font-display font-bold text-[color:var(--text)] uppercase tracking-[0.08em]">
             {pickLosersMode ? 'Pick the Loser' : 'Pick the Winner'}
           </h4>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] font-body text-muted">
             {pickLosersMode 
               ? 'Select a team you expect to LOSE their game this week. If they lose or tie, you survive!'
               : 'Select a team you expect to WIN their game this week. If they win or tie, you survive!'}
@@ -260,8 +262,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
       {/* 3. Game / Team Matchup Grid */}
       <div className="space-y-4">
         {games.length === 0 ? (
-          <div className="bg-slate-900/30 p-8 border border-slate-800 rounded-3xl text-center">
-            <p className="text-slate-500 font-bold">No NFL matchups scheduled for Week {week}.</p>
+          <div className="bg-card p-8 border border-line rounded-xl text-center">
+            <p className="text-muted font-body font-bold num">No NFL matchups scheduled for Week {week}.</p>
           </div>
         ) : (
           games.map(game => {
@@ -282,11 +284,11 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
             return (
               <div
                 key={game.id}
-                className="bg-slate-900/40 border border-slate-800 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 transition-all relative overflow-hidden backdrop-blur-sm hover:border-slate-700/80"
+                className="bg-card border border-line rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-150 relative overflow-hidden shadow-card"
               >
                 {/* Visual Lock overlay */}
                 {locked && game.status === 'SCHEDULED' && (
-                  <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-950/70 border border-slate-800 rounded-full px-2 py-0.5 text-[9px] text-slate-500 font-bold tracking-wider uppercase">
+                  <div className="absolute top-2 right-2 flex items-center gap-1 bg-page border border-line rounded-full px-2 py-0.5 text-[9px] text-muted font-display font-bold tracking-[0.08em] uppercase">
                     <Lock size={9} /> Locked
                   </div>
                 )}
@@ -298,23 +300,23 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                   <button
                     onClick={() => handleTeamSelect(awayAbbrev, game)}
                     disabled={locked || isAwayUsed || isEliminated}
-                    className={`flex-1 max-w-[240px] flex flex-col items-center p-4 rounded-2xl border transition-all text-center relative ${
+                    className={`flex-1 max-w-[240px] flex flex-col items-center p-4 rounded-lg border transition-all duration-150 text-center relative ${
                       isAwaySelected
-                        ? 'bg-indigo-600/10 border-indigo-500/70 shadow-md shadow-indigo-500/5'
+                        ? 'bg-page border-navy-600 ring-2 ring-navy-600 dark:border-gold-500 dark:ring-gold-500'
                         : isAwayUsed
-                          ? 'bg-slate-950/20 border-slate-900/50 opacity-40 cursor-not-allowed'
+                          ? 'bg-page border-line opacity-40 cursor-not-allowed'
                           : (locked || isEliminated)
-                            ? 'bg-slate-950/40 border-slate-850 opacity-80 cursor-not-allowed'
-                            : 'bg-slate-950/40 border-slate-850 hover:border-slate-700 hover:scale-[1.01]'
+                            ? 'bg-page border-line opacity-80 cursor-not-allowed'
+                            : 'bg-page border-line hover:-translate-y-1 hover:shadow-card-hover'
                     }`}
                   >
                     {isAwayUsed && (
-                      <span className="absolute top-2 left-2 bg-slate-900 border border-slate-800 text-slate-500 text-[8px] font-black tracking-widest px-1.5 py-0.5 rounded-full uppercase">
+                      <span className="absolute top-2 left-2 bg-page border border-line text-faint text-[8px] font-display font-bold tracking-[0.16em] px-1.5 py-0.5 rounded-full uppercase">
                         Used
                       </span>
                     )}
                     {isAwaySelected && (
-                      <span className="absolute top-2 right-2 bg-indigo-500 text-slate-950 p-0.5 rounded-full">
+                      <span className="absolute top-2 right-2 bg-navy-800 text-white dark:bg-gold-500 dark:text-ink p-0.5 rounded-full">
                         <Check size={10} className="stroke-[4]" />
                       </span>
                     )}
@@ -322,10 +324,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     {game.awayTeam.logoUrl && (
                       <img src={game.awayTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt={`${game.awayTeam.name} logo`} />
                     )}
-                    <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
+                    <span className="text-[color:var(--text)] font-display font-bold text-sm leading-tight truncate w-full">
                       {game.awayTeam.name}
                     </span>
-                    <span className="text-slate-500 text-[10px] font-bold tracking-widest mt-0.5">
+                    <span className="text-muted text-[10px] font-display font-bold tracking-[0.16em] mt-0.5">
                       {awayAbbrev}
                     </span>
                   </button>
@@ -333,25 +335,25 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                   {/* SCORE OR VS STATUS */}
                   <div className="flex flex-col items-center justify-center min-w-[60px]">
                     {game.status === 'FINAL' ? (
-                      <div className="text-center font-mono">
-                        <span className="text-slate-500 text-[9px] font-bold uppercase tracking-wider block mb-1">Final</span>
-                        <span className="text-base font-black text-white">
+                      <div className="text-center">
+                        <span className="text-muted text-[9px] font-display font-bold uppercase tracking-[0.08em] block mb-1">Final</span>
+                        <span className="text-base font-display font-bold text-[color:var(--text)] num">
                           {game.scores?.away} - {game.scores?.home}
                         </span>
                       </div>
                     ) : game.status === 'IN_PROGRESS' ? (
-                      <div className="text-center font-mono">
+                      <div className="text-center">
                         <span className="relative flex h-1.5 w-1.5 mx-auto mb-1">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brandred-500 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-brandred-600"></span>
                         </span>
-                        <span className="text-sm font-black text-red-500">
+                        <span className="text-sm font-display font-bold text-brandred-600 num">
                           {game.scores?.away} - {game.scores?.home}
                         </span>
-                        <span className="text-[9px] text-slate-500 block mt-0.5 leading-none">{game.clock}</span>
+                        <span className="text-[9px] text-muted num block mt-0.5 leading-none">{game.clock}</span>
                       </div>
                     ) : (
-                      <div className="text-slate-600 text-xs font-black font-mono tracking-widest">VS</div>
+                      <div className="text-faint text-xs font-display font-bold tracking-[0.16em]">VS</div>
                     )}
                   </div>
 
@@ -359,23 +361,23 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                   <button
                     onClick={() => handleTeamSelect(homeAbbrev, game)}
                     disabled={locked || isHomeUsed || isEliminated}
-                    className={`flex-1 max-w-[240px] flex flex-col items-center p-4 rounded-2xl border transition-all text-center relative ${
+                    className={`flex-1 max-w-[240px] flex flex-col items-center p-4 rounded-lg border transition-all duration-150 text-center relative ${
                       isHomeSelected
-                        ? 'bg-indigo-600/10 border-indigo-500/70 shadow-md shadow-indigo-500/5'
+                        ? 'bg-page border-navy-600 ring-2 ring-navy-600 dark:border-gold-500 dark:ring-gold-500'
                         : isHomeUsed
-                          ? 'bg-slate-950/20 border-slate-900/50 opacity-40 cursor-not-allowed'
+                          ? 'bg-page border-line opacity-40 cursor-not-allowed'
                           : (locked || isEliminated)
-                            ? 'bg-slate-950/40 border-slate-850 opacity-80 cursor-not-allowed'
-                            : 'bg-slate-950/40 border-slate-850 hover:border-slate-700 hover:scale-[1.01]'
+                            ? 'bg-page border-line opacity-80 cursor-not-allowed'
+                            : 'bg-page border-line hover:-translate-y-1 hover:shadow-card-hover'
                     }`}
                   >
                     {isHomeUsed && (
-                      <span className="absolute top-2 left-2 bg-slate-900 border border-slate-800 text-slate-500 text-[8px] font-black tracking-widest px-1.5 py-0.5 rounded-full uppercase">
+                      <span className="absolute top-2 left-2 bg-page border border-line text-faint text-[8px] font-display font-bold tracking-[0.16em] px-1.5 py-0.5 rounded-full uppercase">
                         Used
                       </span>
                     )}
                     {isHomeSelected && (
-                      <span className="absolute top-2 right-2 bg-indigo-500 text-slate-950 p-0.5 rounded-full">
+                      <span className="absolute top-2 right-2 bg-navy-800 text-white dark:bg-gold-500 dark:text-ink p-0.5 rounded-full">
                         <Check size={10} className="stroke-[4]" />
                       </span>
                     )}
@@ -383,10 +385,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     {game.homeTeam.logoUrl && (
                       <img src={game.homeTeam.logoUrl} className="w-12 h-12 object-contain mb-2" alt={`${game.homeTeam.name} logo`} />
                     )}
-                    <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
+                    <span className="text-[color:var(--text)] font-display font-bold text-sm leading-tight truncate w-full">
                       {game.homeTeam.name}
                     </span>
-                    <span className="text-slate-500 text-[10px] font-bold tracking-widest mt-0.5">
+                    <span className="text-muted text-[10px] font-display font-bold tracking-[0.16em] mt-0.5">
                       {homeAbbrev}
                     </span>
                   </button>
@@ -400,18 +402,19 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
 
       {/* 4. Action Save Footer */}
       {games.length > 0 && selectedTeam && !isSelectionLocked && (
-        <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm flex justify-center">
-          <button
+        <div className="bg-card border border-line rounded-xl p-6 shadow-card flex justify-center">
+          <Button
+            variant="primary"
+            size="lg"
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-extrabold px-8 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] cursor-pointer"
           >
             {isSubmitting ? 'Locking in...' : (
               <>
                 <Save size={18} /> Lock In Survivor Selection
               </>
             )}
-          </button>
+          </Button>
         </div>
       )}
     </div>

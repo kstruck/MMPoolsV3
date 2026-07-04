@@ -27,7 +27,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
 
     return (
         <div
-            className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
+            className="fixed inset-0 bg-navy-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
             onClick={onClose}
         >
             <div
@@ -42,7 +42,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
                 <button
                     onClick={onClose}
                     aria-label="Close"
-                    className="absolute -top-12 right-0 text-slate-400 hover:text-white transition-colors p-2"
+                    className="absolute -top-12 right-0 text-[#9FB0CC] hover:text-white transition-colors p-2"
                 >
                     <X size={24} />
                 </button>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#142A4C"/>
+      <stop offset="1" stop-color="#0B1526"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EBD49B"/>
+      <stop offset="0.45" stop-color="#C9A867"/>
+      <stop offset="1" stop-color="#A98038"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="url(#navy)"/>
+  <rect x="3.5" y="3.5" width="57" height="57" rx="9.5" fill="none" stroke="#C9A867" stroke-opacity="0.45"/>
+  <text x="32" y="44" font-family="'Saira Condensed','Arial Narrow',sans-serif" font-weight="800" font-size="32" letter-spacing="-1" text-anchor="middle" fill="url(#gold)">MM</text>
+</svg>

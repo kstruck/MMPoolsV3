@@ -73,57 +73,57 @@ export const GlobalStandingsCard: React.FC<GlobalStandingsCardProps> = ({ user, 
 
   if (isLoading) {
     return (
-      <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 h-32 flex items-center justify-center animate-pulse">
-        <Activity className="text-slate-700 animate-spin" />
+      <div className="bg-card border border-line rounded-3xl p-6 h-32 flex items-center justify-center animate-pulse">
+        <Activity className="text-faint animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 relative overflow-hidden backdrop-blur-md">
+    <div className="bg-card border border-line rounded-3xl p-6 relative overflow-hidden shadow-card">
       {/* Decorative background glow */}
-      <div className="absolute -right-16 -top-16 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -right-16 -top-16 w-40 h-40 bg-gold-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="flex items-center gap-3 mb-6 relative z-10">
-        <div className="p-2.5 bg-indigo-500/20 text-indigo-400 rounded-xl">
+        <div className="p-2.5 bg-gold-500/15 text-gold-700 dark:text-gold-400 rounded-xl">
           <Trophy size={20} />
         </div>
         <div>
-          <h3 className="text-white font-extrabold text-sm uppercase tracking-widest">{poolTypeName}</h3>
-          <p className="text-slate-400 text-[11px] font-semibold">Global Platform Leaderboard</p>
+          <h3 className="text-[color:var(--text)] font-display font-bold text-sm uppercase tracking-[0.16em]">{poolTypeName}</h3>
+          <p className="text-muted text-[11px] font-body font-semibold">Global Platform Leaderboard</p>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4 relative z-10">
-        <div className="bg-slate-950/40 p-3 rounded-2xl border border-slate-800/50">
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-extrabold uppercase mb-1">
-            <Crown size={12} className="text-amber-500" /> Global Rank
+        <div className="bg-surface p-3 rounded-2xl border border-line">
+          <div className="flex items-center gap-1.5 text-[10px] text-muted font-display font-bold uppercase tracking-[0.08em] mb-1">
+            <Crown size={12} className="text-gold-600 dark:text-gold-400" /> Global Rank
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-black text-white">
+            <span className="text-2xl font-display font-bold text-[color:var(--text)] num">
               {globalRank ? `#${globalRank}` : 'N/A'}
             </span>
-            <span className="text-slate-500 text-xs font-bold">/ {totalParticipants}</span>
+            <span className="text-muted text-xs font-bold num">/ {totalParticipants}</span>
           </div>
         </div>
 
-        <div className="bg-slate-950/40 p-3 rounded-2xl border border-slate-800/50">
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-extrabold uppercase mb-1">
-            <TrendingUp size={12} className="text-emerald-500" /> Platform Pot
+        <div className="bg-surface p-3 rounded-2xl border border-line">
+          <div className="flex items-center gap-1.5 text-[10px] text-muted font-display font-bold uppercase tracking-[0.08em] mb-1">
+            <TrendingUp size={12} className="text-gold-600 dark:text-gold-400" /> Platform Pot
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-black text-emerald-400">
+            <span className="text-2xl font-display font-bold text-gold-700 dark:text-gold-400 num">
               ${globalPrizePot.toLocaleString()}
             </span>
           </div>
         </div>
 
-        <div className="bg-slate-950/40 p-3 rounded-2xl border border-slate-800/50">
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-extrabold uppercase mb-1">
-            <Users size={12} className="text-blue-500" /> Active Players
+        <div className="bg-surface p-3 rounded-2xl border border-line">
+          <div className="flex items-center gap-1.5 text-[10px] text-muted font-display font-bold uppercase tracking-[0.08em] mb-1">
+            <Users size={12} className="text-navy-700 dark:text-[#9FB0CC]" /> Active Players
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-black text-white">
+            <span className="text-2xl font-display font-bold text-[color:var(--text)] num">
               {totalParticipants.toLocaleString()}
             </span>
           </div>

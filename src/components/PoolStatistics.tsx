@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { GameState, PropCard } from '../types';
 import { dbService } from '../services/dbService';
-import { DollarSign, Users, TrendingUp, Award, Percent, Clock, Zap } from 'lucide-react';
+import { Percent, Award, Zap } from 'lucide-react';
+import { StatTile } from './ui';
 
 interface PoolStatisticsProps {
     pool: GameState;
@@ -71,52 +72,48 @@ export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
         <div className="space-y-6">
             {/* Revenue Overview */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-slate-500 text-xs font-bold uppercase mb-2">
-                        <DollarSign size={14} /> Potential Revenue
-                    </div>
-                    <div className="text-2xl font-bold text-white font-mono">${potentialRevenue.toLocaleString()}</div>
-                    <div className="text-xs text-slate-500">{availableSquares > 0 ? `${availableSquares} available` : 'Grid full!'} (${totalRevenue.toLocaleString()} sold)</div>
-                </div>
+                <StatTile
+                    label="Potential Revenue"
+                    value={`$${potentialRevenue.toLocaleString()}`}
+                    accent="navy"
+                    delta={{ text: `${availableSquares > 0 ? `${availableSquares} available` : 'Grid full!'} ($${totalRevenue.toLocaleString()} sold)` }}
+                />
 
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase mb-2">
-                        <TrendingUp size={14} /> Collected
-                    </div>
-                    <div className="text-2xl font-bold text-emerald-400 font-mono">${collectedRevenue.toLocaleString()}</div>
-                    <div className="text-xs text-slate-500">{paidSquares} squares paid</div>
-                </div>
+                <StatTile
+                    label="Collected"
+                    value={`$${collectedRevenue.toLocaleString()}`}
+                    accent="gold"
+                    delta={{ text: `${paidSquares} squares paid` }}
+                />
 
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase mb-2">
-                        <Clock size={14} /> Outstanding
-                    </div>
-                    <div className="text-2xl font-bold text-amber-400 font-mono">${outstandingRevenue.toLocaleString()}</div>
-                    <div className="text-xs text-slate-500">{unpaidSquares} unpaid</div>
-                </div>
+                <StatTile
+                    label="Outstanding"
+                    value={`$${outstandingRevenue.toLocaleString()}`}
+                    accent="red"
+                    delta={{ text: `${unpaidSquares} unpaid` }}
+                />
 
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase mb-2">
-                        <Users size={14} /> Participants
-                    </div>
-                    <div className="text-2xl font-bold text-indigo-400 font-mono">{uniqueParticipants}</div>
-                    <div className="text-xs text-slate-500">unique players</div>
-                </div>
+                <StatTile
+                    label="Participants"
+                    value={uniqueParticipants}
+                    accent="navy"
+                    delta={{ text: 'unique players' }}
+                />
             </div>
 
             {/* Progress Bars */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-white font-bold mb-4">Grid Progress</h3>
+            <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                <h3 className="font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-4">Grid Progress</h3>
 
                 {/* Sold Progress */}
                 <div className="mb-4">
-                    <div className="flex justify-between text-sm mb-1">
-                        <span className="text-slate-400">Squares Sold</span>
-                        <span className="text-white font-mono font-bold">{soldSquares} / {totalSquares} ({percentSold}%)</span>
+                    <div className="flex justify-between text-sm font-body mb-1">
+                        <span className="text-muted">Squares Sold</span>
+                        <span className="font-display font-bold text-[color:var(--text)] num">{soldSquares} / {totalSquares} ({percentSold}%)</span>
                     </div>
-                    <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-3 bg-line rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 transition-all duration-500"
+                            className="h-full bg-gold-foil transition-all duration-500"
                             style={{ width: `${percentSold}%` }}
                         />
                     </div>
@@ -124,13 +121,13 @@ export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
 
                 {/* Paid Progress */}
                 <div>
-                    <div className="flex justify-between text-sm mb-1">
-                        <span className="text-slate-400">Payment Collected</span>
-                        <span className="text-white font-mono font-bold">{paidSquares} / {soldSquares} ({percentPaid}%)</span>
+                    <div className="flex justify-between text-sm font-body mb-1">
+                        <span className="text-muted">Payment Collected</span>
+                        <span className="font-display font-bold text-[color:var(--text)] num">{paidSquares} / {soldSquares} ({percentPaid}%)</span>
                     </div>
-                    <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-3 bg-line rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500"
+                            className="h-full bg-[#0F7B4A] transition-all duration-500"
                             style={{ width: `${percentPaid}%` }}
                         />
                     </div>
@@ -140,37 +137,37 @@ export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
             {/* Side by Side: Velocity + Top Participants */}
             <div className="grid md:grid-cols-2 gap-4">
                 {/* Sales Velocity */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                        <Percent size={16} className="text-indigo-400" /> Sales Velocity
+                <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                    <h3 className="font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-4 flex items-center gap-2">
+                        <Percent size={16} className="text-gold-600 dark:text-gold-400" /> Sales Velocity
                     </h3>
                     <div className="text-center py-4">
-                        <div className="text-4xl font-bold text-white font-mono mb-2">{salesVelocity}</div>
-                        <div className="text-sm text-slate-500">squares per day</div>
+                        <div className="font-display font-bold text-4xl leading-none text-[color:var(--text)] num mb-2">{salesVelocity}</div>
+                        <div className="text-sm font-body text-muted">squares per day</div>
                     </div>
-                    <div className="text-xs text-slate-600 text-center">
+                    <div className="text-xs font-body text-faint text-center num">
                         Pool created {daysSinceCreation} {daysSinceCreation === 1 ? 'day' : 'days'} ago
                     </div>
                 </div>
 
                 {/* Top Participants */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                        <Award size={16} className="text-amber-400" /> Top Participants
+                <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                    <h3 className="font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-4 flex items-center gap-2">
+                        <Award size={16} className="text-gold-600 dark:text-gold-400" /> Top Participants
                     </h3>
                     {topParticipants.length === 0 ? (
-                        <div className="text-slate-500 text-sm text-center py-4">No participants yet</div>
+                        <div className="text-muted font-body text-sm text-center py-4">No participants yet</div>
                     ) : (
                         <div className="space-y-2">
                             {topParticipants.map(([name, count], i) => (
-                                <div key={name} className="flex items-center justify-between p-2 bg-slate-950 rounded-lg">
+                                <div key={name} className="flex items-center justify-between p-2 bg-surface border border-line rounded-lg">
                                     <div className="flex items-center gap-3">
-                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-amber-500 text-black' : i === 1 ? 'bg-slate-400 text-black' : i === 2 ? 'bg-orange-700 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-display font-bold num ${i === 0 ? 'bg-gold-foil text-navy-900' : i === 1 ? 'bg-navy-800 text-white' : i === 2 ? 'bg-navy-600 text-white' : 'bg-card border border-line text-muted'}`}>
                                             {i + 1}
                                         </span>
-                                        <span className="text-white font-medium truncate max-w-[120px]">{name}</span>
+                                        <span className="text-[color:var(--text)] font-body font-medium truncate max-w-[120px]">{name}</span>
                                     </div>
-                                    <span className="text-slate-400 font-mono text-sm">{count} sq</span>
+                                    <span className="text-muted font-body text-sm num">{count} sq</span>
                                 </div>
                             ))}
                         </div>
@@ -181,35 +178,35 @@ export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
             {/* Side Hustle Stats */}
             {
                 pool.props?.enabled && (
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 relative overflow-hidden">
+                    <div className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                            <Zap size={120} className="text-amber-400" />
+                            <Zap size={120} className="text-gold-500" />
                         </div>
-                        <h3 className="text-white font-bold mb-4 flex items-center gap-2 relative z-10">
-                            <Zap size={16} className="text-amber-400" /> Side Hustle Stats
+                        <h3 className="font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] mb-4 flex items-center gap-2 relative z-10">
+                            <Zap size={16} className="text-gold-600 dark:text-gold-400" /> Side Hustle Stats
                         </h3>
 
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
-                            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                                <div className="text-xs text-slate-500 uppercase font-bold mb-1">Total Pot</div>
-                                <div className="text-2xl font-bold text-emerald-400 font-mono">${propPot.toLocaleString()}</div>
-                                <div className="text-xs text-slate-500">${pool.props?.cost} per card</div>
+                            <div className="bg-surface p-4 rounded-lg border border-line">
+                                <div className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1">Total Pot</div>
+                                <div className="font-display font-bold text-2xl text-gold-700 dark:text-gold-400 num">${propPot.toLocaleString()}</div>
+                                <div className="text-xs font-body text-muted num">${pool.props?.cost} per card</div>
                             </div>
-                            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                                <div className="text-xs text-slate-500 uppercase font-bold mb-1">Cards Sold</div>
-                                <div className="text-2xl font-bold text-indigo-400 font-mono">{propCards.length}</div>
-                                <div className="text-xs text-slate-500">
+                            <div className="bg-surface p-4 rounded-lg border border-line">
+                                <div className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1">Cards Sold</div>
+                                <div className="font-display font-bold text-2xl text-navy-800 dark:text-gold-400 num">{propCards.length}</div>
+                                <div className="text-xs font-body text-muted num">
                                     {pool.props?.maxCards && pool.props?.maxCards > 1 ? `Max ${pool.props.maxCards} per player` : '1 per player'}
                                 </div>
                             </div>
                             {/* Payouts Breakdown */}
-                            <div className="col-span-2 bg-slate-950 p-4 rounded-lg border border-slate-800">
-                                <div className="text-xs text-slate-500 uppercase font-bold mb-2">Projected Payouts</div>
+                            <div className="col-span-2 bg-surface p-4 rounded-lg border border-line">
+                                <div className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-2">Projected Payouts</div>
                                 <div className="flex gap-6 overflow-x-auto pb-1">
                                     {payoutAmounts.map((amt, idx) => (
                                         <div key={idx} className="text-center min-w-[60px]">
-                                            <div className="text-sm font-bold text-white font-mono shadow-green-900">${amt.toLocaleString()}</div>
-                                            <div className="text-[10px] text-slate-500 mt-1 font-bold">
+                                            <div className="text-sm font-display font-bold text-gold-700 dark:text-gold-400 num">${amt.toLocaleString()}</div>
+                                            <div className="text-[10px] text-faint mt-1 font-body font-bold num">
                                                 {idx === 0 ? '1st' : idx === 1 ? '2nd' : idx === 2 ? '3rd' : `${idx + 1}th`}
                                                 <span className="font-normal opacity-50 ml-1">({(pool.props?.payouts || [100])[idx]}%)</span>
                                             </div>

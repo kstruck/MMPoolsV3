@@ -36,8 +36,8 @@ export const RegionTabs: React.FC<RegionTabsProps> = ({ activeRegion, onRegionCh
                         className={`
               flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all
               ${isActive
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                ? 'bg-gold-foil text-navy-900 shadow-lg shadow-[rgba(140,109,51,0.28)]'
+                                : 'bg-card text-muted hover:text-[color:var(--text)]'
                             }
               ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
             `}
@@ -45,15 +45,15 @@ export const RegionTabs: React.FC<RegionTabsProps> = ({ activeRegion, onRegionCh
                         {isLocked ? (
                             <Lock className="w-4 h-4" />
                         ) : stats?.complete ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <CheckCircle2 className={`w-4 h-4 ${isActive ? 'text-navy-800' : 'text-[#0F7B4A]'}`} />
                         ) : (
-                            <Circle className={`w-4 h-4 ${isActive ? 'text-indigo-200' : 'text-slate-600'}`} />
+                            <Circle className={`w-4 h-4 ${isActive ? 'text-navy-800/60' : 'text-faint'}`} />
                         )}
 
-                        <span className="font-medium">{region.label}</span>
+                        <span className="font-display font-bold uppercase tracking-[0.05em]">{region.label}</span>
 
                         {!isLocked && stats && (
-                            <span className={`text-xs ml-1 ${isActive ? 'text-indigo-200' : 'text-slate-500'}`}>
+                            <span className={`text-xs ml-1 num ${isActive ? 'text-navy-800/70' : 'text-faint'}`}>
                                 {stats.count}/{stats.total}
                             </span>
                         )}
