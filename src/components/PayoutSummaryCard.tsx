@@ -27,36 +27,36 @@ export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState,
     const netPot = totalPot - charityAmount;
 
     return (
-        <div className="bg-black rounded-xl border border-slate-800 shadow-xl flex flex-col overflow-hidden h-full">
-            <div className="flex border-b border-slate-800 bg-slate-900 px-6 py-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-white">Payout Structure</h3>
+        <div className="bg-card rounded-xl border border-line shadow-card flex flex-col overflow-hidden h-full">
+            <div className="flex border-b border-line bg-surface px-6 py-4">
+                <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted">Payout Structure</h3>
             </div>
 
             <div className="p-6 flex-1 flex flex-col justify-center">
                 <div className="animate-in fade-in slide-in-from-left-4 duration-300">
                     <div className="space-y-3">
                         {/* Total Collected */}
-                        <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
-                            <span className="text-slate-400">Total Pot</span>
-                            <span className="text-white font-mono font-bold">
+                        <div className="flex justify-between items-center text-sm font-body border-b border-line pb-2">
+                            <span className="text-muted">Total Pot</span>
+                            <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">
                                 ${(totalPot).toLocaleString()}
                             </span>
                         </div>
 
                         {/* Charity Deduction Line */}
                         {gameState.charity?.enabled && (
-                            <div className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-rose-300">
+                            <div className="flex justify-between items-center text-sm font-body border-b border-line pb-2 text-brandred-600 dark:text-brandred-500">
                                 <span className="flex items-center gap-1"><Heart size={12} /> Less Donation ({gameState.charity.percentage}%)</span>
-                                <span className="font-mono font-bold">
+                                <span className="font-display font-bold num">
                                     -${charityAmount.toLocaleString()}
                                 </span>
                             </div>
                         )}
 
                         {/* Net Prize Pot */}
-                        <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2 mb-2">
-                            <span className="text-white font-bold">Net Prize Pool</span>
-                            <span className="text-emerald-400 font-mono font-bold text-lg">
+                        <div className="flex justify-between items-center text-sm font-body border-b border-line pb-2 mb-2">
+                            <span className="text-[color:var(--text)] font-bold">Net Prize Pool</span>
+                            <span className="font-display font-bold text-lg text-gold-700 dark:text-gold-400 num">
                                 ${netPot.toLocaleString()}
                             </span>
                         </div>
@@ -69,22 +69,22 @@ export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState,
                                     const amount = Math.floor(netPot * (percent / 100));
                                     if (percent === 0) return null;
                                     return (
-                                        <div key={idx} className="flex justify-between items-center text-sm">
-                                            <span className="text-slate-400 font-bold">
+                                        <div key={idx} className="flex justify-between items-center text-sm font-body">
+                                            <span className="text-muted font-bold num">
                                                 {idx === 0 ? '1st Place' : idx === 1 ? '2nd Place' : idx === 2 ? '3rd Place' : `${idx + 1}th Place`}
-                                                <span className="text-slate-600 font-normal ml-1">({percent}%)</span>
+                                                <span className="text-faint font-normal ml-1 num">({percent}%)</span>
                                             </span>
-                                            <span className="text-white font-mono font-bold">
+                                            <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">
                                                 ${amount.toLocaleString()}
                                             </span>
                                         </div>
                                     );
                                 })
                             ) : (
-                                <div className="mt-4 bg-slate-900 border border-slate-800 rounded-lg p-3 text-center">
-                                    <Trophy className="w-8 h-8 text-amber-400 mx-auto mb-2" />
-                                    <p className="text-sm text-slate-300 font-medium">Winner Takes All / Manager Discretion</p>
-                                    <p className="text-[10px] text-slate-500 mt-1">Check "Rules" tab for details.</p>
+                                <div className="mt-4 bg-surface border border-line rounded-lg p-3 text-center">
+                                    <Trophy className="w-8 h-8 text-gold-600 dark:text-gold-400 mx-auto mb-2" />
+                                    <p className="text-sm font-body text-[color:var(--text)] font-medium">Winner Takes All / Manager Discretion</p>
+                                    <p className="text-[10px] font-body text-faint mt-1">Check "Rules" tab for details.</p>
                                 </div>
                             )}
                         </div>
@@ -129,17 +129,17 @@ export const PayoutSummaryCard: React.FC<PayoutSummaryCardProps> = ({ gameState,
                                     if (!displayPercent && !gameState.ruleVariations?.scoreChangePayout) return null;
 
                                     return (
-                                        <div key={card.period} className="flex justify-between items-center text-sm">
-                                            <span className="text-slate-400 font-bold">{card.label}
-                                                <span className="text-slate-600 font-normal ml-1">
+                                        <div key={card.period} className="flex justify-between items-center text-sm font-body">
+                                            <span className="text-muted font-bold">{card.label}
+                                                <span className="text-faint font-normal ml-1 num">
                                                     ({displayPercent}%)
                                                 </span>
                                             </span>
                                             <div className="flex flex-col items-end">
-                                                <span className="text-white font-mono font-bold">
+                                                <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">
                                                     ${(card.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 0 })}
                                                 </span>
-                                                {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">Includes Rollover</span>}
+                                                {card.rolloverAdded > 0 && <span className="text-[10px] font-body font-bold text-gold-700 dark:text-gold-400">Includes Rollover</span>}
                                             </div>
                                         </div>
                                     );

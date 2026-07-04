@@ -8,7 +8,7 @@ import type { Page } from '@playwright/test';
 
 export async function registerFreshUser(page: Page, email: string): Promise<void> {
   await page.goto('/');
-  await page.getByRole('button', { name: /Sign In \/ Register/i }).click();
+  await page.getByRole('button', { name: /Get Started/i }).click();
   // Ensure Register mode (the modal may default to either mode).
   const nameField = page.locator('input[type="text"]').first();
   if (!(await nameField.isVisible().catch(() => false))) {
@@ -20,6 +20,83 @@ export async function registerFreshUser(page: Page, email: string): Promise<void
   await page.getByRole('button', { name: /Create Account/i }).click();
   // Registration redirects to /participant on success.
   await page.waitForURL(/\/participant/, { timeout: 15_000 });
+}
+
+/**
+ * Promotes a just-registered user to SUPER_ADMIN directly against the local
+ * Firestore emulator (admin bypass token — never touches real Firebase).
+ *
+ * Needed because `canAccessPoolCreation` = `POOLS_OPEN || isSuperAdmin(user)`,
+ * and POOLS_OPEN is currently false (pre-season gate) — a normal test user
+ * would get redirected away from every /create/:type route. Per the code's
+ * own comment, super admins are meant to reach creation flows for internal
+ * testing while the season gate is closed; this exercises exactly that path.
+ * The app reads `user.role` from a live Firestore listener, so the client
+ * gate updates without a reload once this PATCH lands.
+ */
+async function findUserDocByEmail(email: string): Promise<string | null> {
+  const queryBody = {
+    structuredQuery: {
+      from: [{ collectionId: 'users' }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: 'email' },
+          op: 'EQUAL',
+          value: { stringValue: email },
+        },
+      },
+    },
+  };
+  const queryRes = await fetch(
+    'http://127.0.0.1:8080/v1/projects/demo-mmp/databases/(default)/documents:runQuery',
+    {
+      method: 'POST',
+      headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+      body: JSON.stringify(queryBody),
+    },
+  );
+  const [result] = (await queryRes.json()) as Array<{ document?: { name: string } }>;
+  return result?.document ? result.document.name.split('/').pop()! : null;
+}
+
+async function readUserRole(uid: string): Promise<string | undefined> {
+  const res = await fetch(
+    `http://127.0.0.1:8080/v1/projects/demo-mmp/databases/(default)/documents/users/${uid}`,
+    { headers: { Authorization: 'Bearer owner' } },
+  );
+  if (!res.ok) return undefined;
+  const doc = (await res.json()) as { fields?: { role?: { stringValue?: string } } };
+  return doc.fields?.role?.stringValue;
+}
+
+export async function promoteToSuperAdmin(email: string): Promise<void> {
+  // Find the user doc by email (written by the real onUserCreated trigger).
+  // Retry: the trigger can lag the registration response by a beat, especially
+  // for the very first request against a freshly-booted emulator.
+  let uid: string | null = null;
+  for (let i = 0; i < 10 && !uid; i++) {
+    uid = await findUserDocByEmail(email);
+    if (!uid) await new Promise((r) => setTimeout(r, 500));
+  }
+  if (!uid) throw new Error(`promoteToSuperAdmin: no users/{uid} doc found for ${email}`);
+
+  const patch = await fetch(
+    `http://127.0.0.1:8080/v1/projects/demo-mmp/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=role`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { role: { stringValue: 'SUPER_ADMIN' } } }),
+    },
+  );
+  if (!patch.ok) throw new Error(`promoteToSuperAdmin: Firestore PATCH failed ${patch.status}`);
+
+  // Read back to confirm the write actually persisted before returning —
+  // don't just trust a 200 from the PATCH.
+  for (let i = 0; i < 10; i++) {
+    if ((await readUserRole(uid)) === 'SUPER_ADMIN') return;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  throw new Error(`promoteToSuperAdmin: role never read back as SUPER_ADMIN for uid ${uid}`);
 }
 
 /** Clicks Next repeatedly from wherever the wizard currently is until Review, then accepts TOS. */

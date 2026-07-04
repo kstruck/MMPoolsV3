@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Trophy, PlayCircle, Calendar, Radio, Clock } from 'lucide-react';
+import { RefreshCw, Trophy, PlayCircle, Calendar, Radio, Clock, Shield, GraduationCap, Volleyball } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
@@ -164,20 +164,20 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
         const state = game.status.type.state;
         if (state === 'in') {
             return (
-                <span className="flex items-center gap-1 text-emerald-400 bg-emerald-500/20 px-2 py-1 rounded text-xs font-bold animate-pulse">
-                    <PlayCircle size={12} /> LIVE
+                <span className="flex items-center gap-1.5 text-white bg-brandred-600 px-2 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em]">
+                    <span className="size-1.5 rounded-full bg-white animate-live-pulse" aria-hidden="true" /> LIVE
                 </span>
             );
         }
         if (state === 'post') {
             return (
-                <span className="flex items-center gap-1 text-slate-400 bg-slate-700 px-2 py-1 rounded text-xs font-bold">
+                <span className="flex items-center gap-1 text-[#9FB0CC] bg-navy-800 px-2 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.08em]">
                     <Trophy size={12} /> FINAL
                 </span>
             );
         }
         return (
-            <span className="flex items-center gap-1 text-amber-400 bg-amber-500/20 px-2 py-1 rounded text-xs font-bold">
+            <span className="flex items-center gap-1 text-gold-400 bg-gold-500/10 border border-gold-500/30 px-2 py-1 rounded text-xs font-display font-bold uppercase tracking-[0.08em] num">
                 <Calendar size={12} /> {new Date(game.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
         );
@@ -207,16 +207,16 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 <div className="mb-10">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="relative flex items-center justify-center">
-                            <span className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse absolute" />
-                            <span className="w-3 h-3 bg-emerald-500 rounded-full" />
+                            <span className="w-3 h-3 bg-brandred-600 rounded-full animate-live-pulse absolute" />
+                            <span className="w-3 h-3 bg-brandred-600 rounded-full" />
                         </div>
-                        <h3 className="text-xl font-bold text-white tracking-wide">LIVE <span className="text-emerald-400">Games</span></h3>
-                        <span className="text-xs font-bold text-emerald-400 bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 rounded-full">NCAA Basketball</span>
+                        <h3 className="text-xl font-display font-bold uppercase text-white tracking-wide">LIVE <span className="text-gold-400">Games</span></h3>
+                        <span className="text-xs font-display font-bold uppercase tracking-[0.08em] text-gold-400 bg-gold-500/10 border border-gold-500/30 px-2 py-0.5 rounded-full">NCAA Basketball</span>
                     </div>
-                    <div className="bg-slate-800/50 border border-emerald-500/20 rounded-xl p-8 flex flex-col items-center justify-center gap-3 text-center">
-                        <Clock size={36} className="text-slate-600" />
-                        <p className="text-slate-400 font-medium">No live games right now</p>
-                        <p className="text-xs text-slate-600">Scores update automatically when games tip off</p>
+                    <div className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-xl p-8 flex flex-col items-center justify-center gap-3 text-center">
+                        <Clock size={36} className="text-[#9FB0CC]/50" />
+                        <p className="text-[#9FB0CC] font-medium">No live games right now</p>
+                        <p className="text-xs text-[#9FB0CC]/60">Scores update automatically when games tip off</p>
                     </div>
                 </div>
             );
@@ -227,11 +227,11 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 {/* Section Header */}
                 <div className="flex items-center gap-3 mb-4">
                     <div className="relative flex items-center justify-center">
-                        <span className="w-3 h-3 bg-red-500 rounded-full animate-ping absolute" />
-                        <span className="w-3 h-3 bg-red-500 rounded-full" />
+                        <span className="w-3 h-3 bg-brandred-600 rounded-full animate-ping absolute" />
+                        <span className="w-3 h-3 bg-brandred-600 rounded-full" />
                     </div>
-                    <h3 className="text-xl font-bold text-white tracking-wide">LIVE <span className="text-emerald-400">Games</span></h3>
-                    <span className="text-xs font-bold text-red-400 bg-red-500/20 border border-red-500/40 px-2 py-0.5 rounded-full animate-pulse">
+                    <h3 className="text-xl font-display font-bold uppercase text-white tracking-wide">LIVE <span className="text-gold-400">Games</span></h3>
+                    <span className="text-xs font-display font-bold uppercase tracking-[0.08em] text-white bg-brandred-600 px-2 py-0.5 rounded-full animate-live-pulse num">
                         {gamesList.length} GAME{gamesList.length !== 1 ? 'S' : ''} IN PROGRESS
                     </span>
                 </div>
@@ -246,17 +246,17 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                         return (
                             <div
                                 key={game.id}
-                                className="relative bg-slate-800/80 border border-emerald-500/60 rounded-xl p-4 shadow-lg shadow-emerald-500/10 overflow-hidden"
+                                className="relative bg-navy-900 border border-brandred-600/60 rounded-xl p-4 shadow-lg shadow-brandred-600/10 overflow-hidden"
                             >
                                 {/* Glow accent bar */}
-                                <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500" />
+                                <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-brandred-600 via-brandred-500 to-brandred-600" />
 
                                 {/* Live badge + clock */}
                                 <div className="flex justify-between items-center mb-3">
-                                    <span className="flex items-center gap-1.5 text-emerald-400 bg-emerald-500/20 px-2.5 py-1 rounded-full text-xs font-bold">
-                                        <Radio size={10} className="animate-pulse" /> LIVE
+                                    <span className="flex items-center gap-1.5 text-white bg-brandred-600 px-2.5 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em]">
+                                        <Radio size={10} className="animate-live-pulse" /> LIVE
                                     </span>
-                                    <span className="text-xs text-emerald-300 font-mono font-bold">
+                                    <span className="text-xs text-[#9FB0CC] font-display font-bold num">
                                         {getGameClock(game, isBasketball)}
                                     </span>
                                 </div>
@@ -274,18 +274,18 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             />
                                             <div>
                                                 {awayTeam?.curatedRank?.current && awayTeam.curatedRank.current <= 25 && (
-                                                    <p className="text-[9px] text-amber-400 font-bold leading-none mb-0.5">#{awayTeam.curatedRank.current}</p>
+                                                    <p className="text-[9px] text-gold-400 font-bold leading-none mb-0.5 num">#{awayTeam.curatedRank.current}</p>
                                                 )}
-                                                <p className="font-bold text-white leading-none">{awayTeam?.team.abbreviation}</p>
-                                                <p className="text-[10px] text-slate-500 mt-0.5 max-w-[90px] truncate">{awayTeam?.team.displayName}</p>
+                                                <p className="font-display font-bold text-white leading-none">{awayTeam?.team.abbreviation}</p>
+                                                <p className="text-[10px] text-[#9FB0CC]/70 mt-0.5 max-w-[90px] truncate">{awayTeam?.team.displayName}</p>
                                             </div>
                                         </div>
-                                        <span className="text-3xl font-bold font-mono text-white tabular-nums">
+                                        <span className="text-3xl font-display font-bold text-white num">
                                             {awayTeam?.score || '0'}
                                         </span>
                                     </div>
 
-                                    <div className="border-t border-slate-700/60" />
+                                    <div className="border-t border-[rgba(230,206,150,0.16)]" />
 
                                     {/* Home Team */}
                                     <div className="flex items-center justify-between">
@@ -298,13 +298,13 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             />
                                             <div>
                                                 {homeTeam?.curatedRank?.current && homeTeam.curatedRank.current <= 25 && (
-                                                    <p className="text-[9px] text-amber-400 font-bold leading-none mb-0.5">#{homeTeam.curatedRank.current}</p>
+                                                    <p className="text-[9px] text-gold-400 font-bold leading-none mb-0.5 num">#{homeTeam.curatedRank.current}</p>
                                                 )}
-                                                <p className="font-bold text-white leading-none">{homeTeam?.team.abbreviation}</p>
-                                                <p className="text-[10px] text-slate-500 mt-0.5 max-w-[90px] truncate">{homeTeam?.team.displayName}</p>
+                                                <p className="font-display font-bold text-white leading-none">{homeTeam?.team.abbreviation}</p>
+                                                <p className="text-[10px] text-[#9FB0CC]/70 mt-0.5 max-w-[90px] truncate">{homeTeam?.team.displayName}</p>
                                             </div>
                                         </div>
-                                        <span className="text-3xl font-bold font-mono text-white tabular-nums">
+                                        <span className="text-3xl font-display font-bold text-white num">
                                             {homeTeam?.score || '0'}
                                         </span>
                                     </div>
@@ -317,12 +317,12 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
         );
     };
 
-    const renderGameSection = (title: string, gamesList: Game[], icon: React.ReactNode, borderColor: string = 'border-slate-700') => {
+    const renderGameSection = (title: string, gamesList: Game[], icon: React.ReactNode, borderColor: string = 'border-[rgba(230,206,150,0.16)]') => {
         if (gamesList.length === 0) return null;
 
         return (
             <div className="space-y-4 mb-10">
-                <h3 className={`text-xl font-bold text-white flex items-center gap-2 border-b ${borderColor} pb-2`}>
+                <h3 className={`text-xl font-display font-bold uppercase text-white flex items-center gap-2 border-b ${borderColor} pb-2`}>
                     {icon} {title}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -336,13 +336,13 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                         return (
                             <div
                                 key={game.id}
-                                className={`bg-slate-800/50 border rounded-xl p-4 transition-all ${isLive
-                                    ? 'border-emerald-500/50 bg-emerald-500/5'
-                                    : 'border-slate-700 hover:border-slate-600'
+                                className={`bg-navy-900 border rounded-xl p-4 transition-all ${isLive
+                                    ? 'border-brandred-600/50'
+                                    : 'border-[rgba(230,206,150,0.16)] hover:border-[rgba(230,206,150,0.35)]'
                                     }`}
                             >
                                 {/* Date/Time Row */}
-                                <div className="flex justify-between items-center mb-1 text-[10px] text-slate-500 font-mono uppercase">
+                                <div className="flex justify-between items-center mb-1 text-[10px] text-[#9FB0CC]/70 num uppercase">
                                     <span>{new Date(game.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                                     <span>{new Date(game.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                 </div>
@@ -350,7 +350,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                 {/* Status Row */}
                                 <div className="flex justify-between items-center mb-4">
                                     {getStatusBadge(game)}
-                                    <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                                    <span className="text-xs text-[#9FB0CC] font-medium whitespace-nowrap num">
                                         {getGameClock(game)}
                                     </span>
                                 </div>
@@ -367,11 +367,11 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
                                             <div>
-                                                <p className="font-bold text-white leading-none">{awayTeam?.team.abbreviation}</p>
-                                                <p className="text-[10px] text-slate-500 mt-1">{awayTeam?.team.displayName}</p>
+                                                <p className="font-display font-bold text-white leading-none">{awayTeam?.team.abbreviation}</p>
+                                                <p className="text-[10px] text-[#9FB0CC]/70 mt-1">{awayTeam?.team.displayName}</p>
                                             </div>
                                         </div>
-                                        <span className={`text-2xl font-bold font-mono ${awayTeam?.winner ? 'text-emerald-400' : 'text-white'}`}>
+                                        <span className={`text-2xl font-display font-bold num ${awayTeam?.winner ? 'text-gold-400' : 'text-white'}`}>
                                             {awayTeam?.score || '0'}
                                         </span>
                                     </div>
@@ -386,11 +386,11 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
                                             <div>
-                                                <p className="font-bold text-white leading-none">{homeTeam?.team.abbreviation}</p>
-                                                <p className="text-[10px] text-slate-500 mt-1">{homeTeam?.team.displayName}</p>
+                                                <p className="font-display font-bold text-white leading-none">{homeTeam?.team.abbreviation}</p>
+                                                <p className="text-[10px] text-[#9FB0CC]/70 mt-1">{homeTeam?.team.displayName}</p>
                                             </div>
                                         </div>
-                                        <span className={`text-2xl font-bold font-mono ${homeTeam?.winner ? 'text-emerald-400' : 'text-white'}`}>
+                                        <span className={`text-2xl font-display font-bold num ${homeTeam?.winner ? 'text-gold-400' : 'text-white'}`}>
                                             {homeTeam?.score || '0'}
                                         </span>
                                     </div>
@@ -404,7 +404,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
     };
 
     return (
-        <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+        <div className="min-h-screen bg-navy-950 text-[#EDF1F8] font-body">
             <Header
                 user={user}
                 isManager={false}
@@ -417,31 +417,31 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                            <Trophy className="text-emerald-500" /> Live Scoreboard
+                        <h1 className="text-3xl font-display font-extrabold uppercase leading-none text-white flex items-center gap-3">
+                            <Trophy className="text-gold-500" /> Live Scoreboard
                         </h1>
-                        <p className="text-slate-400 mt-1">Real-time scores from ESPN</p>
+                        <p className="text-[#9FB0CC] mt-1">Real-time scores from ESPN</p>
                     </div>
 
                     <div className="flex items-center gap-4">
                         {lastUpdated && (
-                            <span className="text-xs text-slate-500">
+                            <span className="text-xs text-[#9FB0CC] num">
                                 Updated: {lastUpdated.toLocaleTimeString()}
                             </span>
                         )}
-                        <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                        <label className="flex items-center gap-2 text-sm text-[#9FB0CC] cursor-pointer">
                             <input
                                 type="checkbox"
                                 checked={autoRefresh}
                                 onChange={() => setAutoRefresh(!autoRefresh)}
-                                className="accent-indigo-500"
+                                className="accent-gold-500"
                             />
                             Auto-refresh
                         </label>
                         <button
                             onClick={fetchScores}
                             disabled={loading}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50"
+                            className="bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 disabled:opacity-50 transition-colors duration-150 shadow-red-cta"
                         >
                             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh
                         </button>
@@ -452,27 +452,27 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 <div className="flex gap-2 mb-6">
                     <button
                         onClick={() => setActiveTab('nfl')}
-                        className={`px-6 py-3 rounded-lg font-bold text-sm transition-all ${activeTab === 'nfl' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 flex items-center gap-2 ${activeTab === 'nfl' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
                     >
-                        🏈 NFL
+                        <Shield size={16} /> NFL
                     </button>
                     <button
                         onClick={() => setActiveTab('college')}
-                        className={`px-6 py-3 rounded-lg font-bold text-sm transition-all ${activeTab === 'college' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 flex items-center gap-2 ${activeTab === 'college' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
                     >
-                        🏟️ College Football
+                        <GraduationCap size={16} /> College Football
                     </button>
                     <button
                         onClick={() => setActiveTab('basketball')}
-                        className={`px-6 py-3 rounded-lg font-bold text-sm transition-all ${activeTab === 'basketball' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 flex items-center gap-2 ${activeTab === 'basketball' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
                     >
-                        🏀 NCAA Basketball
+                        <Volleyball size={16} /> NCAA Basketball
                     </button>
                 </div>
 
                 {/* Error State */}
                 {error && (
-                    <div className="bg-rose-500/20 border border-rose-500 text-rose-400 p-4 rounded-lg mb-6">
+                    <div className="bg-navy-900 border border-brandred-600/60 text-brandred-500 p-4 rounded-lg mb-6">
                         {error}
                     </div>
                 )}
@@ -480,17 +480,17 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 {/* Loading State */}
                 {loading && games.length === 0 && (
                     <div className="text-center py-20">
-                        <RefreshCw className="animate-spin inline-block mb-4 text-indigo-500" size={48} />
-                        <p className="text-slate-400">Loading scores...</p>
+                        <RefreshCw className="animate-spin inline-block mb-4 text-gold-500" size={48} />
+                        <p className="text-[#9FB0CC]">Loading scores...</p>
                     </div>
                 )}
 
                 {/* No Games - only for non-basketball tabs */}
                 {!loading && games.length === 0 && activeTab !== 'basketball' && (
-                    <div className="text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700">
-                        <Calendar size={48} className="mx-auto text-slate-600 mb-4" />
-                        <h3 className="text-xl font-bold text-white mb-2">No Games Found</h3>
-                        <p className="text-slate-400">No games scheduled for this period.</p>
+                    <div className="text-center py-20 bg-navy-900 rounded-xl border border-[rgba(230,206,150,0.16)]">
+                        <Calendar size={48} className="mx-auto text-[#9FB0CC]/50 mb-4" />
+                        <h3 className="text-xl font-display font-bold uppercase text-white mb-2">No Games Found</h3>
+                        <p className="text-[#9FB0CC]">No games scheduled for this period.</p>
                     </div>
                 )}
 
@@ -501,20 +501,20 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                         {activeTab === 'basketball' && renderLiveSection(categorizedGames.live)}
 
                         {/* Non-basketball: show live games if any */}
-                        {activeTab !== 'basketball' && renderGameSection('Live Games', categorizedGames.live, <PlayCircle className="text-emerald-500 animate-pulse" />, 'border-emerald-500/30')}
+                        {activeTab !== 'basketball' && renderGameSection('Live Games', categorizedGames.live, <PlayCircle className="text-brandred-500 animate-live-pulse" />, 'border-brandred-600/30')}
 
                         {games.length > 0 && (
                             <>
-                                {renderGameSection('Completed Games', categorizedGames.completed, <Trophy className="text-slate-500" />)}
-                                {renderGameSection('Upcoming Games', categorizedGames.upcoming, <Calendar className="text-amber-500" />, 'border-amber-500/30')}
+                                {renderGameSection('Completed Games', categorizedGames.completed, <Trophy className="text-[#9FB0CC]" />)}
+                                {renderGameSection('Upcoming Games', categorizedGames.upcoming, <Calendar className="text-gold-500" />, 'border-gold-500/30')}
                             </>
                         )}
 
                         {!loading && games.length === 0 && activeTab !== 'basketball' && (
-                            <div className="text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700">
-                                <Calendar size={48} className="mx-auto text-slate-600 mb-4" />
-                                <h3 className="text-xl font-bold text-white mb-2">No Games Found</h3>
-                                <p className="text-slate-400">No games scheduled for this period.</p>
+                            <div className="text-center py-20 bg-navy-900 rounded-xl border border-[rgba(230,206,150,0.16)]">
+                                <Calendar size={48} className="mx-auto text-[#9FB0CC]/50 mb-4" />
+                                <h3 className="text-xl font-display font-bold uppercase text-white mb-2">No Games Found</h3>
+                                <p className="text-[#9FB0CC]">No games scheduled for this period.</p>
                             </div>
                         )}
                     </div>

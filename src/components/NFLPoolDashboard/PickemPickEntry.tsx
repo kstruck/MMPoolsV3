@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Lock, AlertCircle, Save, CheckCircle2 } from 'lucide-react';
+import { Lock, AlertCircle, AlertTriangle, ArrowRight, Save, CheckCircle2 } from 'lucide-react';
+import { Button } from '../ui';
 import { dbService } from '../../services/dbService';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
@@ -224,10 +225,10 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
 
   if (!allSpreadsLocked) {
     return (
-      <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-8 rounded-3xl text-center">
+      <div className="bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 p-8 rounded-xl text-center">
         <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
-        <h3 className="font-black text-xl mb-2">Spreads Not Yet Finalized</h3>
-        <p className="font-bold text-sm">Pick sheets for this week are locked until all spreads have been fully incorporated. Please check back later.</p>
+        <h3 className="font-display font-bold uppercase text-xl mb-2">Spreads Not Yet Finalized</h3>
+        <p className="font-body font-semibold text-sm">Pick sheets for this week are locked until all spreads have been fully incorporated. Please check back later.</p>
       </div>
     );
   }
@@ -235,25 +236,27 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   return (
     <div className="space-y-6">
       {validationError && (
-        <div ref={errorRef} role="alert" className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl text-xs font-bold flex gap-2 items-center">
+        <div ref={errorRef} role="alert" className="bg-brandred-600/10 border border-brandred-600/20 text-brandred-600 p-4 rounded-lg text-xs font-body font-bold flex gap-2 items-center">
           <AlertCircle size={18} aria-hidden="true" /> {validationError}
         </div>
       )}
 
       {/* Persistent receipt — survives the toast so the user can always verify */}
       {submittedAt && !validationError && (
-        <div role="status" className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-4 rounded-2xl text-xs font-bold flex flex-col sm:flex-row gap-3 sm:items-center">
+        <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex flex-col sm:flex-row gap-3 sm:items-center">
           <div className="flex gap-2 items-center flex-1">
             <CheckCircle2 size={18} aria-hidden="true" />
             <span>Week {week} picks submitted at {formatTimeWithZone(submittedAt)}. You can change unlocked picks and resubmit until kickoff.</span>
           </div>
           {onGoToWeek && week < ((Number(castPool.seasonType) === 1) ? 4 : 18) && (
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => onGoToWeek(week + 1)}
-              className="shrink-0 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-black px-4 py-2.5 rounded-xl transition-all"
+              className="shrink-0 num"
             >
-              Pick Week {week + 1} →
-            </button>
+              Pick Week {week + 1} <ArrowRight size={14} aria-hidden="true" />
+            </Button>
           )}
         </div>
       )}
@@ -261,13 +264,13 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       {/* Progress — how much of the sheet is done */}
       {games.length > 0 && !isWeekLocked && (
         <div className="flex items-center gap-3">
-          <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div className="flex-1 h-2 bg-line rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${pickedCount === games.length ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+              className={`h-full rounded-full transition-all duration-150 ${pickedCount === games.length ? 'bg-gold-foil' : 'bg-navy-600 dark:bg-gold-500'}`}
               style={{ width: `${(pickedCount / games.length) * 100}%` }}
             />
           </div>
-          <span className="text-xs font-bold text-slate-400 whitespace-nowrap">
+          <span className="text-xs font-display font-bold uppercase tracking-[0.05em] text-muted num whitespace-nowrap">
             {pickedCount} of {games.length} picked
           </span>
         </div>
@@ -276,8 +279,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       {/* Matchups list */}
       <div className="space-y-4">
         {games.length === 0 ? (
-          <div className="bg-slate-900/30 p-8 border border-slate-800 rounded-3xl text-center">
-            <p className="text-slate-500 font-bold">No NFL matchups scheduled for Week {week}.</p>
+          <div className="bg-card p-8 border border-line rounded-xl text-center">
+            <p className="text-muted font-body font-bold num">No NFL matchups scheduled for Week {week}.</p>
           </div>
         ) : (
           games.map(game => {
@@ -296,17 +299,17 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             return (
               <div
                 key={game.id}
-                className={`bg-slate-900/40 border rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 transition-all relative overflow-hidden backdrop-blur-sm ${
+                className={`bg-card border rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-150 relative overflow-hidden shadow-card ${
                   game.status === 'FINAL'
                     ? isCorrect
-                      ? 'border-green-500/30 bg-green-500/5'
-                      : 'border-red-500/30 bg-red-500/5'
-                    : 'border-slate-800 hover:border-slate-700'
+                      ? 'border-[#BEE7D0] bg-[#0F7B4A]/5'
+                      : 'border-brandred-600/30 bg-brandred-600/5'
+                    : 'border-line'
                 }`}
               >
                 {/* Visual Lock overlay */}
                 {locked && game.status === 'SCHEDULED' && (
-                  <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-950/70 border border-slate-800 rounded-full px-2 py-0.5 text-[9px] text-slate-500 font-bold tracking-wider uppercase">
+                  <div className="absolute top-2 right-2 flex items-center gap-1 bg-page border border-line rounded-full px-2 py-0.5 text-[9px] text-muted font-display font-bold tracking-[0.08em] uppercase">
                     <Lock size={9} /> Locked
                   </div>
                 )}
@@ -317,48 +320,48 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                   <button
                     onClick={() => handlePickSelect(game.id, game.awayTeam.abbreviation)}
                     disabled={locked}
-                    className={`flex-1 max-w-[200px] flex flex-col items-center p-3 rounded-2xl border transition-all text-center ${
+                    className={`flex-1 max-w-[200px] flex flex-col items-center p-3 rounded-lg border transition-all duration-150 text-center ${
                       awayPicked
-                        ? 'bg-blue-600/10 border-blue-500/50 shadow-md shadow-blue-500/5'
-                        : 'bg-slate-950/40 border-slate-850 hover:border-slate-700'
-                    } ${locked ? 'cursor-not-allowed opacity-90' : ''}`}
+                        ? 'bg-page border-navy-600 ring-2 ring-navy-600 dark:border-gold-500 dark:ring-gold-500'
+                        : 'bg-page border-line'
+                    } ${locked ? 'cursor-not-allowed opacity-90' : 'hover:-translate-y-1 hover:shadow-card-hover'}`}
                   >
                     {game.awayTeam.logoUrl && (
                       <img src={game.awayTeam.logoUrl} className="w-10 h-10 object-contain mb-2" alt={`${game.awayTeam.name} logo`} />
                     )}
-                    <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
+                    <span className="text-[color:var(--text)] font-display font-bold text-sm leading-tight truncate w-full">
                       {game.awayTeam.name}
                     </span>
-                    <span className="text-slate-500 text-[10px] font-bold tracking-widest mt-0.5">
+                    <span className="text-muted text-[10px] font-display font-bold tracking-[0.16em] mt-0.5">
                       {game.awayTeam.abbreviation}
                     </span>
                   </button>
 
                   <div className="flex flex-col items-center justify-center">
                     {game.status === 'FINAL' ? (
-                      <div className="text-center font-mono">
-                        <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block mb-1">Final</span>
-                        <span className="text-xl font-black text-white">
+                      <div className="text-center">
+                        <span className="text-muted text-[10px] font-display font-bold uppercase tracking-[0.08em] block mb-1">Final</span>
+                        <span className="text-xl font-display font-bold text-[color:var(--text)] num">
                           {game.scores?.away} - {game.scores?.home}
                         </span>
                       </div>
                     ) : game.status === 'IN_PROGRESS' ? (
-                      <div className="text-center font-mono">
+                      <div className="text-center">
                         <span className="relative flex h-2 w-2 mx-auto mb-1">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brandred-500 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-brandred-600"></span>
                         </span>
-                        <span className="text-sm font-black text-red-500">
+                        <span className="text-sm font-display font-bold text-brandred-600 num">
                           {game.scores?.away} - {game.scores?.home}
                         </span>
-                        <span className="text-[10px] text-slate-500 block mt-0.5">{game.clock}</span>
+                        <span className="text-[10px] text-muted num block mt-0.5">{game.clock}</span>
                       </div>
                     ) : (
-                      <div className="text-slate-500 text-xs font-black font-mono">VS</div>
+                      <div className="text-faint text-xs font-display font-bold tracking-[0.16em]">VS</div>
                     )}
                     {castPool.settings?.pickMode === 'ATS' && game.spread && (
                       <div className="text-center mt-2">
-                        <span className="bg-slate-800 text-slate-300 text-[10px] px-2 py-1 rounded-full font-bold uppercase">
+                        <span className="bg-page border border-line text-muted text-[10px] px-2 py-1 rounded-full font-display font-bold uppercase tracking-[0.05em] num">
                           Spread: {game.spread.value > 0 ? `+${game.spread.value}` : game.spread.value === 0 ? 'EVEN' : game.spread.value}
                         </span>
                       </div>
@@ -369,19 +372,19 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                   <button
                     onClick={() => handlePickSelect(game.id, game.homeTeam.abbreviation)}
                     disabled={locked}
-                    className={`flex-1 max-w-[200px] flex flex-col items-center p-3 rounded-2xl border transition-all text-center ${
+                    className={`flex-1 max-w-[200px] flex flex-col items-center p-3 rounded-lg border transition-all duration-150 text-center ${
                       homePicked
-                        ? 'bg-blue-600/10 border-blue-500/50 shadow-md shadow-blue-500/5'
-                        : 'bg-slate-950/40 border-slate-850 hover:border-slate-700'
-                    } ${locked ? 'cursor-not-allowed opacity-90' : ''}`}
+                        ? 'bg-page border-navy-600 ring-2 ring-navy-600 dark:border-gold-500 dark:ring-gold-500'
+                        : 'bg-page border-line'
+                    } ${locked ? 'cursor-not-allowed opacity-90' : 'hover:-translate-y-1 hover:shadow-card-hover'}`}
                   >
                     {game.homeTeam.logoUrl && (
                       <img src={game.homeTeam.logoUrl} className="w-10 h-10 object-contain mb-2" alt={`${game.homeTeam.name} logo`} />
                     )}
-                    <span className="text-white font-extrabold text-sm leading-tight truncate w-full">
+                    <span className="text-[color:var(--text)] font-display font-bold text-sm leading-tight truncate w-full">
                       {game.homeTeam.name}
                     </span>
-                    <span className="text-slate-500 text-[10px] font-bold tracking-widest mt-0.5">
+                    <span className="text-muted text-[10px] font-display font-bold tracking-[0.16em] mt-0.5">
                       {game.homeTeam.abbreviation}
                     </span>
                   </button>
@@ -389,15 +392,15 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
 
                 {/* Confidence Assignments */}
                 {confidenceMode && (
-                  <div className="flex flex-col items-center justify-center bg-slate-950/60 p-3 border border-slate-800 rounded-2xl min-w-[120px] w-full md:w-auto">
-                    <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest block mb-1">Confidence Weight</span>
+                  <div className="flex flex-col items-center justify-center bg-page p-3 border border-line rounded-lg min-w-[120px] w-full md:w-auto">
+                    <span className="text-[9px] text-muted font-display font-bold uppercase tracking-[0.08em] block mb-1">Confidence Weight</span>
                     <select
                       value={confidence[game.id] || ''}
                       disabled={locked}
                       onChange={e => handleConfidenceSelect(game.id, parseInt(e.target.value))}
                       aria-label={`Confidence weight for ${game.awayTeam.abbreviation} at ${game.homeTeam.abbreviation}`}
-                      className={`bg-slate-950 text-white border border-slate-800 rounded-xl px-2 py-2.5 focus:outline-none text-xs font-bold w-full text-center ${
-                        duplicateConfidenceValues.has(confidence[game.id]) ? 'border-yellow-500 focus:ring-yellow-500' : ''
+                      className={`bg-page text-[color:var(--text)] border border-line rounded-xl px-2 py-2.5 focus:outline-none text-xs font-body font-bold num w-full text-center ${
+                        duplicateConfidenceValues.has(confidence[game.id]) ? 'border-gold-500 focus:ring-gold-500' : ''
                       } ${locked ? 'opacity-85 cursor-not-allowed' : ''}`}
                     >
                       <option value="">Set weight...</option>
@@ -407,8 +410,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     </select>
 
                     {duplicateConfidenceValues.has(confidence[game.id]) && (
-                      <span className="text-[9px] text-yellow-500 font-bold block mt-1">
-                        ⚠️ Duplicate value!
+                      <span className="text-[9px] text-gold-600 dark:text-gold-400 font-body font-bold flex items-center gap-1 mt-1">
+                        <AlertTriangle size={9} aria-hidden="true" /> Duplicate value!
                       </span>
                     )}
                   </div>
@@ -421,36 +424,37 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
 
       {/* Tiebreaker Details & Submission CTA */}
       {games.length > 0 && !isWeekLocked && (
-        <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm space-y-6">
+        <div className="bg-card border border-line rounded-xl p-6 shadow-card space-y-6">
           {showTiebreaker && (
             <div className="max-w-md mx-auto space-y-3">
-              <label className="block text-sm font-bold text-slate-300 text-center">
+              <label className="block text-sm font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-center">
                 Tiebreaker: Predicted Monday Night Football Combined Score
               </label>
               <input
                 type="number"
                 value={tiebreakerPrediction}
                 onChange={e => { dirtyRef.current = true; setTiebreakerPrediction(Math.max(1, parseInt(e.target.value) || 0)); }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-center font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-page border border-line rounded-xl px-4 py-3 text-[color:var(--text)] text-center num font-bold focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500"
               />
-              <p className="text-[10px] text-slate-500 leading-normal text-center">
+              <p className="text-[10px] font-body text-muted leading-normal text-center">
                 Close counts: Predict the combined final score of the MNF games. If there are 2 MNF games, we count the combined score of <strong>both</strong> games.
               </p>
             </div>
           )}
 
           <div className="flex justify-center">
-            <button
+            <Button
+              variant="primary"
+              size="lg"
               onClick={handleSubmit}
               disabled={!canSubmit || isSubmitting}
-              className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-extrabold px-8 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
             >
               {isSubmitting ? 'Saving picks...' : (
                 <>
                   <Save size={18} /> Submit Weekly Picks
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       )}

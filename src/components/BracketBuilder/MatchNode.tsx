@@ -29,8 +29,8 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
     // If no game yet (e.g. waiting for previous round), show placeholder
     if (!game) {
         return (
-            <div className={`flex flex-col border border-slate-800 bg-slate-900/30 rounded overflow-hidden w-40 opacity-50 ${isChampionship ? 'scale-110' : ''}`}>
-                <div className="h-8 border-b border-slate-800" />
+            <div className={`flex flex-col border border-line bg-card rounded overflow-hidden w-40 opacity-50 ${isChampionship ? 'scale-110' : ''}`}>
+                <div className="h-8 border-b border-line" />
                 <div className="h-8" />
             </div>
         );
@@ -62,7 +62,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
     const nodeWidth = comparisonPicks ? 'w-32 sm:w-36' : 'w-40';
 
     return (
-        <div className={`flex flex-col border border-slate-700 bg-slate-900 rounded overflow-hidden ${nodeWidth} shadow-sm transition-all ${isChampionship ? 'scale-110 border-amber-500/50 shadow-amber-900/20' : 'hover:border-slate-600'} ${diffStatus ? 'z-10' : ''}`}>
+        <div className={`flex flex-col border border-line bg-card rounded overflow-hidden ${nodeWidth} shadow-sm transition-all ${isChampionship ? 'scale-110 border-gold-500/60 shadow-[0_2px_8px_rgba(140,109,51,0.2)]' : 'hover:border-gold-500/50'} ${diffStatus ? 'z-10' : ''}`}>
             <TeamSlot
                 teamId={displayHomeId}
                 seed={extractSeedFromId(displayHomeId) ?? teamCtx[displayHomeId ?? '']?.seed}
@@ -75,7 +75,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
                 isEliminated={displayHomeId ? eliminatedTeamIds?.has(displayHomeId) : false}
                 diffStatus={isHomePicked ? diffStatus : null}
             />
-            <div className="border-t border-slate-800 relative"></div>
+            <div className="border-t border-line relative"></div>
             <TeamSlot
                 teamId={displayAwayId}
                 seed={extractSeedFromId(displayAwayId) ?? teamCtx[displayAwayId ?? '']?.seed}
@@ -135,19 +135,19 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
             className={`
                 w-full px-1 sm:px-2 h-9 flex items-center justify-between transition-colors text-left relative overflow-hidden
                 ${isPicked
-                    ? pickStatus === 'incorrect' ? 'bg-red-500/20 text-red-200' : 'bg-amber-600/90 text-white'
-                    : 'hover:bg-slate-800 text-slate-300'
+                    ? pickStatus === 'incorrect' ? 'bg-brandred-600/15 text-brandred-500' : 'bg-gold-500 text-navy-900'
+                    : 'hover:bg-page text-[color:var(--text)]'
                 }
-                ${isWinner && !isPicked ? 'bg-emerald-500/10' : ''}
+                ${isWinner && !isPicked ? 'bg-[#0F7B4A]/10' : ''}
                 ${disabled ? 'cursor-default' : 'cursor-pointer'}
                 ${isEliminated ? 'opacity-50 grayscale-[0.5]' : ''}
-                ${diffStatus === 'same' ? 'ring-2 ring-emerald-500 relative z-20' : diffStatus === 'diff' ? 'ring-2 ring-rose-500 relative z-20' : ''}
+                ${diffStatus === 'same' ? 'ring-2 ring-[#0F7B4A] relative z-20' : diffStatus === 'diff' ? 'ring-2 ring-brandred-500 relative z-20' : ''}
             `}
         >
             <div className="flex items-center gap-1 sm:gap-2 w-full overflow-hidden z-10">
                 {/* Seed badge — always reserve space for alignment */}
-                <span className={`text-[11px] font-bold w-5 text-right flex-shrink-0 leading-none
-                    ${isPicked ? 'text-amber-200' : 'text-slate-500'}
+                <span className={`text-[11px] font-bold w-5 text-right flex-shrink-0 leading-none num
+                    ${isPicked ? 'text-navy-800' : 'text-muted'}
                     ${!seed ? 'opacity-0' : ''}`}
                 >
                     {seed ?? '0'}
@@ -162,23 +162,23 @@ const TeamSlot: React.FC<TeamSlotProps> = ({ teamId, seed, isPicked, pickStatus,
                     />
                 )}
 
-                <span className={`text-[10px] sm:text-xs font-bold truncate tracking-tight flex-1 ${!teamId ? 'italic opacity-40' : ''} ${isEliminated ? 'line-through decoration-red-500/50' : ''}`}>
+                <span className={`text-[10px] sm:text-xs font-bold truncate tracking-tight flex-1 ${!teamId ? 'italic opacity-40' : ''} ${isEliminated ? 'line-through decoration-brandred-500/50' : ''}`}>
                     {teamName}
                 </span>
             </div>
 
             {/* Status Icons */}
             <div className="z-10 ml-0.5 sm:ml-1 shrink-0">
-                {pickStatus === 'correct' && <Check className="w-3.5 h-3.5 text-white" />}
-                {pickStatus === 'incorrect' && <X className="w-3.5 h-3.5 text-red-500" />}
-                {isWinner && !pickStatus && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                {!isWinner && isEliminated && !pickStatus && <X className="w-3.5 h-3.5 text-red-500" />}
-                {isPicked && !pickStatus && !isEliminated && !isWinner && <div className="w-1.5 h-1.5 rounded-full bg-white shadow-sm" />}
+                {pickStatus === 'correct' && <Check className="w-3.5 h-3.5 text-navy-900" />}
+                {pickStatus === 'incorrect' && <X className="w-3.5 h-3.5 text-brandred-500" />}
+                {isWinner && !pickStatus && <Check className="w-3.5 h-3.5 text-[#0F7B4A]" />}
+                {!isWinner && isEliminated && !pickStatus && <X className="w-3.5 h-3.5 text-brandred-500" />}
+                {isPicked && !pickStatus && !isEliminated && !isWinner && <div className="w-1.5 h-1.5 rounded-full bg-navy-900 shadow-sm" />}
             </div>
 
             {/* Winner highlight bar */}
             {isWinner && (
-                <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-emerald-500" />
+                <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-[#0F7B4A]" />
             )}
         </button>
     );

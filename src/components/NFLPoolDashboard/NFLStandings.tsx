@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
-import { Trophy, Heart, ShieldAlert, Star } from 'lucide-react';
+import { Trophy, Heart, ShieldAlert } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
+import { RankChip } from '../ui';
 
 interface NFLStandingsProps {
   pool: Pool;
@@ -103,101 +104,82 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   }, [entries, type]);
 
   const renderRankBadge = (index: number) => {
-    if (index === 0) {
-      return (
-        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-black shadow-sm shadow-amber-500/5">
-          <Star size={10} className="fill-amber-400 mr-0.5" /> 1
-        </span>
-      );
-    }
-    if (index === 1) {
-      return (
-        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-350/20 text-slate-350 border border-slate-350/30 text-xs font-black">
-          2
-        </span>
-      );
-    }
-    if (index === 2) {
-      return (
-        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-700/20 text-amber-600 border border-amber-700/30 text-xs font-black">
-          3
-        </span>
-      );
-    }
-    return <span className="text-slate-500 font-mono text-xs font-bold pl-2">{index + 1}</span>;
+    return <RankChip rank={index + 1} />;
   };
 
+  const TH = 'py-4 px-6 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted';
+
   return (
-    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-sm">
-      <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/10">
-        <h3 className="text-base font-black text-white flex items-center gap-2">
-          <Trophy size={18} className="text-yellow-500" /> Standings Leaderboard
+    <div className="bg-card border border-line rounded-xl overflow-hidden shadow-card">
+      <div className="p-6 border-b border-line flex justify-between items-center bg-surface">
+        <h3 className="font-display font-bold uppercase text-base tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
+          <Trophy size={18} className="text-gold-600 dark:text-gold-400" /> Standings Leaderboard
         </h3>
-        <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest bg-slate-950 border border-slate-850 px-3 py-1 rounded-full">
+        <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
           {entries.length} Entries
         </span>
       </div>
 
       <div className="overflow-x-auto">
         {sortedEntries.length === 0 ? (
-          <div className="text-center py-12 text-slate-500 font-bold">
+          <div className="text-center py-12 text-muted font-body font-bold">
             No entries have registered in this pool yet.
           </div>
         ) : (
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse font-body text-[15px]">
             <thead>
-              <tr className="border-b border-slate-800/80 bg-slate-950/20">
-                <th className="sticky left-0 z-10 bg-slate-950 py-4 px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 w-16">Rank</th>
-                <th className="sticky left-16 z-10 bg-slate-950 py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Player</th>
-                
+              <tr className="border-b border-line bg-surface">
+                <th className={`sticky left-0 z-10 bg-card py-4 px-3 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted w-16`}>Rank</th>
+                <th className={`sticky left-16 z-10 bg-card ${TH}`}>Player</th>
+
                 {/* Custom Pool Columns */}
                 {type === 'NFL_PICKEM' && (
                   <>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">Week {week} Pick</th>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">MNF Score</th>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-right w-24">Total Points</th>
+                    <th className={`${TH} text-center`}>Week {week} Pick</th>
+                    <th className={`${TH} text-center`}>MNF Score</th>
+                    <th className={`${TH} text-right w-24`}>Total Points</th>
                   </>
                 )}
 
                 {type === 'NFL_SURVIVOR' && (
                   <>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">Status</th>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">Strikes</th>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">Rebuys</th>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">Week {week} Pick</th>
+                    <th className={`${TH} text-center`}>Status</th>
+                    <th className={`${TH} text-center`}>Strikes</th>
+                    <th className={`${TH} text-center`}>Rebuys</th>
+                    <th className={`${TH} text-center`}>Week {week} Pick</th>
                   </>
                 )}
 
                 {type === 'NFL_MARGIN' && (
                   <>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">Week {week} Pick</th>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">Negative Burden</th>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">Win Wks</th>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-center">Best Wk</th>
-                    <th className="py-4 px-6 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 text-right w-28">Season Total</th>
+                    <th className={`${TH} text-center`}>Week {week} Pick</th>
+                    <th className={`${TH} text-center`}>Negative Burden</th>
+                    <th className={`${TH} text-center`}>Win Wks</th>
+                    <th className={`${TH} text-center`}>Best Wk</th>
+                    <th className={`${TH} text-right w-28`}>Season Total</th>
                   </>
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/50">
+            <tbody className="divide-y divide-[color:var(--line)]">
               {sortedEntries.map((entry, index) => {
                 const isMyEntry = false; // user profile checking is bypassed/not needed for row highlight
 
                 return (
                   <tr
                     key={entry.id}
-                    className={`transition-colors hover:bg-slate-900/20 ${
-                      isMyEntry ? 'bg-indigo-500/5 hover:bg-indigo-500/10' : ''
+                    className={`transition-colors hover:bg-[color:var(--page)] ${
+                      isMyEntry ? 'bg-brandred-600/[0.07] hover:bg-brandred-600/10' : ''
                     }`}
                   >
                     {/* Rank */}
-                    <td className="sticky left-0 z-10 bg-slate-900 py-4 px-3 font-bold">{renderRankBadge(index)}</td>
+                    <td className="sticky left-0 z-10 bg-card py-4 px-3 font-bold">{renderRankBadge(index)}</td>
 
                     {/* Username */}
-                    <td className="sticky left-16 z-10 bg-slate-900 py-4 px-6 font-extrabold text-white text-sm">
+                    <td className="sticky left-16 z-10 bg-card py-4 px-6 font-display font-bold text-[color:var(--text)] text-sm">
                       {entry.userName}
                       {isMyEntry && (
-                        <span className="ml-1.5 text-[8px] font-black tracking-widest text-indigo-400 uppercase bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded">
+                        <span className="ml-1.5 inline-flex items-center rounded-full bg-brandred-600 px-2 py-0.5 leading-none font-display font-bold uppercase text-[11px] tracking-[0.08em] text-white">
                           Me
                         </span>
                       )}
@@ -206,13 +188,13 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {/* Pick'em Columns */}
                     {type === 'NFL_PICKEM' && (
                       <>
-                        <td className="py-4 px-6 text-center text-xs font-bold text-slate-400">
+                        <td className="py-4 px-6 text-center text-[13px] font-bold text-muted num">
                           {Object.keys(entry.picks || {}).length} Picks Set
                         </td>
-                        <td className="py-4 px-6 text-center text-xs font-mono font-bold text-slate-500">
+                        <td className="py-4 px-6 text-center text-[13px] num font-bold text-muted">
                           {entry.weeklyTiebreakers?.[week] ? `${entry.weeklyTiebreakers[week]} pts` : '—'}
                         </td>
-                        <td className="py-4 px-6 text-right font-black text-white text-sm font-mono">
+                        <td className="py-4 px-6 text-right font-display font-bold text-[color:var(--text)] text-sm num">
                           {entry.totalScore ?? 0}
                         </td>
                       </>
@@ -223,24 +205,24 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                       <>
                         <td className="py-4 px-6 text-center">
                           {entry.status === 'ALIVE' ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-extrabold text-emerald-400 uppercase tracking-wide">
-                              <Heart size={8} className="fill-emerald-400/20" /> Alive
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E4F5EC] border border-[#BEE7D0] font-display font-bold text-[10px] text-[#0F7B4A] uppercase tracking-[0.08em]">
+                              <Heart size={8} className="fill-[#0F7B4A]/20" /> Alive
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-[9px] font-extrabold text-rose-400 uppercase tracking-wide">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brandred-600/10 border border-brandred-600/30 font-display font-bold text-[10px] text-brandred-600 uppercase tracking-[0.08em]">
                               <ShieldAlert size={8} /> Eliminated
                             </span>
                           )}
                         </td>
-                        <td className="py-4 px-6 text-center text-xs font-bold font-mono text-slate-400">
+                        <td className="py-4 px-6 text-center text-[13px] font-bold num text-muted">
                           {entry.strikesUsed ?? 0}
                         </td>
-                        <td className="py-4 px-6 text-center text-xs font-bold font-mono text-slate-400">
+                        <td className="py-4 px-6 text-center text-[13px] font-bold num text-muted">
                           {entry.rebuysUsed ?? 0}
                         </td>
-                        <td className="py-4 px-6 text-center text-xs font-black text-indigo-400 uppercase tracking-wider">
+                        <td className="py-4 px-6 text-center text-[13px] font-display font-bold text-navy-700 dark:text-gold-400 uppercase tracking-[0.08em]">
                           {entry.picks?.[week] || (
-                            <span className="text-slate-650 italic text-[10px]">No selection</span>
+                            <span className="text-faint italic text-[11px] normal-case font-body">No selection</span>
                           )}
                         </td>
                       </>
@@ -249,21 +231,21 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {/* Margin Columns */}
                     {type === 'NFL_MARGIN' && (
                       <>
-                        <td className="py-4 px-6 text-center text-xs font-black text-indigo-400 uppercase tracking-wider">
+                        <td className="py-4 px-6 text-center text-[13px] font-display font-bold text-navy-700 dark:text-gold-400 uppercase tracking-[0.08em]">
                           {entry.picks?.[week] || (
-                            <span className="text-slate-650 italic text-[10px]">No selection</span>
+                            <span className="text-faint italic text-[11px] normal-case font-body">No selection</span>
                           )}
                         </td>
-                        <td className="py-4 px-6 text-center text-xs font-bold font-mono text-rose-400">
+                        <td className="py-4 px-6 text-center text-[13px] font-bold num text-brandred-600">
                           -{entry.negativeBurden ?? 0}
                         </td>
-                        <td className="py-4 px-6 text-center text-xs font-bold font-mono text-slate-400">
+                        <td className="py-4 px-6 text-center text-[13px] font-bold num text-muted">
                           {entry.positiveWeeks ?? 0}
                         </td>
-                        <td className="py-4 px-6 text-center text-xs font-bold font-mono text-emerald-400">
+                        <td className="py-4 px-6 text-center text-[13px] font-bold num text-gold-600 dark:text-gold-400">
                           +{entry.bestWeek ?? 0}
                         </td>
-                        <td className="py-4 px-6 text-right font-black text-white text-sm font-mono">
+                        <td className="py-4 px-6 text-right font-display font-bold text-[color:var(--text)] text-sm num">
                           {entry.seasonTotal ?? 0}
                         </td>
                       </>

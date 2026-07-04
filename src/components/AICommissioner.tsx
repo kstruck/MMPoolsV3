@@ -5,6 +5,7 @@ import { collection, query, orderBy, limit, onSnapshot, addDoc, where } from 'fi
 import type { AIArtifact, AIRequest } from '../types';
 import { Bot, Gavel, HelpCircle, CheckCircle, ChevronDown, ChevronUp, Loader } from 'lucide-react';
 import { useToast } from './ui/Toast';
+import { Badge, Button } from './ui';
 
 interface AICommissionerProps {
     poolId: string;
@@ -102,38 +103,38 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
     };
 
     return (
-        <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl w-full max-w-2xl mx-auto my-8">
+        <div className="bg-card border border-line rounded-xl overflow-hidden shadow-panel w-full max-w-2xl mx-auto my-8">
             {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-4 border-b border-slate-700 flex items-center justify-between">
+            <div className="bg-navy-900 p-4 border-b border-[rgba(230,206,150,0.16)] flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-500/20 rounded-full flex items-center justify-center border border-indigo-400/50">
-                        <Bot size={24} className="text-indigo-400" />
+                    <div className="w-10 h-10 bg-gold-500/15 rounded-full flex items-center justify-center border border-gold-400/50">
+                        <Bot size={24} className="text-gold-400" />
                     </div>
                     <div>
-                        <h2 className="text-white font-bold text-lg">AI Commissioner</h2>
-                        <p className="text-xs text-indigo-300 font-mono">POWERED BY GEMINI • VERIFIED FACTS ONLY</p>
+                        <h2 className="text-white font-display font-bold uppercase tracking-[0.05em] text-lg">AI Commissioner</h2>
+                        <p className="text-[10px] font-display font-bold uppercase tracking-[0.16em] text-[#9FB0CC]">POWERED BY GEMINI • VERIFIED FACTS ONLY</p>
                     </div>
                 </div>
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-slate-700 bg-slate-950/50">
+            <div className="flex border-b border-line bg-surface">
                 <button
                     onClick={() => setActiveTab('UPDATES')}
-                    className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'UPDATES' ? 'text-white border-b-2 border-indigo-500 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+                    className={`flex-1 py-3 text-sm font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 ${activeTab === 'UPDATES' ? 'text-[color:var(--text)] border-b-2 border-gold-500 bg-gold-500/10' : 'text-muted hover:text-[color:var(--text)]'}`}
                 >
                     Latest Updates
                 </button>
                 <button
                     onClick={() => setActiveTab('DISPUTE')}
-                    className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'DISPUTE' ? 'text-white border-b-2 border-indigo-500 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+                    className={`flex-1 py-3 text-sm font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 ${activeTab === 'DISPUTE' ? 'text-[color:var(--text)] border-b-2 border-gold-500 bg-gold-500/10' : 'text-muted hover:text-[color:var(--text)]'}`}
                 >
                     Dispute Helper
                 </button>
                 {(poolType === 'BRACKET' || poolType === 'PROPS' || poolType?.startsWith('NFL_')) && (
                     <button
                         onClick={() => setActiveTab('INSIGHTS')}
-                        className={`flex-1 py-3 text-sm font-bold transition-colors ${activeTab === 'INSIGHTS' ? 'text-white border-b-2 border-indigo-500 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200'}`}
+                        className={`flex-1 py-3 text-sm font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 ${activeTab === 'INSIGHTS' ? 'text-[color:var(--text)] border-b-2 border-gold-500 bg-gold-500/10' : 'text-muted hover:text-[color:var(--text)]'}`}
                     >
                         {poolType === 'BRACKET' ? 'Bracket Insights' : poolType === 'PROPS' ? 'Prop Insights' : 'Weekly Analysis'}
                     </button>
@@ -141,13 +142,13 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
             </div>
 
             {/* Content */}
-            <div className="p-4 bg-slate-950 min-h-[300px]">
+            <div className="p-4 bg-page min-h-[300px]">
 
                 {/* UPDATES TAB */}
                 {activeTab === 'UPDATES' && (
                     <div className="space-y-4">
                         {artifacts.filter(a => a.type !== 'DISPUTE_RESPONSE').length === 0 ? (
-                            <div className="text-center text-slate-500 py-10">
+                            <div className="text-center text-muted font-body py-10">
                                 <Bot size={40} className="mx-auto mb-2 opacity-20" />
                                 <p>No updates yet. Commissioner is watching correctly.</p>
                             </div>
@@ -163,60 +164,65 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
                 {activeTab === 'DISPUTE' && (
                     <div className="space-y-6">
                         {/* New Request */}
-                        <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
-                            <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
-                                <HelpCircle size={16} className="text-amber-400" /> Ask the Commissioner
+                        <div className="bg-card p-4 rounded-lg border border-line shadow-card">
+                            <h3 className="text-sm font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2 flex items-center gap-2">
+                                <HelpCircle size={16} className="text-gold-600 dark:text-gold-400" /> Ask the Commissioner
                             </h3>
-                            <p className="text-xs text-slate-400 mb-3">
+                            <p className="text-xs font-body text-muted mb-3">
                                 Challenge a result or ask for clarification. The AI will analyze the audit logs, scores, and rules to give you a factual answer.
                             </p>
                             <textarea
                                 value={question}
                                 onChange={e => setQuestion(e.target.value)}
                                 placeholder="e.g. Why did the numbers change after lock?"
-                                className="w-full bg-black/50 border border-slate-700 rounded p-3 text-sm text-white focus:border-indigo-500 outline-none h-24 mb-3 resize-none"
+                                className="w-full bg-surface border border-line rounded-md p-3 text-sm font-body text-[color:var(--text)] focus:border-gold-500 outline-none h-24 mb-3 resize-none"
                             />
-                            <button
+                            <Button
+                                variant="primary"
+                                size="sm"
                                 onClick={submitDispute}
                                 disabled={isSubmitting || !question.trim()}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded text-sm w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full"
                             >
                                 {isSubmitting ? <Loader className="animate-spin" size={16} /> : <Gavel size={16} />}
                                 Submit Challenge
-                            </button>
+                            </Button>
                         </div>
 
                         {/* History */}
                         <div className="space-y-4">
-                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Your History</h4>
+                            <h4 className="text-[12px] font-display font-bold uppercase tracking-[0.16em] text-muted">Your History</h4>
                             {userRequests.map(req => {
                                 const response = getArtifactForRequest(req);
                                 return (
-                                    <div key={req.id} className="border border-slate-800 rounded-lg overflow-hidden">
-                                        <div className="p-3 bg-slate-900 flex justify-between items-start">
+                                    <div key={req.id} className="border border-line rounded-lg overflow-hidden">
+                                        <div className="p-3 bg-surface flex justify-between items-start">
                                             <div>
-                                                <p className="text-sm text-white font-medium">"{req.question}"</p>
-                                                <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded mt-1 inline-block ${req.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                                                <p className="text-sm font-body text-[color:var(--text)] font-medium">"{req.question}"</p>
+                                                <Badge
+                                                    status={req.status === 'COMPLETED' ? 'paid' : 'unpaid'}
+                                                    className="text-[10px] px-1.5 py-0.5 rounded mt-1"
+                                                >
                                                     {req.status}
-                                                </span>
+                                                </Badge>
                                             </div>
                                         </div>
                                         {response && (
-                                            <div className="p-3 bg-emerald-900/10 border-t border-slate-800">
+                                            <div className="p-3 bg-[#0F7B4A]/5 border-t border-line">
                                                 <div className="flex items-start gap-2">
-                                                    <Bot size={16} className="text-emerald-400 mt-1 shrink-0" />
+                                                    <Bot size={16} className="text-[#0F7B4A] dark:text-[#3FB77F] mt-1 shrink-0" />
                                                     <div>
-                                                        <h5 className="text-sm font-bold text-emerald-400 mb-1">{response.content.headline}</h5>
+                                                        <h5 className="text-sm font-display font-bold text-[#0F7B4A] dark:text-[#3FB77F] mb-1">{response.content.headline}</h5>
                                                         <ul className="space-y-1 mb-2">
                                                             {response.content.summaryBullets.map((b, i) => (
-                                                                <li key={i} className="text-xs text-slate-300">• {b}</li>
+                                                                <li key={i} className="text-xs font-body text-[color:var(--text)]">• {b}</li>
                                                             ))}
                                                         </ul>
-                                                        <button onClick={() => setExpandedId(expandedId === req.id ? null : req.id)} className="text-[10px] text-slate-500 hover:text-white flex items-center gap-1">
+                                                        <button onClick={() => setExpandedId(expandedId === req.id ? null : req.id)} className="text-[10px] text-muted hover:text-[color:var(--text)] flex items-center gap-1 transition-colors duration-150">
                                                             {expandedId === req.id ? 'Hide Details' : 'Show Full Explanation'} {expandedId === req.id ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
                                                         </button>
                                                         {expandedId === req.id && (
-                                                            <div className="mt-2 text-xs text-slate-400 space-y-1 pl-2 border-l border-slate-700">
+                                                            <div className="mt-2 text-xs font-body text-muted space-y-1 pl-2 border-l border-line">
                                                                 {response.content.explanationSteps.map((step, i) => (
                                                                     <p key={i}>{step}</p>
                                                                 ))}
@@ -236,11 +242,11 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
                 {/* INSIGHTS TAB */}
                 {activeTab === 'INSIGHTS' && (
                     <div className="space-y-6 animate-in fade-in">
-                        <div className="bg-indigo-900/20 p-4 rounded-lg border border-indigo-500/30">
-                            <h3 className="text-sm font-bold text-indigo-400 mb-2 flex items-center gap-2">
+                        <div className="bg-gold-500/10 p-4 rounded-lg border border-gold-500/30">
+                            <h3 className="text-sm font-display font-bold uppercase tracking-[0.05em] text-gold-700 dark:text-gold-400 mb-2 flex items-center gap-2">
                                 <Bot size={16} /> AI {poolType === 'BRACKET' ? 'Bracket' : poolType === 'PROPS' ? 'Props' : 'Weekly'} Analysis
                             </h3>
-                            <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                            <p className="text-xs font-body text-[color:var(--text)] mb-4 leading-relaxed">
                                 {poolType === 'BRACKET' ? 'Get personalized insights about your bracket strategy. The AI Commissioner will analyze your picks against the rest of the pool and historical data.' :
                                  poolType === 'PROPS' ? 'Get strategic insights on your prop bets. The AI Commissioner will analyze line values, correlations, and compare your picks to the field.' :
                                  'Get a breakdown of your weekly NFL strategy. The AI Commissioner will review your matchups, point allocations, and risk profile.'}
@@ -249,35 +255,35 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {poolType === 'BRACKET' ? (
                                     <>
-                                        <button onClick={() => submitInsight("Analyze my bracket strategy. What is my chalk vs upset balance?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
-                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Strategy Analysis</div>
-                                            <div className="text-xs text-slate-500">Chalk vs upset balance & risk profile</div>
+                                        <button onClick={() => submitInsight("Analyze my bracket strategy. What is my chalk vs upset balance?")} disabled={isSubmitting} className="bg-card hover:bg-surface border border-line text-left p-3 rounded-lg transition-colors duration-150 group disabled:opacity-50">
+                                            <div className="text-[color:var(--text)] font-body font-medium text-sm mb-1 group-hover:text-gold-700 dark:group-hover:text-gold-400">Strategy Analysis</div>
+                                            <div className="text-xs font-body text-muted">Chalk vs upset balance & risk profile</div>
                                         </button>
-                                        <button onClick={() => submitInsight("Who is my biggest threat in the standings based on our different picks?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
-                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Competitor Threat</div>
-                                            <div className="text-xs text-slate-500">Identify who can pass you</div>
+                                        <button onClick={() => submitInsight("Who is my biggest threat in the standings based on our different picks?")} disabled={isSubmitting} className="bg-card hover:bg-surface border border-line text-left p-3 rounded-lg transition-colors duration-150 group disabled:opacity-50">
+                                            <div className="text-[color:var(--text)] font-body font-medium text-sm mb-1 group-hover:text-gold-700 dark:group-hover:text-gold-400">Competitor Threat</div>
+                                            <div className="text-xs font-body text-muted">Identify who can pass you</div>
                                         </button>
                                     </>
                                 ) : poolType === 'PROPS' ? (
                                     <>
-                                        <button onClick={() => submitInsight("Analyze my prop card strategy. Did I take too many favorites or longshots?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
-                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Card Analysis</div>
-                                            <div className="text-xs text-slate-500">Risk vs Reward breakdown</div>
+                                        <button onClick={() => submitInsight("Analyze my prop card strategy. Did I take too many favorites or longshots?")} disabled={isSubmitting} className="bg-card hover:bg-surface border border-line text-left p-3 rounded-lg transition-colors duration-150 group disabled:opacity-50">
+                                            <div className="text-[color:var(--text)] font-body font-medium text-sm mb-1 group-hover:text-gold-700 dark:group-hover:text-gold-400">Card Analysis</div>
+                                            <div className="text-xs font-body text-muted">Risk vs Reward breakdown</div>
                                         </button>
-                                        <button onClick={() => submitInsight("Compare my props to the pool average. How contrarian am I?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
-                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Contrarian Check</div>
-                                            <div className="text-xs text-slate-500">See how you differ from the field</div>
+                                        <button onClick={() => submitInsight("Compare my props to the pool average. How contrarian am I?")} disabled={isSubmitting} className="bg-card hover:bg-surface border border-line text-left p-3 rounded-lg transition-colors duration-150 group disabled:opacity-50">
+                                            <div className="text-[color:var(--text)] font-body font-medium text-sm mb-1 group-hover:text-gold-700 dark:group-hover:text-gold-400">Contrarian Check</div>
+                                            <div className="text-xs font-body text-muted">See how you differ from the field</div>
                                         </button>
                                     </>
                                 ) : (
                                     <>
-                                        <button onClick={() => submitInsight("Review my picks for this week. Where is my biggest risk?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
-                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Weekly Risk</div>
-                                            <div className="text-xs text-slate-500">Analyze current week's exposures</div>
+                                        <button onClick={() => submitInsight("Review my picks for this week. Where is my biggest risk?")} disabled={isSubmitting} className="bg-card hover:bg-surface border border-line text-left p-3 rounded-lg transition-colors duration-150 group disabled:opacity-50">
+                                            <div className="text-[color:var(--text)] font-body font-medium text-sm mb-1 group-hover:text-gold-700 dark:group-hover:text-gold-400">Weekly Risk</div>
+                                            <div className="text-xs font-body text-muted">Analyze current week's exposures</div>
                                         </button>
-                                        <button onClick={() => submitInsight("How does my strategy compare to the current pool leader?")} disabled={isSubmitting} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-left p-3 rounded-lg transition-colors group disabled:opacity-50">
-                                            <div className="text-white font-medium text-sm mb-1 group-hover:text-indigo-300">Leaderboard Comparison</div>
-                                            <div className="text-xs text-slate-500">Compare against the top spot</div>
+                                        <button onClick={() => submitInsight("How does my strategy compare to the current pool leader?")} disabled={isSubmitting} className="bg-card hover:bg-surface border border-line text-left p-3 rounded-lg transition-colors duration-150 group disabled:opacity-50">
+                                            <div className="text-[color:var(--text)] font-body font-medium text-sm mb-1 group-hover:text-gold-700 dark:group-hover:text-gold-400">Leaderboard Comparison</div>
+                                            <div className="text-xs font-body text-muted">Compare against the top spot</div>
                                         </button>
                                     </>
                                 )}
@@ -295,21 +301,21 @@ const ArtifactCard: React.FC<{ artifact: AIArtifact, poolId: string, userId?: st
     const isExplanation = artifact.type === 'WINNER_EXPLANATION';
 
     return (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-lg overflow-hidden transition-all hover:border-slate-700">
+        <div className="bg-card border border-line rounded-lg overflow-hidden transition-all duration-150 hover:border-gold-500/40">
             <div className="p-4">
                 <div className="flex justify-between items-start mb-2">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${isExplanation ? 'bg-emerald-500/10 text-emerald-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                    <span className={`text-[10px] font-display font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded ${isExplanation ? 'bg-[#E4F5EC] text-[#0F7B4A] border border-[#BEE7D0]' : 'bg-[#E5EDF6] text-[#142A4C] border border-[#CBDCEC]'}`}>
                         {artifact.type.replace('_', ' ')}
                     </span>
-                    <span className="text-[10px] text-slate-600 font-mono">
+                    <span className="text-[10px] text-faint num">
                         {new Date(artifact.createdAt).toLocaleTimeString()}
                     </span>
                 </div>
-                <h3 className="text-white font-bold text-lg mb-2">{artifact.content.headline}</h3>
+                <h3 className="text-[color:var(--text)] font-display font-bold text-lg mb-2">{artifact.content.headline}</h3>
                 <ul className="space-y-1 mb-3">
                     {artifact.content.summaryBullets.map((b, i) => (
-                        <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
-                            <CheckCircle size={14} className="text-emerald-500/50 mt-0.5 shrink-0" />
+                        <li key={i} className="text-sm font-body text-[color:var(--text)] flex items-start gap-2">
+                            <CheckCircle size={14} className="text-[#0F7B4A]/60 mt-0.5 shrink-0" />
                             <span>{b}</span>
                         </li>
                     ))}
@@ -319,30 +325,30 @@ const ArtifactCard: React.FC<{ artifact: AIArtifact, poolId: string, userId?: st
                     <div className="mt-3">
                         <button
                             onClick={() => setExpanded(!expanded)}
-                            className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
+                            className="flex items-center gap-1 text-xs text-gold-700 dark:text-gold-400 hover:text-gold-600 dark:hover:text-gold-300 transition-colors duration-150 font-body font-medium"
                         >
                             {expanded ? 'Hide Analysis' : 'Show Analysis'}
                             {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
 
                         {expanded && (
-                            <div className="mt-3 pt-3 border-t border-slate-800/50 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="mt-3 pt-3 border-t border-line space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
                                 {artifact.content.explanationSteps.map((step, i) => (
-                                    <div key={i} className="flex gap-3 text-sm text-slate-400">
-                                        <span className="font-mono text-slate-600 font-bold">{i + 1}.</span>
+                                    <div key={i} className="flex gap-3 text-sm font-body text-muted">
+                                        <span className="text-faint font-bold num">{i + 1}.</span>
                                         <p>{step}</p>
                                     </div>
                                 ))}
-                                <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-600">
-                                    <span className="font-mono">CONFIDENCE: {(artifact.content.confidence * 100).toFixed(0)}%</span>
+                                <div className="mt-2 flex items-center gap-2 text-[10px] text-faint">
+                                    <span className="font-display font-bold uppercase tracking-[0.08em] num">CONFIDENCE: {(artifact.content.confidence * 100).toFixed(0)}%</span>
                                     <span>•</span>
-                                    <span className="font-mono">HASH: {artifact.factsHash.substring(0, 8)}</span>
+                                    <span className="font-display font-bold uppercase tracking-[0.08em]">HASH: {artifact.factsHash.substring(0, 8)}</span>
                                 </div>
                             </div>
                         )}
                     </div>
                 )}
-                
+
                 {/* Comments / Message Board Section */}
                 <ArtifactComments poolId={poolId} artifactId={artifact.id} userId={userId} userName={userName} />
             </div>
@@ -384,20 +390,20 @@ const ArtifactComments: React.FC<{ poolId: string, artifactId: string, userId?: 
     };
 
     return (
-        <div className="mt-4 pt-4 border-t border-slate-800">
-            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                Participant Discussion ({comments.length})
+        <div className="mt-4 pt-4 border-t border-line">
+            <h4 className="text-[12px] font-display font-bold uppercase tracking-[0.16em] text-muted mb-3 flex items-center gap-2">
+                Participant Discussion (<span className="num">{comments.length}</span>)
             </h4>
-            
+
             {comments.length > 0 && (
-                <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-[color:var(--line)] scrollbar-track-transparent">
                     {comments.map(c => (
-                        <div key={c.id} className="bg-slate-950/50 rounded p-2.5 border border-slate-800/50 text-sm">
+                        <div key={c.id} className="bg-surface rounded p-2.5 border border-line text-sm font-body">
                             <div className="flex justify-between items-center mb-1">
-                                <span className="font-bold text-indigo-400 text-xs">{c.userName}</span>
-                                <span className="text-[10px] text-slate-600">{new Date(c.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'})}</span>
+                                <span className="font-bold text-gold-700 dark:text-gold-400 text-xs">{c.userName}</span>
+                                <span className="text-[10px] text-faint num">{new Date(c.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'})}</span>
                             </div>
-                            <p className="text-slate-300">{c.text}</p>
+                            <p className="text-[color:var(--text)]">{c.text}</p>
                         </div>
                     ))}
                 </div>
@@ -411,18 +417,19 @@ const ArtifactComments: React.FC<{ poolId: string, artifactId: string, userId?: 
                         onChange={e => setNewComment(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && submitComment()}
                         placeholder="Reply to this update..."
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                        className="flex-1 bg-surface border border-line rounded-lg px-3 py-2 text-sm font-body text-[color:var(--text)] focus:outline-none focus:border-gold-500"
                     />
-                    <button
+                    <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={submitComment}
                         disabled={isSubmitting || !newComment.trim()}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 transition-colors"
                     >
                         Post
-                    </button>
+                    </Button>
                 </div>
             ) : (
-                <p className="text-xs text-slate-500 italic">Sign in to join the discussion.</p>
+                <p className="text-xs font-body text-muted italic">Sign in to join the discussion.</p>
             )}
         </div>
     );

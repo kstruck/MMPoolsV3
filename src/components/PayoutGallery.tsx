@@ -2,7 +2,8 @@ import React, { useMemo } from 'react';
 import type { GameState, Winner } from '../types';
 import { calculateQuarterlyPayouts } from '../utils/payouts';
 import { getLastDigit } from '../services/gameLogic';
-import { Zap, Check } from 'lucide-react';
+import { Zap } from 'lucide-react';
+import { Badge } from './ui';
 
 interface PayoutGalleryProps {
     gameState: GameState;
@@ -27,46 +28,46 @@ export const PayoutGallery: React.FC<PayoutGalleryProps> = ({ gameState, winners
                     })
                     .map((card, idx) => {
                         return (
-                            <div key={idx} className="bg-black border border-slate-800 rounded-xl p-6 text-center shadow-lg relative overflow-hidden group w-full md:w-[320px]">
-                                <div className={`absolute top-0 w-full h-1 opacity-20 group-hover:opacity-50 transition-opacity ${card.isLocked ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
-                                <h4 className="text-slate-400 font-bold text-sm uppercase mb-4">{card.label}</h4>
-                                <div className="flex justify-center gap-4 text-white font-bold text-2xl mb-2 items-center">
-                                    <span>{card.home}</span> <span className="text-slate-600">-</span> <span>{card.away}</span>
+                            <div key={idx} className="bg-card border border-line rounded-xl p-6 text-center shadow-card transition-all duration-150 hover:-translate-y-1 hover:shadow-card-hover relative overflow-hidden group w-full md:w-[320px]">
+                                <div className={`absolute top-0 w-full h-1 opacity-40 group-hover:opacity-80 transition-opacity ${card.isLocked ? 'bg-brandred-600' : 'bg-gold-foil'}`}></div>
+                                <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-4">{card.label}</h4>
+                                <div className="flex justify-center gap-4 font-display font-bold text-2xl mb-2 items-center text-[color:var(--text)] num">
+                                    <span>{card.home}</span> <span className="text-faint">-</span> <span>{card.away}</span>
                                 </div>
 
                                 {/* Winning Digits Display */}
-                                <div className="flex justify-center gap-6 mb-4 bg-slate-900/50 py-1.5 rounded border border-slate-800/50">
+                                <div className="flex justify-center gap-6 mb-4 bg-surface py-1.5 rounded border border-line">
                                     <div className="flex flex-col items-center">
-                                        <span className="text-[9px] text-rose-400/80 uppercase font-bold tracking-wider">Home Digit</span>
-                                        <span className="font-mono text-lg font-bold text-white leading-none mt-0.5">{card.home !== undefined ? getLastDigit(card.home) : '-'}</span>
+                                        <span className="font-display font-bold uppercase text-[9px] tracking-[0.08em] text-brandred-600 dark:text-brandred-500">Home Digit</span>
+                                        <span className="font-display font-bold text-lg text-[color:var(--text)] leading-none mt-0.5 num">{card.home !== undefined ? getLastDigit(card.home) : '-'}</span>
                                     </div>
                                     <div className="flex flex-col items-center">
-                                        <span className="text-[9px] text-indigo-400/80 uppercase font-bold tracking-wider">Away Digit</span>
-                                        <span className="font-mono text-lg font-bold text-white leading-none mt-0.5">{card.away !== undefined ? getLastDigit(card.away) : '-'}</span>
+                                        <span className="font-display font-bold uppercase text-[9px] tracking-[0.08em] text-navy-600 dark:text-gold-400">Away Digit</span>
+                                        <span className="font-display font-bold text-lg text-[color:var(--text)] leading-none mt-0.5 num">{card.away !== undefined ? getLastDigit(card.away) : '-'}</span>
                                     </div>
                                 </div>
-                                <p className="text-xs text-slate-500 mb-6 font-medium">This Quarter: {card.qPointsHome} - {card.qPointsAway}</p>
+                                <p className="text-xs font-body text-muted mb-6 font-medium num">This Quarter: {card.qPointsHome} - {card.qPointsAway}</p>
                                 <div className="mb-4">
-                                    <p className="text-xs text-slate-400 uppercase font-bold mb-1">In the money:</p>
+                                    <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1">In the money:</p>
                                     {card.isRollover ? (
-                                        <p className="text-emerald-400 font-bold text-lg italic flex items-center justify-center gap-1"><Zap size={16} fill="currentColor" /> Rollover</p>
+                                        <p className="text-gold-600 dark:text-gold-400 font-bold text-lg italic flex items-center justify-center gap-1"><Zap size={16} fill="currentColor" /> Rollover</p>
                                     ) : (
-                                        <p className="text-white font-bold text-lg">{card.winnerName}</p>
+                                        <p className="font-body font-bold text-lg text-[color:var(--text)]">{card.winnerName}</p>
                                     )}
                                     {card.reverseWinnerName && (
                                         <div className="mt-1 flex flex-col items-center">
-                                            <span className="text-[10px] text-slate-500">AND (Reverse)</span>
-                                            <span className="text-indigo-300 font-bold text-sm">{card.reverseWinnerName}</span>
+                                            <span className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint">AND (Reverse)</span>
+                                            <span className="font-body font-bold text-sm text-navy-600 dark:text-gold-400">{card.reverseWinnerName}</span>
                                         </div>
                                     )}
                                 </div>
                                 <div className="flex flex-col items-center mb-4">
                                     {card.isRollover ? (
-                                        <div className="text-slate-500 font-mono font-bold text-sm uppercase">Accumulating...</div>
+                                        <div className="font-display font-bold uppercase text-sm tracking-[0.05em] text-muted">Accumulating...</div>
                                     ) : (
                                         <>
-                                            <div className="text-2xl font-bold font-mono text-emerald-400">${(card.amount || 0).toLocaleString()}</div>
-                                            {card.rolloverAdded > 0 && <span className="text-[10px] text-emerald-500 font-bold">(Includes ${card.rolloverAdded} Rollover)</span>}
+                                            <div className="font-display font-bold text-2xl text-gold-700 dark:text-gold-400 num">${(card.amount || 0).toLocaleString()}</div>
+                                            {card.rolloverAdded > 0 && <span className="text-[10px] font-body font-bold text-gold-700 dark:text-gold-400 num">(Includes ${card.rolloverAdded} Rollover)</span>}
                                         </>
                                     )}
                                 </div>
@@ -76,13 +77,13 @@ export const PayoutGallery: React.FC<PayoutGalleryProps> = ({ gameState, winners
                                     <div className="mb-4">
                                         {card.isPaid ? (
                                             <div className="flex items-center justify-center gap-2">
-                                                <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                                                    <Check size={10} strokeWidth={4} /> Paid
-                                                </span>
+                                                <Badge status="paid" className="text-[11px] px-2.5 py-1">
+                                                    Paid
+                                                </Badge>
                                                 {isManager && (
                                                     <button
                                                         onClick={() => onUpdatePaidStatus(card.label.toLowerCase(), false)}
-                                                        className="text-slate-500 hover:text-white text-[10px] underline"
+                                                        className="text-muted hover:text-brandred-600 text-[10px] underline transition-colors duration-150"
                                                     >Undo</button>
                                                 )}
                                             </div>
@@ -90,7 +91,7 @@ export const PayoutGallery: React.FC<PayoutGalleryProps> = ({ gameState, winners
                                             isManager && (
                                                 <button
                                                     onClick={() => onUpdatePaidStatus(card.label.toLowerCase(), true)}
-                                                    className="border border-slate-700 hover:bg-emerald-500/10 hover:border-emerald-500 hover:text-emerald-400 text-slate-400 px-3 py-1 rounded text-[10px] font-bold uppercase transition-colors"
+                                                    className="border-[1.5px] border-line hover:bg-[#0F7B4A]/10 hover:border-[#0F7B4A] hover:text-[#0F7B4A] text-muted px-3 py-1 rounded font-display font-bold uppercase tracking-[0.05em] text-[10px] transition-colors duration-150"
                                                 >
                                                     Mark Paid
                                                 </button>

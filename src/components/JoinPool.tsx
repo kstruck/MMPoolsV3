@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn, Mail, Phone } from 'lucide-react';
+import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn, Mail, Phone, Check } from 'lucide-react';
 import { dbService } from '../services/dbService';
 import { logger } from '../utils/logger';
 import { useToast } from './ui/Toast';
@@ -9,6 +9,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User, Pool } from '../types';
 import { PayoutsPanel } from './PayoutsPanel';
+import { Button } from './ui';
 
 interface JoinPoolProps {
   user: User | null;
@@ -86,7 +87,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
   }, [user, pool, isAlreadyMember, pendingJoinKey, handleJoin]);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col">
+    <div className="min-h-screen bg-page text-[color:var(--text)] font-body flex flex-col">
       <Header
         user={user}
         onOpenAuth={onOpenAuth}
@@ -97,8 +98,8 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
       <main className="flex-grow flex items-center justify-center py-16 px-4">
         {isLoading ? (
           <div className="text-center py-12">
-            <div className="animate-spin text-blue-500 w-12 h-12 border-4 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p className="text-slate-400 font-bold">Retrieving pool invitation details...</p>
+            <div className="animate-spin text-gold-500 w-12 h-12 border-4 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-muted font-display font-bold uppercase tracking-[0.05em]">Retrieving pool invitation details...</p>
           </div>
         ) : castPool?.status === 'CANCELED' ? (
           <div className="max-w-md w-full bg-slate-950 border border-slate-800 rounded-3xl p-8 text-center shadow-2xl">
@@ -116,36 +117,37 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
             </button>
           </div>
         ) : !pool ? (
-          <div className="max-w-md w-full bg-slate-950 border border-slate-800 rounded-3xl p-8 text-center shadow-2xl">
-            <ShieldAlert className="text-red-500 w-16 h-16 mx-auto mb-4" />
-            <h2 className="text-2xl font-black text-white mb-2">Invitation Expired</h2>
-            <p className="text-slate-400 text-sm mb-6">
+          <div className="max-w-md w-full bg-card border border-line rounded-3xl p-8 text-center shadow-panel">
+            <ShieldAlert className="text-brandred-600 w-16 h-16 mx-auto mb-4" />
+            <h2 className="font-display font-extrabold uppercase text-[28px] leading-none text-[color:var(--text)] mb-2">Invitation Expired</h2>
+            <p className="text-muted text-sm mb-6 font-body">
               This pool invitation link is invalid, expired, or has been deleted by the host. Please contact the commissioner.
             </p>
-            <button
+            <Button
+              variant="secondary"
               onClick={() => navigate('/')}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-all"
+              className="w-full"
             >
               Back to Home
-            </button>
+            </Button>
           </div>
         ) : (
-          <div className="max-w-xl w-full bg-slate-950/80 border border-slate-800 rounded-3xl p-6 md:p-10 shadow-2xl backdrop-blur-sm">
+          <div className="max-w-xl w-full bg-card border border-line rounded-3xl p-6 md:p-10 shadow-panel">
             <div className="text-center mb-8">
-              <span className="bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-block mb-3">
+              <span className="bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 text-xs font-display font-bold px-3 py-1 rounded-full uppercase tracking-[0.08em] inline-block mb-3">
                 Pool Invitation
               </span>
-              <h2 className="text-3xl font-black text-white leading-tight mb-2">
+              <h2 className="font-display font-extrabold uppercase text-4xl leading-[0.9] text-[color:var(--text)] mb-2">
                 {pool.name}
               </h2>
-              <p className="text-slate-400 text-sm flex items-center justify-center gap-1.5 flex-wrap">
-                <span>Hosted by <span className="text-slate-300 font-bold">{pool.managerName || 'Pool Host'}</span></span>
+              <p className="text-muted text-sm flex items-center justify-center gap-1.5 flex-wrap font-body">
+                <span>Hosted by <span className="text-[color:var(--text)] font-bold">{pool.managerName || 'Pool Host'}</span></span>
                 {castPool.contactMethod !== 'none' && (
                   <span className="flex items-center gap-1.5 ml-1 inline-flex">
                     {(castPool.contactMethod === 'email' || castPool.contactMethod === 'both' || !castPool.contactMethod) && pool.contactEmail && (
                       <a
                         href={`mailto:${pool.contactEmail}`}
-                        className="p-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-[#9FB0CC] border border-navy-600/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Email Host: ${pool.contactEmail}`}
                       >
                         <Mail size={12} />
@@ -154,7 +156,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                     {(castPool.contactMethod === 'phone' || castPool.contactMethod === 'both') && castPool.contactPhone && (
                       <a
                         href={`tel:${castPool.contactPhone}`}
-                        className="p-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-gold-500/10 hover:bg-gold-500/20 text-gold-700 dark:text-gold-400 border border-gold-500/30 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Call/SMS Host: ${castPool.contactPhone}`}
                       >
                         <Phone size={12} />
@@ -166,21 +168,21 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
             </div>
 
             {/* Quick Stats overview */}
-            <div className="grid grid-cols-3 gap-4 mb-8 bg-slate-900/50 p-4 border border-slate-800 rounded-2xl text-center">
+            <div className="grid grid-cols-3 gap-4 mb-8 bg-surface p-4 border border-line rounded-2xl text-center">
               <div>
-                <Coins className="text-emerald-400 w-6 h-6 mx-auto mb-1" />
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Entry Fee</span>
-                <span className="text-white font-black text-lg">${castPool?.settings?.entryFee ?? 0}</span>
+                <Coins className="text-gold-600 dark:text-gold-400 w-6 h-6 mx-auto mb-1" />
+                <span className="text-[10px] text-muted font-display font-bold uppercase tracking-[0.08em] block">Entry Fee</span>
+                <span className="text-[color:var(--text)] font-display font-bold text-lg num">${castPool?.settings?.entryFee ?? 0}</span>
               </div>
               <div>
-                <Users className="text-blue-400 w-6 h-6 mx-auto mb-1" />
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Members</span>
-                <span className="text-white font-black text-lg">{pool.participantIds?.length ?? 0}</span>
+                <Users className="text-navy-700 dark:text-[#9FB0CC] w-6 h-6 mx-auto mb-1" />
+                <span className="text-[10px] text-muted font-display font-bold uppercase tracking-[0.08em] block">Members</span>
+                <span className="text-[color:var(--text)] font-display font-bold text-lg num">{pool.participantIds?.length ?? 0}</span>
               </div>
               <div>
-                <Trophy className="text-orange-400 w-6 h-6 mx-auto mb-1" />
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Pool Format</span>
-                <span className="text-white font-extrabold text-sm block mt-1 truncate">
+                <Trophy className="text-gold-600 dark:text-gold-400 w-6 h-6 mx-auto mb-1" />
+                <span className="text-[10px] text-muted font-display font-bold uppercase tracking-[0.08em] block">Pool Format</span>
+                <span className="text-[color:var(--text)] font-display font-bold uppercase text-sm block mt-1 truncate">
                   {pool.type === 'NFL_PICKEM' ? 'Pick\'em' :
                    pool.type === 'NFL_SURVIVOR' ? 'Survivor' :
                    pool.type === 'NFL_MARGIN' ? 'Margin' : 'Squares'}
@@ -192,16 +194,16 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
             {((castPool?.settings?.entryFee ?? 0) > 0 ||
               (castPool?.settings?.payouts?.places?.length ?? 0) > 0 ||
               (pool.type === 'SQUARES' && (castPool?.costPerSquare ?? 0) > 0)) && (
-              <div className="mb-8 bg-slate-900/50 p-4 border border-slate-800 rounded-2xl">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Prizes</h4>
+              <div className="mb-8 bg-surface p-4 border border-line rounded-2xl">
+                <h4 className="text-xs font-display font-bold text-muted uppercase tracking-[0.16em] mb-3">Prizes</h4>
                 <PayoutsPanel pool={pool} compact />
               </div>
             )}
 
             {/* Rules preview list */}
-            <div className="space-y-4 mb-8 border-b border-slate-900 pb-8">
-              <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Pool Rules Configuration</h4>
-              
+            <div className="space-y-4 mb-8 border-b border-line pb-8">
+              <h4 className="text-xs font-display font-bold text-muted uppercase tracking-[0.16em] mb-2">Pool Rules Configuration</h4>
+
               {pool.type === 'NFL_PICKEM' && (() => {
                 const s = castPool?.settings || {};
                 const isConfidence = !!s.confidenceMode;
@@ -210,22 +212,22 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                 const lockMode = s.lockMode ?? 'PER_GAME';
                 const hasPrimetime = primetime.thursday || primetime.sundayNight || primetime.monday;
                 return (
-                  <ul className="text-sm text-slate-300 space-y-2.5">
+                  <ul className="text-sm text-[color:var(--text)] space-y-2.5 font-body">
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-400 mt-0.5">✓</span>
+                      <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                       {isConfidence
                         ? 'Confidence ranking mode — rank each game 1 to N, higher rank earns more points on a correct pick'
                         : 'Straight winner predictions — pick the outright winner of each game'}
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-400 mt-0.5">✓</span>
+                      <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                       {isConfidence
                         ? 'Confidence points scale from 1 to N (number of games in week) — most confident game gets the highest rank'
                         : `Base scoring: ${ptsPerPick} point${ptsPerPick !== 1 ? 's' : ''} per correct pick`}
                     </li>
                     {hasPrimetime && (
                       <li className="flex items-start gap-2">
-                        <span className="text-amber-400 mt-0.5">✓</span>
+                        <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                         <span>
                           Primetime bonus points:{' '}
                           {[
@@ -237,9 +239,9 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                       </li>
                     )}
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-400 mt-0.5">✓</span>
+                      <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                       Lock Mode:{' '}
-                      <strong className="text-white font-bold ml-1">
+                      <strong className="text-[color:var(--text)] font-bold ml-1">
                         {isConfidence
                           ? 'Weekly (required by Confidence Mode)'
                           : lockMode === 'PER_GAME'
@@ -252,35 +254,35 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
               })()}
 
               {pool.type === 'NFL_SURVIVOR' && (
-                <ul className="text-sm text-slate-300 space-y-2.5">
+                <ul className="text-sm text-[color:var(--text)] space-y-2.5 font-body">
                   <li className="flex items-center gap-2">
-                    <span className="text-red-400">✓</span> Mulligans: <strong className="text-white font-bold">{castPool?.settings?.maxStrikes} strikes before elimination</strong>
+                    <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Mulligans: <strong className="text-[color:var(--text)] font-bold">{castPool?.settings?.maxStrikes} strikes before elimination</strong>
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-red-400">✓</span> 
-                    {castPool?.settings?.maxRebuys > 0 
-                      ? `${castPool?.settings.maxRebuys} rebuys permitted up to week ${castPool?.settings.rebuyDeadlineWeek}` 
+                    <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" />
+                    {castPool?.settings?.maxRebuys > 0
+                      ? `${castPool?.settings.maxRebuys} rebuys permitted up to week ${castPool?.settings.rebuyDeadlineWeek}`
                       : 'No rebuys/buy-backs allowed'}
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-red-400">✓</span> 
-                    {castPool?.settings?.pickLosersMode 
-                      ? 'Pick-Loser Mode: Pick team to LOSE weekly' 
+                    <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" />
+                    {castPool?.settings?.pickLosersMode
+                      ? 'Pick-Loser Mode: Pick team to LOSE weekly'
                       : 'Pick-Winner Mode: Pick team to WIN weekly'}
                   </li>
                 </ul>
               )}
 
               {pool.type === 'NFL_MARGIN' && (
-                <ul className="text-sm text-slate-300 space-y-2.5">
+                <ul className="text-sm text-[color:var(--text)] space-y-2.5 font-body">
                   <li className="flex items-center gap-2">
-                    <span className="text-teal-400">✓</span> Pick 1 team weekly (no reuse)
+                    <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Pick 1 team weekly (no reuse)
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-teal-400">✓</span> Weekly margin score differential counts for/against total
+                    <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Weekly margin score differential counts for/against total
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-teal-400">✓</span> 5-step sorting tiebreaker cascade enforced at season-end
+                    <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> 5-step sorting tiebreaker cascade enforced at season-end
                   </li>
                 </ul>
               )}
@@ -288,31 +290,37 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
 
             {/* Actions */}
             {isAlreadyMember ? (
-              <button
+              <Button
+                variant="premium"
+                size="lg"
                 onClick={() => navigate(`/pool/${poolId}`)}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02]"
+                className="w-full"
               >
                 Enter Pool Dashboard <ArrowRight size={18} />
-              </button>
+              </Button>
             ) : !user ? (
-              <button
+              <Button
+                variant="secondary"
+                size="lg"
                 onClick={handleJoin}
-                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-extrabold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 shadow-xl border border-slate-700 transition-all hover:scale-[1.02]"
+                className="w-full"
               >
                 <LogIn size={18} /> Sign In to Join Pool
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
+                variant="primary"
+                size="lg"
                 onClick={handleJoin}
                 disabled={isJoining}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-extrabold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
+                className="w-full"
               >
                 {isJoining ? 'Joining Pool...' : (
                   <>
-                    Accept Invitation & Join <ArrowRight size={18} />
+                    Accept Invitation &amp; Join <ArrowRight size={18} />
                   </>
                 )}
-              </button>
+              </Button>
             )}
           </div>
         )}

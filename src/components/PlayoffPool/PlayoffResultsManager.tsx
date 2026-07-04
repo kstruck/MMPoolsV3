@@ -6,6 +6,7 @@ import { functions, db } from '../../firebase'; // Adjust import if needed
 import { doc, getDoc } from 'firebase/firestore';
 import { Save, Trophy } from 'lucide-react';
 import { useToast } from '../ui/Toast';
+import { Button } from '../ui';
 
 interface PlayoffResultsManagerProps {
     teams: PlayoffTeam[];
@@ -118,23 +119,23 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
         { key: 'SUPER_BOWL', label: 'Super Bowl' },
     ];
 
-    if (isLoading) return <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 text-white font-bold">Loading Global Results...</div>;
+    if (isLoading) return <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 text-white font-display font-bold uppercase">Loading Global Results...</div>;
 
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-900 rounded-xl border border-slate-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <Trophy className="w-6 h-6 text-yellow-500" />
+            <div className="bg-card rounded-xl border border-line shadow-panel max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6 border-b border-line flex justify-between items-center">
+                    <h2 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                        <Trophy className="w-6 h-6 text-gold-500" />
                         Manage Global Playoff Results
                     </h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white">Close</button>
+                    <button onClick={onClose} className="font-display font-bold uppercase text-[13px] tracking-[0.05em] text-muted hover:text-[color:var(--text)] transition-colors duration-150">Close</button>
                 </div>
 
                 <div className="p-6 space-y-8">
                     {rounds.map(round => (
                         <div key={round.key} className="space-y-4">
-                            <h3 className="text-lg font-semibold text-emerald-400 border-b border-slate-800 pb-2">
+                            <h3 className="text-lg font-display font-bold uppercase tracking-[0.05em] text-gold-600 dark:text-gold-400 border-b border-line pb-2">
                                 {round.label} Winners
                             </h3>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -144,9 +145,9 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
                                         <button
                                             key={team.id}
                                             onClick={() => toggleTeam(round.key as any, team.id)}
-                                            className={`p-2 rounded text-sm font-bold transition-colors ${isSelected
-                                                ? 'bg-emerald-600 text-white'
-                                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                            className={`p-2 rounded-md text-sm font-display font-bold uppercase tracking-[0.02em] transition-colors duration-150 ${isSelected
+                                                ? 'bg-navy-800 text-white dark:ring-1 dark:ring-gold-500'
+                                                : 'bg-surface border border-line text-muted hover:border-navy-600 hover:text-[color:var(--text)]'
                                                 }`}
                                         >
                                             {team.name}
@@ -158,25 +159,26 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
                     ))}
                 </div>
 
-                <div className="p-6 border-t border-slate-800 flex justify-between gap-3 sticky bottom-0 bg-slate-900">
+                <div className="p-6 border-t border-line flex justify-between gap-3 sticky bottom-0 bg-card">
                     <button
                         onClick={handleReset}
                         disabled={isSaving}
-                        className="text-rose-400 hover:text-rose-300 px-4 py-2 font-bold text-sm"
+                        className="text-brandred-600 hover:text-brandred-500 px-4 py-2 font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors duration-150"
                     >
                         Reset All Results
                     </button>
 
                     <div className="flex gap-3">
-                        <button onClick={onClose} className="px-4 py-2 text-slate-300 hover:text-white">Cancel</button>
-                        <button
+                        <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+                        <Button
+                            size="sm"
                             onClick={handleSave}
                             disabled={isSaving}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2"
+                            className="px-6"
                         >
                             {isSaving ? 'Updating All Pools...' : 'Update All Pools'}
                             {!isSaving && <Save size={18} />}
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>

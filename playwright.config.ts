@@ -12,7 +12,9 @@ const emulatorEnv: Record<string, string> = javaHome
 export default defineConfig({
   testDir: './tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
-  timeout: 60_000,
+  // 90s to accommodate the one-time Firestore listen-channel cold-start cost
+  // the first test in the suite can pay (see registerAsAdmin in the spec).
+  timeout: 90_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: 1,

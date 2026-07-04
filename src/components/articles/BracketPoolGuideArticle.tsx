@@ -22,18 +22,18 @@ export const BracketPoolGuideArticle: React.FC = () => {
     }, []);
 
     return (
-        <div className="bg-slate-950 min-h-screen text-slate-300 font-sans selection:bg-indigo-500/30">
+        <div className="bg-navy-950 min-h-screen text-[#9FB0CC] font-body selection:bg-gold-500/30">
             {/* Hero Section */}
-            <div className="relative overflow-hidden bg-slate-900 border-b border-slate-800">
-                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-orange-900/20 to-transparent pointer-events-none" />
+            <div className="relative overflow-hidden bg-navy-900 border-b border-[rgba(230,206,150,0.16)]">
+                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-navy-800/40 to-transparent pointer-events-none" />
                 <div className="max-w-4xl mx-auto px-6 py-20 relative z-10">
-                    <div className="inline-block px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-full text-orange-400 text-xs font-bold uppercase tracking-wider mb-6">
+                    <div className="inline-block px-3 py-1 bg-gold-500/10 border border-gold-500/25 rounded-full text-gold-400 text-xs font-display font-bold uppercase tracking-[0.08em] mb-6">
                         Pool Hosting Guide
                     </div>
-                    <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6 leading-tight">
-                        March Madness Bracket Pool 2026: <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-400">How To Set Up, Run, And Win</span> Your Office Brackets
+                    <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-extrabold uppercase text-[#EDF1F8] mb-6 leading-[0.95]">
+                        March Madness Bracket Pool 2026: <span className="text-gold-400">How To Set Up, Run, And Win</span> Your Office Brackets
                     </h1>
-                    <p className="text-xl text-slate-400 max-w-2xl leading-relaxed">
+                    <p className="text-xl text-[#9FB0CC] max-w-2xl leading-relaxed">
                         Everything you need to host a smooth, fair bracket pool — from Selection Sunday through the championship game.
                     </p>
                 </div>
@@ -51,24 +51,24 @@ export const BracketPoolGuideArticle: React.FC = () => {
                         margin-bottom: 1.5rem !important;
                     }
                 `}</style>
-                <article className="article-spaced prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-bold prose-headings:text-white prose-p:text-slate-300 prose-a:text-indigo-400 hover:prose-a:text-indigo-300 prose-strong:text-white prose-img:rounded-xl prose-img:border prose-img:border-slate-800 prose-img:shadow-2xl">
+                <article className="article-spaced prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-display prose-headings:font-bold prose-headings:uppercase prose-headings:text-[#EDF1F8] prose-p:text-[#9FB0CC] prose-a:text-gold-400 hover:prose-a:text-gold-300 prose-strong:text-[#EDF1F8] prose-img:rounded-xl prose-img:border prose-img:border-[rgba(230,206,150,0.16)] prose-img:shadow-2xl">
 
-                    <p className="lead text-lg md:text-xl text-slate-300 mb-8">
+                    <p className="lead text-lg md:text-xl text-[#9FB0CC] mb-8">
                         In 2026, March Madness bracket pools are bigger than ever, with more than 34 million brackets submitted across major platforms in the most recent tournament season, and your group expects a smooth, fair pool experience. We will walk you through exactly how to host a March Madness Bracket Pool, keep it legal for your group, and make scoring and payouts easy from Selection Sunday through the championship game.
                     </p>
 
                     {/* Key Takeaways Table */}
-                    <div className="my-12 p-8 bg-slate-900/50 border border-slate-800 rounded-2xl">
-                        <h2 className="text-2xl font-bold text-white mb-6 mt-0">Key Takeaways</h2>
+                    <div className="my-12 p-8 bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl">
+                        <h2 className="text-2xl font-display font-bold uppercase text-[#EDF1F8] mb-6 mt-0">Key Takeaways</h2>
                         <div className="not-prose space-y-4">
                             {[
                                 {
                                     q: "What is a March Madness Bracket Pool?",
-                                    a: <>A shared contest where everyone fills out NCAA tournament brackets and earns points for correct picks. You can host it online with real-time scoring using platforms like <Link to="/" className="text-indigo-400 hover:text-indigo-300">March Melee Pools</Link>.</>
+                                    a: <>A shared contest where everyone fills out NCAA tournament brackets and earns points for correct picks. You can host it online with real-time scoring using platforms like <Link to="/" className="text-gold-400 hover:text-gold-300">March Melee Pools</Link>.</>
                                 },
                                 {
                                     q: "How do I set up a bracket pool in 2026?",
-                                    a: <>Choose a hosting platform, define entry rules, scoring, and payouts, then invite participants. Our how-to section aligns with tools explained on our <Link to="/how-it-works?sport=brackets" className="text-indigo-400 hover:text-indigo-300">How It Works page</Link>.</>
+                                    a: <>Choose a hosting platform, define entry rules, scoring, and payouts, then invite participants. Our how-to section aligns with tools explained on our <Link to="/how-it-works?sport=brackets" className="text-gold-400 hover:text-gold-300">How It Works page</Link>.</>
                                 },
                                 {
                                     q: "Is a March Madness Bracket Pool Legal?",
@@ -91,9 +91,9 @@ export const BracketPoolGuideArticle: React.FC = () => {
                                     a: "Use an online platform with automatic score updates and standings. This removes manual math and disputes in busy 2026 brackets."
                                 }
                             ].map((item, i) => (
-                                <div key={i} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-                                    <p className="text-white font-bold text-sm mb-1">{item.q}</p>
-                                    <p className="text-slate-400 text-sm mb-0">{item.a}</p>
+                                <div key={i} className="bg-navy-800/50 rounded-xl p-4 border border-[rgba(230,206,150,0.16)]">
+                                    <p className="text-[#EDF1F8] font-display font-bold uppercase tracking-[0.03em] text-sm mb-1">{item.q}</p>
+                                    <p className="text-[#9FB0CC] text-sm mb-0">{item.a}</p>
                                 </div>
                             ))}
                         </div>
@@ -111,7 +111,7 @@ export const BracketPoolGuideArticle: React.FC = () => {
                         Once the games start, participants earn points for each correct pick, usually with later rounds worth more. The host or platform tracks points, ranks everyone in a leaderboard, and pays out based on the pool's prize structure when the tournament ends.
                     </p>
                     <p>
-                        Online tools such as <Link to="/" className="text-indigo-400 hover:text-indigo-300">March Melee Pools</Link> make the process easy by handling bracket collection, live scoring, and tiebreakers automatically so you can focus on building office or friend rivalries instead of updating spreadsheets.
+                        Online tools such as <Link to="/" className="text-gold-400 hover:text-gold-300">March Melee Pools</Link> make the process easy by handling bracket collection, live scoring, and tiebreakers automatically so you can focus on building office or friend rivalries instead of updating spreadsheets.
                     </p>
 
 
@@ -143,16 +143,16 @@ export const BracketPoolGuideArticle: React.FC = () => {
                         <strong>March Melee Pools</strong> is designed specifically as an online sports pool host, described on its homepage as the professional choice for office pools with real-time scoring, "Who to Root For" analytics, and commission-free charity fundraising. You can create and join March Madness brackets online with a free-to-start model, then scale up to bigger groups without adding tech overhead.
                     </p>
                     <p>
-                        The platform's <Link to="/how-it-works?sport=brackets" className="text-indigo-400 hover:text-indigo-300">How It Works</Link> content emphasizes secure and auditable transactions, which is important if you are handling money. In a 2026 environment where more pools involve cash or charity contributions, traceable transactions add credibility for your group.
+                        The platform's <Link to="/how-it-works?sport=brackets" className="text-gold-400 hover:text-gold-300">How It Works</Link> content emphasizes secure and auditable transactions, which is important if you are handling money. In a 2026 environment where more pools involve cash or charity contributions, traceable transactions add credibility for your group.
                     </p>
 
                     <figure className="my-12">
                         <img
                             src="/images/bracket-pool-features.png"
                             alt="Infographic visualizing 5 key features of a March Madness Bracket Pool."
-                            className="w-full h-auto rounded-xl border border-slate-700 shadow-lg"
+                            className="w-full h-auto rounded-xl border border-[rgba(230,206,150,0.16)] shadow-lg"
                         />
-                        <figcaption className="text-center text-sm text-slate-500 mt-2 italic">
+                        <figcaption className="text-center text-sm text-[#9FB0CC]/70 mt-2 italic">
                             This infographic highlights the five essential features of a March Madness Bracket Pool. Use it to quickly understand setup, scoring, and participation.
                         </figcaption>
                     </figure>
@@ -172,9 +172,9 @@ export const BracketPoolGuideArticle: React.FC = () => {
                         If you run a Charity Pool, decide in advance what percentage of the pot goes to charity and whether winners receive the rest as cash or non-cash recognition. Stating this in your pool description is important for legal clarity and trust in 2026 pools that involve fundraising.
                     </p>
 
-                    <div className="my-8 p-6 bg-amber-500/5 border border-amber-500/20 rounded-xl not-prose">
-                        <p className="text-amber-400 font-bold text-sm uppercase tracking-wide mb-2">Did You Know?</p>
-                        <p className="text-white font-bold text-lg">
+                    <div className="my-8 p-6 bg-gold-500/5 border border-gold-500/25 rounded-xl not-prose">
+                        <p className="text-gold-400 font-display font-bold text-sm uppercase tracking-[0.08em] mb-2">Did You Know?</p>
+                        <p className="text-[#EDF1F8] font-bold text-lg num">
                             ESPN Men's Tournament Challenge set a record with 24.4 million completed brackets in 2025, with a peak of more than 709 brackets submitted per second and over 1.1 billion total picks.
                         </p>
                     </div>
@@ -224,9 +224,9 @@ export const BracketPoolGuideArticle: React.FC = () => {
                         As a host, you can keep things friendly by sharing basic tips in your invite email or pool homepage. This makes newer fans feel welcome and lowers the barrier to entry, which is important if you are trying to grow a large 2026 pool.
                     </p>
 
-                    <div className="my-8 p-6 bg-amber-500/5 border border-amber-500/20 rounded-xl not-prose">
-                        <p className="text-amber-400 font-bold text-sm uppercase tracking-wide mb-2">Did You Know?</p>
-                        <p className="text-white font-bold text-lg">
+                    <div className="my-8 p-6 bg-gold-500/5 border border-gold-500/25 rounded-xl not-prose">
+                        <p className="text-gold-400 font-display font-bold text-sm uppercase tracking-[0.08em] mb-2">Did You Know?</p>
+                        <p className="text-[#EDF1F8] font-bold text-lg num">
                             By March 23 of the 2025 tournament, only 2 brackets remained perfect out of more than 34 million submitted across major platforms.
                         </p>
                     </div>
@@ -291,7 +291,7 @@ export const BracketPoolGuideArticle: React.FC = () => {
                         Finally, note what worked and what did not for your group in 2026. You can adjust entry fees, scoring, or communication next year, and with an online platform the setup will be even faster because most of your choices can be reused for the next March Madness run.
                     </p>
 
-                    <hr className="border-slate-800 my-12" />
+                    <hr className="border-[rgba(230,206,150,0.16)] my-12" />
 
                     {/* Conclusion */}
                     <h2>Conclusion</h2>
@@ -305,15 +305,15 @@ export const BracketPoolGuideArticle: React.FC = () => {
                 </article>
 
                 {/* Call to Action Box */}
-                <div className="mt-16 bg-gradient-to-br from-orange-900/50 to-amber-900/50 border border-orange-500/30 rounded-2xl p-8 text-center relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-orange-600/10 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-                    <h3 className="text-2xl font-black text-white mb-4 relative z-10">Start Your 2026 Bracket Pool</h3>
-                    <p className="text-orange-200 mb-8 max-w-lg mx-auto relative z-10">
+                <div className="mt-16 bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-8 text-center relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gold-500/10 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                    <h3 className="text-2xl font-display font-extrabold uppercase text-[#EDF1F8] mb-4 relative z-10">Start Your 2026 Bracket Pool</h3>
+                    <p className="text-[#9FB0CC] mb-8 max-w-lg mx-auto relative z-10">
                         Create a free bracket pool for your office, friends, or charity in minutes. Real-time scoring, automatic standings, zero spreadsheets.
                     </p>
                     <Link
                         to="/create-pool"
-                        className="relative z-10 inline-flex items-center gap-2 bg-white text-orange-900 hover:bg-orange-50 px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-xl shadow-orange-900/20"
+                        className="relative z-10 inline-flex items-center gap-2 bg-gold-foil text-navy-900 hover:brightness-105 px-8 py-4 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-lg transition-all transform hover:scale-105 shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
                     >
                         Create Your Bracket Pool Now
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-right"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>

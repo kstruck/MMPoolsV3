@@ -67,17 +67,17 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     const currentPool = subscribedPool;
 
     if (isFetchingPool) {
-        return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader className="animate-spin text-indigo-500" /> Loading Pool...</div>;
+        return <div className="min-h-screen bg-page flex items-center justify-center gap-2 text-[color:var(--text)] font-body"><Loader className="animate-spin text-gold-500" /> Loading Pool...</div>;
     }
 
     if (!currentPool) {
-        return <div className="text-white p-10 text-center">Pool not found.</div>;
+        return <div className="text-[color:var(--text)] p-10 text-center font-body">Pool not found.</div>;
     }
 
     // Permission check (Simple version, ideally checked in components or rules too)
     const isOwner = user?.id === currentPool.ownerId || user?.id === (currentPool as any).managerUid;
     if (!isOwner && !isSuperAdmin) {
-        return <div className="text-white p-10 text-center text-rose-500">You do not have permission to manage this pool.</div>;
+        return <div className="p-10 text-center text-brandred-500 font-display font-bold uppercase tracking-[0.05em]">You do not have permission to manage this pool.</div>;
     }
 
     const openShare = (poolId: string) => {
@@ -89,7 +89,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
 
     if (currentPool.type === 'PROPS') {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+            <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
                 <div className="flex-grow">
                     <PropsPoolDashboard
@@ -109,7 +109,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
 
     if (currentPool.type === 'NFL_PLAYOFFS') {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+            <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
                 <div className="flex-grow">
                     <PlayoffDashboard
@@ -125,7 +125,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
 
     if (currentPool.type === 'BRACKET') {
         return (
-            <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+            <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
                 <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
                 <div className="flex-grow">
                     <BracketPoolDashboard
@@ -142,12 +142,12 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
 
     if (currentPool.type && currentPool.type !== 'SQUARES') {
         // Fallback for unknown types
-        return <div className="text-white p-20 text-center font-bold">Admin panel is only available for SQUARES pools. Use the appropriate admin interface for this pool type.</div>;
+        return <div className="text-[color:var(--text)] p-20 text-center font-body font-bold">Admin panel is only available for SQUARES pools. Use the appropriate admin interface for this pool type.</div>;
     }
 
     // SQUARES ADMIN
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+        <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
             <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
             <AdminPanel
                 gameState={currentPool as GameState}

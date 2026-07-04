@@ -2,6 +2,7 @@ import React from 'react';
 import { User, Wallet, Globe, Mail, FileText } from 'lucide-react';
 import type { GameState } from '../types';
 import { DebouncedInput, DebouncedTextarea } from './admin/DebouncedInputs';
+import { Button, Toggle } from './ui';
 
 interface WizardStepDetailsProps {
     gameState: GameState;
@@ -14,69 +15,64 @@ export const WizardStepDetails: React.FC<WizardStepDetailsProps> = ({ gameState,
 
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-2">Pool Details</h3>
-                <p className="text-slate-400 text-sm mb-6">Who is running this pool and how should they pay?</p>
+            <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Pool Details</h3>
+                <p className="text-muted font-body text-sm mb-6">Who is running this pool and how should they pay?</p>
 
                 {/* VISIBILITY */}
-                <div className="mb-6 bg-slate-950 border border-slate-800 rounded-lg p-4 flex items-center justify-between">
+                <div className="mb-6 bg-surface border border-line rounded-lg p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${gameState.isPublic ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
+                        <div className={`p-2 rounded-lg ${gameState.isPublic ? 'bg-navy-600/15 text-navy-600 dark:text-gold-400' : 'bg-card text-faint'}`}>
                             <Globe size={24} />
                         </div>
                         <div>
-                            <h4 className={`font-bold ${gameState.isPublic ? 'text-white' : 'text-slate-400'}`}>Public Visibility</h4>
-                            <p className="text-xs text-slate-500">
+                            <h4 className={`font-display font-bold uppercase tracking-[0.05em] ${gameState.isPublic ? 'text-[color:var(--text)]' : 'text-muted'}`}>Public Visibility</h4>
+                            <p className="text-xs font-body text-faint">
                                 {gameState.isPublic
                                     ? "Listed in 'Browse Pools' directory."
                                     : "Only accessible via direct link."}
                             </p>
                         </div>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={!!gameState.isPublic}
-                            onChange={(e) => updateConfig({ isPublic: e.target.checked })}
-                            className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                    </label>
+                    <Toggle
+                        checked={!!gameState.isPublic}
+                        onChange={(checked) => updateConfig({ isPublic: checked })}
+                    />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* BASIC INFO */}
                     <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label>
+                        <label className="block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Pool Name</label>
                         <DebouncedInput
                             value={gameState.name}
                             onChange={(val) => updateConfig({ name: val })}
-                            className="w-full bg-slate-950 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none font-bold"
+                            className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] font-bold text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                             placeholder="e.g. Super Bowl Squares 2024"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Manager Name</label>
+                        <label className="block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Manager Name</label>
                         <div className="relative">
-                            <User className="absolute left-3 top-3 text-slate-500" size={18} />
+                            <User className="absolute left-3 top-3 text-faint" size={18} />
                             <DebouncedInput
                                 value={gameState.managerName || ''}
                                 onChange={(val) => updateConfig({ managerName: val })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded pl-10 pr-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                className="w-full rounded-md border-[1.5px] border-line bg-page pl-10 pr-4 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                                 placeholder="Your Name"
                             />
                         </div>
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contact Email</label>
+                        <label className="block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Contact Email</label>
                         <div className="relative">
-                            <Mail className="absolute left-3 top-3 text-slate-500" size={18} />
+                            <Mail className="absolute left-3 top-3 text-faint" size={18} />
                             <DebouncedInput
                                 value={gameState.contactEmail}
                                 onChange={(val) => updateConfig({ contactEmail: val })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded pl-10 pr-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                className="w-full rounded-md border-[1.5px] border-line bg-page pl-10 pr-4 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                                 placeholder="admin@example.com"
                             />
                         </div>
@@ -84,53 +80,50 @@ export const WizardStepDetails: React.FC<WizardStepDetailsProps> = ({ gameState,
 
                     {/* PAYMENT HANDLES */}
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Venmo Handle</label>
+                        <label className="block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Venmo Handle</label>
                         <div className="relative">
-                            <span className="absolute left-3 top-3 text-sky-500 font-bold text-sm">V</span>
+                            <span className="absolute left-3 top-3 text-[#008CFF] font-bold text-sm">V</span>
                             <DebouncedInput
                                 value={gameState.paymentHandles?.venmo || ''}
                                 onChange={(val) => updateConfig({ paymentHandles: { ...gameState.paymentHandles, venmo: val } })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded pl-10 pr-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                className="w-full rounded-md border-[1.5px] border-line bg-page pl-10 pr-4 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                                 placeholder="@YourUsername"
                             />
                         </div>
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Zelle / CashApp</label>
+                        <label className="block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Zelle / CashApp</label>
                         <div className="relative">
-                            <Wallet className="absolute left-3 top-3 text-slate-500" size={18} />
+                            <Wallet className="absolute left-3 top-3 text-faint" size={18} />
                             <DebouncedInput
                                 value={gameState.paymentHandles?.zelle || ''}
                                 onChange={(val) => updateConfig({ paymentHandles: { ...gameState.paymentHandles, zelle: val } })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded pl-10 pr-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                className="w-full rounded-md border-[1.5px] border-line bg-page pl-10 pr-4 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                                 placeholder="Phone or $Cashtag"
                             />
                         </div>
                     </div>
 
                     <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payment Instructions</label>
+                        <label className="block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Payment Instructions</label>
                         <div className="relative">
-                            <FileText className="absolute left-3 top-3 text-slate-500" size={18} />
+                            <FileText className="absolute left-3 top-3 text-faint" size={18} />
                             <DebouncedTextarea
                                 value={gameState.paymentInstructions}
                                 onChange={(val) => updateConfig({ paymentInstructions: val })}
-                                className="w-full bg-slate-950 border border-slate-700 rounded pl-10 pr-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-24 resize-none"
+                                className="w-full rounded-md border-[1.5px] border-line bg-page pl-10 pr-4 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none h-24 resize-none"
                                 placeholder="e.g. Please put your square coordinates in the payment note!"
                             />
                         </div>
                     </div>
                 </div>
 
-                <div className="flex justify-between pt-6 border-t border-slate-800 mt-6">
-                    <button onClick={onBack} className="text-slate-400 hover:text-white font-bold text-sm">Back</button>
-                    <button
-                        onClick={onNext}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105"
-                    >
+                <div className="flex justify-between pt-6 border-t border-line mt-6">
+                    <Button variant="ghost" size="sm" onClick={onBack}>Back</Button>
+                    <Button variant="primary" onClick={onNext}>
                         Next: Grid Settings
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

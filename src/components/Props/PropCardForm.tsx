@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { GameState, PropCard, PropsPool, User } from '../../types';
 import { dbService } from '../../services/dbService';
 import { Check, Lock, Trophy, Plus, Eye, Edit2, Save, Loader } from 'lucide-react';
+import { Button } from '../ui';
 
 interface PropCardFormProps {
     gameState?: GameState;
@@ -195,20 +196,20 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
     if (!effectivePoolId || !effectiveConfig) return null;
 
     return (
-        <div className="max-w-2xl mx-auto p-4 space-y-6">
+        <div className="max-w-2xl mx-auto p-4 space-y-6 font-body">
             <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-white flex items-center justify-center gap-2">
-                    <Trophy className="text-amber-400" />
+                <h2 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] flex items-center justify-center gap-2">
+                    <Trophy className="text-gold-500" />
                     Side Hustle Props
                 </h2>
-                <p className="text-slate-400">Entry Fee: <span className="text-emerald-400 font-bold">${cost}</span> per card</p>
+                <p className="text-muted">Entry Fee: <span className="text-gold-600 dark:text-gold-400 font-bold num">${cost}</span> per card</p>
             </div>
 
             {/* Existing Cards */}
             {activeCards.length > 0 && (
-                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 mb-4">
-                    <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-                        <Trophy size={16} className="text-amber-400" /> Your Cards ({activeCards.length}/{maxCards})
+                <div className="bg-card p-4 rounded-xl border border-line shadow-card mb-4">
+                    <h3 className="text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] mb-3 flex items-center gap-2">
+                        <Trophy size={16} className="text-gold-500" /> Your Cards ({activeCards.length}/{maxCards})
                     </h3>
                     <div className="space-y-2">
                         {activeCards.map((card, idx) => {
@@ -217,14 +218,14 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                             return (
                                 <div
                                     key={card.id || idx}
-                                    className={`p-3 rounded-lg flex items-center justify-between cursor-pointer transition-all ${isViewing ? 'bg-indigo-500/20 border border-indigo-500' : 'bg-slate-900 hover:bg-slate-800'}`}
+                                    className={`p-3 rounded-lg flex items-center justify-between cursor-pointer transition-all duration-150 ${isViewing ? 'bg-navy-800/10 border border-navy-700 dark:border-gold-500' : 'bg-surface border border-line hover:border-navy-600'}`}
                                     onClick={() => setViewingCardId(isViewing ? null : card.id || null)}
                                 >
                                     <div>
-                                        <div className="text-white font-medium">{card.cardName || `Card #${idx + 1} `}</div>
-                                        <div className="text-xs text-slate-500">
-                                            Score: <span className="text-emerald-400">{score}/{getTotalPoints()}</span> •
-                                            Correct: <span className="text-indigo-400">{correctCount}/{questions.length}</span> •
+                                        <div className="text-[color:var(--text)] font-medium">{card.cardName || `Card #${idx + 1} `}</div>
+                                        <div className="text-xs text-muted num">
+                                            Score: <span className="text-gold-600 dark:text-gold-400">{score}/{getTotalPoints()}</span> •
+                                            Correct: <span className="text-[color:var(--text)]">{correctCount}/{questions.length}</span> •
                                             TB: {card.tiebreakerVal}
                                         </div>
                                     </div>
@@ -235,13 +236,13 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                                     e.stopPropagation();
                                                     if (card.id) handleStartEdit(card as PropCard & { id: string });
                                                 }}
-                                                className="p-2 text-indigo-400 hover:text-indigo-300 hover:bg-slate-800 rounded-full"
+                                                className="p-2 text-navy-700 dark:text-gold-400 hover:bg-page rounded-full transition-colors duration-150"
                                                 title="Edit Picks"
                                             >
                                                 <Edit2 size={16} />
                                             </button>
                                         )}
-                                        <Eye size={16} className={isViewing ? 'text-indigo-400' : 'text-slate-500'} />
+                                        <Eye size={16} className={isViewing ? 'text-navy-700 dark:text-gold-400' : 'text-faint'} />
                                     </div>
                                 </div>
                             );
@@ -249,35 +250,37 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                     </div>
 
                     {canBuyMoreCards && !showNewCardForm && !effectiveIsLocked && (
-                        <button
+                        <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() => { setViewingCardId(null); setShowNewCardForm(true); setAnswers({}); setTiebreaker(''); }}
-                            className="mt-3 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold flex items-center justify-center gap-2"
+                            className="mt-3 w-full"
                         >
                             <Plus size={16} /> Buy Another Card (${cost})
-                        </button>
+                        </Button>
                     )}
                 </div>
             )}
 
             {/* Viewing Card Banner */}
             {viewingCard && (
-                <div className="bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-xl mb-6 text-center">
-                    <h3 className="text-indigo-400 font-bold text-lg">Viewing: {viewingCard.cardName || 'Your Card'}</h3>
-                    <p className="text-slate-300">
-                        Score: <span className="text-white font-bold text-2xl mx-2">{getCardScore(viewingCard).score} / {getTotalPoints()} pts</span>
+                <div className="bg-navy-600/10 border border-navy-600/30 dark:border-gold-500/40 p-4 rounded-xl mb-6 text-center">
+                    <h3 className="text-navy-800 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] text-lg">Viewing: {viewingCard.cardName || 'Your Card'}</h3>
+                    <p className="text-[color:var(--text)]">
+                        Score: <span className="font-display font-bold text-2xl mx-2 num">{getCardScore(viewingCard).score} / {getTotalPoints()} pts</span>
                     </p>
                     <div className="flex justify-center gap-2 mt-2">
                         {!effectiveIsLocked && (
                             <button
                                 onClick={() => viewingCard && viewingCard.id && handleStartEdit(viewingCard as PropCard & { id: string })}
-                                className="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/50 px-3 py-1 rounded-full flex items-center gap-1"
+                                className="text-xs text-navy-800 dark:text-gold-400 hover:opacity-80 border border-navy-600/50 dark:border-gold-500/50 px-3 py-1 rounded-full flex items-center gap-1 font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150"
                             >
                                 <Edit2 size={12} /> Edit Picks
                             </button>
                         )}
                         <button
                             onClick={() => setViewingCardId(null)}
-                            className="text-xs text-slate-400 hover:text-slate-300 px-3 py-1"
+                            className="text-xs text-muted hover:text-[color:var(--text)] px-3 py-1 font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150"
                         >
                             Close View
                         </button>
@@ -287,8 +290,8 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
 
             {/* New Card Form - Card Naming */}
             {showNewCardForm && !viewingCardId && (
-                <div className={`p-4 rounded-xl mb-6 ${editingCardId ? 'bg-indigo-500/10 border border-indigo-500/30' : 'bg-emerald-500/10 border border-emerald-500/30'}`}>
-                    <h3 className={`${editingCardId ? 'text-indigo-400' : 'text-emerald-400'} font-bold text-lg mb-2`}>
+                <div className={`p-4 rounded-xl mb-6 ${editingCardId ? 'bg-navy-600/10 border border-navy-600/30 dark:border-gold-500/40' : 'bg-gold-500/10 border border-gold-500/30'}`}>
+                    <h3 className={`${editingCardId ? 'text-navy-800 dark:text-gold-400' : 'text-gold-700 dark:text-gold-400'} font-display font-bold uppercase tracking-[0.05em] text-lg mb-2`}>
                         {editingCardId ? 'Edit Card' : 'New Card'}
                     </h3>
                     <input
@@ -296,7 +299,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         placeholder={`Card name(e.g. "${currentUser?.name || 'My'}'s Lucky Pick")`}
                         value={cardName}
                         onChange={(e) => setCardName(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded"
+                        className="w-full bg-page border-[1.5px] border-line text-[color:var(--text)] placeholder:text-faint px-3 py-2 rounded-md focus:border-navy-600 outline-none"
                     />
                 </div>
             )}
@@ -305,10 +308,10 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             {(showNewCardForm || viewingCardId) && (
                 <div className="space-y-6">
                     {questions.map((q, idx) => (
-                        <div key={q.id} className="bg-slate-800/50 p-5 rounded-xl border border-slate-700">
+                        <div key={q.id} className="bg-card p-5 rounded-xl border border-line shadow-card">
                             <div className="flex items-start justify-between mb-4">
-                                <h4 className="text-white font-medium text-lg">{idx + 1}. {q.text}</h4>
-                                <span className="text-amber-400 text-xs font-bold bg-amber-500/10 px-2 py-1 rounded">{q.points || 1} pts</span>
+                                <h4 className="text-[color:var(--text)] font-medium text-lg">{idx + 1}. {q.text}</h4>
+                                <span className="text-gold-700 dark:text-gold-400 text-xs font-display font-bold uppercase tracking-[0.05em] num bg-gold-500/10 border border-gold-500/25 px-2 py-1 rounded">{q.points || 1} pts</span>
                             </div>
                             <div className={`grid gap-3 ${q.options.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
                                 {q.options.map((opt, optIdx) => {
@@ -316,21 +319,25 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                     const isCorrect = q.correctOption === optIdx;
                                     const showResult = viewingCardId && q.correctOption !== undefined;
 
-                                    let borderClass = 'border-slate-600 hover:border-slate-500';
-                                    let bgClass = 'bg-slate-900';
+                                    let borderClass = 'border-line hover:border-navy-600';
+                                    let bgClass = 'bg-surface';
+                                    let textClass = 'text-muted';
 
                                     if (isSelected) {
-                                        borderClass = 'border-indigo-500 ring-1 ring-indigo-500';
-                                        bgClass = 'bg-indigo-500/20';
+                                        borderClass = 'border-navy-800 ring-1 ring-navy-800 dark:border-gold-500 dark:ring-gold-500';
+                                        bgClass = 'bg-navy-800';
+                                        textClass = 'text-white';
                                     }
 
                                     if (showResult) {
                                         if (isCorrect) {
-                                            borderClass = 'border-emerald-500';
-                                            bgClass = 'bg-emerald-500/20';
+                                            borderClass = 'border-[#0F7B4A]';
+                                            bgClass = 'bg-[#E4F5EC]';
+                                            textClass = 'text-[#0F7B4A]';
                                         } else if (isSelected && !isCorrect) {
-                                            borderClass = 'border-rose-500';
-                                            bgClass = 'bg-rose-500/10 opacity-75';
+                                            borderClass = 'border-brandred-500';
+                                            bgClass = 'bg-brandred-600/10 opacity-75';
+                                            textClass = 'text-brandred-600';
                                         }
                                     }
 
@@ -339,11 +346,11 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                             key={optIdx}
                                             disabled={!!viewingCardId}
                                             onClick={() => handleSelect(q.id, optIdx)}
-                                            className={`p-4 rounded-lg border text-left transition-all relative ${borderClass} ${bgClass} ${viewingCardId ? 'cursor-default' : ''}`}
+                                            className={`p-4 rounded-lg border text-left transition-all duration-150 relative ${borderClass} ${bgClass} ${viewingCardId ? 'cursor-default' : ''}`}
                                         >
-                                            <span className={`font-medium ${isSelected ? 'text-white' : 'text-slate-400'}`}>{opt}</span>
+                                            <span className={`font-medium ${textClass}`}>{opt}</span>
                                             {showResult && isCorrect && (
-                                                <div className="absolute top-2 right-2 text-emerald-400 bg-emerald-900/50 rounded-full p-0.5">
+                                                <div className="absolute top-2 right-2 text-[#0F7B4A] bg-[#BEE7D0] rounded-full p-0.5">
                                                     <Check size={12} />
                                                 </div>
                                             )}
@@ -359,13 +366,13 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             {/* Tiebreaker - Only for new cards */}
             {showNewCardForm && !viewingCardId && (
                 <>
-                    <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700">
-                        <h4 className="text-white font-medium text-lg mb-2">Tiebreaker</h4>
-                        <p className="text-slate-400 text-sm mb-3">Total points scored in the game (both teams combined).</p>
+                    <div className="bg-card p-5 rounded-xl border border-line shadow-card">
+                        <h4 className="text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] text-lg mb-2">Tiebreaker</h4>
+                        <p className="text-muted text-sm mb-3">Total points scored in the game (both teams combined).</p>
                         <input
                             type="number"
                             placeholder="e.g. 45"
-                            className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-lg text-lg font-bold"
+                            className="w-full bg-page border-[1.5px] border-line text-[color:var(--text)] placeholder:text-faint px-4 py-3 rounded-md text-lg font-bold num focus:border-navy-600 outline-none"
                             value={tiebreaker}
                             onChange={e => setTiebreaker(e.target.value)}
                         />
@@ -373,31 +380,29 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
 
                     {/* Login Required (if not logged in) */}
                     {!currentUser && (
-                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 text-center">
-                            <Lock className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-                            <h3 className="text-xl font-bold text-white mb-2">Login Required</h3>
-                            <p className="text-slate-400 mb-6">
+                        <div className="bg-card p-6 rounded-xl border border-line shadow-card text-center">
+                            <Lock className="w-12 h-12 text-gold-500 mx-auto mb-4" />
+                            <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Login Required</h3>
+                            <p className="text-muted mb-6">
                                 You must be signed in to submit your picks for this pool.
                             </p>
-                            <button
-                                onClick={() => onOpenAuth?.()}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-lg shadow-indigo-500/20"
-                            >
+                            <Button onClick={() => onOpenAuth?.()} className="px-8">
                                 Sign In / Register
-                            </button>
+                            </Button>
                         </div>
                     )}
 
                     {error && (
-                        <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl text-rose-400 text-center">
+                        <div className="bg-brandred-600/10 border border-brandred-600/30 p-4 rounded-xl text-brandred-600 text-center">
                             {error}
                         </div>
                     )}
 
-                    <button
+                    <Button
+                        size="lg"
                         onClick={editingCardId ? handleSaveEdit : handleInitPurchase}
                         disabled={isSubmitting || effectiveIsLocked}
-                        className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl text-lg shadow-lg shadow-indigo-500/25 disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="w-full rounded-xl text-lg"
                     >
                         {isSubmitting ? (editingCardId ? 'Saving...' : 'Submitting...') : effectiveIsLocked ? (
                             <><Lock size={20} /> Picks Locked</>
@@ -406,7 +411,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         ) : (
                             <><Plus size={20} /> Purchase Card (${cost})</>
                         )}
-                    </button>
+                    </Button>
 
                     {(activeCards.length > 0 || editingCardId) && (
                         <button
@@ -417,7 +422,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                 setTiebreaker('');
                                 setCardName('');
                             }}
-                            className="w-full py-2 text-slate-400 hover:text-slate-300"
+                            className="w-full py-2 text-muted hover:text-[color:var(--text)] transition-colors duration-150"
                         >
                             Cancel
                         </button>
@@ -427,19 +432,19 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
 
             {/* Locked / Max Reached Message */}
             {!showNewCardForm && !viewingCardId && (
-                <div className="text-center p-6 text-slate-500">
+                <div className="text-center p-6 text-muted">
                     {effectiveIsLocked ? (
                         <>
-                            <Lock size={24} className="mx-auto mb-2 text-rose-500" />
-                            <p className="text-rose-400 font-bold mb-6">Picks locked</p>
+                            <Lock size={24} className="mx-auto mb-2 text-brandred-500" />
+                            <p className="text-brandred-600 font-display font-bold uppercase tracking-[0.05em] mb-6">Picks locked</p>
 
                             {/* STATS DISPLAY */}
                             <div className="text-left space-y-6 animate-in fade-in">
-                                <h3 className="text-xl font-bold text-white text-center mb-6 flex items-center justify-center gap-2">
-                                    <Trophy size={20} className="text-amber-400" />
+                                <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] text-center mb-6 flex items-center justify-center gap-2">
+                                    <Trophy size={20} className="text-gold-500" />
                                     Pool Statistics
                                 </h3>
-                                <div className="text-center text-xs text-slate-500 mb-4">
+                                <div className="text-center text-xs text-muted mb-4 num">
                                     Based on {allPoolCards.length} entries
                                 </div>
                                 {questions.map((q, qIdx) => {
@@ -453,9 +458,9 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                     });
 
                                     return (
-                                        <div key={q.id} className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                                            <h4 className="text-white font-medium mb-3 flex items-start gap-2">
-                                                <span className="text-slate-500 font-bold">{qIdx + 1}.</span>
+                                        <div key={q.id} className="bg-card p-4 rounded-xl border border-line shadow-card">
+                                            <h4 className="text-[color:var(--text)] font-medium mb-3 flex items-start gap-2">
+                                                <span className="text-faint font-bold num">{qIdx + 1}.</span>
                                                 {q.text}
                                             </h4>
                                             <div className="space-y-3">
@@ -466,18 +471,18 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
 
                                                     return (
                                                         <div key={optIdx} className="relative">
-                                                            <div className="flex justify-between text-xs mb-1 text-slate-400 font-medium">
+                                                            <div className="flex justify-between text-xs mb-1 text-muted font-medium">
                                                                 <div className="flex items-center gap-2">
-                                                                    <span className={isCorrect ? 'text-emerald-400 font-bold' : ''}>
+                                                                    <span className={isCorrect ? 'text-[#0F7B4A] font-bold' : ''}>
                                                                         {opt}
                                                                     </span>
-                                                                    {isCorrect && <Check size={12} className="text-emerald-400" />}
+                                                                    {isCorrect && <Check size={12} className="text-[#0F7B4A]" />}
                                                                 </div>
-                                                                <span>{pct}% ({count})</span>
+                                                                <span className="num">{pct}% ({count})</span>
                                                             </div>
-                                                            <div className="h-2 bg-slate-900 rounded-full overflow-hidden">
+                                                            <div className="h-2 bg-line rounded-full overflow-hidden">
                                                                 <div
-                                                                    className={`h-full rounded-full ${isCorrect ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                                                                    className={`h-full rounded-full ${isCorrect ? 'bg-[#0F7B4A]' : 'bg-navy-600 dark:bg-gold-500'}`}
                                                                     style={{ width: `${pct}%`, opacity: count === 0 ? 0 : 1 }}
                                                                 />
                                                             </div>
@@ -492,8 +497,8 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                         </>
                     ) : !canBuyMoreCards ? (
                         <>
-                            <Trophy size={24} className="mx-auto mb-2 text-slate-600" />
-                            <p>Maximum entries reached ({maxCards}/{maxCards}).</p>
+                            <Trophy size={24} className="mx-auto mb-2 text-faint" />
+                            <p className="num">Maximum entries reached ({maxCards}/{maxCards}).</p>
                         </>
                     ) : null}
                 </div>
@@ -502,20 +507,20 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
             {/* Confirmation Modal */}
             {isConfirming && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                    <div className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full">
-                        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                            {isSubmitting ? <Loader className="animate-spin text-emerald-400" /> : <Check className="text-emerald-400" />}
+                    <div className="bg-card border border-line p-6 rounded-xl shadow-panel max-w-sm w-full">
+                        <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-4 flex items-center gap-2">
+                            {isSubmitting ? <Loader className="animate-spin text-gold-500" /> : <Check className="text-[#0F7B4A]" />}
                             Confirm Prop Card Submission
                         </h3>
 
-                        <div className="bg-slate-900 rounded-lg p-4 mb-4 space-y-3">
+                        <div className="bg-surface border border-line rounded-lg p-4 mb-4 space-y-3">
                             <div className="flex justify-between text-sm">
-                                <span className="text-slate-400">Player:</span>
-                                <span className="text-white font-bold">{currentUser?.name || currentUser?.email || 'Unknown User'}</span>
+                                <span className="text-muted">Player:</span>
+                                <span className="text-[color:var(--text)] font-bold">{currentUser?.name || currentUser?.email || 'Unknown User'}</span>
                             </div>
-                            <div className="border-t border-slate-700 pt-3 flex justify-between text-lg">
-                                <span className="text-slate-300 font-bold">Total Due:</span>
-                                <span className="text-emerald-400 font-mono font-bold">${cost}</span>
+                            <div className="border-t border-line pt-3 flex justify-between text-lg">
+                                <span className="text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em]">Total Due:</span>
+                                <span className="text-gold-600 dark:text-gold-400 num font-display font-bold">${cost}</span>
                             </div>
                         </div>
 
@@ -527,31 +532,32 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                         type="checkbox"
                                         checked={liabilityAccepted}
                                         onChange={(e) => setLiabilityAccepted(e.target.checked)}
-                                        className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-slate-500 bg-slate-900 transition-all checked:border-emerald-500 checked:bg-emerald-500 hover:border-emerald-400"
+                                        className="peer h-5 w-5 cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-line bg-page transition-all checked:border-navy-800 checked:bg-navy-800 hover:border-navy-600"
                                     />
                                     <Check size={14} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                                 </div>
-                                <p className="text-xs text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">
+                                <p className="text-xs text-muted leading-relaxed group-hover:text-[color:var(--text)] transition-colors">
                                     By checking this box and selecting Purchase Prop Card, I acknowledge and agree that MarchMeleePools does not administer, hold, or distribute prizes. Any prizes are provided solely by the Pool Manager/Organizer. Any questions, disputes, or claims related to prizes or pool outcomes must be resolved directly between the user and the Pool Manager/Organizer.
                                 </p>
                             </label>
                         </div>
 
                         <div className="flex gap-3">
-                            <button
+                            <Button
+                                variant="ghost"
                                 onClick={() => setIsConfirming(false)}
                                 disabled={isSubmitting}
-                                className="flex-1 py-3 text-slate-400 hover:bg-slate-700 rounded-lg font-bold transition-colors disabled:opacity-50"
+                                className="flex-1"
                             >
                                 Cancel
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                                 onClick={handleFinalizePurchase}
                                 disabled={!liabilityAccepted || isSubmitting}
-                                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg font-bold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all"
+                                className="flex-1"
                             >
                                 {isSubmitting ? 'Submitting...' : 'Submit Prop Card'}
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>

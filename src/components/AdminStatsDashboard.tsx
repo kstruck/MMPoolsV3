@@ -7,6 +7,7 @@ import {
 import type { Pool, User } from '../types';
 import { Users, Database, Clock, Calendar, RefreshCw } from 'lucide-react';
 import { dbService } from '../services/dbService';
+import { Button } from './ui';
 import { useToast } from './ui/Toast';
 import { getUserMessage } from '../utils/errorMessages';
 
@@ -15,8 +16,8 @@ interface AdminStatsDashboardProps {
     users: User[];
 }
 
-// COLORS
-const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
+// COLORS (brand palette: gold / navy / success / deep navy)
+const COLORS = ['#C9A867', '#24507F', '#0F7B4A', '#1A3B62', '#C9A867', '#24507F', '#0F7B4A', '#1A3B62'];
 
 const getTimestamp = (createdAt: any): number => {
     if (!createdAt) return 0;
@@ -179,49 +180,49 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
 
             {/* KPIS */}
             <div className="flex justify-end mb-4">
-                <button
+                <Button
                     onClick={handleRecalculate}
                     disabled={isRecalculating}
-                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition-colors disabled:opacity-50"
+                    size="sm"
                 >
                     <RefreshCw size={16} className={isRecalculating ? 'animate-spin' : ''} />
                     {isRecalculating ? 'Recalculating...' : 'Recalculate Global Stats'}
-                </button>
+                </Button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="bg-card p-4 rounded-xl border border-line shadow-card">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400"><Database size={20} /></div>
-                        <span className="text-slate-400 text-xs font-bold uppercase">Avg Pools/Day (30d)</span>
+                        <div className="p-2 bg-gold-500/10 rounded-lg text-gold-600 dark:text-gold-400"><Database size={20} /></div>
+                        <span className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em]">Avg Pools/Day (30d)</span>
                     </div>
-                    <p className="text-2xl font-black text-white">
+                    <p className="text-2xl font-display font-bold text-navy-800 dark:text-gold-400 num">
                         {(growthLast30Days.reduce((acc, curr) => acc + curr.pools, 0) / 30).toFixed(1)}
                     </p>
                 </div>
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="bg-card p-4 rounded-xl border border-line shadow-card">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400"><Users size={20} /></div>
-                        <span className="text-slate-400 text-xs font-bold uppercase">Avg Users/Day (30d)</span>
+                        <div className="p-2 bg-gold-500/10 rounded-lg text-gold-600 dark:text-gold-400"><Users size={20} /></div>
+                        <span className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em]">Avg Users/Day (30d)</span>
                     </div>
-                    <p className="text-2xl font-black text-white">
+                    <p className="text-2xl font-display font-bold text-navy-800 dark:text-gold-400 num">
                         {(growthLast30Days.reduce((acc, curr) => acc + curr.users, 0) / 30).toFixed(1)}
                     </p>
                 </div>
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="bg-card p-4 rounded-xl border border-line shadow-card">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400"><Clock size={20} /></div>
-                        <span className="text-slate-400 text-xs font-bold uppercase">Peak Hour</span>
+                        <div className="p-2 bg-gold-500/10 rounded-lg text-gold-600 dark:text-gold-400"><Clock size={20} /></div>
+                        <span className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em]">Peak Hour</span>
                     </div>
-                    <p className="text-2xl font-black text-white">
+                    <p className="text-2xl font-display font-bold text-navy-800 dark:text-gold-400 num">
                         {activityByHour.reduce((max, curr) => curr.total > max.total ? curr : max, { label: '-', total: -1 }).label}
                     </p>
                 </div>
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="bg-card p-4 rounded-xl border border-line shadow-card">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-rose-500/20 rounded-lg text-rose-400"><Calendar size={20} /></div>
-                        <span className="text-slate-400 text-xs font-bold uppercase">Busiest Month</span>
+                        <div className="p-2 bg-gold-500/10 rounded-lg text-gold-600 dark:text-gold-400"><Calendar size={20} /></div>
+                        <span className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em]">Busiest Month</span>
                     </div>
-                    <p className="text-2xl font-black text-white">
+                    <p className="text-2xl font-display font-bold text-navy-800 dark:text-gold-400 num">
                         {monthlyTrends.reduce((max, curr) => (curr.pools + curr.users) > (max.pools + max.users) ? curr : max, { month: '-', pools: 0, users: 0 }).month}
                     </p>
                 </div>
@@ -229,55 +230,55 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
 
             {/* ROW 1: Growth Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                        <Calendar size={18} className="text-indigo-400" /> 30-Day Growth
+                <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                    <h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-6 flex items-center gap-2">
+                        <Calendar size={18} className="text-gold-500" /> 30-Day Growth
                     </h3>
                     <div className="h-[300px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={growthLast30Days}>
                                 <defs>
                                     <linearGradient id="colorPools" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
-                                        <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
+                                        <stop offset="5%" stopColor="#24507F" stopOpacity={0.8} />
+                                        <stop offset="95%" stopColor="#24507F" stopOpacity={0} />
                                     </linearGradient>
                                     <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
-                                        <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
+                                        <stop offset="5%" stopColor="#C9A867" stopOpacity={0.8} />
+                                        <stop offset="95%" stopColor="#C9A867" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="date" stroke="#94a3b8" tick={{ fontSize: 12 }} />
-                                <YAxis stroke="#94a3b8" tick={{ fontSize: 12 }} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(159,176,204,0.25)" />
+                                <XAxis dataKey="date" stroke="#9FB0CC" tick={{ fontSize: 12 }} />
+                                <YAxis stroke="#9FB0CC" tick={{ fontSize: 12 }} />
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
-                                    itemStyle={{ color: '#f8fafc' }}
+                                    contentStyle={{ backgroundColor: '#1A3B62', borderColor: 'rgba(230,206,150,0.16)', color: '#EDF1F8' }}
+                                    itemStyle={{ color: '#EDF1F8' }}
                                 />
                                 <Legend />
-                                <Area type="monotone" dataKey="pools" stroke="#8884d8" fillOpacity={1} fill="url(#colorPools)" name="New Pools" />
-                                <Area type="monotone" dataKey="users" stroke="#82ca9d" fillOpacity={1} fill="url(#colorUsers)" name="New Users" />
+                                <Area type="monotone" dataKey="pools" stroke="#24507F" fillOpacity={1} fill="url(#colorPools)" name="New Pools" />
+                                <Area type="monotone" dataKey="users" stroke="#C9A867" fillOpacity={1} fill="url(#colorUsers)" name="New Users" />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                        <Clock size={18} className="text-amber-400" /> Activity by Hour of Day
+                <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                    <h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-6 flex items-center gap-2">
+                        <Clock size={18} className="text-gold-500" /> Activity by Hour of Day
                     </h3>
                     <div className="h-[300px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={activityByHour}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="label" stroke="#94a3b8" tick={{ fontSize: 10 }} interval={2} />
-                                <YAxis stroke="#94a3b8" tick={{ fontSize: 12 }} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(159,176,204,0.25)" />
+                                <XAxis dataKey="label" stroke="#9FB0CC" tick={{ fontSize: 10 }} interval={2} />
+                                <YAxis stroke="#9FB0CC" tick={{ fontSize: 12 }} />
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
-                                    cursor={{ fill: '#334155', opacity: 0.4 }}
+                                    contentStyle={{ backgroundColor: '#1A3B62', borderColor: 'rgba(230,206,150,0.16)', color: '#EDF1F8' }}
+                                    cursor={{ fill: '#9FB0CC', opacity: 0.2 }}
                                 />
                                 <Legend />
-                                <Bar dataKey="pools" stackId="a" fill="#8884d8" name="Pools Created" />
-                                <Bar dataKey="users" stackId="a" fill="#82ca9d" name="Users Joined" />
+                                <Bar dataKey="pools" stackId="a" fill="#24507F" name="Pools Created" />
+                                <Bar dataKey="users" stackId="a" fill="#C9A867" name="Users Joined" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -287,28 +288,28 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
             {/* ROW 2: Distributions */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Monthly Trends */}
-                <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-lg font-bold text-white mb-6">Monthly Trends (L12M)</h3>
+                <div className="lg:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card">
+                    <h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-6">Monthly Trends (L12M)</h3>
                     <div className="h-[300px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={monthlyTrends}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="month" stroke="#94a3b8" tick={{ fontSize: 12 }} />
-                                <YAxis stroke="#94a3b8" tick={{ fontSize: 12 }} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(159,176,204,0.25)" />
+                                <XAxis dataKey="month" stroke="#9FB0CC" tick={{ fontSize: 12 }} />
+                                <YAxis stroke="#9FB0CC" tick={{ fontSize: 12 }} />
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
+                                    contentStyle={{ backgroundColor: '#1A3B62', borderColor: 'rgba(230,206,150,0.16)', color: '#EDF1F8' }}
                                 />
                                 <Legend />
-                                <Bar dataKey="pools" fill="#8884d8" name="Pools" />
-                                <Bar dataKey="users" fill="#82ca9d" name="Users" />
+                                <Bar dataKey="pools" fill="#24507F" name="Pools" />
+                                <Bar dataKey="users" fill="#C9A867" name="Users" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
                 {/* Pool Types */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <h3 className="text-lg font-bold text-white mb-6">Pool Types</h3>
+                <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                    <h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-6">Pool Types</h3>
                     <div className="h-[300px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -318,7 +319,7 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
                                     cy="50%"
                                     labelLine={false}
                                     outerRadius={80}
-                                    fill="#8884d8"
+                                    fill="#24507F"
                                     dataKey="value"
                                     label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                                 >
@@ -327,7 +328,7 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
                                     ))}
                                 </Pie>
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
+                                    contentStyle={{ backgroundColor: '#1A3B62', borderColor: 'rgba(230,206,150,0.16)', color: '#EDF1F8' }}
                                 />
                             </PieChart>
                         </ResponsiveContainer>

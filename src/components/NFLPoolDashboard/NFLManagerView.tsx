@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Settings, DollarSign, CheckCircle, XCircle, Users, Activity,
   Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing,
-  ChevronDown, ChevronUp, Clock, UserCog, Ban
+  ChevronDown, ChevronUp, Clock, UserCog, Ban, Trophy, Moon, Star, Zap
 } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
@@ -370,7 +370,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       
-      {/* 👑 Premium Bento Overview Dashboard */}
+      {/* Premium Bento Overview Dashboard */}
       <NFLManagerBentoDashboard 
         pool={pool} 
         entries={entries} 
@@ -382,10 +382,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
       {/* Feedback Alert */}
       {feedback && (
-        <div className={`p-4 rounded-2xl text-xs font-bold flex gap-2 items-center ${
+        <div className={`p-4 rounded-lg font-body text-xs font-bold flex gap-2 items-center ${
           feedback.type === 'success'
-            ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-            : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
+            ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
+            : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600'
         }`}>
           {feedback.type === 'success' ? <CheckCircle size={18} /> : <XCircle size={18} />}
           {feedback.message}
@@ -393,18 +393,18 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       )}
 
       {/* Control Room Header */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm relative overflow-hidden">
+      <div className="bg-card border border-line shadow-card rounded-xl p-6 relative overflow-hidden">
         <div
           className="absolute -right-16 -top-16 w-32 h-32 rounded-full blur-3xl opacity-10 pointer-events-none"
           style={{ backgroundColor: primaryAccent }}
         />
         <div className="flex gap-4 items-center">
-          <div className="p-3 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-2xl">
+          <div className="p-3 bg-navy-800 text-white rounded-lg">
             <Settings size={22} />
           </div>
           <div>
-            <h3 className="text-lg font-black text-white">Commissioner Control Room</h3>
-            <p className="text-slate-400 text-xs mt-1">
+            <h3 className="font-display font-bold uppercase text-lg text-[color:var(--text)]">Commissioner Control Room</h3>
+            <p className="font-body text-muted text-xs mt-1">
               Pool host with write capabilities: score weeks, update payment statuses, and configure pool rules.
             </p>
           </div>
@@ -414,40 +414,40 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       {/* ═══════════════════════════════════════════
            SECTION: POOL SETTINGS EDITOR
       ═══════════════════════════════════════════ */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-3xl backdrop-blur-sm overflow-hidden">
+      <div className="bg-card border border-line shadow-card rounded-xl overflow-hidden">
         {/* Header */}
-        <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/20">
+        <div className="p-5 border-b border-line flex justify-between items-center bg-surface">
           <div className="flex items-center gap-2">
-            <Edit3 size={14} className="text-indigo-400" />
-            <h4 className="text-xs font-black text-slate-300 uppercase tracking-widest">Pool Rules & Settings Editor</h4>
+            <Edit3 size={14} className="text-navy-700 dark:text-gold-400" />
+            <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Pool Rules & Settings Editor</h4>
           </div>
 
           {/* Access badge */}
           {isSuperAdmin ? (
-            <div className="flex items-center gap-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full px-3 py-1">
-              <ShieldCheck size={11} className="text-purple-400" />
-              <span className="text-[10px] font-black text-purple-400 uppercase tracking-wider">Super Admin — Full Access</span>
+            <div className="flex items-center gap-1.5 bg-navy-800 rounded-full px-3 py-1">
+              <ShieldCheck size={11} className="text-white" />
+              <span className="font-display font-bold uppercase text-[10px] text-white tracking-[0.08em]">Super Admin — Full Access</span>
             </div>
           ) : isPreSeason ? (
-            <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
-              <Unlock size={11} className="text-emerald-400" />
-              <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">Pre-Season — Editable</span>
+            <div className="flex items-center gap-1.5 bg-[#E4F5EC] border border-[#BEE7D0] rounded-full px-3 py-1">
+              <Unlock size={11} className="text-[#0F7B4A]" />
+              <span className="font-display font-bold uppercase text-[10px] text-[#0F7B4A] tracking-[0.08em]">Pre-Season — Editable</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1">
-              <Lock size={11} className="text-amber-400" />
-              <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider">Season Active — Locked</span>
+            <div className="flex items-center gap-1.5 bg-gold-400/10 border border-gold-500/40 rounded-full px-3 py-1">
+              <Lock size={11} className="text-gold-600 dark:text-gold-400" />
+              <span className="font-display font-bold uppercase text-[10px] text-gold-600 dark:text-gold-400 tracking-[0.08em]">Season Active — Locked</span>
             </div>
           )}
         </div>
 
         {/* Locked notice for regular managers in-season */}
         {!canEditSettings && (
-          <div className="mx-6 mt-5 bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 flex items-start gap-3">
-            <AlertTriangle size={16} className="text-amber-400 mt-0.5 flex-shrink-0" />
+          <div className="mx-6 mt-5 bg-gold-400/10 border border-gold-500/40 rounded-lg p-4 flex items-start gap-3">
+            <AlertTriangle size={16} className="text-gold-600 dark:text-gold-400 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-amber-400 text-xs font-bold">Settings Locked During Active Season</p>
-              <p className="text-slate-500 text-[11px] mt-0.5 leading-relaxed">
+              <p className="font-display font-bold uppercase text-gold-600 dark:text-gold-400 text-xs tracking-[0.05em]">Settings Locked During Active Season</p>
+              <p className="font-body text-muted text-[11px] mt-0.5 leading-relaxed">
                 Pool rules cannot be modified once the season has started. Contact your platform Super Admin to make changes if needed.
               </p>
             </div>
@@ -458,10 +458,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
           {/* Settings Feedback */}
           {settingsFeedback && (
-            <div className={`p-3.5 rounded-2xl text-xs font-bold flex gap-2 items-center ${
+            <div className={`p-3.5 rounded-lg font-body text-xs font-bold flex gap-2 items-center ${
               settingsFeedback.type === 'success'
-                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-                : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
+                ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
+                : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600'
             }`}>
               {settingsFeedback.type === 'success' ? <CheckCircle size={15} /> : <XCircle size={15} />}
               {settingsFeedback.message}
@@ -470,96 +470,96 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
           {/* ── General Settings ── */}
           <div className="space-y-4">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">General</p>
+            <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">General</p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">Pool Name</label>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Pool Name</label>
                 <input
                   type="text"
                   value={poolName}
                   onChange={e => setPoolName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">Entry Fee ($)</label>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Entry Fee ($)</label>
                 <input
                   type="number"
                   value={entryFee}
                   min={0}
                   onChange={e => setEntryFee(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-400 mb-1.5">Payment Instructions</label>
+              <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payment Instructions</label>
               <textarea
                 value={paymentInstructions}
                 onChange={e => setPaymentInstructions(e.target.value)}
                 rows={2}
                 placeholder="e.g. Venmo @your-handle — include your name in the note."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none"
+                className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all resize-none"
               />
             </div>
 
-            <div className="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-3">
+            <div className="flex items-center justify-between bg-page border border-line rounded-md px-4 py-3">
               <div>
-                <p className="text-xs font-bold text-white">List Pool Publicly</p>
-                <p className="text-[10px] text-slate-500">Allow others to find this pool via the public browser</p>
+                <p className="font-display font-bold uppercase text-xs tracking-[0.05em] text-[color:var(--text)]">List Pool Publicly</p>
+                <p className="font-body text-[10px] text-faint">Allow others to find this pool via the public browser</p>
               </div>
               <input
                 type="checkbox"
                 checked={isListedPublic}
                 onChange={e => setIsListedPublic(e.target.checked)}
-                className="w-5 h-5 rounded border-slate-700 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                className="w-5 h-5 rounded border-line text-navy-700 focus:ring-navy-600 dark:focus:ring-gold-500 cursor-pointer"
               />
             </div>
 
             {/* Host Profile & Contact Links */}
-            <div className="space-y-4 pt-4 border-t border-slate-800/60">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Host Profile & Contact Links</p>
+            <div className="space-y-4 pt-4 border-t border-line">
+              <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Host Profile & Contact Links</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Host Name</label>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Host Name</label>
                   <input
                     type="text"
                     value={editManagerName}
                     onChange={e => setEditManagerName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all animate-none"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all animate-none"
                     placeholder="Host Display Name"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Contact Email</label>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Contact Email</label>
                   <input
                     type="email"
                     value={editContactEmail}
                     onChange={e => setEditContactEmail(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all animate-none"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all animate-none"
                     placeholder="host@example.com"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Contact Phone</label>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Contact Phone</label>
                   <input
                     type="text"
                     value={editContactPhone}
                     onChange={e => setEditContactPhone(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all animate-none"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all animate-none"
                     placeholder="+1 (555) 0199"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">Contact Link Options</label>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Contact Link Options</label>
                 <select
                   value={editContactMethod}
                   onChange={e => setEditContactMethod(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all cursor-pointer"
                 >
                   <option value="email">Email Link Only</option>
                   <option value="phone">Phone Link Only</option>
@@ -573,43 +573,43 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           {/* ── Pick'em Rules ── */}
           {type === 'NFL_PICKEM' && (
             <div className="space-y-4">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">Pick'em Rules</p>
+              <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Pick'em Rules</p>
 
               {/* Confidence Mode */}
-              <div className="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between bg-page border border-line rounded-md px-4 py-3">
                 <div>
-                  <p className="text-xs font-bold text-white">Confidence Mode</p>
-                  <p className="text-[10px] text-slate-500">Players rank games 1–N; highest rank earns most points</p>
+                  <p className="font-display font-bold uppercase text-xs tracking-[0.05em] text-[color:var(--text)]">Confidence Mode</p>
+                  <p className="font-body text-[10px] text-faint">Players rank games 1–N; highest rank earns most points</p>
                 </div>
                 <input
                   type="checkbox"
                   checked={confidenceMode}
                   onChange={e => setConfidenceMode(e.target.checked)}
-                  className="w-5 h-5 rounded border-slate-700 text-blue-500 focus:ring-blue-500 cursor-pointer"
+                  className="w-5 h-5 rounded border-line text-navy-700 focus:ring-navy-600 dark:focus:ring-gold-500 cursor-pointer"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Lock Mode</label>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Lock Mode</label>
                   <select
                     value={lockMode}
                     disabled={confidenceMode}
                     onChange={e => setLockMode(e.target.value as 'PER_GAME' | 'WEEKLY')}
-                    className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${confidenceMode ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    className={`w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all ${confidenceMode ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     <option value="PER_GAME">Per-Game (each game locks at kickoff)</option>
                     <option value="WEEKLY">Weekly (all locks at first kickoff)</option>
                   </select>
-                  {confidenceMode && <p className="text-[10px] text-yellow-500 font-bold mt-1">* Forced Weekly in Confidence Mode</p>}
+                  {confidenceMode && <p className="font-body text-[10px] text-gold-600 dark:text-gold-400 font-bold mt-1">* Forced Weekly in Confidence Mode</p>}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Lock Buffer</label>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Lock Buffer</label>
                   <select
                     value={lockBufferMinutes}
                     onChange={e => setLockBufferMinutes(parseInt(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                   >
                     <option value={0}>0 min (exactly at kickoff)</option>
                     <option value={5}>5 min grace (recommended)</option>
@@ -619,11 +619,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">Payout Method</label>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payout Method</label>
                 <select
                   value={payoutMode}
                   onChange={e => setPayoutMode(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
                   <option value="SEASON">Season-End Standings Only</option>
                   <option value="WEEKLY">Weekly Winner Only</option>
@@ -632,12 +632,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               </div>
 
               {/* Scoring Configuration */}
-              <div className="bg-slate-950/60 border border-blue-900/30 rounded-2xl p-5 space-y-5">
-                <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">🏆 Scoring Configuration</p>
+              <div className="bg-page border border-line rounded-lg p-5 space-y-5">
+                <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-1.5">
+                  <Trophy size={12} className="text-gold-600 dark:text-gold-400" /> Scoring Configuration
+                </p>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Base Points Per Correct Pick</label>
-                  <p className="text-[11px] text-slate-500 mb-2">Default is 1. Increase to reward all correct picks more.</p>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1">Base Points Per Correct Pick</label>
+                  <p className="font-body text-[11px] text-faint mb-2">Default is 1. Increase to reward all correct picks more.</p>
                   <div className="flex items-center gap-3">
                     <input
                       type="number"
@@ -645,23 +647,25 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       min={1}
                       max={10}
                       onChange={e => setPointsPerPick(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-24 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className="num w-24 font-body bg-page border border-line rounded-md px-4 py-2 text-[color:var(--text)] font-bold text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                     />
-                    <span className="text-slate-400 text-xs font-bold">point(s) per correct pick</span>
+                    <span className="font-body text-muted text-xs font-bold">point(s) per correct pick</span>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Primetime Game Bonus Points</label>
-                  <p className="text-[11px] text-slate-500 mb-3">Flat bonus added on top of the base score for correct primetime picks. Set 0 to disable.</p>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1">Primetime Game Bonus Points</label>
+                  <p className="font-body text-[11px] text-faint mb-3">Flat bonus added on top of the base score for correct primetime picks. Set 0 to disable.</p>
                   <div className="space-y-2.5">
                     {[
-                      { label: '🌙 Thursday Night Game (TNF)', value: thursdayBonus, setter: setThursdayBonus },
-                      { label: '⭐ Sunday Night Game (SNF)', value: sundayNightBonus, setter: setSundayNightBonus },
-                      { label: '🏈 Monday Night Game (MNF)', value: mondayBonus, setter: setMondayBonus },
-                    ].map(({ label, value, setter }) => (
-                      <div key={label} className="flex items-center justify-between bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2.5">
-                        <span className="text-slate-300 text-xs font-bold">{label}</span>
+                      { label: 'Thursday Night Game (TNF)', icon: Moon, value: thursdayBonus, setter: setThursdayBonus },
+                      { label: 'Sunday Night Game (SNF)', icon: Star, value: sundayNightBonus, setter: setSundayNightBonus },
+                      { label: 'Monday Night Game (MNF)', icon: Zap, value: mondayBonus, setter: setMondayBonus },
+                    ].map(({ label, icon: RowIcon, value, setter }) => (
+                      <div key={label} className="flex items-center justify-between bg-card border border-line rounded-md px-4 py-2.5">
+                        <span className="font-body text-[color:var(--text)] text-xs font-bold inline-flex items-center gap-1.5">
+                          <RowIcon size={12} className="text-gold-600 dark:text-gold-400" /> {label}
+                        </span>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
@@ -669,9 +673,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                             min={0}
                             max={10}
                             onChange={e => setter(Math.max(0, parseInt(e.target.value) || 0))}
-                            className="w-16 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                            className="num w-16 font-body bg-page border border-line rounded-md px-3 py-1.5 text-[color:var(--text)] text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] w-20 text-right">{value > 0 ? `+${value} bonus pts` : 'disabled'}</span>
+                          <span className="num font-body text-faint text-[11px] w-20 text-right">{value > 0 ? `+${value} bonus pts` : 'disabled'}</span>
                         </div>
                       </div>
                     ))}
@@ -684,15 +688,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           {/* ── Survivor Rules ── */}
           {type === 'NFL_SURVIVOR' && (
             <div className="space-y-4">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">Survivor Rules</p>
+              <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Survivor Rules</p>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Strikes Limit</label>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Strikes Limit</label>
                   <select
                     value={maxStrikes}
                     onChange={e => setMaxStrikes(parseInt(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                   >
                     <option value={0}>0 — Sudden Death</option>
                     <option value={1}>1 — Double Elimination</option>
@@ -700,11 +704,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Max Rebuys</label>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Max Rebuys</label>
                   <select
                     value={maxRebuys}
                     onChange={e => setMaxRebuys(parseInt(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                   >
                     <option value={0}>None</option>
                     <option value={1}>1</option>
@@ -715,41 +719,41 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               </div>
 
               {maxRebuys > 0 && (
-                <div className="grid grid-cols-2 gap-4 bg-slate-950/40 p-4 border border-slate-800 rounded-2xl">
+                <div className="grid grid-cols-2 gap-4 bg-page p-4 border border-line rounded-lg">
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-400 mb-1.5 uppercase">Rebuy Cutoff Week</label>
+                    <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Rebuy Cutoff Week</label>
                     <input
                       type="number"
                       value={rebuyDeadlineWeek}
                       min={1}
                       max={18}
                       onChange={e => setRebuyDeadlineWeek(Math.max(1, Math.min(18, parseInt(e.target.value) || 1)))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className="w-full font-body bg-page border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-slate-400 mb-1.5 uppercase">Rebuy Fee ($)</label>
+                    <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Rebuy Fee ($)</label>
                     <input
                       type="number"
                       value={rebuyCost}
                       min={0}
                       onChange={e => setRebuyCost(Math.max(0, parseInt(e.target.value) || 0))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className="w-full font-body bg-page border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                     />
                   </div>
                 </div>
               )}
 
-              <div className="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between bg-page border border-line rounded-md px-4 py-3">
                 <div>
-                  <p className="text-xs font-bold text-white">Pick-Loser Mode</p>
-                  <p className="text-[10px] text-slate-500">Players pick a team to LOSE instead of win</p>
+                  <p className="font-display font-bold uppercase text-xs tracking-[0.05em] text-[color:var(--text)]">Pick-Loser Mode</p>
+                  <p className="font-body text-[10px] text-faint">Players pick a team to LOSE instead of win</p>
                 </div>
                 <input
                   type="checkbox"
                   checked={pickLosersMode}
                   onChange={e => setPickLosersMode(e.target.checked)}
-                  className="w-5 h-5 rounded border-slate-700 text-red-500 focus:ring-red-500 cursor-pointer"
+                  className="w-5 h-5 rounded border-line text-navy-700 focus:ring-navy-600 dark:focus:ring-gold-500 cursor-pointer"
                 />
               </div>
             </div>
@@ -758,13 +762,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           {/* ── Margin Rules ── */}
           {type === 'NFL_MARGIN' && (
             <div className="space-y-4">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">Margin Rules</p>
+              <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Margin Rules</p>
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">Payout Method</label>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Payout Method</label>
                 <select
                   value={marginPayoutMode}
                   onChange={e => setMarginPayoutMode(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                 >
                   <option value="SEASON">Season-End Totals Only</option>
                   <option value="WEEKLY">Weekly Highest Margin Wins</option>
@@ -775,11 +779,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           )}
 
           {/* ── Save Button ── */}
-          <div className="pt-2 border-t border-slate-800 flex justify-end">
+          <div className="pt-2 border-t border-line flex justify-end">
             <button
               onClick={handleSaveSettings}
               disabled={isSavingSettings}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold py-3 px-8 rounded-2xl flex items-center gap-2 shadow-lg shadow-indigo-600/15 transition-all hover:scale-[1.02] cursor-pointer text-sm"
+              className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3 px-8 rounded-lg flex items-center gap-2 shadow-card transition-all duration-150 hover:-translate-y-px cursor-pointer text-sm"
             >
               <Save size={15} />
               {isSavingSettings ? 'Saving...' : 'Save Pool Settings'}
@@ -794,19 +798,19 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Weekly Scoring Console */}
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm space-y-5">
-            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <Activity size={14} className="text-indigo-400" /> Week {week} Scoring Feed
+          <div className="bg-card border border-line shadow-card rounded-xl p-6 space-y-5">
+            <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
+              <Activity size={14} className="text-navy-700 dark:text-gold-400" /> Week {week} Scoring Feed
             </h4>
 
             <div className="space-y-4">
-              <div className="flex justify-between items-center text-xs border-b border-slate-800 pb-2">
-                <span className="text-slate-400 font-semibold">Total Matchups:</span>
-                <span className="text-white font-extrabold font-mono">{totalGamesCount}</span>
+              <div className="flex justify-between items-center text-xs border-b border-line pb-2">
+                <span className="font-body text-muted font-semibold">Total Matchups:</span>
+                <span className="num font-display font-bold text-[color:var(--text)]">{totalGamesCount}</span>
               </div>
-              <div className="flex justify-between items-center text-xs border-b border-slate-800 pb-2">
-                <span className="text-slate-400 font-semibold">Completed Games:</span>
-                <span className={`font-extrabold font-mono ${isWeekFullyFinal ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <div className="flex justify-between items-center text-xs border-b border-line pb-2">
+                <span className="font-body text-muted font-semibold">Completed Games:</span>
+                <span className={`num font-display font-bold ${isWeekFullyFinal ? 'text-[#0F7B4A]' : 'text-gold-600 dark:text-gold-400'}`}>
                   {finalGamesCount} / {totalGamesCount}
                 </span>
               </div>
@@ -816,15 +820,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               <button
                 onClick={handleScoreWeek}
                 disabled={isScoring || totalGamesCount === 0}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/15 transition-all hover:scale-[1.02] cursor-pointer"
+                className="w-full bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-4 rounded-lg flex items-center justify-center gap-2 shadow-red-cta transition-all duration-150 hover:-translate-y-px cursor-pointer"
               >
                 <Play size={14} className={isScoring ? 'animate-spin' : ''} />
                 {isScoring ? 'Calculating...' : `Score & Recap Week ${week}`}
               </button>
 
               {!isWeekFullyFinal && (
-                <p className="text-[10px] text-slate-500 mt-2.5 leading-relaxed text-center">
-                  ⚠️ <strong>Warning:</strong> Some games are still active. SuperAdmins may override.
+                <p className="font-body text-[10px] text-muted mt-2.5 leading-relaxed text-center">
+                  <AlertTriangle size={10} className="inline-block align-[-1px] text-gold-600 dark:text-gold-400" /> <strong>Warning:</strong> Some games are still active. SuperAdmins may override.
                 </p>
               )}
             </div>
@@ -833,13 +837,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
         {/* Participant Roster + Payment Tracker */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-sm">
-            <div className="p-5 border-b border-slate-800 bg-slate-900/10 space-y-3">
+          <div className="bg-card border border-line shadow-card rounded-xl overflow-hidden">
+            <div className="p-5 border-b border-line bg-surface space-y-3">
               <div className="flex justify-between items-center">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Users size={14} className="text-indigo-400" /> Member Roster & Payments
+                <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
+                  <Users size={14} className="text-navy-700 dark:text-gold-400" /> Member Roster & Payments
                 </h4>
-                <span className="text-[10px] text-slate-500 font-bold bg-slate-950 px-2 py-0.5 border border-slate-800 rounded-full">
+                <span className="num font-display font-bold uppercase text-[10px] tracking-[0.08em] text-muted bg-page px-2 py-0.5 border border-line rounded-full">
                   {entries.length} members
                 </span>
               </div>
@@ -847,7 +851,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <button
                   onClick={() => handleRemindBulk('PICKS')}
                   disabled={bulkReminding !== null || unpickedCount === 0}
-                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider bg-orange-500/10 border border-orange-500/25 text-orange-400 hover:bg-orange-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 hover:bg-gold-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px cursor-pointer"
                 >
                   <BellRing size={12} />
                   {bulkReminding === 'PICKS' ? 'Sending...' : `Remind all unpicked (${unpickedCount})`}
@@ -855,7 +859,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <button
                   onClick={() => handleRemindBulk('PAYMENT')}
                   disabled={bulkReminding !== null || unpaidCount === 0}
-                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-500/10 border border-amber-500/25 text-amber-400 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 hover:bg-gold-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px cursor-pointer"
                 >
                   <DollarSign size={12} />
                   {bulkReminding === 'PAYMENT' ? 'Sending...' : `Remind all unpaid (${unpaidCount})`}
@@ -866,57 +870,57 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-800/80 bg-slate-950/20 text-slate-500">
-                    <th className="py-3.5 px-5 font-bold uppercase tracking-wider">Name</th>
+                  <tr className="border-b border-line bg-page text-muted">
+                    <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em]">Name</th>
                     {type === 'NFL_SURVIVOR' && (
                       <>
-                        <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-center">Status</th>
-                        <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-center">Strikes</th>
-                        <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-center">Rebuys</th>
+                        <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">Status</th>
+                        <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">Strikes</th>
+                        <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">Rebuys</th>
                       </>
                     )}
                     {type === 'NFL_MARGIN' && (
-                      <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-right">Margin Score</th>
+                      <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right">Margin Score</th>
                     )}
-                    <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-center">Wk {week} Picks</th>
-                    <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-right w-36">Payment</th>
-                    <th className="py-3.5 px-5 font-bold uppercase tracking-wider text-right w-32">Remind</th>
+                    <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-center">Wk {week} Picks</th>
+                    <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right w-36">Payment</th>
+                    <th className="py-3.5 px-5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-right w-32">Remind</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/50">
+                <tbody className="divide-y divide-line">
                   {entries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-slate-900/10 transition-colors">
-                      <td className="py-3.5 px-5 font-extrabold text-white">{entry.userName}</td>
+                    <tr key={entry.id} className="hover:bg-page transition-colors">
+                      <td className="py-3.5 px-5 font-body font-bold text-[color:var(--text)]">{entry.userName}</td>
 
                       {type === 'NFL_SURVIVOR' && (
                         <>
                           <td className="py-3.5 px-5 text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                            <span className={`px-2 py-0.5 rounded-full font-display font-bold text-[9px] tracking-[0.08em] uppercase ${
                               entry.status === 'ALIVE'
-                                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-                                : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
+                                ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
+                                : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600'
                             }`}>
                               {entry.status ?? 'ALIVE'}
                             </span>
                           </td>
-                          <td className="py-3.5 px-5 text-center font-bold font-mono text-slate-400">{entry.strikesUsed ?? 0}</td>
-                          <td className="py-3.5 px-5 text-center font-bold font-mono text-slate-400">{entry.rebuysUsed ?? 0}</td>
+                          <td className="num py-3.5 px-5 text-center font-body font-bold text-muted">{entry.strikesUsed ?? 0}</td>
+                          <td className="num py-3.5 px-5 text-center font-body font-bold text-muted">{entry.rebuysUsed ?? 0}</td>
                         </>
                       )}
 
                       {type === 'NFL_MARGIN' && (
-                        <td className="py-3.5 px-5 text-right font-black font-mono text-white">
+                        <td className="num py-3.5 px-5 text-right font-display font-bold text-[color:var(--text)]">
                           {entry.seasonTotal ?? 0} pts
                         </td>
                       )}
 
                       <td className="py-3.5 px-5 text-center">
                         {pickedMap[entry.id] ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-display font-bold text-[9px] tracking-[0.08em] uppercase bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]">
                             <CheckCircle size={10} /> Picked
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-display font-bold text-[9px] tracking-[0.08em] uppercase bg-brandred-600/10 border border-brandred-600/25 text-brandred-600">
                             <XCircle size={10} /> Missing
                           </span>
                         )}
@@ -926,10 +930,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                         <button
                           onClick={() => handleTogglePayment(entry.id, entry.paidStatus)}
                           disabled={isSavingPayment === entry.id}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all hover:scale-[1.03] cursor-pointer ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:-translate-y-px cursor-pointer ${
                             entry.paidStatus === 'PAID'
-                              ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20'
-                              : 'bg-rose-500/10 border border-rose-500/25 text-rose-400 hover:bg-rose-500/20'
+                              ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
+                              : 'bg-brandred-600/10 border border-brandred-600/25 text-brandred-600 hover:bg-brandred-600/[0.15]'
                           }`}
                         >
                           <DollarSign size={10} />
@@ -946,7 +950,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                             (pickedMap[entry.id] && entry.paidStatus === 'PAID')
                           }
                           title={!pickedMap[entry.id] ? 'Email a picks reminder' : entry.paidStatus !== 'PAID' ? 'Email a payment reminder' : 'Picked and paid — nothing to remind'}
-                          className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                          className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-navy-800 text-white hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px cursor-pointer"
                         >
                           <BellRing size={10} />
                           {remindingUid === targetUidOf(entry) ? 'Sending...' : 'Remind'}
@@ -967,64 +971,64 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
            hospital, mis-set deadline, dead pool) — every action is
            audited and members are notified.
       ═══════════════════════════════════════════ */}
-      <div className="bg-slate-900/40 border border-amber-900/40 rounded-3xl backdrop-blur-sm overflow-hidden">
+      <div className="bg-card border border-gold-500/40 shadow-card rounded-xl overflow-hidden">
         <button
           onClick={() => setExceptionsOpen(o => !o)}
-          className="w-full p-5 flex justify-between items-center bg-slate-900/20 hover:bg-slate-900/40 transition-colors cursor-pointer"
+          className="w-full p-5 flex justify-between items-center bg-surface hover:bg-page transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <AlertTriangle size={14} className="text-amber-400" />
-            <h4 className="text-xs font-black text-slate-300 uppercase tracking-widest">Exceptions — Commissioner Tools</h4>
+            <AlertTriangle size={14} className="text-gold-600 dark:text-gold-400" />
+            <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Exceptions — Commissioner Tools</h4>
           </div>
-          {exceptionsOpen ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+          {exceptionsOpen ? <ChevronUp size={16} className="text-muted" /> : <ChevronDown size={16} className="text-muted" />}
         </button>
 
         {exceptionsOpen && (
-          <div className="p-6 space-y-6 border-t border-slate-800">
-            <p className="text-[11px] text-slate-500 leading-relaxed">
+          <div className="p-6 space-y-6 border-t border-line">
+            <p className="font-body text-[11px] text-muted leading-relaxed">
               For the rare cases a season throws at you. Every action here is written to the pool audit log
               with your name and reason, and members are emailed — no silent changes.
             </p>
 
             {/* ── Extend Week Deadline ── */}
-            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="bg-page border border-line rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
-                <Clock size={14} className="text-indigo-400" />
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Extend Week {week} Deadline</p>
+                <Clock size={14} className="text-navy-700 dark:text-gold-400" />
+                <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Extend Week {week} Deadline</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Extra Minutes (max 1440)</label>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Extra Minutes (max 1440)</label>
                   <input
                     type="number"
                     value={extendMinutes}
                     min={1}
                     max={1440}
                     onChange={e => setExtendMinutes(Math.max(1, Math.min(1440, parseInt(e.target.value) || 1)))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Reason (emailed to members)</label>
+                  <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Reason (emailed to members)</label>
                   <input
                     type="text"
                     value={extendReason}
                     onChange={e => setExtendReason(e.target.value)}
                     maxLength={200}
                     placeholder="e.g. Deadline was mis-set — several members were locked out"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                   />
                 </div>
               </div>
               <div className="flex items-center justify-between gap-4 flex-wrap">
-                <p className="text-[10px] text-amber-400/80 leading-relaxed max-w-md">
+                <p className="font-body text-[10px] text-gold-600 dark:text-gold-400 leading-relaxed max-w-md">
                   Note: the extension takes effect immediately for commissioner proxy picks; member
                   self-submitted picks honoring the extension is rolling out separately.
                 </p>
                 <button
                   onClick={handleExtendDeadline}
                   disabled={isExtending}
-                  className="min-h-[44px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold px-6 rounded-2xl flex items-center gap-2 transition-all cursor-pointer text-xs"
+                  className="min-h-[44px] bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 transition-all duration-150 hover:-translate-y-px cursor-pointer text-xs"
                 >
                   <Clock size={13} />
                   {isExtending ? 'Extending...' : 'Extend Deadline'}
@@ -1033,13 +1037,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             </div>
 
             {/* ── Proxy Pick ── */}
-            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="bg-page border border-line rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
-                <UserCog size={14} className="text-indigo-400" />
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enter a Pick for a Member</p>
+                <UserCog size={14} className="text-navy-700 dark:text-gold-400" />
+                <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Enter a Pick for a Member</p>
               </div>
               {type === 'NFL_PICKEM' ? (
-                <p className="text-[11px] text-slate-500 leading-relaxed">
+                <p className="font-body text-[11px] text-muted leading-relaxed">
                   Pick'em proxy entry isn't available in the dashboard yet (a full week of game-by-game picks
                   is too error-prone to enter here). Survivor and Margin pools can proxy below; for pick'em,
                   contact support.
@@ -1048,11 +1052,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Member</label>
+                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Member</label>
                       <select
                         value={proxyTargetUid}
                         onChange={e => setProxyTargetUid(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all cursor-pointer"
                       >
                         <option value="">Select member...</option>
                         {entries.map(entry => (
@@ -1061,22 +1065,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Week</label>
+                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Week</label>
                       <input
                         type="number"
                         value={proxyWeek}
                         min={1}
                         max={23}
                         onChange={e => setProxyWeek(Math.max(1, Math.min(23, parseInt(e.target.value) || 1)))}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Team</label>
+                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Team</label>
                       <select
                         value={proxyTeam}
                         onChange={e => setProxyTeam(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all cursor-pointer"
                       >
                         <option value="">Select team...</option>
                         {proxyWeekTeams.map(team => (
@@ -1085,26 +1089,26 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Reason (audited)</label>
+                      <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Reason (audited)</label>
                       <input
                         type="text"
                         value={proxyReason}
                         onChange={e => setProxyReason(e.target.value)}
                         maxLength={200}
                         placeholder="e.g. Member in hospital, texted me their pick"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
                       />
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-4 flex-wrap">
-                    <p className="text-[10px] text-slate-500 leading-relaxed max-w-md">
+                    <p className="font-body text-[10px] text-muted leading-relaxed max-w-md">
                       Proxy picks respect the real deadline — if the week is locked, extend the deadline first.
                       Teams already used by the member this season are rejected.
                     </p>
                     <button
                       onClick={handleProxyPick}
                       disabled={isProxying}
-                      className="min-h-[44px] bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold px-6 rounded-2xl flex items-center gap-2 transition-all cursor-pointer text-xs"
+                      className="min-h-[44px] bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 transition-all duration-150 hover:-translate-y-px cursor-pointer text-xs"
                     >
                       <UserCog size={13} />
                       {isProxying ? 'Submitting...' : 'Submit Proxy Pick'}
@@ -1115,31 +1119,31 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             </div>
 
             {/* ── Cancel Pool ── */}
-            <div className="bg-rose-500/5 border border-rose-900/40 rounded-2xl p-5 space-y-4">
+            <div className="bg-brandred-600/5 border border-brandred-600/25 rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
-                <Ban size={14} className="text-rose-400" />
-                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Cancel Pool</p>
+                <Ban size={14} className="text-brandred-600" />
+                <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-brandred-600">Cancel Pool</p>
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="font-body text-[11px] text-muted leading-relaxed">
                 Marks the pool as canceled and emails every member the reason plus who to contact about dues
                 already paid. This cannot be undone from the dashboard.
               </p>
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">Reason (emailed to members)</label>
+                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1.5">Reason (emailed to members)</label>
                 <input
                   type="text"
                   value={cancelReason}
                   onChange={e => setCancelReason(e.target.value)}
                   maxLength={200}
                   placeholder="e.g. Not enough members joined to run the season"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-brandred-500 transition-all"
                 />
               </div>
               <div className="flex justify-end">
                 <button
                   onClick={handleCancelPool}
                   disabled={isCanceling}
-                  className="min-h-[44px] bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-extrabold px-6 rounded-2xl flex items-center gap-2 transition-all cursor-pointer text-xs"
+                  className="min-h-[44px] bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 shadow-red-cta transition-all duration-150 hover:-translate-y-px cursor-pointer text-xs"
                 >
                   <Ban size={13} />
                   {isCanceling ? 'Canceling...' : 'Cancel Pool...'}

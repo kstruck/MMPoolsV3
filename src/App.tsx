@@ -10,7 +10,6 @@ import { RouteSEO } from './components/RouteSEO';
 import { AuthModal } from './components/modals';
 import { OfflineBanner } from './components/ui/OfflineBanner';
 import { useToast } from './components/ui/Toast';
-import { PoolTypeGate } from './components/PoolTypeGate';
 
 // Lazy-loaded route components (loaded on demand)
 const GamedaySquaresLanding = React.lazy(() => import('./components/GamedaySquaresLanding').then(m => ({ default: m.GamedaySquaresLanding })));
@@ -55,13 +54,13 @@ const TournamentSimulator = React.lazy(() => import('./components/TournamentSimu
 import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
-import { isSuperAdmin } from './utils/auth';
+import { isSuperAdmin, canAccessPoolCreation } from './utils/auth';
 import { logger } from './utils/logger';
 
 // Loading spinner for lazy-loaded routes
 const RouteLoader = () => (
-  <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-    <Loader className="animate-spin text-indigo-500 w-8 h-8" />
+  <div className="min-h-screen bg-page flex items-center justify-center">
+    <Loader className="animate-spin text-gold-500 w-8 h-8" />
   </div>
 );
 
@@ -198,7 +197,7 @@ const App: React.FC = () => {
   const isAdmin = isSuperAdmin(user);
 
   if (isAuthLoading) {
-    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-100"><Loader className="animate-spin text-indigo-500" /></div>;
+    return <div className="min-h-screen bg-page flex items-center justify-center text-[color:var(--text)]"><Loader className="animate-spin text-gold-500" /></div>;
   }
 
   return (
@@ -267,78 +266,64 @@ const App: React.FC = () => {
 
           {/* Unified create flow */}
           <Route path="/create/playoff" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="NFL_PLAYOFFS">
-                  <CreatePlayoffPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
+                <CreatePlayoffPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
           } />
           <Route path="/create/pickem" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="NFL_PICKEM">
-                  <CreateNFLPickemPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
+                <CreateNFLPickemPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
           } />
           <Route path="/create/survivor" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="NFL_SURVIVOR">
-                  <CreateNFLSurvivorPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
+                <CreateNFLSurvivorPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
           } />
           <Route path="/create/margin" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="NFL_MARGIN">
-                  <CreateNFLMarginPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
+                <CreateNFLMarginPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
           } />
           <Route path="/create/bracket" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="BRACKET">
-                  <CreateBracketPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
+                <CreateBracketPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
           } />
           <Route path="/create/squares" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="SQUARES">
-                  <CreateSquaresPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
+                <CreateSquaresPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
           } />
           <Route path="/create/props" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+            user && canAccessPoolCreation(user) ? (
+              <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="PROPS">
-                  <CreatePropsPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
+                <CreatePropsPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
                 <Footer />
               </div>
             ) : <Navigate to="/" replace />
@@ -423,7 +408,7 @@ const App: React.FC = () => {
 
           <Route path="/super-admin" element={
             isAdmin ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+              <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-brandred-600 selection:text-white flex flex-col">
                 <Header user={user} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <SuperAdmin />
                 <Footer />
@@ -436,9 +421,9 @@ const App: React.FC = () => {
             <TournamentSimulator user={user} />
           } />
 
-          {/* Creation Wizards */}
+          {/* Creation Wizards — gated by POOL_CREATION_ENABLED (super admins bypass) */}
           <Route path="/create-pool" element={
-            user ? (
+            user && canAccessPoolCreation(user) ? (
               <CreatePoolSelection
                 user={user}
                 isManager={false}

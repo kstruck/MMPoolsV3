@@ -3,12 +3,13 @@ import type { User as UserType, Pool, NFLGame } from '../../types';
 import { dbService, db } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
 import { useToast } from '../ui/Toast';
+import { Badge } from '../ui';
 import { doc, updateDoc } from 'firebase/firestore';
-import { 
-  Lock, 
-  Volume2, 
-  Send, 
-  Activity, 
+import {
+  Lock,
+  Volume2,
+  Send,
+  Activity,
   CheckCircle,
   ShieldCheck,
   AlertCircle,
@@ -16,17 +17,20 @@ import {
   DollarSign,
   X,
   Edit,
-  Save
+  Save,
+  PartyPopper,
+  RefreshCw,
+  Megaphone
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, 
-  PieChart, 
-  Pie, 
-  Cell, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
   Tooltip
 } from 'recharts';
 
@@ -52,10 +56,10 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const [aiMood, setAiMood] = useState<'savage' | 'professional' | 'analyst'>('savage');
   const [banterText, setBanterText] = useState('');
   const [banterFeed, setBanterFeed] = useState<string[]>([
-    "🚨 COMMISSIONER: Warm welcome to the active NFL pool. Good luck!",
-    "🚨 COMMISSIONER: Friendly reminder that unsubmitted picks lock at kickoff. Don't be that person."
+    "COMMISSIONER: Warm welcome to the active NFL pool. Good luck!",
+    "COMMISSIONER: Friendly reminder that unsubmitted picks lock at kickoff. Don't be that person."
   ]);
-  
+
   const [isNudging, setIsNudging] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [savingLedgerId, setSavingLedgerId] = useState<string | null>(null);
@@ -121,8 +125,8 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
   React.useEffect(() => {
     setBanterFeed([
-      `🚨 COMMISSIONER: ${topPlayerName} is currently leading, but historically has collapsed in Week 13. Place your bets accordingly!`,
-      "🚨 COMMISSIONER: Friendly reminder that unsubmitted picks lock at kickoff. Don't be that person."
+      `COMMISSIONER: ${topPlayerName} is currently leading, but historically has collapsed in Week 13. Place your bets accordingly!`,
+      "COMMISSIONER: Friendly reminder that unsubmitted picks lock at kickoff. Don't be that person."
     ]);
   }, [topPlayerName]);
 
@@ -178,12 +182,12 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       const email = (p.email || '').toLowerCase();
       const query = ledgerSearch.toLowerCase();
       const matchesSearch = name.includes(query) || email.includes(query);
-      
+
       const status = p.paidStatus || 'UNPAID';
-      const matchesFilter = ledgerFilter === 'ALL' || 
+      const matchesFilter = ledgerFilter === 'ALL' ||
                             (ledgerFilter === 'PAID' && status === 'PAID') ||
                             (ledgerFilter === 'UNPAID' && status !== 'PAID');
-      
+
       return matchesSearch && matchesFilter;
     });
   }, [entries, ledgerSearch, ledgerFilter]);
@@ -204,10 +208,10 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const handleSendBanter = (e: React.FormEvent) => {
     e.preventDefault();
     if (!banterText.trim()) return;
-    
-    let Prefix = "🚨 COMMISSIONER [Savage Mode]: ";
-    if (aiMood === 'professional') Prefix = "🚨 COMMISSIONER [Professional]: ";
-    if (aiMood === 'analyst') Prefix = "🚨 COMMISSIONER [Data Analyst]: ";
+
+    let Prefix = "COMMISSIONER [Savage Mode]: ";
+    if (aiMood === 'professional') Prefix = "COMMISSIONER [Professional]: ";
+    if (aiMood === 'analyst') Prefix = "COMMISSIONER [Data Analyst]: ";
 
     setBanterFeed(prev => [
       `${Prefix}${banterText}`,
@@ -258,8 +262,8 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   // Submission Health PieChart Data (Recharts)
   const submissionPieData = useMemo(() => {
     return [
-      { name: 'Submitted', value: submissionStats.submitted, color: '#FF6600' },
-      { name: 'Pending', value: submissionStats.pendingCount, color: '#1e293b' }
+      { name: 'Submitted', value: submissionStats.submitted, color: '#B78F4A' },
+      { name: 'Pending', value: submissionStats.pendingCount, color: '#142A4C' }
     ];
   }, [submissionStats]);
 
@@ -269,33 +273,32 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       {
         name: 'Collected',
         Amount: ledgerStats.collected,
-        fill: '#10B981'
+        fill: '#0F7B4A'
       },
       {
         name: 'Outstanding',
         Amount: ledgerStats.remaining,
-        fill: '#FBBF24'
+        fill: '#C9A867'
       }
     ];
   }, [ledgerStats]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
-      
+
       {/* CARD 1: POOL PERFORMANCE & SUBMISSIONS HEALTH */}
-      <div 
-        className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
-        style={{ boxShadow: `inset 0 0 20px rgba(59, 130, 246, 0.05), 0 10px 40px rgba(0,0,0,0.4)` }}
+      <div
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Submission Health</h3>
-              <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Week {week} Pick Completion Rate</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Submission Health</h3>
+              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Week {week} Pick Completion Rate</p>
             </div>
-            <span className="bg-slate-950 border border-slate-800 px-3 py-1 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest">
+            <Badge status="live" className="text-[10px]">
               Live Tracker
-            </span>
+            </Badge>
           </div>
 
           <div className="flex items-center gap-8 mb-6">
@@ -319,17 +322,17 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
-                <span className="text-lg font-black text-white leading-none">{submissionStats.percentage}%</span>
-                <span className="text-[7px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Active</span>
+                <span className="font-display font-bold text-lg text-[color:var(--text)] leading-none num">{submissionStats.percentage}%</span>
+                <span className="font-display font-bold text-[7px] text-faint uppercase tracking-[0.16em] mt-0.5">Active</span>
               </div>
             </div>
 
             <div>
-              <h4 className="text-sm font-extrabold text-white uppercase mb-1">Weekly Summary</h4>
-              <p className="text-xs text-slate-400 leading-relaxed mb-2">
-                <strong>{submissionStats.submitted}</strong> of <strong>{submissionStats.total}</strong> active participants have successfully locked-in their selections.
+              <h4 className="font-display font-bold text-sm text-[color:var(--text)] uppercase mb-1">Weekly Summary</h4>
+              <p className="font-body text-xs text-muted leading-relaxed mb-2">
+                <strong className="num">{submissionStats.submitted}</strong> of <strong className="num">{submissionStats.total}</strong> active participants have successfully locked-in their selections.
               </p>
-              <span className="text-[10px] font-bold text-amber-400 uppercase flex items-center gap-1.5 animate-pulse">
+              <span className="font-display font-bold text-[10px] text-gold-600 dark:text-gold-400 uppercase tracking-[0.08em] flex items-center gap-1.5 animate-pulse">
                 <AlertCircle size={12} /> Deadline approaches in 16 hours
               </span>
             </div>
@@ -337,61 +340,60 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
           {/* List of slackers who need nudging */}
           <div className="space-y-3">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Pending Pick Sheets ({unsubmittedPlayers.length})</span>
+            <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Pending Pick Sheets (<span className="num">{unsubmittedPlayers.length}</span>)</span>
             {unsubmittedPlayers.length > 0 ? (
               unsubmittedPlayers.slice(0, 5).map((player, idx) => (
-                <div key={idx} className="flex justify-between items-center p-3 rounded-2xl border bg-slate-950/60 border-slate-800 transition-all hover:bg-slate-950">
+                <div key={idx} className="flex justify-between items-center p-3 rounded-lg border bg-page border-line transition-all duration-150 hover:bg-surface">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 font-extrabold text-xs text-slate-400 flex items-center justify-center uppercase">
+                    <div className="w-8 h-8 rounded-md bg-navy-800 font-display font-bold text-xs text-white flex items-center justify-center uppercase">
                       {player.name.substring(0,2).toUpperCase()}
                     </div>
                     <div>
-                      <span className="text-xs font-extrabold text-white block uppercase leading-none">{player.name}</span>
-                      <span className="text-[9px] font-bold text-slate-500">{player.email}</span>
+                      <span className="font-display font-bold text-xs text-[color:var(--text)] block uppercase leading-none">{player.name}</span>
+                      <span className="font-body font-semibold text-[9px] text-faint">{player.email}</span>
                     </div>
                   </div>
 
                   <button
                     onClick={() => handleNudge(player)}
                     disabled={isNudging !== null}
-                    className="min-h-[44px] bg-orange-500/10 border border-orange-500/35 hover:bg-orange-500/20 text-orange-400 hover:text-white font-extrabold text-[10px] uppercase tracking-wider px-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="min-h-[44px] bg-gold-400/10 border border-gold-500/40 hover:bg-gold-400/20 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 rounded-md transition-all duration-150 hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isNudging === player.uid ? 'Sending...' : 'Nudge Email'}
                   </button>
                 </div>
               ))
             ) : (
-              <div className="text-emerald-400 text-xs font-black text-center py-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
-                🎉 Perfect submission health! Everyone has completed their pick sheets.
+              <div className="text-gold-700 dark:text-gold-400 font-display font-bold text-xs uppercase text-center py-4 bg-gold-400/10 border border-gold-500/40 rounded-lg flex items-center justify-center gap-2">
+                <PartyPopper size={14} /> Perfect submission health! Everyone has completed their pick sheets.
               </div>
             )}
           </div>
         </div>
 
-        <div className="mt-6 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-          <span className="text-slate-500 font-bold uppercase flex items-center gap-1">
-            <Activity size={12} className="text-slate-600" /> Auto-reminders enabled
+        <div className="mt-6 pt-4 border-t border-line flex justify-between items-center text-[10px]">
+          <span className="text-muted font-display font-bold uppercase tracking-[0.08em] flex items-center gap-1">
+            <Activity size={12} className="text-faint" /> Auto-reminders enabled
           </span>
-          <span className="text-emerald-400 font-black uppercase">
+          <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.08em]">
             Platform healthy
           </span>
         </div>
       </div>
 
       {/* CARD 2: BUY-IN REVENUE LEDGER & MEMBERS ACCREDITATION */}
-      <div 
-        className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
-        style={{ boxShadow: `inset 0 0 20px rgba(16, 185, 129, 0.05), 0 10px 40px rgba(0,0,0,0.4)` }}
+      <div
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Buy-In Ledger</h3>
-              <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Member Financial Tracking</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Buy-In Ledger</h3>
+              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Member Financial Tracking</p>
             </div>
             <button
               onClick={() => setIsLedgerOpen(true)}
-              className="bg-indigo-600/10 border border-indigo-500/35 hover:bg-indigo-650 hover:text-white transition-all text-indigo-400 font-black text-[10px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-lg"
+              className="bg-navy-800 hover:bg-navy-700 transition-all duration-150 hover:-translate-y-px text-white font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 py-1.5 rounded-md shadow-card"
             >
               View Full Ledger
             </button>
@@ -399,12 +401,12 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
           {/* Recharts BarChart represents Collected vs Outstanding side-by-side */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <div className="md:col-span-2 bg-slate-950/60 border border-slate-800/80 p-3 rounded-2xl h-24">
+            <div className="md:col-span-2 bg-page border border-line p-3 rounded-lg h-24">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={financialBarData} layout="vertical" margin={{ top: 2, right: 10, left: -25, bottom: 2 }}>
-                  <XAxis type="number" stroke="#475569" fontSize={8} tickFormatter={(v) => `$${v}`} />
-                  <YAxis type="category" dataKey="name" stroke="#475569" fontSize={8} />
-                  <Tooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: '8px', fontSize: '9px' }} />
+                  <XAxis type="number" stroke="#24507F" fontSize={8} tickFormatter={(v) => `$${v}`} />
+                  <YAxis type="category" dataKey="name" stroke="#24507F" fontSize={8} />
+                  <Tooltip cursor={{ fill: 'rgba(19,27,43,0.04)' }} contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--line)', color: 'var(--text)', borderRadius: '10px', fontSize: '9px' }} />
                   <Bar dataKey="Amount" radius={[0, 4, 4, 0]}>
                     {financialBarData.map((d, index) => (
                       <Cell key={`cell-${index}`} fill={d.fill} />
@@ -414,44 +416,44 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
               </ResponsiveContainer>
             </div>
 
-            <div className="bg-slate-950/60 border border-slate-850 p-3.5 rounded-2xl text-center flex flex-col justify-center">
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">Projected Pot</span>
-              <span className="text-xl font-black text-emerald-400 font-mono">${ledgerStats.total}</span>
+            <div className="bg-page border border-line p-3.5 rounded-lg text-center flex flex-col justify-center">
+              <span className="font-display font-bold uppercase text-[9px] tracking-[0.08em] text-faint block mb-0.5">Projected Pot</span>
+              <span className="font-display font-bold text-xl text-gold-600 dark:text-gold-400 num">${ledgerStats.total}</span>
             </div>
           </div>
 
           {/* Members list limited to 10 UNPAID players */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Unpaid Players ({entries.filter(e => e.paidStatus !== 'PAID').length})</span>
-              <span className="text-[8px] text-slate-500 font-bold uppercase">Showing Max 10</span>
+              <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Unpaid Players (<span className="num">{entries.filter(e => e.paidStatus !== 'PAID').length}</span>)</span>
+              <span className="font-display font-bold text-[8px] text-faint uppercase tracking-[0.08em]">Showing Max 10</span>
             </div>
-            
+
             {dashboardUnpaidPlayers.length > 0 ? (
               dashboardUnpaidPlayers.map((player) => {
                 const entryId = player.id;
                 const isPaid = player.paidStatus === 'PAID';
                 return (
-                  <div 
-                    key={entryId} 
-                    className="flex justify-between items-center p-3 rounded-2xl border border-slate-850 bg-slate-950/40 hover:bg-slate-950 transition-all"
+                  <div
+                    key={entryId}
+                    className="flex justify-between items-center p-3 rounded-lg border border-line bg-page hover:bg-surface transition-all duration-150"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl font-extrabold text-xs flex items-center justify-center border bg-slate-900 border-slate-800 text-slate-500">
+                      <div className="w-8 h-8 rounded-md font-display font-bold text-xs flex items-center justify-center bg-navy-800 text-white">
                         {(player.userName || player.ownerName || 'U').substring(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <span className="text-xs font-extrabold text-white block uppercase leading-none mb-1">
+                        <span className="font-display font-bold text-xs text-[color:var(--text)] block uppercase leading-none mb-1">
                           {player.userName || player.ownerName || 'Anonymous Player'}
                         </span>
-                        <span className="text-[9px] font-bold text-slate-500">{player.email || 'No email registered'}</span>
+                        <span className="font-body font-semibold text-[9px] text-faint">{player.email || 'No email registered'}</span>
                       </div>
                     </div>
 
                     <button
                       onClick={() => togglePayment(entryId, isPaid)}
                       disabled={togglingId === entryId}
-                      className="flex items-center gap-2 border bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800 px-3.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wide transition-all"
+                      className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
                     >
                       {togglingId === entryId ? 'Saving...' : 'Mark Paid'}
                     </button>
@@ -459,7 +461,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 );
               })
             ) : (
-              <div className="text-emerald-400 text-xs font-black text-center py-6 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl flex flex-col items-center gap-1">
+              <div className="text-[#0F7B4A] font-display font-bold text-xs uppercase text-center py-6 bg-[#E4F5EC] border border-[#BEE7D0] rounded-lg flex flex-col items-center gap-1">
                 <CheckCircle size={24} />
                 <span>All buy-ins cleared! Excellent ledger status.</span>
               </div>
@@ -467,62 +469,61 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           </div>
         </div>
 
-        <div className="mt-6 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-          <span className="text-slate-500 font-bold uppercase">Commission status</span>
-          <span className="text-emerald-400 font-black uppercase">
+        <div className="mt-6 pt-4 border-t border-line flex justify-between items-center text-[10px]">
+          <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Commission status</span>
+          <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.08em]">
             100% Secure Transaction Logs
           </span>
         </div>
       </div>
 
       {/* CARD 3: COMMISSIONER AI BANTER WIDGET */}
-      <div 
-        className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
-        style={{ boxShadow: `inset 0 0 20px rgba(251, 191, 36, 0.05), 0 10px 40px rgba(0,0,0,0.4)` }}
+      <div
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">AI Commissioner Chat</h3>
-              <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Generate custom trash talk banter</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">AI Commissioner Chat</h3>
+              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Generate custom trash talk banter</p>
             </div>
-            <Volume2 size={18} className="text-amber-400 animate-bounce" />
+            <Volume2 size={18} className="text-gold-600 dark:text-gold-400" />
           </div>
 
           {/* AI Commissioner Mood configurations */}
           <div className="grid grid-cols-3 gap-2.5 mb-5">
             {[
-              { id: 'savage', label: 'Savage', desc: 'Rants & burns', color: 'border-orange-500/50 text-orange-400' },
-              { id: 'professional', label: 'Pro', desc: 'Firm & direct', color: 'border-blue-500/50 text-blue-400' },
-              { id: 'analyst', label: 'Analyst', desc: 'Data & stats', color: 'border-emerald-500/50 text-emerald-400' }
+              { id: 'savage', label: 'Savage', desc: 'Rants & burns', color: 'border-gold-500/50 text-gold-600' },
+              { id: 'professional', label: 'Pro', desc: 'Firm & direct', color: 'border-navy-600/50 text-navy-700' },
+              { id: 'analyst', label: 'Analyst', desc: 'Data & stats', color: 'border-gold-500/50 text-gold-600' }
             ].map(mood => (
               <button
                 key={mood.id}
                 onClick={() => setAiMood(mood.id as any)}
-                className={`text-left p-3.5 rounded-2xl border transition-all duration-300 ${
-                  aiMood === mood.id 
-                    ? `bg-slate-950 border-orange-500 shadow-md scale-[1.02]` 
-                    : 'bg-slate-950/60 border-slate-800/50 opacity-60 hover:opacity-100'
+                className={`text-left p-3.5 rounded-lg border transition-all duration-150 ${
+                  aiMood === mood.id
+                    ? `bg-card border-gold-500 shadow-card scale-[1.02]`
+                    : 'bg-page border-line opacity-60 hover:opacity-100'
                 }`}
               >
-                <span className="text-xs font-black uppercase block leading-none mb-1">{mood.label}</span>
-                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest leading-none">{mood.desc}</span>
+                <span className="font-display font-bold text-xs text-[color:var(--text)] uppercase block leading-none mb-1">{mood.label}</span>
+                <span className="font-display font-bold text-[8px] text-faint uppercase tracking-[0.16em] leading-none">{mood.desc}</span>
               </button>
             ))}
           </div>
 
           {/* Live Banter entry feed */}
           <form onSubmit={handleSendBanter} className="flex gap-2 mb-5">
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder={`Type a comment or prompt the AI as a ${aiMood} commissioner...`}
               value={banterText}
               onChange={e => setBanterText(e.target.value)}
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-650 focus:ring-1 focus:ring-orange-500 focus:outline-none"
+              className="flex-1 bg-page border border-line rounded-md px-4 py-3 font-body text-xs text-[color:var(--text)] placeholder:text-faint focus:ring-1 focus:ring-navy-600 dark:focus:ring-gold-500 focus:outline-none"
             />
-            <button 
+            <button
               type="submit"
-              className="bg-gradient-to-r from-orange-500 to-indigo-600 hover:from-orange-600 hover:to-indigo-700 text-white p-3 rounded-xl transition-all shadow-md active:scale-95"
+              className="bg-brandred-600 hover:bg-brandred-500 text-white p-3 rounded-md transition-all duration-150 hover:-translate-y-px shadow-red-cta active:scale-95"
             >
               <Send size={15} />
             </button>
@@ -530,49 +531,49 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
           {/* Scrolling Feed of Recent Banters */}
           <div className="space-y-3 max-h-40 overflow-y-auto pr-1">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Live banter feed</span>
+            <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Live banter feed</span>
             {banterFeed.map((item, idx) => (
-              <div key={idx} className="p-3.5 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-xs text-slate-300 leading-relaxed font-semibold">
-                {item}
+              <div key={idx} className="p-3.5 bg-page border border-line rounded-lg font-body text-xs text-[color:var(--text)] leading-relaxed font-semibold flex items-start gap-2">
+                <Megaphone size={13} className="text-brandred-600 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{item}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="mt-6 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-          <span className="text-slate-500 font-bold uppercase">Banter engine status</span>
-          <span className="text-emerald-400 font-black uppercase">
+        <div className="mt-6 pt-4 border-t border-line flex justify-between items-center text-[10px]">
+          <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Banter engine status</span>
+          <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.08em]">
             AI Moderation ACTIVE
           </span>
         </div>
       </div>
 
       {/* CARD 4: COMMISSIONER CONTROLS & TRANSACTION FEED */}
-      <div 
-        className="bg-slate-900/40 backdrop-blur-md border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-slate-700/80 flex flex-col justify-between"
-        style={{ boxShadow: `inset 0 0 20px rgba(99, 102, 241, 0.05), 0 10px 40px rgba(0,0,0,0.4)` }}
+      <div
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Commissioner Actions</h3>
-              <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase">Active League Administration Tools</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Commissioner Actions</h3>
+              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Active League Administration Tools</p>
             </div>
-            <ShieldCheck size={18} className="text-indigo-400" />
+            <ShieldCheck size={18} className="text-navy-700 dark:text-gold-400" />
           </div>
 
           {/* Quick Admin Toggles */}
           <div className="grid grid-cols-2 gap-4 mb-6">
             <button
               onClick={() => toast.info('Initiating ESPN Sync score recalculation...')}
-              className="bg-gradient-to-r from-orange-500 to-indigo-600 hover:from-orange-600 hover:to-indigo-700 text-white font-extrabold text-xs uppercase tracking-wider py-4 rounded-2xl transition-all shadow-lg hover:scale-[1.02]"
+              className="bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold text-xs uppercase tracking-[0.05em] py-4 rounded-lg transition-all duration-150 shadow-red-cta hover:-translate-y-px flex items-center justify-center gap-2"
             >
-              🔄 Recalculate Scores
+              <RefreshCw size={13} /> Recalculate Scores
             </button>
-            
+
             <button
               onClick={() => toast.info('Toggling locks status...')}
-              className="bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-extrabold text-xs uppercase tracking-wider py-4 rounded-2xl transition-all flex items-center justify-center gap-2"
+              className="bg-navy-800 hover:bg-navy-700 text-white font-display font-bold text-xs uppercase tracking-[0.05em] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2"
             >
               <Lock size={13} /> Toggle Locks
             </button>
@@ -580,19 +581,19 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
           {/* Interactive Audit Trail Log entries */}
           <div className="space-y-3">
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">League operations log</span>
+            <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">League operations log</span>
             {auditLogs.map((log, idx) => (
-              <div key={idx} className="flex justify-between items-center p-3 bg-slate-950/60 border border-slate-800 rounded-2xl text-xs">
+              <div key={idx} className="flex justify-between items-center p-3 bg-page border border-line rounded-lg text-xs">
                 <div>
-                  <span className="text-white font-semibold leading-relaxed block">{log.msg}</span>
-                  <span className="text-[9px] font-bold text-slate-500 uppercase">{log.time}</span>
+                  <span className="font-body text-[color:var(--text)] font-semibold leading-relaxed block">{log.msg}</span>
+                  <span className="font-display font-bold text-[9px] text-faint uppercase tracking-[0.08em]">{log.time}</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black tracking-widest uppercase border shrink-0 ml-4 ${
-                  log.severity === 'SYSTEM' 
-                    ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' 
-                    : log.severity === 'USER' 
-                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' 
-                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                <span className={`px-2 py-0.5 rounded-full text-[8px] font-display font-bold tracking-[0.16em] uppercase border shrink-0 ml-4 ${
+                  log.severity === 'SYSTEM'
+                    ? 'bg-navy-600/10 border-navy-600/30 text-navy-700 dark:text-gold-400'
+                    : log.severity === 'USER'
+                      ? 'bg-gold-400/10 border-gold-500/40 text-gold-600 dark:text-gold-400'
+                      : 'bg-surface border-line text-muted'
                 }`}>
                   {log.severity}
                 </span>
@@ -601,9 +602,9 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           </div>
         </div>
 
-        <div className="mt-6 pt-4 border-t border-slate-800/50 flex justify-between items-center text-[10px]">
-          <span className="text-slate-500 font-bold uppercase">Audit logs status</span>
-          <span className="text-emerald-400 font-black uppercase">
+        <div className="mt-6 pt-4 border-t border-line flex justify-between items-center text-[10px]">
+          <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Audit logs status</span>
+          <span className="text-gold-600 dark:text-gold-400 font-display font-bold uppercase tracking-[0.08em]">
             Secured behind TLS & SHA-256
           </span>
         </div>
@@ -611,39 +612,39 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
       {/* FULL FEATURED PAYMENT LEDGER MODAL */}
       {isLedgerOpen && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col text-slate-100">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-card border border-line rounded-xl w-full max-w-4xl max-h-[85vh] overflow-hidden shadow-panel flex flex-col text-[color:var(--text)]">
             {/* Header */}
-            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
+            <div className="p-6 border-b border-line flex justify-between items-center bg-surface">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
+                <div className="p-2 bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 rounded-lg">
                   <DollarSign size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white uppercase tracking-wider">Advanced Payment Ledger</h3>
-                  <p className="text-slate-500 text-xs mt-0.5 uppercase font-bold">{pool.name} Roster Financials</p>
+                  <h3 className="font-display font-bold text-lg text-[color:var(--text)] uppercase tracking-[0.05em]">Advanced Payment Ledger</h3>
+                  <p className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-faint mt-0.5">{pool.name} Roster Financials</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => { setIsLedgerOpen(false); setEditingEntryId(null); }}
-                className="p-2 hover:bg-slate-800/80 rounded-xl text-slate-400 hover:text-white transition-colors"
+                className="p-2 hover:bg-page rounded-md text-muted hover:text-[color:var(--text)] transition-all duration-150"
               >
                 <X size={20} />
               </button>
             </div>
 
             {/* Sub-Header stats panels & Filters */}
-            <div className="p-6 bg-slate-950/20 border-b border-slate-800/80 space-y-4">
+            <div className="p-6 bg-surface border-b border-line space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
-                  { title: 'Total Projected', value: `$${ledgerStats.total}`, color: 'text-white' },
-                  { title: 'Total Collected', value: `$${ledgerStats.collected}`, color: 'text-emerald-400' },
-                  { title: 'Outstanding Due', value: `$${ledgerStats.remaining}`, color: 'text-amber-400' },
-                  { title: 'Clearing Rate', value: `${entries.length > 0 ? Math.round((entries.filter(e => e.paidStatus === 'PAID').length / entries.length) * 100) : 0}%`, color: 'text-indigo-400' }
+                  { title: 'Total Projected', value: `$${ledgerStats.total}`, color: 'text-[color:var(--text)]' },
+                  { title: 'Total Collected', value: `$${ledgerStats.collected}`, color: 'text-[#0F7B4A]' },
+                  { title: 'Outstanding Due', value: `$${ledgerStats.remaining}`, color: 'text-gold-600 dark:text-gold-400' },
+                  { title: 'Clearing Rate', value: `${entries.length > 0 ? Math.round((entries.filter(e => e.paidStatus === 'PAID').length / entries.length) * 100) : 0}%`, color: 'text-navy-700 dark:text-gold-400' }
                 ].map((stat, idx) => (
-                  <div key={idx} className="bg-slate-950/60 border border-slate-850 p-3 rounded-2xl text-center">
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">{stat.title}</span>
-                    <span className={`text-sm font-black ${stat.color} font-mono`}>{stat.value}</span>
+                  <div key={idx} className="bg-page border border-line p-3 rounded-lg text-center">
+                    <span className="font-display font-bold uppercase text-[8px] tracking-[0.08em] text-faint block mb-0.5">{stat.title}</span>
+                    <span className={`font-display font-bold text-sm ${stat.color} num`}>{stat.value}</span>
                   </div>
                 ))}
               </div>
@@ -656,20 +657,20 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                     placeholder="Search player name, email, note..."
                     value={ledgerSearch}
                     onChange={(e) => setLedgerSearch(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-4 pl-10 text-xs text-white placeholder:text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-page border border-line rounded-md py-2.5 px-4 pl-10 font-body text-xs text-[color:var(--text)] placeholder:text-faint focus:ring-1 focus:ring-navy-600 dark:focus:ring-gold-500 focus:outline-none"
                   />
-                  <Search className="absolute left-3 top-3 text-slate-500" size={14} />
+                  <Search className="absolute left-3 top-3 text-faint" size={14} />
                 </div>
-                
-                <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl">
+
+                <div className="flex gap-1 bg-page p-1 border border-line rounded-md">
                   {['ALL', 'PAID', 'UNPAID'].map((type) => (
                     <button
                       key={type}
                       onClick={() => setLedgerFilter(type as any)}
-                      className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
-                        ledgerFilter === type 
-                          ? 'bg-indigo-600 text-white shadow-md' 
-                          : 'text-slate-500 hover:text-slate-350'
+                      className={`px-3 py-1.5 rounded-sm text-[9px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 ${
+                        ledgerFilter === type
+                          ? 'bg-navy-800 text-white shadow-card'
+                          : 'text-muted hover:text-[color:var(--text)]'
                       }`}
                     >
                       {type}
@@ -683,7 +684,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             <div className="flex-1 overflow-auto p-6">
               <table className="w-full text-left border-collapse text-[11px]">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-500 font-black uppercase tracking-wider">
+                  <tr className="border-b border-line font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">
                     <th className="pb-3 px-2">Player / Contact</th>
                     <th className="pb-3 px-2 text-center w-28">Status</th>
                     <th className="pb-3 px-2 w-32">Method</th>
@@ -692,19 +693,19 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                     <th className="pb-3 px-2 text-right w-24">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/40">
+                <tbody className="divide-y divide-line">
                   {ledgerFilteredPlayers.length > 0 ? (
                     ledgerFilteredPlayers.map((player) => {
                       const entryId = player.id;
                       const isEditing = editingEntryId === entryId;
                       const isPaid = player.paidStatus === 'PAID';
-                      
+
                       return (
-                        <tr key={entryId} className="hover:bg-slate-950/30 transition-colors">
+                        <tr key={entryId} className="hover:bg-page transition-colors duration-150">
                           {/* Name / Email */}
                           <td className="py-3 px-2">
-                            <span className="font-extrabold text-white block uppercase">{player.userName || player.ownerName || 'Anonymous'}</span>
-                            <span className="text-[9px] text-slate-500">{player.email || 'No email registered'}</span>
+                            <span className="font-display font-bold text-[color:var(--text)] block uppercase">{player.userName || player.ownerName || 'Anonymous'}</span>
+                            <span className="font-body text-[9px] text-faint">{player.email || 'No email registered'}</span>
                           </td>
 
                           {/* Status */}
@@ -713,29 +714,25 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                               <select
                                 value={editPaidStatus}
                                 onChange={(e) => setEditPaidStatus(e.target.value as any)}
-                                className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white font-bold"
+                                className="bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)] font-bold"
                               >
                                 <option value="PAID">PAID</option>
                                 <option value="UNPAID">UNPAID</option>
                               </select>
                             ) : (
-                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${
-                                isPaid 
-                                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
-                                  : 'bg-rose-500/10 border-rose-500/20 text-rose-450'
-                              }`}>
+                              <Badge status={isPaid ? 'paid' : 'unpaid'} className="text-[10px] px-2 py-1">
                                 {player.paidStatus || 'UNPAID'}
-                              </span>
+                              </Badge>
                             )}
                           </td>
 
                           {/* Payment Method */}
-                          <td className="py-3 px-2 text-slate-300 font-semibold">
+                          <td className="py-3 px-2 font-body text-muted font-semibold">
                             {isEditing ? (
                               <select
                                 value={editMethod}
                                 onChange={(e) => setEditMethod(e.target.value)}
-                                className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white"
+                                className="bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)]"
                               >
                                 <option value="Venmo">Venmo</option>
                                 <option value="Zelle">Zelle</option>
@@ -745,36 +742,36 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                                 <option value="Other">Other</option>
                               </select>
                             ) : (
-                              player.paymentMethod || <span className="text-slate-600 italic">N/A</span>
+                              player.paymentMethod || <span className="text-faint italic">N/A</span>
                             )}
                           </td>
 
                           {/* Paid Date */}
-                          <td className="py-3 px-2 text-slate-400 font-mono">
+                          <td className="py-3 px-2 font-body text-muted num">
                             {isEditing ? (
                               <input
                                 type="date"
                                 value={editDate}
                                 onChange={(e) => setEditDate(e.target.value)}
-                                className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white"
+                                className="bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)]"
                               />
                             ) : (
-                              player.paidAt ? new Date(player.paidAt).toLocaleDateString() : <span className="text-slate-600 italic">N/A</span>
+                              player.paidAt ? new Date(player.paidAt).toLocaleDateString() : <span className="text-faint italic">N/A</span>
                             )}
                           </td>
 
                           {/* Notes */}
-                          <td className="py-3 px-2 text-slate-400">
+                          <td className="py-3 px-2 font-body text-muted">
                             {isEditing ? (
                               <input
                                 type="text"
                                 placeholder="Tx ID or comments..."
                                 value={editNote}
                                 onChange={(e) => setEditNote(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white"
+                                className="w-full bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)] placeholder:text-faint"
                               />
                             ) : (
-                              player.paymentNote || <span className="text-slate-650 italic">None</span>
+                              player.paymentNote || <span className="text-faint italic">None</span>
                             )}
                           </td>
 
@@ -785,13 +782,13 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                                 <button
                                   onClick={() => saveDetailedPayment(entryId)}
                                   disabled={savingLedgerId === entryId}
-                                  className="p-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/35 hover:bg-emerald-500/20 rounded-lg"
+                                  className="p-1 bg-navy-800 text-white hover:bg-navy-700 rounded-sm transition-all duration-150 disabled:opacity-50"
                                 >
                                   <Save size={14} />
                                 </button>
                                 <button
                                   onClick={() => setEditingEntryId(null)}
-                                  className="p-1 bg-slate-950 text-slate-400 border border-slate-800 hover:bg-slate-800 rounded-lg"
+                                  className="p-1 bg-page text-muted border border-line hover:bg-surface rounded-sm transition-all duration-150"
                                 >
                                   <X size={14} />
                                 </button>
@@ -805,7 +802,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                                   setEditDate(player.paidAt ? new Date(player.paidAt).toISOString().split('T')[0] : '');
                                   setEditNote(player.paymentNote || '');
                                 }}
-                                className="p-1 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-slate-400 hover:text-white"
+                                className="p-1 bg-page hover:bg-surface border border-line rounded-sm text-muted hover:text-[color:var(--text)] transition-all duration-150"
                               >
                                 <Edit size={14} />
                               </button>
@@ -816,7 +813,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                     })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="text-center py-10 text-slate-650 font-bold">
+                      <td colSpan={6} className="text-center py-10 text-faint font-body font-bold">
                         No members matching filter criteria.
                       </td>
                     </tr>
@@ -826,7 +823,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex justify-between items-center text-[10px] text-slate-600 font-bold uppercase">
+            <div className="p-4 border-t border-line bg-surface flex justify-between items-center text-[10px] text-faint font-display font-bold uppercase tracking-[0.08em]">
               <span>Platform TLS Accreditation: Secure</span>
               <span>Clearing Ledger Logs v2.4</span>
             </div>

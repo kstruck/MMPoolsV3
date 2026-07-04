@@ -8,6 +8,7 @@ import { Loader, ArrowLeft, Check, AlertTriangle, Mail, Lock, Users, QrCode, Plu
 import type { GameState, PropsPool } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { BillingInvoiceCard } from '../billing/BillingInvoiceCard';
+import { Button } from '../ui';
 
 interface PropsWizardProps {
     user: any;
@@ -18,13 +19,18 @@ interface PropsWizardProps {
 }
 
 const STEPS = [
-    { title: 'Game Selection', icon: '🏈' },
-    { title: 'Branding', icon: '🎨' },
-    { title: 'Details', icon: '📝' },
-    { title: 'Props Setup', icon: '❓' },
-    { title: 'Reminders', icon: '⏰' },
-    { title: 'Final', icon: '🏁' },
+    { title: 'Game Selection' },
+    { title: 'Branding' },
+    { title: 'Details' },
+    { title: 'Props Setup' },
+    { title: 'Reminders' },
+    { title: 'Final' },
 ];
+
+const CONTROL =
+    'w-full rounded-md border-[1.5px] border-line bg-page px-4 py-3 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint focus:border-navy-600 focus:bg-surface focus:outline-none transition-colors';
+const LABEL =
+    'block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-1';
 
 export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComplete, initialData, embedded }) => {
     // All hooks must run unconditionally (rules-of-hooks). The login guard is
@@ -86,12 +92,12 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
     // Login guard — after all hooks so hook order stays stable across renders.
     if (!user) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-400">
-                <AlertTriangle size={48} className="text-amber-500 mb-4" />
-                <h2 className="text-xl font-bold text-white mb-2">Login Required</h2>
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-muted font-body">
+                <AlertTriangle size={48} className="text-gold-500 mb-4" />
+                <h2 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Login Required</h2>
                 <p>You must be signed in to create a pool.</p>
                 <div className="mt-6 flex gap-4">
-                    <button onClick={onCancel} className="px-6 py-2 rounded-lg font-bold text-slate-300 hover:bg-slate-800 transition-colors">Cancel</button>
+                    <Button variant="ghost" onClick={onCancel}>Cancel</Button>
                 </div>
             </div>
         );
@@ -173,14 +179,14 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
     };
 
     return (
-        <div className={`min-h-screen bg-slate-950 flex flex-col ${embedded ? 'min-h-0 bg-transparent' : ''}`}>
+        <div className={`min-h-screen bg-page text-[color:var(--text)] font-body flex flex-col ${embedded ? 'min-h-0 bg-transparent' : ''}`}>
             {/* Header handled by Layout */}
 
             <main className={`flex-grow ${embedded ? 'p-0' : 'p-4 md:p-8'}`}>
                 <div className="max-w-4xl mx-auto">
                     {/* Wizard Navigation Header */}
                     <div className="flex items-center justify-between mb-8">
-                        <button onClick={onCancel} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+                        <button onClick={onCancel} className="flex items-center gap-2 text-muted hover:text-[color:var(--text)] transition-colors duration-150">
                             <ArrowLeft size={20} /> Cancel
                         </button>
                         <div className="flex items-center gap-2">
@@ -190,25 +196,25 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                     onClick={() => setStep(idx)}
                                     className={`flex items-center gap-2 transition-all hover:opacity-100 ${idx === step ? 'opacity-100' : 'opacity-40 cursor-pointer'}`}
                                 >
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-colors ${idx === step ? 'bg-indigo-600' : idx < step ? 'bg-emerald-600' : 'bg-slate-800'}`}>
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-sm num transition-colors duration-150 ${idx === step ? 'bg-navy-800 text-white dark:bg-gold-500 dark:text-navy-900' : idx < step ? 'bg-gold-foil text-navy-900' : 'bg-surface border border-line text-muted'}`}>
                                         {idx < step ? <Check size={14} /> : idx + 1}
                                     </div>
-                                    <span className={`text-sm font-bold hidden md:block transition-colors ${idx === step ? 'text-white' : 'text-slate-500'}`}>{s.title}</span>
-                                    {idx < STEPS.length - 1 && <div className="w-8 h-[1px] bg-slate-700 hidden md:block" />}
+                                    <span className={`text-sm font-display font-bold uppercase tracking-[0.05em] hidden md:block transition-colors duration-150 ${idx === step ? 'text-[color:var(--text)]' : 'text-faint'}`}>{s.title}</span>
+                                    {idx < STEPS.length - 1 && <div className="w-8 h-[1px] bg-line hidden md:block" />}
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     {error && (
-                        <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/50 rounded-lg flex items-center gap-3 text-rose-400">
+                        <div className="mb-6 p-4 bg-brandred-600/10 border border-brandred-600/40 rounded-lg flex items-center gap-3 text-brandred-600">
                             <AlertTriangle size={20} />
                             {error}
                         </div>
                     )}
 
                     {/* Content */}
-                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 md:p-8 shadow-2xl">
+                    <div className="bg-card border border-line rounded-xl p-6 md:p-8 shadow-card">
                         {step === 0 && (
                             <WizardStepGame
                                 gameState={config as unknown as GameState}
@@ -229,100 +235,100 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                         {step === 2 && (
                             <div className="space-y-6 animate-in slide-in-from-right duration-300">
                                 <div className="text-center mb-6">
-                                    <h2 className="text-2xl font-bold text-white mb-2">Pool Details</h2>
-                                    <p className="text-slate-400">Configure public visibility and payment options.</p>
+                                    <h2 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Pool Details</h2>
+                                    <p className="text-muted">Configure public visibility and payment options.</p>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="md:col-span-2">
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Name</label>
+                                        <label className={LABEL}>Pool Name</label>
                                         <input
                                             type="text"
                                             value={config.name}
                                             onChange={(e) => updateConfig({ name: e.target.value })}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                            className={CONTROL}
                                             placeholder="e.g. Super Bowl 2025 Props"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Custom URL Slug (Optional)</label>
+                                        <label className={LABEL}>Custom URL Slug (Optional)</label>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-3 text-slate-600 font-mono text-sm">/</span>
+                                            <span className="absolute left-3 top-3 text-faint font-body text-sm">/</span>
                                             <input
                                                 type="text"
                                                 value={config.urlSlug || ''}
                                                 onChange={(e) => updateConfig({ urlSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-                                                className="w-full bg-slate-900 border border-slate-700 rounded pl-6 pr-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                className={`${CONTROL} pl-6`}
                                                 placeholder="my-super-pool"
                                             />
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pool Manager Name</label>
+                                        <label className={LABEL}>Pool Manager Name</label>
                                         <input
                                             type="text"
                                             value={config.managerName || ''}
                                             onChange={(e) => updateConfig({ managerName: e.target.value })}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                            className={CONTROL}
                                             placeholder="Your Name"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Contact Email</label>
+                                        <label className={LABEL}>Contact Email</label>
                                         <input
                                             type="email"
                                             value={config.contactEmail || ''}
                                             onChange={(e) => updateConfig({ contactEmail: e.target.value })}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                            className={CONTROL}
                                             placeholder="admin@example.com"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Venmo Handle (@username)</label>
+                                        <label className={LABEL}>Venmo Handle (@username)</label>
                                         <input
                                             type="text"
                                             value={config.paymentHandles?.venmo || ''}
                                             onChange={(e) => updateConfig({ paymentHandles: { ...config.paymentHandles, venmo: e.target.value } })}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                            className={CONTROL}
                                             placeholder="@YourVenmo"
                                         />
                                     </div>
 
                                     <div className="md:col-span-2">
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Payment Instructions</label>
+                                        <label className={LABEL}>Payment Instructions</label>
                                         <textarea
                                             value={config.paymentInstructions || ''}
                                             onChange={(e) => updateConfig({ paymentInstructions: e.target.value })}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 outline-none h-24 resize-none"
+                                            className={`${CONTROL} h-24 resize-none`}
                                             placeholder="Example: Please pay within 24 hours. Good luck!"
                                         />
                                     </div>
 
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-3 cursor-pointer p-4 bg-slate-900 rounded-lg border border-slate-800 hover:border-indigo-500 transition-colors">
+                                        <label className="flex items-center gap-3 cursor-pointer p-4 bg-surface rounded-lg border border-line hover:border-navy-600 transition-colors duration-150">
                                             <input
                                                 type="checkbox"
                                                 checked={config.isPublic}
                                                 onChange={(e) => updateConfig({ isPublic: e.target.checked })}
-                                                className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                                                className="w-5 h-5 rounded border-line bg-page text-navy-800 focus:ring-navy-600"
                                             />
                                             <div>
-                                                <span className="font-bold text-white block">List in Public Directory</span>
-                                                <span className="text-xs text-slate-500">Allow anyone to find and join your pool from the "Public Pools" page.</span>
+                                                <span className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] block">List in Public Directory</span>
+                                                <span className="text-xs text-faint">Allow anyone to find and join your pool from the "Public Pools" page.</span>
                                             </div>
                                         </label>
                                     </div>
                                 </div>
 
-                                <div className="flex justify-between pt-8 border-t border-slate-800 mt-8">
-                                    <button onClick={handleBack} className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:bg-slate-800 transition-colors">Back</button>
-                                    <button onClick={handleNext} disabled={!config.name} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
+                                <div className="flex justify-between pt-8 border-t border-line mt-8">
+                                    <Button variant="ghost" onClick={handleBack}>Back</Button>
+                                    <Button onClick={handleNext} disabled={!config.name} className="px-8">
                                         Next: Props Setup
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         )}
@@ -331,47 +337,47 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                             /* Adapting PropsManager to be used as a setup step */
                             <div className="space-y-6 animate-in slide-in-from-right duration-300">
                                 <div className="text-center mb-6">
-                                    <h2 className="text-2xl font-bold text-white mb-2">Configure Props Game</h2>
-                                    <p className="text-slate-400">Set the entry fee, payouts, and questions.</p>
+                                    <h2 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Configure Props Game</h2>
+                                    <p className="text-muted">Set the entry fee, payouts, and questions.</p>
                                 </div>
 
                                 {/* Basic Settings */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Entry Fee ($)</label>
+                                        <label className={LABEL}>Entry Fee ($)</label>
                                         <input
                                             type="number"
                                             min="0"
                                             value={config.props?.cost}
                                             onChange={(e) => updateConfig({ props: { ...config.props!, cost: Number(e.target.value) } })}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 font-mono font-bold text-emerald-400 focus:border-indigo-500 outline-none"
+                                            className={`${CONTROL} num font-bold text-gold-600 dark:text-gold-400`}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Max Cards Per Player</label>
+                                        <label className={LABEL}>Max Cards Per Player</label>
                                         <input
                                             type="number"
                                             min="1"
                                             value={config.props?.maxCards}
                                             onChange={(e) => updateConfig({ props: { ...config.props!, maxCards: Number(e.target.value) } })}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 font-bold text-white focus:border-indigo-500 outline-none"
+                                            className={`${CONTROL} num font-bold`}
                                         />
                                     </div>
                                 </div>
 
-                                <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
-                                    <Sparkles size={16} className="text-indigo-400 shrink-0 mt-0.5" />
+                                <div className="p-3.5 bg-gold-500/10 border border-gold-500/25 text-muted text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
+                                    <Sparkles size={16} className="text-gold-500 shrink-0 mt-0.5" />
                                     <div>
-                                        <strong className="text-white block mb-0.5">💡 Start Small, Upgrade Later!</strong>
+                                        <strong className="text-[color:var(--text)] block mb-0.5">Start Small, Upgrade Later!</strong>
                                         Not sure how many players will join? Choose a lower estimate to minimize upfront costs. You can instantly upgrade with one click later for only the pro-rated difference!
                                     </div>
                                 </div>
 
                                 {/* Payout Structure */}
-                                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                                    <h4 className="font-bold text-white mb-4 flex items-center justify-between">
+                                <div className="bg-surface p-4 rounded-xl border border-line">
+                                    <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4 flex items-center justify-between">
                                         <span>Payout Structure (Percentages)</span>
-                                        <span className={`text-sm ${(config.props?.payouts?.reduce((a, b) => a + b, 0) || 0) === 100 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                        <span className={`text-sm num ${(config.props?.payouts?.reduce((a, b) => a + b, 0) || 0) === 100 ? 'text-[#0F7B4A]' : 'text-gold-600 dark:text-gold-400'}`}>
                                             Total: {config.props?.payouts?.reduce((a, b) => a + b, 0)}%
                                         </span>
                                     </h4>
@@ -379,7 +385,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                     <div className="space-y-3">
                                         {config.props?.payouts?.map((p, idx) => (
                                             <div key={idx} className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-slate-400 text-sm">
+                                                <div className="w-8 h-8 rounded-full bg-page border border-line flex items-center justify-center font-display font-bold text-muted text-sm num">
                                                     {idx + 1}
                                                 </div>
                                                 <div className="flex-grow relative">
@@ -393,16 +399,16 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                                             newPayouts[idx] = Number(e.target.value);
                                                             updateConfig({ props: { ...config.props!, payouts: newPayouts } });
                                                         }}
-                                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white pr-8 focus:border-indigo-500 outline-none"
+                                                        className="w-full bg-page border-[1.5px] border-line rounded-md px-3 py-2 text-[color:var(--text)] num pr-8 focus:border-navy-600 outline-none"
                                                     />
-                                                    <span className="absolute right-3 top-2 text-slate-500">%</span>
+                                                    <span className="absolute right-3 top-2 text-faint">%</span>
                                                 </div>
                                                 <button
                                                     onClick={() => {
                                                         const newPayouts = config.props?.payouts?.filter((_, i) => i !== idx);
                                                         updateConfig({ props: { ...config.props!, payouts: newPayouts } });
                                                     }}
-                                                    className="p-2 text-slate-500 hover:text-rose-400 transition-colors"
+                                                    className="p-2 text-faint hover:text-brandred-600 transition-colors duration-150"
                                                     disabled={(config.props?.payouts?.length || 0) <= 1}
                                                 >
                                                     <Trash2 size={18} />
@@ -417,14 +423,14 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                                     updateConfig({ props: { ...config.props!, payouts: [...(config.props?.payouts || []), 100 - currentTotal] } });
                                                 }
                                             }}
-                                            className="w-full py-2 border border-dashed border-slate-700 rounded-lg text-slate-400 hover:text-white hover:border-slate-500 transition-colors flex items-center justify-center gap-2 text-sm"
+                                            className="w-full py-2 border border-dashed border-line rounded-lg text-muted hover:text-[color:var(--text)] hover:border-navy-600 transition-colors duration-150 flex items-center justify-center gap-2 text-sm"
                                         >
                                             <Plus size={16} /> Add Place
                                         </button>
                                     </div>
                                 </div>
 
-                                <hr className="border-slate-800 my-6" />
+                                <hr className="border-line my-6" />
 
                                 <PropsManager
                                     gameState={config as unknown as PropsPool}
@@ -432,11 +438,11 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                     isWizardMode={true}
                                 />
 
-                                <div className="flex justify-between pt-8 border-t border-slate-800 mt-8">
-                                    <button onClick={handleBack} className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:bg-slate-800 transition-colors">Back</button>
-                                    <button onClick={handleNext} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
+                                <div className="flex justify-between pt-8 border-t border-line mt-8">
+                                    <Button variant="ghost" onClick={handleBack}>Back</Button>
+                                    <Button onClick={handleNext} className="px-8">
                                         Next: Reminders
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         )}
@@ -449,11 +455,11 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                     onNext={handleNext}
                                     isProps={true}
                                 />
-                                <div className="flex justify-between pt-8 border-t border-slate-800 mt-8">
-                                    <button onClick={handleBack} className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:bg-slate-800 transition-colors">Back</button>
-                                    <button onClick={handleNext} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
+                                <div className="flex justify-between pt-8 border-t border-line mt-8">
+                                    <Button variant="ghost" onClick={handleBack}>Back</Button>
+                                    <Button onClick={handleNext} className="px-8">
                                         Next: Final Preferences
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         )}
@@ -461,72 +467,74 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                         {step === 5 && (
                             <div className="space-y-6 animate-in slide-in-from-right duration-300">
                                 <div className="text-center mb-6">
-                                    <h2 className="text-2xl font-bold text-white mb-2">Final Preferences</h2>
-                                    <p className="text-slate-400">Customize data collection, notifications, and access.</p>
+                                    <h2 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Final Preferences</h2>
+                                    <p className="text-muted">Customize data collection, notifications, and access.</p>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     {/* Player Data */}
-                                    <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                                        <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Users size={16} className="text-indigo-400" /> Player Data Collection</h4>
+                                    <div className="bg-surface p-4 rounded-xl border border-line">
+                                        <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4 flex items-center gap-2"><Users size={16} className="text-navy-700 dark:text-gold-400" /> Player Data Collection</h4>
                                         <div className="space-y-3">
                                             {['collectPhone', 'collectAddress', 'collectReferral', 'collectNotes'].map((field) => (
-                                                <label key={field} className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-800 rounded">
-                                                    <span className="text-sm text-slate-300 capitalize">{field.replace('collect', '').replace(/([A-Z])/g, ' $1').trim()} ({field === 'collectNotes' ? 'Notes' : 'Required'})</span>
-                                                    <input type="checkbox" checked={(config as any)[field]} onChange={(e) => updateConfig({ [field]: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-indigo-600 focus:ring-indigo-500" />
+                                                <label key={field} className="flex items-center justify-between cursor-pointer p-2 hover:bg-page rounded">
+                                                    <span className="text-sm text-[color:var(--text)] capitalize">{field.replace('collect', '').replace(/([A-Z])/g, ' $1').trim()} ({field === 'collectNotes' ? 'Notes' : 'Required'})</span>
+                                                    <input type="checkbox" checked={(config as any)[field]} onChange={(e) => updateConfig({ [field]: e.target.checked })} className="w-5 h-5 rounded border-line bg-page text-navy-800 focus:ring-navy-600" />
                                                 </label>
                                             ))}
                                         </div>
                                     </div>
 
                                     {/* Email Notifications */}
-                                    <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                                        <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Mail size={16} className="text-sky-400" /> Notifications</h4>
+                                    <div className="bg-surface p-4 rounded-xl border border-line">
+                                        <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4 flex items-center gap-2"><Mail size={16} className="text-navy-700 dark:text-gold-400" /> Notifications</h4>
                                         <div className="space-y-4">
                                             <div>
-                                                <label className="block text-xs text-slate-500 uppercase font-bold mb-1">User Confirmation Email</label>
+                                                <label className={LABEL}>User Confirmation Email</label>
                                                 <select
                                                     value={config.emailConfirmation}
                                                     onChange={(e) => updateConfig({ emailConfirmation: e.target.value })}
-                                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-sm outline-none focus:border-indigo-500"
+                                                    className="w-full bg-page border-[1.5px] border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm outline-none focus:border-navy-600 cursor-pointer"
                                                 >
                                                     <option value="No Email Confirmation">Don't Send</option>
                                                     <option value="Email Confirmation">Send Email Receipt</option>
                                                 </select>
                                             </div>
 
-                                            <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-800 rounded border-t border-slate-800 pt-3">
-                                                <span className="text-sm text-slate-300">Alert Admin when Pool Full/Active</span>
-                                                <input type="checkbox" checked={config.notifyAdminFull} onChange={(e) => updateConfig({ notifyAdminFull: e.target.checked })} className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-indigo-600 focus:ring-indigo-500" />
+                                            <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-page rounded border-t border-line pt-3">
+                                                <span className="text-sm text-[color:var(--text)]">Alert Admin when Pool Full/Active</span>
+                                                <input type="checkbox" checked={config.notifyAdminFull} onChange={(e) => updateConfig({ notifyAdminFull: e.target.checked })} className="w-5 h-5 rounded border-line bg-page text-navy-800 focus:ring-navy-600" />
                                             </label>
                                         </div>
                                     </div>
 
                                     {/* Access Control */}
-                                    <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                                        <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Lock size={16} className="text-amber-400" /> Access Control</h4>
+                                    <div className="bg-surface p-4 rounded-xl border border-line">
+                                        <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4 flex items-center gap-2"><Lock size={16} className="text-gold-500" /> Access Control</h4>
                                         <div className="space-y-4">
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Entry Password</label>
-                                                <input type="text" value={config.gridPassword || ''} onChange={(e) => updateConfig({ gridPassword: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none" placeholder="Optional" />
+                                                <label className={LABEL}>Entry Password</label>
+                                                <input type="text" value={config.gridPassword || ''} onChange={(e) => updateConfig({ gridPassword: e.target.value })} className="w-full bg-page border-[1.5px] border-line rounded-md px-3 py-2 text-[color:var(--text)] placeholder:text-faint outline-none focus:border-navy-600" placeholder="Optional" />
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* QR Code Sharing */}
-                                    <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                                        <h4 className="font-bold text-white mb-4 flex items-center gap-2"><QrCode size={16} className="text-emerald-400" /> Share via QR Code</h4>
+                                    <div className="bg-surface p-4 rounded-xl border border-line">
+                                        <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4 flex items-center gap-2"><QrCode size={16} className="text-gold-500" /> Share via QR Code</h4>
                                         <div className="text-center">
-                                            <button
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
                                                 onClick={() => setShowQRCode(!showQRCode)}
-                                                className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 mx-auto"
+                                                className="mx-auto"
                                             >
                                                 <QrCode size={16} />
                                                 {showQRCode ? 'Hide QR Code' : 'Generate QR Code'}
-                                            </button>
+                                            </Button>
                                             {showQRCode && (
                                                 <div className="mt-4 animate-in fade-in slide-in-from-top-2">
-                                                    <div className="bg-white p-4 rounded-xl inline-block">
+                                                    <div className="bg-white p-4 rounded-xl inline-block border border-line">
                                                         <QRCodeSVG
                                                             id="pool-qr-code"
                                                             value={`${window.location.origin}/#pool/${config.urlSlug || 'new-pool'}`}
@@ -541,7 +549,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                     </div>
                                 </div>
 
-                                <div className="mt-6 font-sans">
+                                <div className="mt-6 font-body">
                                     <BillingInvoiceCard
                                         poolName={config.name || 'New Pool'}
                                         poolType="PROPS"
@@ -565,25 +573,25 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                         }}
                                     />
 
-                                    <div className="mt-4 p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-slate-400 text-xs">
-                                        <ShieldCheck className="text-indigo-400 shrink-0 mt-0.5" size={20} />
+                                    <div className="mt-4 p-4 bg-surface border border-line rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-muted text-xs">
+                                        <ShieldCheck className="text-gold-500 shrink-0 mt-0.5" size={20} />
                                         <div>
-                                            <strong className="text-white block mb-0.5">🚀 100% Free Trial Setup</strong>
+                                            <strong className="text-[color:var(--text)] block mb-0.5">100% Free Trial Setup</strong>
                                             Set up rules, invite participants, and run your pool completely free for 14 days! Pay only when you are ready to upgrade.
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="flex justify-between pt-8 border-t border-slate-800 mt-8">
-                                    <button onClick={handleBack} className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:bg-slate-800 transition-colors">Back</button>
-                                    <button
+                                <div className="flex justify-between pt-8 border-t border-line mt-8">
+                                    <Button variant="ghost" onClick={handleBack}>Back</Button>
+                                    <Button
                                         onClick={handleSubmit}
                                         disabled={isSubmitting || !tosAccepted}
-                                        className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 flex items-center gap-2"
+                                        className="px-8"
                                     >
                                         {isSubmitting ? <Loader className="animate-spin" /> : <Check />}
                                         {initialData ? 'Update Pool' : 'Create Pool'}
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         )}

@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import { AlertTriangle, ArrowRight } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, X, Square, Dot, Minus } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
 import { getWeekStatus, weekDeadline, type WeekStatus } from '../../utils/nflPending';
 import { formatDeadline } from '../../utils/formatTime';
 import { now as serverNow } from '../../utils/serverClock';
+import { Button } from '../ui';
 
 interface WeekChecklistProps {
     pool: Pool;
@@ -16,21 +17,21 @@ interface WeekChecklistProps {
 }
 
 const CHIP_STYLES: Record<WeekStatus, string> = {
-    'complete': 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400',
-    'locked-complete': 'bg-slate-800/60 border-slate-700 text-slate-400',
-    'due': 'bg-amber-500/10 border-amber-500/50 text-amber-400',
-    'missed': 'bg-rose-500/10 border-rose-500/40 text-rose-400',
-    'future': 'bg-slate-900/40 border-slate-800 text-slate-500',
-    'no-games': 'bg-slate-900/20 border-slate-900 text-slate-700',
+    'complete': 'bg-[#E4F5EC] border-[#BEE7D0] text-[#0F7B4A]',
+    'locked-complete': 'bg-cream border-line text-muted',
+    'due': 'bg-[#FBEEDD] border-[#F2D6B0] text-[#B4530A]',
+    'missed': 'bg-brandred-600/10 border-brandred-600/30 text-brandred-600',
+    'future': 'bg-page border-line text-faint',
+    'no-games': 'bg-page border-line text-faint opacity-60',
 };
 
-const CHIP_MARKS: Record<WeekStatus, string> = {
-    'complete': '✓',
-    'locked-complete': '✓',
-    'due': '☐',
-    'missed': '✗',
-    'future': '·',
-    'no-games': '–',
+const CHIP_MARKS: Record<WeekStatus, React.ReactNode> = {
+    'complete': <Check size={11} aria-hidden="true" />,
+    'locked-complete': <Check size={11} aria-hidden="true" />,
+    'due': <Square size={10} aria-hidden="true" />,
+    'missed': <X size={11} aria-hidden="true" />,
+    'future': <Dot size={11} aria-hidden="true" />,
+    'no-games': <Minus size={10} aria-hidden="true" />,
 };
 
 /**
@@ -64,19 +65,20 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
     return (
         <div className="space-y-3">
             {nextDue && (
-                <div role="status" className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div role="status" className="bg-gold-400/10 border border-gold-500/40 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex items-center gap-2 flex-1">
-                        <AlertTriangle size={16} className="text-amber-400 shrink-0" aria-hidden="true" />
-                        <span className="text-xs font-bold text-amber-300">
+                        <AlertTriangle size={16} className="text-gold-600 dark:text-gold-400 shrink-0" aria-hidden="true" />
+                        <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-gold-700 dark:text-gold-300">
                             Week {nextDue.week} picks not in yet — locks {formatDeadline(nextDue.deadline!)}
                         </span>
                     </div>
-                    <button
+                    <Button
+                        size="sm"
                         onClick={() => onPickNow(nextDue.week)}
-                        className="bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shrink-0"
+                        className="shrink-0"
                     >
                         Make picks <ArrowRight size={13} aria-hidden="true" />
-                    </button>
+                    </Button>
                 </div>
             )}
 
@@ -87,7 +89,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                         onClick={() => onSelectWeek(week)}
                         aria-label={`Week ${week}: ${status === 'complete' || status === 'locked-complete' ? 'picks submitted' : status === 'due' ? 'picks needed' : status === 'missed' ? 'missed' : status === 'no-games' ? 'no games' : 'upcoming'}`}
                         aria-current={week === selectedWeek ? 'true' : undefined}
-                        className={`shrink-0 min-w-[52px] px-2 py-1.5 rounded-lg border text-[11px] font-black transition-all ${CHIP_STYLES[status]} ${week === selectedWeek ? 'ring-2 ring-blue-500/60' : 'hover:brightness-125'}`}
+                        className={`shrink-0 min-w-[52px] px-2 py-1.5 rounded-md border inline-flex items-center justify-center gap-1 font-display font-bold uppercase text-[11px] tracking-[0.05em] num transition-all duration-150 ${CHIP_STYLES[status]} ${week === selectedWeek ? 'ring-2 ring-navy-600 dark:ring-gold-500' : 'hover:-translate-y-px'}`}
                     >
                         W{week} {CHIP_MARKS[status]}
                     </button>

@@ -80,26 +80,26 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   }, [entries, games, week, isWeekLocked]);
 
   return (
-    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 backdrop-blur-sm space-y-5">
-      <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-        <BarChart2 size={15} className="text-indigo-400" /> Pick Distribution
+    <div className="bg-card border border-line rounded-xl p-6 shadow-card space-y-5">
+      <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
+        <BarChart2 size={15} className="text-navy-700 dark:text-gold-400" /> Pick Distribution
       </h3>
 
       <div className="space-y-4">
         {games.length === 0 ? (
-          <p className="text-xs text-slate-500 italic text-center py-4">No active games scheduled.</p>
+          <p className="font-body text-[13px] text-faint italic text-center py-4">No active games scheduled.</p>
         ) : (
           distributionData.map(({ game, locked, homePct, awayPct, totalPicksForGame }) => (
-            <div key={game.id} className="bg-slate-950/50 p-4 border border-slate-900 rounded-2xl space-y-2">
+            <div key={game.id} className="bg-page p-4 border border-line rounded-lg space-y-2">
               {/* Game Teams Header */}
-              <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              <div className="flex justify-between items-center font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted">
                 <span>{game.awayTeam.abbreviation} vs {game.homeTeam.abbreviation}</span>
                 {locked ? (
-                  <span className="text-indigo-400 flex items-center gap-1">
+                  <span className="text-navy-700 dark:text-gold-400 flex items-center gap-1 num">
                     <Eye size={10} /> Revealed ({totalPicksForGame} picks)
                   </span>
                 ) : (
-                  <span className="text-slate-600 flex items-center gap-1">
+                  <span className="text-faint flex items-center gap-1">
                     <Lock size={9} /> Locked until kickoff
                   </span>
                 )}
@@ -108,33 +108,33 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
               {/* Progress Bar Distribution */}
               {locked ? (
                 <div className="space-y-1.5">
-                  <div className="flex justify-between items-baseline text-xs font-black text-white font-mono">
-                    <span className={awayPct >= homePct ? 'text-blue-400' : 'text-slate-405'}>
+                  <div className="flex justify-between items-baseline font-display font-bold text-[13px] num text-[color:var(--text)]">
+                    <span className={awayPct >= homePct ? 'text-navy-700 dark:text-gold-400' : 'text-muted'}>
                       {game.awayTeam.abbreviation} {awayPct}%
                     </span>
-                    <span className={homePct >= awayPct ? 'text-blue-400' : 'text-slate-405'}>
+                    <span className={homePct >= awayPct ? 'text-navy-700 dark:text-gold-400' : 'text-muted'}>
                       {homePct}% {game.homeTeam.abbreviation}
                     </span>
                   </div>
-                  
-                  {/* Glassmorphic progress bar */}
-                  <div className="h-2 w-full bg-slate-900 border border-slate-800/80 rounded-full overflow-hidden flex">
+
+                  {/* Split distribution bar */}
+                  <div className="h-2 w-full bg-line rounded-full overflow-hidden flex">
                     <div
-                      className="bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
+                      className="bg-navy-600 transition-all duration-500"
                       style={{ width: `${awayPct}%` }}
                     />
                     <div
-                      className="bg-slate-900 border-l border-slate-800 transition-all duration-500"
+                      className="bg-transparent transition-all duration-500"
                       style={{ width: `${100 - awayPct - homePct}%` }}
                     />
                     <div
-                      className="bg-gradient-to-l from-indigo-500 to-purple-500 transition-all duration-500"
+                      className="bg-gold-foil transition-all duration-500"
                       style={{ width: `${homePct}%` }}
                     />
                   </div>
                 </div>
               ) : (
-                <div className="h-10 border border-dashed border-slate-800 rounded-xl flex items-center justify-center text-[10px] font-bold text-slate-600 tracking-wider uppercase bg-slate-950/20">
+                <div className="h-10 border border-dashed border-line rounded-md flex items-center justify-center font-display font-bold uppercase text-[11px] tracking-[0.08em] text-faint bg-page/50">
                   <Lock size={12} className="mr-1.5" /> Locked until kickoff
                 </div>
               )}

@@ -136,7 +136,7 @@ export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournamen
 
     if (!analyticsData) return null;
 
-    const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1'];
+    const COLORS = ['#C9A867', '#24507F', '#0F7B4A', '#C4342E', '#B78F4A', '#1A3B62', '#D9BC80', '#9E241F'];
 
     return (
         <div className="space-y-8">
@@ -144,58 +144,58 @@ export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournamen
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 {/* Champion Picks Bar Chart */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                        <Trophy size={18} className="text-amber-400" /> Champion Pick Distribution
+                <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                    <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-6 flex items-center gap-2">
+                        <Trophy size={18} className="text-gold-500" /> Champion Pick Distribution
                     </h3>
                     {analyticsData.championChart.length > 0 ? (
                         <div className="h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={analyticsData.championChart}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                    <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                                    <YAxis tick={{ fill: '#94a3b8' }} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                                    <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 12 }} />
+                                    <YAxis tick={{ fill: 'var(--muted)' }} />
                                     <Tooltip
-                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#fff' }}
-                                        cursor={{ fill: '#1e293b', opacity: 0.4 }}
+                                        contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--line)', color: 'var(--text)' }}
+                                        cursor={{ fill: 'var(--line)', opacity: 0.4 }}
                                     />
-                                    <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]}>
+                                    <Bar dataKey="value" fill="#24507F" radius={[4, 4, 0, 0]}>
                                         {analyticsData.championChart.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#6366f1'} />
+                                            <Cell key={`cell-${index}`} fill={index === 0 ? '#C9A867' : '#24507F'} />
                                         ))}
                                     </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
                     ) : (
-                        <div className="text-slate-500 text-center py-10 h-[300px] flex items-center justify-center">No champion picks yet</div>
+                        <div className="text-faint text-center py-10 h-[300px] flex items-center justify-center">No champion picks yet</div>
                     )}
                 </div>
 
                 {/* Round Accuracy or Placeholder */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl relative overflow-hidden">
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2 relative z-10">
-                        <Activity size={18} className="text-emerald-400" /> Pool-wide Accuracy per Round
+                <div className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden">
+                    <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-6 flex items-center gap-2 relative z-10">
+                        <Activity size={18} className="text-[#0F7B4A]" /> Pool-wide Accuracy per Round
                     </h3>
                     {analyticsData.roundAccuracy.length > 0 ? (
                         <div className="h-[300px] w-full relative z-10">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={analyticsData.roundAccuracy}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                    <XAxis dataKey="round" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                                    <YAxis tick={{ fill: '#94a3b8' }} domain={[0, 100]} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                                    <XAxis dataKey="round" tick={{ fill: 'var(--muted)', fontSize: 12 }} />
+                                    <YAxis tick={{ fill: 'var(--muted)' }} domain={[0, 100]} />
                                     <Tooltip
                                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                         formatter={(val: any) => [`${val}%`, 'Accuracy']}
-                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#fff' }}
-                                        cursor={{ fill: '#1e293b', opacity: 0.4 }}
+                                        contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--line)', color: 'var(--text)' }}
+                                        cursor={{ fill: 'var(--line)', opacity: 0.4 }}
                                     />
-                                    <Bar dataKey="accuracy" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="accuracy" fill="#0F7B4A" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
                     ) : (
-                        <div className="text-slate-500 text-center py-10 h-[300px] flex items-center justify-center flex-col gap-2 relative z-10">
+                        <div className="text-faint text-center py-10 h-[300px] flex items-center justify-center flex-col gap-2 relative z-10">
                             <Activity className="w-8 h-8 opacity-20" />
                             <p>Tournament hasn't started yet.<br />Accuracy charts will appear here.</p>
                         </div>
@@ -205,14 +205,14 @@ export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournamen
 
             {/* Region Winner Pies */}
             {analyticsData.regionCharts.length > 0 && (
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                        <Map size={18} className="text-indigo-400" /> Region Winners (Final Four Picks)
+                <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                    <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-6 flex items-center gap-2">
+                        <Map size={18} className="text-gold-500" /> Region Winners (Final Four Picks)
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {analyticsData.regionCharts.map((rc) => (
                             <div key={rc.regionId} className="flex flex-col items-center">
-                                <h4 className="text-slate-400 font-bold text-sm mb-2">{rc.regionName}</h4>
+                                <h4 className="text-muted font-display font-bold uppercase tracking-[0.08em] text-sm mb-2">{rc.regionName}</h4>
                                 <div className="h-[200px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
@@ -230,8 +230,8 @@ export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournamen
                                                 ))}
                                             </Pie>
                                             <Tooltip
-                                                contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#fff' }}
-                                                itemStyle={{ color: '#fff' }}
+                                                contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--line)', color: 'var(--text)' }}
+                                                itemStyle={{ color: 'var(--text)' }}
                                             />
                                         </PieChart>
                                     </ResponsiveContainer>
@@ -243,18 +243,18 @@ export const PoolAnalytics: React.FC<PoolAnalyticsProps> = ({ entries, tournamen
             )}
 
             {/* Contrarian List */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-                <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                    <Users size={18} className="text-rose-400" /> Most Contrarian Brackets
+            <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+                <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-6 flex items-center gap-2">
+                    <Users size={18} className="text-brandred-600" /> Most Contrarian Brackets
                 </h3>
-                <p className="text-slate-400 text-sm mb-6">These entries deviate the most from the pool's consensus picks.</p>
+                <p className="text-muted font-body text-sm mb-6">These entries deviate the most from the pool's consensus picks.</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {analyticsData.contrarianData.map((c, i) => (
-                        <div key={i} className="bg-slate-950 border border-slate-800 rounded-lg p-4 flex items-center justify-between">
-                            <span className="font-bold text-white truncate mr-4">{c.name}</span>
+                        <div key={i} className="bg-surface border border-line rounded-lg p-4 flex items-center justify-between">
+                            <span className="font-bold text-[color:var(--text)] truncate mr-4">{c.name}</span>
                             <div className="flex flex-col items-end">
-                                <span className="text-rose-400 font-mono text-xl">{c.contrarianScore}%</span>
-                                <span className="text-[10px] text-slate-500 uppercase tracking-widest">Contrarian</span>
+                                <span className="text-brandred-600 num font-display font-bold text-xl">{c.contrarianScore}%</span>
+                                <span className="text-[10px] text-faint font-display uppercase tracking-[0.16em]">Contrarian</span>
                             </div>
                         </div>
                     ))}

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { Tournament } from '../../types';
 import { useToast } from '../ui/Toast';
+import { Button, Badge } from '../ui';
 
 interface TournamentOption {
     id: string;
@@ -270,17 +271,17 @@ export const TournamentManager: React.FC = () => {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <Trophy className="text-amber-500" /> Tournament Manager
+                    <h2 className="text-2xl font-display font-bold uppercase tracking-[0.03em] text-[color:var(--text)] flex items-center gap-2">
+                        <Trophy className="text-gold-500" /> Tournament Manager
                     </h2>
-                    <p className="text-slate-400 text-sm">Manage NCAA Tournament data</p>
+                    <p className="text-muted text-sm font-body">Manage NCAA Tournament data</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <select
                         value={selectedTournamentId}
                         onChange={e => setSelectedTournamentId(e.target.value)}
                         disabled={loadingList || tournamentList.length === 0}
-                        className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent appearance-none pr-8"
+                        className="bg-page border border-line rounded-lg px-3 py-1.5 text-[color:var(--text)] text-sm font-body focus:ring-2 focus:ring-gold-500 focus:border-transparent appearance-none pr-8"
                         style={{ backgroundImage: 'none' }}
                     >
                         {loadingList && <option>Loading...</option>}
@@ -289,114 +290,117 @@ export const TournamentManager: React.FC = () => {
                         ))}
                         {!loadingList && tournamentList.length === 0 && <option>No tournaments</option>}
                     </select>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${tournament ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
-                        {tournament ? (tournament.isFinalized ? 'Finalized' : 'Active') : 'Not Found'}
-                    </span>
+                    {tournament
+                        ? <Badge status={tournament.isFinalized ? 'winner' : 'open'}>{tournament.isFinalized ? 'Finalized' : 'Active'}</Badge>
+                        : <Badge status="locked">Not Found</Badge>}
                 </div>
             </div>
 
             {/* Status Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="bg-card p-4 rounded-xl border border-line shadow-card">
                     <div className="flex justify-between items-start mb-2">
-                        <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400"><Users size={20} /></div>
-                        <span className="text-xs font-bold text-slate-500 uppercase">Teams</span>
+                        <div className="p-2 bg-navy-700/20 rounded-lg text-navy-700 dark:text-[#9FB0CC]"><Users size={20} /></div>
+                        <span className="text-xs font-display font-bold text-faint uppercase tracking-[0.08em]">Teams</span>
                     </div>
-                    <div className="text-2xl font-black text-white">{teamCount}</div>
-                    <div className="text-xs text-slate-400">Imported Teams</div>
+                    <div className="text-2xl font-display font-bold text-[color:var(--text)] num">{teamCount}</div>
+                    <div className="text-xs text-muted font-body">Imported Teams</div>
                 </div>
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="bg-card p-4 rounded-xl border border-line shadow-card">
                     <div className="flex justify-between items-start mb-2">
-                        <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400"><Calendar size={20} /></div>
-                        <span className="text-xs font-bold text-slate-500 uppercase">Games</span>
+                        <div className="p-2 bg-gold-500/20 rounded-lg text-gold-600"><Calendar size={20} /></div>
+                        <span className="text-xs font-display font-bold text-faint uppercase tracking-[0.08em]">Games</span>
                     </div>
-                    <div className="text-2xl font-black text-white">{gameCount}</div>
-                    <div className="text-xs text-slate-400">Scheduled / Final</div>
+                    <div className="text-2xl font-display font-bold text-[color:var(--text)] num">{gameCount}</div>
+                    <div className="text-xs text-muted font-body">Scheduled / Final</div>
                 </div>
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="bg-card p-4 rounded-xl border border-line shadow-card">
                     <div className="flex justify-between items-start mb-2">
-                        <div className="p-2 bg-purple-500/20 rounded-lg text-purple-400"><Activity size={20} /></div>
-                        <span className="text-xs font-bold text-slate-500 uppercase">Last Sync</span>
+                        <div className="p-2 bg-navy-700/20 rounded-lg text-navy-700 dark:text-[#9FB0CC]"><Activity size={20} /></div>
+                        <span className="text-xs font-display font-bold text-faint uppercase tracking-[0.08em]">Last Sync</span>
                     </div>
-                    <div className="text-lg font-bold text-white truncate">{lastUpdated}</div>
-                    <div className="text-xs text-slate-400">From ESPN</div>
+                    <div className="text-lg font-bold text-[color:var(--text)] truncate num">{lastUpdated}</div>
+                    <div className="text-xs text-muted font-body">From ESPN</div>
                 </div>
-                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div className="bg-card p-4 rounded-xl border border-line shadow-card">
                     <div className="flex justify-between items-start mb-2">
-                        <div className="p-2 bg-cyan-500/20 rounded-lg text-cyan-400"><Clock size={20} /></div>
-                        <span className="text-xs font-bold text-slate-500 uppercase">Lock Date</span>
+                        <div className="p-2 bg-gold-500/20 rounded-lg text-gold-600"><Clock size={20} /></div>
+                        <span className="text-xs font-display font-bold text-faint uppercase tracking-[0.08em]">Lock Date</span>
                     </div>
-                    <div className="text-sm font-bold text-white truncate">{lockAtDisplay}</div>
-                    <div className="text-xs text-slate-400">Entries lock at this time</div>
+                    <div className="text-sm font-bold text-[color:var(--text)] truncate num">{lockAtDisplay}</div>
+                    <div className="text-xs text-muted font-body">Entries lock at this time</div>
                 </div>
             </div>
 
             {/* Lock Date Editor */}
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <Clock size={18} className="text-cyan-400" /> Tournament Lock Date
+            <div className="bg-card rounded-xl border border-line p-6 shadow-card">
+                <h3 className="text-lg font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4 flex items-center gap-2">
+                    <Clock size={18} className="text-gold-500" /> Tournament Lock Date
                 </h3>
-                <p className="text-xs text-slate-500 mb-4">
+                <p className="text-xs text-faint mb-4 font-body">
                     All bracket pools linked to this tournament will auto-lock entries at this time.
                     Typically set to the first game of the NCAA Tournament.
                 </p>
                 <div className="flex items-end gap-4">
                     <div className="flex-1">
-                        <label className="text-xs text-slate-400 block mb-1">Lock Date & Time</label>
+                        <label className="text-xs text-muted block mb-1 font-display font-bold uppercase tracking-[0.08em]">Lock Date & Time</label>
                         <input
                             type="datetime-local"
                             value={editLockAt}
                             onChange={e => setEditLockAt(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                            className="w-full bg-page border border-line rounded-lg p-2.5 text-[color:var(--text)] text-sm font-body focus:ring-2 focus:ring-gold-500 focus:border-transparent"
                         />
                     </div>
-                    <button
+                    <Button
+                        variant="secondary"
                         onClick={handleSaveLockAt}
                         disabled={savingLockAt || !editLockAt}
-                        className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2.5 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all text-sm"
                     >
                         {savingLockAt ? <RefreshCw className="animate-spin" size={14} /> : <Check size={14} />}
                         Save
-                    </button>
+                    </Button>
                 </div>
             </div>
 
             {/* Actions */}
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                <h3 className="text-lg font-bold text-white mb-4">Actions</h3>
+            <div className="bg-card rounded-xl border border-line p-6 shadow-card">
+                <h3 className="text-lg font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4">Actions</h3>
 
                 {error && (
-                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                    <div className="mb-4 p-3 bg-brandred-600/10 border border-brandred-600/30 rounded-lg text-brandred-500 text-sm flex items-center gap-2 font-body">
                         <AlertTriangle size={16} /> {error}
                     </div>
                 )}
 
                 {successMsg && (
-                    <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm flex items-center gap-2">
+                    <div className="mb-4 p-3 bg-[#0F7B4A]/10 border border-[#0F7B4A]/30 rounded-lg text-[#0F7B4A] text-sm flex items-center gap-2 font-body">
                         <Check size={16} /> {successMsg}
                     </div>
                 )}
 
                 <div className="flex flex-col md:flex-row gap-4">
-                    <button
+                    <Button
+                        variant="primary"
                         onClick={handleImport}
                         disabled={importing}
-                        className="flex-1 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg shadow-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+                        className="flex-1"
                     >
                         {importing ? <RefreshCw className="animate-spin" /> : <Download />}
                         {importing ? 'Importing from ESPN...' : 'Import Data from ESPN'}
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
+                        variant="ghost"
                         onClick={handleReset}
                         disabled={isLoading || importing}
-                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+                        className="flex-1"
                     >
                         <RefreshCw className={isLoading ? "animate-spin" : ""} />
                         Re-Initialize Skeleton
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
+                        variant="secondary"
                         onClick={async () => {
                             setSyncingPlayIns(true);
                             setError(null);
@@ -413,13 +417,13 @@ export const TournamentManager: React.FC = () => {
                             }
                         }}
                         disabled={syncingPlayIns || importing}
-                        className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+                        className="flex-1"
                     >
                         {syncingPlayIns ? <RefreshCw className="animate-spin" /> : <Users />}
                         {syncingPlayIns ? 'Syncing...' : 'Sync Early Bracket Picks'}
-                    </button>
+                    </Button>
                 </div>
-                <p className="mt-2 text-xs text-slate-500 text-center">
+                <p className="mt-2 text-xs text-faint text-center font-body">
                     Importing will fetch live data from ESPN and update the tournament document.
                     Re-initializing will reset the bracket structure to a clean state.
                     Sync Early Bracket Picks will process brackets submitted prior to the play-in games.
@@ -428,36 +432,36 @@ export const TournamentManager: React.FC = () => {
 
             {/* Data Preview */}
             {tournament && (
-                <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                    <div className="p-4 border-b border-slate-700 bg-slate-900/50">
-                        <h3 className="font-bold text-white">Imported Data Preview</h3>
+                <div className="bg-card rounded-xl border border-line overflow-hidden shadow-card">
+                    <div className="p-4 border-b border-line bg-page/50">
+                        <h3 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)]">Imported Data Preview</h3>
                     </div>
                     <div className="p-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Teams List */}
                             <div>
-                                <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Teams ({teamCount})</h4>
+                                <h4 className="text-sm font-display font-bold text-muted uppercase tracking-[0.08em] mb-3">Teams (<span className="num">{teamCount}</span>)</h4>
                                 <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                                     {Object.values(tournament.importedTeams || {}).map((team) => (
-                                        <div key={team.id} className="flex items-center gap-3 p-2 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                                        <div key={team.id} className="flex items-center gap-3 p-2 bg-page/50 rounded-lg border border-line/50">
                                             {team.logoUrl ? (
                                                 <img src={team.logoUrl} alt={team.name} className="w-6 h-6 object-contain" />
                                             ) : (
-                                                <div className="w-6 h-6 bg-slate-700 rounded-full" />
+                                                <div className="w-6 h-6 bg-page rounded-full" />
                                             )}
                                             <div className="flex-1 min-w-0">
-                                                <div className="text-sm font-bold text-white truncate">{team.name}</div>
-                                                <div className="text-xs text-slate-500">Seed: {team.seed}</div>
+                                                <div className="text-sm font-bold text-[color:var(--text)] truncate font-body">{team.name}</div>
+                                                <div className="text-xs text-faint">Seed: <span className="num">{team.seed}</span></div>
                                             </div>
                                         </div>
                                     ))}
-                                    {teamCount === 0 && <p className="text-slate-500 text-sm">No teams imported.</p>}
+                                    {teamCount === 0 && <p className="text-faint text-sm font-body">No teams imported.</p>}
                                 </div>
                             </div>
 
                             {/* Games List */}
                             <div>
-                                <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Recent Games ({gameCount})</h4>
+                                <h4 className="text-sm font-display font-bold text-muted uppercase tracking-[0.08em] mb-3">Recent Games (<span className="num">{gameCount}</span>)</h4>
                                 <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                                     {Object.values(tournament.importedGames || {})
                                         .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
@@ -465,27 +469,27 @@ export const TournamentManager: React.FC = () => {
                                             const homeTeam = (tournament.importedTeams || {})[game.homeTeamId];
                                             const awayTeam = (tournament.importedTeams || {})[game.awayTeamId];
                                             return (
-                                                <div key={game.id} className="p-2 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                                                <div key={game.id} className="p-2 bg-page/50 rounded-lg border border-line/50">
                                                     <div className="flex justify-between items-center mb-1">
-                                                        <span className="text-xs font-bold text-indigo-400">{game.status}</span>
-                                                        <span className="text-xs text-slate-500">{new Date(game.startTime).toLocaleDateString()}</span>
+                                                        <span className="text-xs font-display font-bold uppercase tracking-[0.06em] text-navy-700 dark:text-[#9FB0CC]">{game.status}</span>
+                                                        <span className="text-xs text-faint num">{new Date(game.startTime).toLocaleDateString()}</span>
                                                     </div>
                                                     <div className="flex justify-between items-center text-sm">
-                                                        <span className={game.winnerTeamId === game.homeTeamId ? 'text-amber-400 font-bold' : 'text-slate-300'}>
+                                                        <span className={game.winnerTeamId === game.homeTeamId ? 'text-gold-600 font-bold font-body' : 'text-muted font-body'}>
                                                             {homeTeam?.name || game.homeTeamId}
-                                                            {game.homeScore > 0 && <span className="ml-2 text-white">{game.homeScore}</span>}
+                                                            {game.homeScore > 0 && <span className="ml-2 text-[color:var(--text)] num">{game.homeScore}</span>}
                                                         </span>
                                                     </div>
                                                     <div className="flex justify-between items-center text-sm">
-                                                        <span className={game.winnerTeamId === game.awayTeamId ? 'text-amber-400 font-bold' : 'text-slate-300'}>
+                                                        <span className={game.winnerTeamId === game.awayTeamId ? 'text-gold-600 font-bold font-body' : 'text-muted font-body'}>
                                                             {awayTeam?.name || game.awayTeamId}
-                                                            {game.awayScore > 0 && <span className="ml-2 text-white">{game.awayScore}</span>}
+                                                            {game.awayScore > 0 && <span className="ml-2 text-[color:var(--text)] num">{game.awayScore}</span>}
                                                         </span>
                                                     </div>
                                                 </div>
                                             );
                                         })}
-                                    {gameCount === 0 && <p className="text-slate-500 text-sm">No games imported.</p>}
+                                    {gameCount === 0 && <p className="text-faint text-sm font-body">No games imported.</p>}
                                 </div>
                             </div>
                         </div>

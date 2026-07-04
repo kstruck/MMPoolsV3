@@ -54,7 +54,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
 
     return (
         <div
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
+            className="fixed inset-0 bg-navy-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
             onClick={onClose}
         >
             <div
@@ -63,16 +63,16 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
                 aria-modal="true"
                 aria-labelledby="share-modal-title"
                 tabIndex={-1}
-                className="bg-slate-800 border border-slate-600 p-6 rounded-xl shadow-2xl max-w-sm w-full relative outline-none"
+                className="bg-card border border-line p-6 rounded-xl shadow-panel max-w-sm w-full relative outline-none"
                 onClick={(e) => e.stopPropagation()}
             >
-                <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 text-slate-400 hover:text-white">
+                <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 text-muted hover:text-[color:var(--text)] transition-colors">
                     <LogOut className="rotate-45" size={20} />
                 </button>
-                <h3 id="share-modal-title" className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                    <Share2 size={20} className="text-indigo-400" /> Share Pool
+                <h3 id="share-modal-title" className="text-xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2 flex items-center gap-2">
+                    <Share2 size={20} className="text-gold-500" /> Share Pool
                 </h3>
-                <p className="text-sm text-slate-400 mb-6">Invite friends to join the action.</p>
+                <p className="text-sm font-body text-muted mb-6">Invite friends to join the action.</p>
                 <div className="grid grid-cols-4 gap-4 mb-6">
                     {/* Native Share (Best for Instagram/Mobile) */}
                     <button
@@ -80,10 +80,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
                         className="flex flex-col items-center gap-2 group"
                         title="Share to Instagram / Other Apps"
                     >
-                        <div className="w-12 h-12 bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 rounded-full flex items-center justify-center border border-slate-700 group-hover:scale-110 transition-transform">
+                        <div className="w-12 h-12 bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 rounded-full flex items-center justify-center border border-line group-hover:scale-110 transition-transform">
                             <Instagram size={20} className="text-white" />
                         </div>
-                        <span className="text-xs text-slate-400">Instagram</span>
+                        <span className="text-xs font-body text-muted">Instagram</span>
                     </button>
 
                     <a
@@ -92,10 +92,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
                         rel="noopener noreferrer"
                         className="flex flex-col items-center gap-2 group"
                     >
-                        <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-indigo-500 transition-colors">
+                        <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center border border-line group-hover:border-gold-500 transition-colors">
                             <Twitter size={20} className="fill-white" />
                         </div>
-                        <span className="text-xs text-slate-400">X</span>
+                        <span className="text-xs font-body text-muted">X</span>
                     </a>
                     <a
                         href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
@@ -103,10 +103,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
                         rel="noopener noreferrer"
                         className="flex flex-col items-center gap-2 group"
                     >
-                        <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-blue-500 transition-colors">
-                            <Facebook size={20} className="text-blue-500" />
+                        <div className="w-12 h-12 bg-navy-900 rounded-full flex items-center justify-center border border-line group-hover:border-[#1877F2] transition-colors">
+                            <Facebook size={20} className="text-[#1877F2]" />
                         </div>
-                        <span className="text-xs text-slate-400">Facebook</span>
+                        <span className="text-xs font-body text-muted">Facebook</span>
                     </a>
                     <a
                         href={`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + cleanUrl)}`}
@@ -114,18 +114,18 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
                         rel="noopener noreferrer"
                         className="flex flex-col items-center gap-2 group"
                     >
-                        <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center border border-slate-700 group-hover:border-emerald-500 transition-colors">
-                            <MessageCircle size={20} className="text-emerald-500" />
+                        <div className="w-12 h-12 bg-navy-900 rounded-full flex items-center justify-center border border-line group-hover:border-[#25D366] transition-colors">
+                            <MessageCircle size={20} className="text-[#25D366]" />
                         </div>
-                        <span className="text-xs text-slate-400">WhatsApp</span>
+                        <span className="text-xs font-body text-muted">WhatsApp</span>
                     </a>
                 </div>
 
-                <div className="bg-slate-900 p-3 rounded-lg flex items-center gap-2 border border-slate-700">
-                    <span className="text-xs text-slate-400 truncate flex-1 font-mono">{cleanUrl}</span>
+                <div className="bg-page p-3 rounded-lg flex items-center gap-2 border border-line">
+                    <span className="text-xs text-muted truncate flex-1 font-mono num">{cleanUrl}</span>
                     <button
                         onClick={() => { navigator.clipboard.writeText(cleanUrl); toast.success("Link copied to clipboard!"); }}
-                        className="bg-slate-800 hover:bg-slate-700 text-white p-2 rounded transition-colors"
+                        className="bg-navy-800 hover:bg-navy-700 text-white p-2 rounded transition-colors"
                         title="Copy Link"
                     >
                         <LinkIcon size={16} />

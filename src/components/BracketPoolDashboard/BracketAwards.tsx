@@ -78,7 +78,7 @@ export const BracketAwards: React.FC<BracketAwardsProps> = ({ entries, tournamen
                     title: 'Crystal Ball',
                     description: 'Most correct Round 1 picks',
                     icon: Compass,
-                    color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+                    color: 'text-navy-700 dark:text-gold-300 bg-navy-600/10 border-navy-600/30',
                     winners: currentWinners,
                     value: `${maxR1}/${r1Games.length}`
                 });
@@ -120,7 +120,7 @@ export const BracketAwards: React.FC<BracketAwardsProps> = ({ entries, tournamen
                     title: 'Upset King',
                     description: 'Most upsets correctly called',
                     icon: Zap,
-                    color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+                    color: 'text-gold-600 bg-gold-500/10 border-gold-500/30',
                     winners: currentWinners,
                     value: `${maxUpsets} upsets`
                 });
@@ -167,7 +167,7 @@ export const BracketAwards: React.FC<BracketAwardsProps> = ({ entries, tournamen
                     title: 'Chalk Walker',
                     description: 'Safest Final Four picks (avg seed)',
                     icon: Trophy,
-                    color: 'text-slate-300 bg-slate-500/10 border-slate-500/20',
+                    color: 'text-muted bg-surface border-line',
                     winners: currentWinners,
                     value: `Avg: ${winningVal}`
                 });
@@ -200,7 +200,7 @@ export const BracketAwards: React.FC<BracketAwardsProps> = ({ entries, tournamen
                     title: 'Sharpshooter',
                     description: 'Most correct late-round picks (S16+)',
                     icon: Crosshair,
-                    color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+                    color: 'text-[#0F7B4A] bg-[#0F7B4A]/10 border-[#0F7B4A]/30',
                     winners: currentWinners,
                     value: `${maxLate}/${lateGames.length}`
                 });
@@ -224,7 +224,7 @@ export const BracketAwards: React.FC<BracketAwardsProps> = ({ entries, tournamen
                     title: 'Champion Caller',
                     description: 'Correctly predicted the National Champion',
                     icon: Crown,
-                    color: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
+                    color: 'text-gold-700 dark:text-gold-400 bg-gold-500/15 border-gold-500/40',
                     winners: currentWinners,
                     value: tournament.importedTeams?.[finalChampId]?.name || 'Champ'
                 });
@@ -237,9 +237,9 @@ export const BracketAwards: React.FC<BracketAwardsProps> = ({ entries, tournamen
     if (awards.length === 0) return null;
 
     return (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl w-full">
-            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                <Trophy size={24} className="text-amber-400" /> End of Tournament Awards
+        <div className="bg-card border border-line rounded-xl p-6 shadow-card w-full">
+            <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-6 flex items-center gap-2">
+                <Trophy size={24} className="text-gold-500" /> End of Tournament Awards
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -247,20 +247,20 @@ export const BracketAwards: React.FC<BracketAwardsProps> = ({ entries, tournamen
                     <div key={award.id} className={`border rounded-lg p-5 flex flex-col justify-between ${award.color}`}>
                         <div>
                             <div className="flex justify-between items-start mb-2">
-                                <div className="p-2 bg-slate-950/50 rounded-lg">
+                                <div className="p-2 bg-page/60 rounded-lg">
                                     <award.icon size={24} />
                                 </div>
-                                <span className="font-bold text-lg opacity-90">{award.value}</span>
+                                <span className="font-display font-bold text-lg opacity-90 num">{award.value}</span>
                             </div>
-                            <h4 className="text-lg font-bold mb-1">{award.title}</h4>
-                            <p className="opacity-80 text-sm mb-4">{award.description}</p>
+                            <h4 className="text-lg font-display font-bold uppercase mb-1">{award.title}</h4>
+                            <p className="opacity-80 font-body text-sm mb-4">{award.description}</p>
                         </div>
 
                         <div className="pt-4 border-t border-current/20">
-                            <h5 className="text-xs uppercase tracking-wider opacity-70 mb-2 font-semibold">Awarded To</h5>
+                            <h5 className="text-xs font-display uppercase tracking-[0.08em] opacity-70 mb-2 font-semibold">Awarded To</h5>
                             <div className="flex flex-wrap gap-2">
                                 {award.winners.map((winner, idx) => (
-                                    <span key={idx} className="bg-slate-950/50 px-2 py-1 rounded text-sm font-medium">
+                                    <span key={idx} className="bg-page/60 px-2 py-1 rounded text-sm font-medium">
                                         {winner}
                                     </span>
                                 ))}

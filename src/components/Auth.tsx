@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authService } from '../services/authService';
 import { Mail, Lock, User, ArrowRight, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Button } from './ui';
 
 interface AuthProps {
   onLogin: (result?: { isNewUser?: boolean }) => void;
@@ -79,12 +80,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
-        <div className="p-8 text-center border-b border-slate-700 bg-slate-900/50">
-          <h2 className="text-2xl font-bold text-white mb-2">
+      <div className="bg-card border border-line rounded-2xl shadow-panel overflow-hidden">
+        <div className="p-8 text-center border-b border-line bg-surface">
+          <h2 className="font-display font-extrabold uppercase text-[28px] leading-none text-[color:var(--text)] mb-2">
             {isResetting ? 'Reset Password' : (isRegistering ? 'Create Account' : 'Welcome Back')}
           </h2>
-          <p className="text-slate-400 text-sm">
+          <p className="text-muted text-sm font-body">
             {isResetting ? "Enter your email to receive a reset link" : (isRegistering ? 'Sign up to create and manage pools' : 'Sign in to access your dashboard')}
           </p>
         </div>
@@ -92,7 +93,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
         <div className="p-8 space-y-6">
           {/* Error Banner */}
           {error && (
-            <div className="bg-rose-500/10 border border-rose-500/50 rounded-lg p-3 flex items-start gap-3 text-rose-200 text-sm">
+            <div className="bg-brandred-600/10 border border-brandred-600/40 rounded-lg p-3 flex items-start gap-3 text-brandred-600 text-sm font-body">
               <AlertCircle size={18} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -100,7 +101,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
 
           {/* Success Banner */}
           {successMsg && (
-            <div className="bg-emerald-500/10 border border-emerald-500/50 rounded-lg p-3 flex items-start gap-3 text-emerald-200 text-sm">
+            <div className="bg-[#E4F5EC] border border-[#BEE7D0] rounded-lg p-3 flex items-start gap-3 text-[#0F7B4A] text-sm font-body">
               <CheckCircle size={18} className="shrink-0 mt-0.5" />
               <span>{successMsg}</span>
             </div>
@@ -110,7 +111,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
           <button
             onClick={handleGoogleLogin}
             disabled={isLoading}
-            className="w-full bg-white text-slate-900 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-white text-navy-900 font-display font-bold uppercase tracking-[0.05em] py-3 px-4 rounded-md border border-line flex items-center justify-center gap-3 hover:bg-cream transition-all duration-150 hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0"
           >
             {isLoading ? <Loader2 className="animate-spin" size={20} /> : (
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -137,25 +138,25 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-600"></div>
+              <div className="w-full border-t border-line"></div>
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-slate-800 px-2 text-slate-500 font-bold">Or continue with email</span>
+              <span className="bg-card px-2 text-muted font-display font-bold tracking-[0.08em]">Or continue with email</span>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegistering && (
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-400 uppercase">Name</label>
+                <label className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Name</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-3 text-slate-500" size={18} />
+                  <User className="absolute left-3 top-3 text-faint" size={18} />
                   <input
                     type="text"
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    className="w-full rounded-md border-[1.5px] border-line bg-page py-2.5 pl-10 pr-4 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                     placeholder="John Doe"
                   />
                 </div>
@@ -163,15 +164,15 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
             )}
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-400 uppercase">Email</label>
+              <label className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 text-slate-500" size={18} />
+                <Mail className="absolute left-3 top-3 text-faint" size={18} />
                 <input
                   type="email"
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  className="w-full rounded-md border-[1.5px] border-line bg-page py-2.5 pl-10 pr-4 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                   placeholder="name@example.com"
                 />
               </div>
@@ -179,29 +180,31 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
 
             {!isResetting && (
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-400 uppercase">Password</label>
+                <label className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]">Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 text-slate-500" size={18} />
+                  <Lock className="absolute left-3 top-3 text-faint" size={18} />
                   <input
                     type="password"
                     required={!isResetting}
                     minLength={6}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    className="w-full rounded-md border-[1.5px] border-line bg-page py-2.5 pl-10 pr-4 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                     placeholder="••••••••"
                   />
                 </div>
                 {isRegistering && (
-                  <p className="text-xs text-slate-500 mt-1 ml-1">Password must be at least 6 characters</p>
+                  <p className="text-xs text-faint font-body mt-1 ml-1">Password must be at least 6 characters</p>
                 )}
               </div>
             )}
 
-            <button
+            <Button
               type="submit"
+              variant="primary"
+              size="md"
               disabled={isLoading}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mt-6"
             >
               {isLoading ? (
                 <Loader2 className="animate-spin" size={20} />
@@ -211,7 +214,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
                   <ArrowRight size={18} />
                 </>
               )}
-            </button>
+            </Button>
           </form>
 
 
@@ -222,7 +225,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
                 <button
                   type="button"
                   onClick={() => { setIsRegistering(!isRegistering); setError(null); }}
-                  className="text-indigo-400 hover:text-indigo-300 text-sm font-bold transition-colors block w-full"
+                  className="text-gold-700 dark:text-gold-400 hover:text-gold-600 dark:hover:text-gold-300 text-sm font-display font-bold uppercase tracking-[0.05em] transition-colors block w-full"
                 >
                   {isRegistering ? 'Already have an account? Sign In' : "Don't have an account? Register"}
                 </button>
@@ -230,7 +233,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
                   <button
                     type="button"
                     onClick={() => { setIsResetting(true); setError(null); }}
-                    className="text-slate-500 hover:text-white text-xs transition-colors"
+                    className="text-muted hover:text-[color:var(--text)] text-xs font-body transition-colors"
                   >
                     Forgot Password?
                   </button>
@@ -240,16 +243,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
               <button
                 type="button"
                 onClick={() => { setIsResetting(false); setError(null); }}
-                className="text-slate-500 hover:text-white text-xs transition-colors"
+                className="text-muted hover:text-[color:var(--text)] text-xs font-body transition-colors"
               >
                 Back to Sign In
               </button>
             )}
           </div>
 
-          <div className="mt-6 pt-6 border-t border-slate-700/50 text-center">
-            <p className="text-xs text-slate-500">
-              By continuing, you agree to our <Link to="/terms" className="underline hover:text-slate-400">Terms</Link> and acknowledge our <Link to="/privacy" className="underline hover:text-slate-400">Privacy Policy</Link>.
+          <div className="mt-6 pt-6 border-t border-line text-center">
+            <p className="text-xs text-faint font-body">
+              By continuing, you agree to our <Link to="/terms" className="underline hover:text-muted">Terms</Link> and acknowledge our <Link to="/privacy" className="underline hover:text-muted">Privacy Policy</Link>.
             </p>
           </div>
         </div>

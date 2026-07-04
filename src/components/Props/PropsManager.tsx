@@ -5,6 +5,7 @@ import { dbService } from '../../services/dbService';
 import type { PropQuestion, PropsPool, PropCard, PropSeed } from '../../types';
 import { PropStats } from './PropStats';
 import { useToast } from '../ui/Toast';
+import { Button } from '../ui';
 
 interface PropsManagerProps {
     gameState: PropsPool;
@@ -12,6 +13,11 @@ interface PropsManagerProps {
     allCards?: PropCard[];
     isWizardMode?: boolean;
 }
+
+const CONTROL =
+    'w-full rounded-md border-[1.5px] border-line bg-page px-3 py-2 font-body text-[color:var(--text)] placeholder:text-faint focus:border-navy-600 outline-none transition-colors';
+const LABEL =
+    'text-[12px] font-display font-bold uppercase tracking-[0.08em] text-muted';
 
 export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateConfig, allCards, isWizardMode }) => {
     const toast = useToast();
@@ -156,20 +162,20 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
     };
 
     return (
-        <div className="space-y-8 pb-20 relative">
+        <div className="space-y-8 pb-20 relative font-body">
             {/* Inspiration Modal */}
             {showInspirationModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl">
-                        <div className="p-6 border-b border-slate-800 flex items-center justify-between sticky top-0 bg-slate-900/95 backdrop-blur rounded-t-2xl z-10">
+                    <div className="bg-card border border-line rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-panel">
+                        <div className="p-6 border-b border-line flex items-center justify-between sticky top-0 bg-card backdrop-blur rounded-t-2xl z-10">
                             <div>
-                                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                                    <Lightbulb size={24} className="text-amber-400" />
+                                <h2 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                                    <Lightbulb size={24} className="text-gold-500" />
                                     Prop Question Library
                                 </h2>
-                                <p className="text-slate-400">Browse template questions to add to your pool.</p>
+                                <p className="text-muted">Browse template questions to add to your pool.</p>
                             </div>
-                            <button onClick={() => setShowInspirationModal(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
+                            <button onClick={() => setShowInspirationModal(false)} className="p-2 hover:bg-surface rounded-full text-muted hover:text-[color:var(--text)] transition-colors duration-150">
                                 <X size={24} />
                             </button>
                         </div>
@@ -196,13 +202,13 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
             )}
 
             {/* Header / Save Bar */}
-            <div className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800 p-4 -mx-4 sm:mx-0 sm:rounded-xl shadow-xl flex items-center justify-between">
+            <div className="sticky top-0 z-30 bg-card backdrop-blur border-b border-line p-4 -mx-4 sm:mx-0 sm:rounded-xl sm:border shadow-card flex items-center justify-between">
                 <div>
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <Edit2 size={24} className="text-indigo-400" />
+                    <h2 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
+                        <Edit2 size={24} className="text-navy-700 dark:text-gold-400" />
                         Prop Questions
                     </h2>
-                    <p className="text-slate-400 text-xs mt-1">
+                    <p className="text-muted text-xs mt-1 num">
                         {questions.length} questions configured • {questions.reduce((sum, q) => sum + (q.points || 1), 0)} total points
                     </p>
                 </div>
@@ -212,7 +218,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                     {allCards && allCards.length > 0 && (
                         <button
                             onClick={() => setShowStats(!showStats)}
-                            className={`px-3 py-1.5 rounded text-sm font-bold border transition-colors ${showStats ? 'bg-indigo-900/50 border-indigo-500 text-indigo-200' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                            className={`px-3 py-1.5 rounded text-sm font-display font-bold uppercase tracking-[0.05em] border transition-colors duration-150 ${showStats ? 'bg-navy-800 border-navy-800 text-white dark:border-gold-500' : 'bg-surface border-line text-muted hover:text-[color:var(--text)]'
                                 }`}
                         >
                             {showStats ? 'Hide Stats' : 'View Stats'}
@@ -220,17 +226,15 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                     )}
 
                     {!showStats && (
-                        <button
+                        <Button
+                            size="sm"
                             onClick={handleSave}
                             disabled={!hasChanges}
-                            className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all ${hasChanges
-                                ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 scale-105'
-                                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                                }`}
+                            className="px-6"
                         >
                             <Save size={18} />
                             {hasChanges ? 'Save Changes' : 'Saved'}
-                        </button>
+                        </Button>
                     )}
                 </div>
             </div>
@@ -246,23 +250,23 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                     <div className="lg:col-span-7 space-y-6">
 
                         {/* Filters */}
-                        <div className="flex flex-wrap items-center gap-3 bg-slate-900 p-3 rounded-lg border border-slate-800">
+                        <div className="flex flex-wrap items-center gap-3 bg-card p-3 rounded-lg border border-line">
                             <div className="relative flex-1 min-w-[200px]">
-                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
                                 <input
                                     type="text"
                                     placeholder="Search your questions..."
                                     value={questionSearch}
                                     onChange={(e) => setQuestionSearch(e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded pl-9 pr-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+                                    className={`${CONTROL} pl-9 pr-3 text-sm`}
                                 />
                             </div>
                             <div className="flex items-center gap-2">
-                                <Filter size={16} className="text-slate-500" />
+                                <Filter size={16} className="text-faint" />
                                 <select
                                     value={selectedCategory}
                                     onChange={(e) => setSelectedCategory(e.target.value)}
-                                    className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 cursor-pointer"
+                                    className="bg-page border-[1.5px] border-line rounded-md px-3 py-2 text-sm text-[color:var(--text)] outline-none focus:border-navy-600 cursor-pointer"
                                 >
                                     <option value="All">All Categories</option>
                                     {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
@@ -273,21 +277,18 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                         {/* Questions List */}
                         <div className="space-y-3">
                             {questions.length === 0 ? (
-                                <div className="text-center py-16 text-slate-500 bg-slate-900/50 rounded-xl border-2 border-slate-800 border-dashed flex flex-col items-center justify-center">
-                                    <div className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center mb-4 text-slate-600">
+                                <div className="text-center py-16 text-muted bg-card rounded-xl border-2 border-line border-dashed flex flex-col items-center justify-center">
+                                    <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center mb-4 text-faint">
                                         <Lightbulb size={32} />
                                     </div>
-                                    <h3 className="text-lg font-bold text-white mb-2">No Questions Yet</h3>
+                                    <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-2">No Questions Yet</h3>
                                     <p className="text-sm max-w-xs mx-auto mb-6">Start by adding a custom question on the right, or browse our library of popular props.</p>
-                                    <button
-                                        onClick={() => setShowInspirationModal(true)}
-                                        className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold flex items-center gap-2 transition-colors"
-                                    >
+                                    <Button variant="secondary" size="sm" onClick={() => setShowInspirationModal(true)} className="px-6">
                                         <Lightbulb size={18} /> Browse Library
-                                    </button>
+                                    </Button>
                                 </div>
                             ) : filteredQuestions.length === 0 ? (
-                                <div className="text-center py-12 text-slate-500 bg-slate-900/50 rounded-xl border border-slate-800 border-dashed">
+                                <div className="text-center py-12 text-muted bg-card rounded-xl border border-line border-dashed">
                                     <p>No questions found matching your filters.</p>
                                 </div>
                             ) : (
@@ -298,50 +299,50 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
 
                                     if (isEditing) {
                                         return (
-                                            <div key={q.id} className="bg-slate-800 border-l-4 border-indigo-500 rounded-lg p-4 shadow-xl animate-in fade-in">
+                                            <div key={q.id} className="bg-card border border-line border-l-4 border-l-navy-700 dark:border-l-gold-500 rounded-lg p-4 shadow-card-hover animate-in fade-in">
                                                 <div className="space-y-4">
                                                     <div>
-                                                        <label className="text-xs font-bold text-slate-400 uppercase">Question Text</label>
+                                                        <label className={LABEL}>Question Text</label>
                                                         <input
                                                             type="text"
                                                             value={editForm.text}
                                                             onChange={(e) => setEditForm({ ...editForm, text: e.target.value })}
-                                                            className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-bold"
+                                                            className={`${CONTROL} font-bold`}
                                                         />
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div>
-                                                            <label className="text-xs font-bold text-slate-400 uppercase">Category</label>
+                                                            <label className={LABEL}>Category</label>
                                                             <select
                                                                 value={editForm.category || ''}
                                                                 onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                                                                className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"
+                                                                className={`${CONTROL} cursor-pointer`}
                                                             >
                                                                 {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
                                                             </select>
                                                         </div>
                                                         <div>
-                                                            <label className="text-xs font-bold text-slate-400 uppercase">Points</label>
+                                                            <label className={LABEL}>Points</label>
                                                             <input
                                                                 type="number"
                                                                 value={editForm.points}
                                                                 onChange={(e) => setEditForm({ ...editForm, points: parseInt(e.target.value) || 1 })}
-                                                                className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"
+                                                                className={`${CONTROL} num`}
                                                             />
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Options (Comma Separated)</label>
+                                                        <label className={`${LABEL} mb-1 block`}>Options (Comma Separated)</label>
                                                         <input
                                                             type="text"
                                                             value={editForm.options?.join(', ')}
                                                             onChange={(e) => setEditForm({ ...editForm, options: e.target.value.split(',').map(s => s.trim()) })}
-                                                            className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"
+                                                            className={CONTROL}
                                                         />
                                                     </div>
                                                     <div className="flex justify-end gap-3 pt-2">
-                                                        <button onClick={cancelEdit} className="px-4 py-2 rounded font-bold text-slate-400 hover:text-white">Cancel</button>
-                                                        <button onClick={saveEdit} className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-2"><Check size={16} /> Save</button>
+                                                        <button onClick={cancelEdit} className="px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] text-muted hover:text-[color:var(--text)] transition-colors duration-150">Cancel</button>
+                                                        <Button size="sm" onClick={saveEdit}><Check size={16} /> Save</Button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -349,21 +350,21 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                     }
 
                                     return (
-                                        <div key={q.id} className="group bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-lg p-4 transition-all flex items-start gap-4">
+                                        <div key={q.id} className="group bg-card border border-line hover:border-navy-600 rounded-lg p-4 transition-all duration-150 flex items-start gap-4">
                                             {/* Drag Handles (Actually Up/Down Buttons) */}
                                             {selectedCategory === 'All' && !questionSearch && (
                                                 <div className="flex flex-col gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button
                                                         onClick={() => moveQuestion(actualIndex, 'up')}
                                                         disabled={actualIndex === 0}
-                                                        className="p-1 text-slate-500 hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-slate-500"
+                                                        className="p-1 text-faint hover:text-navy-700 dark:hover:text-gold-400 disabled:opacity-30 disabled:hover:text-faint"
                                                     >
                                                         <ChevronUp size={20} />
                                                     </button>
                                                     <button
                                                         onClick={() => moveQuestion(actualIndex, 'down')}
                                                         disabled={actualIndex === questions.length - 1}
-                                                        className="p-1 text-slate-500 hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-slate-500"
+                                                        className="p-1 text-faint hover:text-navy-700 dark:hover:text-gold-400 disabled:opacity-30 disabled:hover:text-faint"
                                                     >
                                                         <ChevronDown size={20} />
                                                     </button>
@@ -373,20 +374,20 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                             <div className="flex-1">
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div>
-                                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-slate-900 text-slate-400 mb-2 border border-slate-800">
+                                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] uppercase font-display font-bold tracking-[0.08em] bg-surface text-muted mb-2 border border-line">
                                                             {q.category || 'General'}
                                                         </span>
-                                                        <h4 className="font-bold text-white text-lg leading-tight">{q.text}</h4>
+                                                        <h4 className="font-bold text-[color:var(--text)] text-lg leading-tight">{q.text}</h4>
                                                     </div>
                                                     <div className="text-right">
-                                                        <span className="block font-bold text-indigo-400">{q.points} Pts</span>
-                                                        {q.type === 'tiebreaker' && <span className="text-[10px] text-amber-500 uppercase font-bold">Tiebreaker</span>}
+                                                        <span className="block font-display font-bold num text-navy-700 dark:text-gold-400">{q.points} Pts</span>
+                                                        {q.type === 'tiebreaker' && <span className="text-[10px] text-gold-600 dark:text-gold-400 uppercase font-display font-bold tracking-[0.08em]">Tiebreaker</span>}
                                                     </div>
                                                 </div>
 
                                                 <div className="flex flex-wrap gap-2 mt-3">
                                                     {q.options.map((opt, i) => (
-                                                        <span key={i} className="px-3 py-1 rounded-md bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300">
+                                                        <span key={i} className="px-3 py-1 rounded-md bg-surface border border-line text-xs font-semibold text-muted">
                                                             {opt}
                                                         </span>
                                                     ))}
@@ -394,10 +395,10 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                             </div>
 
                                             <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => startEditing(q)} className="p-2 rounded bg-slate-900 text-blue-400 hover:bg-blue-900/30 transition-colors">
+                                                <button onClick={() => startEditing(q)} className="p-2 rounded bg-surface border border-line text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 transition-colors duration-150">
                                                     <Edit2 size={16} />
                                                 </button>
-                                                <button onClick={() => handleDelete(q.id)} className="p-2 rounded bg-slate-900 text-rose-400 hover:bg-rose-900/30 transition-colors">
+                                                <button onClick={() => handleDelete(q.id)} className="p-2 rounded bg-surface border border-line text-brandred-600 hover:bg-brandred-600/10 transition-colors duration-150">
                                                     <Trash2 size={16} />
                                                 </button>
                                             </div>
@@ -412,62 +413,64 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                     <div className="lg:col-span-5 space-y-6">
 
                         {/* Banner for Inspiration */}
-                        <div className="bg-gradient-to-br from-indigo-900/50 to-slate-900 border border-indigo-500/30 rounded-xl p-6 relative overflow-hidden group hover:border-indigo-500/50 transition-colors">
-                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <div className="bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-xl p-6 relative overflow-hidden group hover:border-[rgba(230,206,150,0.3)] transition-colors duration-150">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity text-gold-400">
                                 <Lightbulb size={80} />
                             </div>
-                            <h3 className="text-lg font-bold text-white mb-2 relative z-10">Need Inspiration?</h3>
-                            <p className="text-sm text-indigo-200 mb-4 relative z-10">Browse our library of popular prop questions to quickly build your pool.</p>
-                            <button
+                            <h3 className="text-lg font-display font-bold uppercase text-white mb-2 relative z-10">Need Inspiration?</h3>
+                            <p className="text-sm text-[#9FB0CC] mb-4 relative z-10">Browse our library of popular prop questions to quickly build your pool.</p>
+                            <Button
+                                variant="premium"
+                                size="sm"
                                 onClick={() => setShowInspirationModal(true)}
-                                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold flex items-center justify-center gap-2 transition-all relative z-10 shadow-lg shadow-indigo-900/50"
+                                className="w-full relative z-10"
                             >
                                 <Lightbulb size={18} /> Open Question Library
-                            </button>
+                            </Button>
                         </div>
 
                         {/* Add Custom Form */}
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 sticky top-24">
-                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                <Plus size={20} className="text-emerald-400" /> Add Custom Question
+                        <div className="bg-card border border-line rounded-xl shadow-card p-6 sticky top-24">
+                            <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] mb-4 flex items-center gap-2">
+                                <Plus size={20} className="text-gold-500" /> Add Custom Question
                             </h3>
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Question</label>
+                                    <label className={`block ${LABEL} mb-1`}>Question</label>
                                     <input
                                         type="text"
                                         value={newQuestionText}
                                         onChange={(e) => setNewQuestionText(e.target.value)}
                                         placeholder="e.g. Total Passing Yards"
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                        className={CONTROL}
                                     />
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Category</label>
+                                        <label className={`block ${LABEL} mb-1`}>Category</label>
                                         <select
                                             value={newQuestionCategory}
                                             onChange={(e) => setNewQuestionCategory(e.target.value)}
-                                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500 appearance-none"
+                                            className={`${CONTROL} cursor-pointer appearance-none`}
                                         >
                                             {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Points</label>
+                                        <label className={`block ${LABEL} mb-1`}>Points</label>
                                         <input
                                             type="number"
                                             value={newQuestionPoints}
                                             onChange={(e) => setNewQuestionPoints(parseInt(e.target.value) || 1)}
-                                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                            className={`${CONTROL} num`}
                                         />
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Options</label>
+                                    <label className={`block ${LABEL} mb-1`}>Options</label>
                                     <div className="flex gap-2">
                                         {newQuestionOptions.map((opt, i) => (
                                             <div key={i} className="flex-1 relative">
@@ -479,26 +482,26 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                                         newOpts[i] = e.target.value;
                                                         setNewQuestionOptions(newOpts);
                                                     }}
-                                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-sm focus:border-indigo-500 outline-none"
+                                                    className={`${CONTROL} text-sm`}
                                                 />
                                             </div>
                                         ))}
                                     </div>
                                     <button
                                         onClick={() => setNewQuestionOptions([...newQuestionOptions, ''])}
-                                        className="text-[10px] text-indigo-400 font-bold mt-1 hover:underline"
+                                        className="text-[10px] text-navy-700 dark:text-gold-400 font-display font-bold uppercase tracking-[0.08em] mt-1 hover:underline"
                                     >
                                         + Add Option
                                     </button>
                                 </div>
 
-                                <button
+                                <Button
                                     onClick={handleAddQuestion}
                                     disabled={!newQuestionText}
-                                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg font-bold flex items-center justify-center gap-2 transition-all mt-2 shadow-lg shadow-emerald-900/20"
+                                    className="w-full mt-2"
                                 >
                                     <Plus size={18} /> Add Custom Question
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -556,17 +559,17 @@ const SeedLibrary: React.FC<{
     const isAdded = (text: string) => existingQuestions.some(q => q.text === text);
 
     return (
-        <div className="h-full flex flex-col bg-slate-950">
+        <div className="h-full flex flex-col bg-page font-body">
             {/* Toolbar */}
-            <div className="p-4 border-b border-slate-800 flex gap-4 bg-slate-900">
+            <div className="p-4 border-b border-line flex gap-4 bg-surface">
                 <div className="relative flex-1">
-                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
                     <input
                         type="text"
                         placeholder="Search seeds..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:border-indigo-500 outline-none"
+                        className="w-full bg-page border-[1.5px] border-line rounded-lg pl-10 pr-4 py-2 text-[color:var(--text)] placeholder:text-faint focus:border-navy-600 outline-none"
                     />
                 </div>
                 <div className="flex gap-2 overflow-x-auto no-scrollbar max-w-[50%]">
@@ -574,9 +577,9 @@ const SeedLibrary: React.FC<{
                         <button
                             key={cat}
                             onClick={() => setActiveCategory(cat)}
-                            className={`px-3 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${activeCategory === cat
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                            className={`px-3 py-1.5 rounded-full text-sm font-display font-bold uppercase tracking-[0.05em] whitespace-nowrap transition-colors duration-150 ${activeCategory === cat
+                                ? 'bg-navy-800 text-white dark:ring-1 dark:ring-gold-500'
+                                : 'bg-page border border-line text-muted hover:text-[color:var(--text)]'
                                 }`}
                         >
                             {cat}
@@ -586,14 +589,14 @@ const SeedLibrary: React.FC<{
             </div>
 
             {/* List */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-slate-700">
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 scrollbar-thin">
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                        <div className="animate-spin w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full mb-4"></div>
+                    <div className="flex flex-col items-center justify-center h-full text-muted">
+                        <div className="animate-spin w-8 h-8 border-2 border-navy-600 dark:border-gold-500 border-t-transparent rounded-full mb-4"></div>
                         Loading Library...
                     </div>
                 ) : filtered.length === 0 ? (
-                    <div className="text-center text-slate-500 mt-20">
+                    <div className="text-center text-muted mt-20">
                         No questions found matching your criteria.
                     </div>
                 ) : (
@@ -603,31 +606,31 @@ const SeedLibrary: React.FC<{
                             return (
                                 <div
                                     key={seed.id}
-                                    className={`p-4 rounded-xl border transition-all ${added
-                                        ? 'bg-slate-900/50 border-slate-800 opacity-60'
-                                        : 'bg-slate-900 border-slate-700 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-900/10'
+                                    className={`p-4 rounded-xl border transition-all duration-150 ${added
+                                        ? 'bg-surface border-line opacity-60'
+                                        : 'bg-card border-line hover:border-gold-500/50 hover:shadow-card-hover'
                                         }`}
                                 >
                                     <div className="flex justify-between items-start gap-3 mb-2">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 bg-indigo-900/20 px-2 py-0.5 rounded">
+                                        <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-navy-700 dark:text-gold-400 bg-navy-600/10 px-2 py-0.5 rounded">
                                             {seed.category || 'General'}
                                         </span>
-                                        {added && <span className="text-xs font-bold text-emerald-500 flex items-center gap-1"><Check size={12} /> Added</span>}
+                                        {added && <span className="text-xs font-display font-bold uppercase text-[#0F7B4A] flex items-center gap-1"><Check size={12} /> Added</span>}
                                     </div>
-                                    <h4 className={`font-bold mb-3 ${added ? 'text-slate-500' : 'text-slate-200'}`}>{seed.text}</h4>
+                                    <h4 className={`font-bold mb-3 ${added ? 'text-muted' : 'text-[color:var(--text)]'}`}>{seed.text}</h4>
 
-                                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-800/50">
+                                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-line">
                                         <div className="flex gap-1">
                                             {seed.options.map((opt, i) => (
-                                                <span key={i} className="text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-500 border border-slate-800">{opt}</span>
+                                                <span key={i} className="text-[10px] bg-page px-2 py-0.5 rounded text-faint border border-line">{opt}</span>
                                             ))}
                                         </div>
                                         <button
                                             onClick={() => !added && onAdd(seed)}
                                             disabled={added}
-                                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${added
-                                                ? 'bg-transparent text-slate-600 cursor-default'
-                                                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 ${added
+                                                ? 'bg-transparent text-faint cursor-default'
+                                                : 'bg-navy-800 hover:bg-navy-700 text-white'
                                                 }`}
                                         >
                                             {added ? 'In Pool' : <><Plus size={14} /> Add</>}

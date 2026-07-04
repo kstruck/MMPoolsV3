@@ -1,6 +1,7 @@
 import React from 'react';
 import type { PropQuestion, PropCard } from '../../types';
-import { BarChart, Users } from 'lucide-react';
+import { BarChart } from 'lucide-react';
+import { Badge, StatTile } from '../ui';
 
 interface PropStatsProps {
     questions: PropQuestion[];
@@ -12,7 +13,7 @@ export const PropStats: React.FC<PropStatsProps> = ({ questions, cards }) => {
 
     if (totalEntries === 0) {
         return (
-            <div className="p-8 text-center text-slate-500 bg-slate-900/50 rounded-xl border border-slate-800">
+            <div className="p-8 text-center text-muted bg-card rounded-xl border border-line font-body">
                 <BarChart className="mx-auto mb-3 opacity-50" size={32} />
                 <p>No entries yet. Stats will appear once players submit cards.</p>
             </div>
@@ -20,18 +21,10 @@ export const PropStats: React.FC<PropStatsProps> = ({ questions, cards }) => {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 font-body">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Summary Card */}
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center justify-between">
-                    <div>
-                        <p className="text-slate-400 text-xs font-bold uppercase">Total Entries</p>
-                        <p className="text-2xl font-bold text-white">{totalEntries}</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
-                        <Users size={20} />
-                    </div>
-                </div>
+                <StatTile label="Total Entries" value={totalEntries} />
             </div>
 
             <div className="grid gap-6">
@@ -48,9 +41,9 @@ export const PropStats: React.FC<PropStatsProps> = ({ questions, cards }) => {
                     });
 
                     return (
-                        <div key={q.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                            <h4 className="font-bold text-white mb-4 flex items-start gap-3">
-                                <span className="text-indigo-400 text-sm mt-0.5">#{qIdx + 1}</span>
+                        <div key={q.id} className="bg-card border border-line rounded-xl shadow-card p-5">
+                            <h4 className="font-bold text-[color:var(--text)] mb-4 flex items-start gap-3">
+                                <span className="text-navy-700 dark:text-gold-400 text-sm mt-0.5 num">#{qIdx + 1}</span>
                                 {q.text}
                             </h4>
 
@@ -63,17 +56,17 @@ export const PropStats: React.FC<PropStatsProps> = ({ questions, cards }) => {
                                     return (
                                         <div key={optIdx} className="relative">
                                             <div className="flex justify-between text-sm mb-1 relative z-10">
-                                                <span className={`font-medium ${isCorrect ? 'text-emerald-400' : 'text-slate-300'} flex items-center gap-2`}>
+                                                <span className={`font-medium ${isCorrect ? 'text-[#0F7B4A]' : 'text-[color:var(--text)]'} flex items-center gap-2`}>
                                                     {opt}
-                                                    {isCorrect && <span className="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase">Winner</span>}
+                                                    {isCorrect && <Badge status="winner" className="text-[10px] px-1.5 py-[3px]" />}
                                                 </span>
-                                                <span className="text-slate-400 font-mono">
-                                                    {percentage}% <span className="text-slate-600 text-xs">({count})</span>
+                                                <span className="text-muted num">
+                                                    {percentage}% <span className="text-faint text-xs">({count})</span>
                                                 </span>
                                             </div>
-                                            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                                            <div className="h-2 bg-line rounded-full overflow-hidden">
                                                 <div
-                                                    className={`h-full rounded-full transition-all duration-1000 ${isCorrect ? 'bg-emerald-500' : 'bg-indigo-500/50'}`}
+                                                    className={`h-full rounded-full transition-all duration-1000 ${isCorrect ? 'bg-[#0F7B4A]' : 'bg-navy-600/60 dark:bg-gold-500/60'}`}
                                                     style={{ width: `${percentage}%` }}
                                                 />
                                             </div>

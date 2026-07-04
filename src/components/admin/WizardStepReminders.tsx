@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Bell, CheckCircle, Clock, Sparkles, Trash2 } from 'lucide-react';
+import { Bell, CheckCircle, Clock, Sparkles, Trash2, MapPin } from 'lucide-react';
 import type { GameState } from '../../types';
 
 interface WizardStepRemindersProps {
@@ -38,88 +38,88 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
 
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-300">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                    <Bell size={20} className="text-amber-400" /> Payment Reminders
+            <div className="bg-surface border border-line rounded-xl p-6">
+                <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-2 flex items-center gap-2">
+                    <Bell size={20} className="text-gold-700 dark:text-gold-400" /> Payment Reminders
                 </h3>
-                <p className="text-slate-400 text-sm mb-6">Automate follow-ups for unpaid squares.</p>
+                <p className="text-muted text-sm mb-6">Automate follow-ups for unpaid squares.</p>
 
                 <div className="space-y-4">
-                    <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                    <label className="flex items-center justify-between cursor-pointer p-3 bg-card rounded-lg border border-line hover:border-navy-600 transition-colors">
                         <div>
-                            <span className="font-bold text-slate-200 block">Enable Auto-Reminders</span>
-                            <span className="text-xs text-slate-500">System checks every 15 mins for unpaid reservations.</span>
+                            <span className="font-display font-bold uppercase text-[color:var(--text)] block">Enable Auto-Reminders</span>
+                            <span className="text-xs text-faint">System checks every 15 mins for unpaid reservations.</span>
                         </div>
                         <input
                             type="checkbox"
                             checked={safeReminders.payment.enabled}
                             onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, enabled: e.target.checked } } })}
-                            className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                            className="size-6 rounded-[5px] border-[1.5px] border-line bg-page checked:bg-navy-800 checked:border-navy-800 accent-navy-800 focus:ring-navy-600"
                         />
                     </label>
 
                     {safeReminders.payment.enabled && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Grace Period (Minutes)</label>
+                                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Grace Period (Minutes)</label>
                                 <input
                                     type="number"
                                     value={safeReminders.payment.graceMinutes}
                                     onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, graceMinutes: parseInt(e.target.value) || 0 } } })}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                    className="num w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                                 />
-                                <p className="text-[10px] text-slate-500 mt-1">Wait time after reservation before detailed reminder.</p>
+                                <p className="text-[10px] text-faint mt-1">Wait time after reservation before detailed reminder.</p>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Repeat Every (Hours)</label>
+                                <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Repeat Every (Hours)</label>
                                 <input
                                     type="number"
                                     value={safeReminders.payment.repeatEveryHours}
                                     onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, repeatEveryHours: parseInt(e.target.value) || 0 } } })}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                    className="num w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                                 />
-                                <p className="text-[10px] text-slate-500 mt-1">Frequency of follow-up emails.</p>
+                                <p className="text-[10px] text-faint mt-1">Frequency of follow-up emails.</p>
                             </div>
 
                             {/* Notify Users Toggle */}
-                            <label className="md:col-span-2 flex items-center gap-3 cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800">
+                            <label className="md:col-span-2 flex items-center gap-3 cursor-pointer p-3 bg-card rounded-lg border border-line">
                                 <input
                                     type="checkbox"
                                     checked={safeReminders.payment.notifyUsers}
                                     onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, notifyUsers: e.target.checked } } })}
-                                    className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600"
+                                    className="size-5 rounded-[5px] border-[1.5px] border-line bg-page checked:bg-navy-800 checked:border-navy-800 accent-navy-800 focus:ring-navy-600"
                                 />
-                                <span className="text-sm text-slate-300">Also email the <strong>Participants</strong> directly (not just Host summary)</span>
+                                <span className="text-sm text-muted">Also email the <strong className="text-[color:var(--text)]">Participants</strong> directly (not just Host summary)</span>
                             </label>
 
                             {/* Auto-Release Configuration */}
-                            <div className="md:col-span-2 pt-4 border-t border-slate-800 mt-2">
+                            <div className="md:col-span-2 pt-4 border-t border-line mt-2">
                                 <label className="flex items-center justify-between cursor-pointer p-2 mb-2">
                                     <div>
-                                        <span className="font-bold text-rose-400 block flex items-center gap-2">
+                                        <span className="font-display font-bold uppercase text-brandred-600 block flex items-center gap-2">
                                             <Trash2 size={14} /> Auto-Release Unpaid Squares
                                         </span>
-                                        <span className="text-xs text-slate-500">Automatically remove reservation if not paid in time.</span>
+                                        <span className="text-xs text-faint">Automatically remove reservation if not paid in time.</span>
                                     </div>
                                     <input
                                         type="checkbox"
                                         checked={safeReminders.payment.autoRelease}
                                         onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, autoRelease: e.target.checked } } })}
-                                        className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-rose-600 focus:ring-rose-500"
+                                        className="size-5 rounded-[5px] border-[1.5px] border-line bg-page checked:bg-brandred-600 checked:border-brandred-600 accent-brandred-600 focus:ring-brandred-500"
                                     />
                                 </label>
 
                                 {safeReminders.payment.autoRelease && (
                                     <div className="pl-4 animate-in fade-in">
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Release After (Hours)</label>
+                                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Release After (Hours)</label>
                                         <div className="flex items-center gap-3">
                                             <input
                                                 type="number"
                                                 value={safeReminders.payment.autoReleaseHours || 24}
                                                 onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, autoReleaseHours: parseInt(e.target.value) || 0 } } })}
-                                                className="w-24 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-rose-500"
+                                                className="num w-24 rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] transition-colors focus:border-brandred-500 focus:outline-none"
                                             />
-                                            <span className="text-xs text-slate-500">hours from reservation time.</span>
+                                            <span className="text-xs text-faint">hours from reservation time.</span>
                                         </div>
                                     </div>
                                 )}
@@ -129,30 +129,30 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                 </div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                    <Clock size={20} className="text-rose-400" /> Auto-Lock & Number Generation
+            <div className="bg-surface border border-line rounded-xl p-6">
+                <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-2 flex items-center gap-2">
+                    <Clock size={20} className="text-brandred-600" /> Auto-Lock & Number Generation
                 </h3>
-                <p className="text-slate-400 text-sm mb-6">Automatically lock the grid and reveal numbers.</p>
+                <p className="text-muted text-sm mb-6">Automatically lock the grid and reveal numbers.</p>
 
                 <div className="space-y-4">
-                    <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-slate-900 rounded mb-2 border border-transparent hover:border-slate-700 transition-all">
+                    <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-surface rounded mb-2 border border-transparent hover:border-line transition-all">
                         <input
                             type="checkbox"
                             checked={safeReminders.lock.enabled}
                             onChange={(e) => updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, enabled: e.target.checked } } })}
-                            className="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                            className="size-5 rounded-[5px] border-[1.5px] border-line bg-page checked:bg-navy-800 checked:border-navy-800 accent-navy-800 focus:ring-navy-600"
                         />
                         <div>
-                            <span className="text-sm font-bold text-slate-200 block">Enable Auto-Lock System</span>
-                            <span className="text-xs text-slate-500">If disabled, the pool will NEVER auto-lock.</span>
+                            <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block">Enable Auto-Lock System</span>
+                            <span className="text-xs text-faint">If disabled, the pool will NEVER auto-lock.</span>
                         </div>
                     </label>
 
-                    <div className={`bg-slate-950 p-4 rounded-lg border border-slate-800 ${!safeReminders.lock.enabled ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Trigger Time</label>
+                    <div className={`bg-card p-4 rounded-lg border border-line ${!safeReminders.lock.enabled ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-2">Trigger Time</label>
                         <select
-                            className="w-full bg-slate-900 border border-slate-700 rounded px-4 py-3 text-white mb-4 outline-none focus:border-indigo-500"
+                            className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] mb-4 cursor-pointer transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                             onChange={(e) => {
                                 const val = e.target.value;
                                 if (val === 'manual') {
@@ -192,10 +192,10 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                         </select>
 
                         {safeReminders.lock.lockAt && (
-                            <div className="animate-in fade-in slide-in-from-top-2 border-t border-slate-800 pt-4 mt-2">
+                            <div className="animate-in fade-in slide-in-from-top-2 border-t border-line pt-4 mt-2">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Date</label>
+                                        <label className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1 block">Date</label>
                                         <input
                                             type="date"
                                             value={(() => {
@@ -215,14 +215,14 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                                 current.setDate(d);
                                                 updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
                                             }}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white outline-none"
+                                            className="num w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] outline-none transition-colors focus:border-navy-600 focus:bg-surface"
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Time</label>
-                                        <div className="flex bg-slate-900 border border-slate-700 rounded px-1">
+                                        <label className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1 block">Time</label>
+                                        <div className="flex bg-page border-[1.5px] border-line rounded-md px-1">
                                             <select
-                                                className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
+                                                className="num bg-transparent text-[color:var(--text)] outline-none text-center font-bold font-mono py-2 flex-1"
                                                 value={(() => {
                                                     let h = new Date(safeReminders.lock.lockAt!).getHours();
                                                     if (h === 0) h = 12;
@@ -240,11 +240,11 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                                     updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
                                                 }}
                                             >
-                                                {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h} className="bg-slate-900 text-white">{h}</option>)}
+                                                {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h} className="bg-surface text-[color:var(--text)]">{h}</option>)}
                                             </select>
-                                            <span className="py-2 text-slate-500">:</span>
+                                            <span className="py-2 text-faint num">:</span>
                                             <select
-                                                className="bg-transparent text-white outline-none text-center font-bold font-mono py-2 flex-1"
+                                                className="num bg-transparent text-[color:var(--text)] outline-none text-center font-bold font-mono py-2 flex-1"
                                                 value={Math.floor(new Date(safeReminders.lock.lockAt).getMinutes() / 5) * 5}
                                                 onChange={(e) => {
                                                     const m = parseInt(e.target.value);
@@ -253,10 +253,10 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                                     updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
                                                 }}
                                             >
-                                                {Array.from({ length: 12 }, (_, i) => i * 5).map(m => <option key={m} value={m} className="bg-slate-900 text-white">{m.toString().padStart(2, '0')}</option>)}
+                                                {Array.from({ length: 12 }, (_, i) => i * 5).map(m => <option key={m} value={m} className="bg-surface text-[color:var(--text)]">{m.toString().padStart(2, '0')}</option>)}
                                             </select>
                                             <select
-                                                className="bg-transparent text-indigo-400 outline-none font-bold py-2 pl-2"
+                                                className="bg-transparent text-navy-600 dark:text-gold-400 outline-none font-bold py-2 pl-2"
                                                 value={new Date(safeReminders.lock.lockAt).getHours() >= 12 ? 'PM' : 'AM'}
                                                 onChange={(e) => {
                                                     const isPM = e.target.value === 'PM';
@@ -268,18 +268,18 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                                                     updateConfig({ reminders: { ...safeReminders, lock: { ...safeReminders.lock, lockAt: current.getTime() } } });
                                                 }}
                                             >
-                                                <option value="AM" className="bg-slate-900 text-white">AM</option>
-                                                <option value="PM" className="bg-slate-900 text-white">PM</option>
+                                                <option value="AM" className="bg-surface text-[color:var(--text)]">AM</option>
+                                                <option value="PM" className="bg-surface text-[color:var(--text)]">PM</option>
                                             </select>
                                         </div>
                                     </div>
                                 </div>
-                                <p className="text-[10px] text-emerald-400 mt-2 flex items-center gap-1">
+                                <p className="text-[10px] text-[#0F7B4A] mt-2 flex items-center gap-1">
                                     <CheckCircle size={10} /> Grid will automatically lock and numbers will be generated at this time.
                                 </p>
-                                <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
-                                    📍 Times shown in your local timezone: <span className="font-mono text-slate-400">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span> <br />
-                                    (Server Time: {new Date().toLocaleTimeString([], { timeZoneName: 'short' })})
+                                <p className="text-[10px] text-faint mt-1 flex items-center gap-1">
+                                    <MapPin size={10} className="shrink-0" /> Times shown in your local timezone: <span className="num font-mono text-muted">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span> <br />
+                                    (Server Time: <span className="num">{new Date().toLocaleTimeString([], { timeZoneName: 'short' })}</span>)
                                 </p>
                             </div>
                         )}
@@ -287,43 +287,43 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                 </div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                    <Sparkles size={20} className="text-emerald-400" /> Winner Announcements
+            <div className="bg-surface border border-line rounded-xl p-6">
+                <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-2 flex items-center gap-2">
+                    <Sparkles size={20} className="text-gold-700 dark:text-gold-400" /> Winner Announcements
                 </h3>
-                <p className="text-slate-400 text-sm mb-6">Instant alerts when a quarter closes.</p>
+                <p className="text-muted text-sm mb-6">Instant alerts when a quarter closes.</p>
                 <div className="space-y-4">
-                    <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/50 transition-colors">
+                    <label className="flex items-center justify-between cursor-pointer p-3 bg-card rounded-lg border border-line hover:border-navy-600 transition-colors">
                         <div>
-                            <span className="font-bold text-slate-200 block">Enable Winner Emails</span>
-                            <span className="text-xs text-slate-500">Auto-email all participants when a winner is calculated.</span>
+                            <span className="font-display font-bold uppercase text-[color:var(--text)] block">Enable Winner Emails</span>
+                            <span className="text-xs text-faint">Auto-email all participants when a winner is calculated.</span>
                         </div>
                         <input
                             type="checkbox"
                             checked={safeReminders.winner.enabled}
                             onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, enabled: e.target.checked } } })}
-                            className="w-6 h-6 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                            className="size-6 rounded-[5px] border-[1.5px] border-line bg-page checked:bg-navy-800 checked:border-navy-800 accent-navy-800 focus:ring-navy-600"
                         />
                     </label>
                     {safeReminders.winner.enabled && (
-                        <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 p-3 bg-slate-950 rounded-lg border border-slate-800">
+                        <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 p-3 bg-card rounded-lg border border-line">
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={safeReminders.winner.includeDigits}
                                     onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, includeDigits: e.target.checked } } })}
-                                    className="w-5 h-5 rounded bg-slate-800 border-slate-600"
+                                    className="size-5 rounded-[5px] bg-page border-[1.5px] border-line checked:bg-navy-800 checked:border-navy-800 accent-navy-800"
                                 />
-                                <span className="text-sm text-slate-300">Include Winning Digits</span>
+                                <span className="text-sm text-muted">Include Winning Digits</span>
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={safeReminders.winner.includeCharityImpact}
                                     onChange={(e) => updateConfig({ reminders: { ...safeReminders, winner: { ...safeReminders.winner, includeCharityImpact: e.target.checked } } })}
-                                    className="w-5 h-5 rounded bg-slate-800 border-slate-600"
+                                    className="size-5 rounded-[5px] bg-page border-[1.5px] border-line checked:bg-navy-800 checked:border-navy-800 accent-navy-800"
                                 />
-                                <span className="text-sm text-slate-300">Include Charity Impact</span>
+                                <span className="text-sm text-muted">Include Charity Impact</span>
                             </label>
                         </div>
                     )}
