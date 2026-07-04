@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 import { writeAuditEvent } from './audit';
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -93,7 +94,7 @@ export const createPool = onCall(async (request) => {
         const poolId = poolRef.id;
 
         // Prepare Pool Data
-        const now = admin.firestore.Timestamp.now();
+        const now = Timestamp.now();
 
         const newPool: any = {
             ...data,
@@ -207,7 +208,7 @@ export const updatePoolSettings = onCall(async (request) => {
 
     const patch: Record<string, unknown> = {
         ...set,
-        updatedAt: admin.firestore.Timestamp.now(),
+        updatedAt: Timestamp.now(),
     };
     for (const key of clearLegacy) {
         patch[key] = admin.firestore.FieldValue.delete();

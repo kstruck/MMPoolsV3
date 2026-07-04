@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import * as crypto from "crypto";
 import { AuditLogEvent, AuditEventType } from "./types";
 
@@ -38,7 +39,7 @@ export const writeAuditEvent = async (options: AuditOptions, existingTransaction
                     return "SKIPPED";
                 }
             }
-            t.set(dedupeRef, { timestamp: admin.firestore.Timestamp.now(), originalEventId: eventId });
+            t.set(dedupeRef, { timestamp: Timestamp.now(), originalEventId: eventId });
         }
 
         const event: AuditLogEvent = {
@@ -55,7 +56,7 @@ export const writeAuditEvent = async (options: AuditOptions, existingTransaction
 
         t.set(auditRef.doc(eventId), {
             ...event,
-            createdAt: admin.firestore.Timestamp.now()
+            createdAt: Timestamp.now()
         });
         return "WRITTEN";
     };

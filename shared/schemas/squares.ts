@@ -14,7 +14,10 @@ export const squaresCreateInputSchema = contactFieldsSchema.extend({
   gameTime: z.number().optional(),
   seasonType: z.enum(['1', '2', '3']).optional(),
   week: z.number().int().optional(),
-  numberSets: z.number().int().optional(),
+  // Driven by a <select> in the wizard, so the raw form value is a string
+  // ('1'/'4') — coerce rather than a bare z.number(), which would silently
+  // fail RHF's full-form submit validation with no visible error.
+  numberSets: z.coerce.number().int().optional(),
   theme: z.string().optional(),
   branding: brandingSchema.optional(),
 });

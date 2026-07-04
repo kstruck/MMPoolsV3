@@ -2,7 +2,7 @@
 // built in PlayoffWizard.tsx:355-406. season is not required at create
 // (createPool doesn't enforce it; only createNFLPool does).
 import { z } from 'zod';
-import { contactFieldsSchema, brandingSchema, payoutsSchema } from './common';
+import { contactFieldsSchema, brandingSchema, payoutsSchema, optionalDateMillis } from './common';
 
 export const roundMultipliersSchema = z.object({
   WILD_CARD: z.number(),
@@ -26,7 +26,9 @@ export const playoffCreateInputSchema = contactFieldsSchema.extend({
   }),
   branding: brandingSchema.optional(),
   isPublic: z.boolean().optional(),
-  lockDate: z.number().optional(),
+  // <input type="datetime-local"> gives a raw ISO-ish string client-side and
+  // an already-converted millis number server-side (via buildPlayoffPayload).
+  lockDate: optionalDateMillis,
 });
 
 export type PlayoffCreateInput = z.infer<typeof playoffCreateInputSchema>;

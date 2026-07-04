@@ -55,6 +55,26 @@ assert.throws(
   'playoff missing scoring rejected',
 );
 
+// lockDate is shared by the client resolver (raw datetime-local string / blank)
+// and the server gate (already-converted millis) — both shapes must parse.
+const playoffScoring = { WILD_CARD: 1, DIVISIONAL: 2, CONF_CHAMP: 3, SUPER_BOWL: 4 };
+const playoffBase = { type: 'NFL_PLAYOFFS', name: 'x', settings: { entryFee: 0, payouts: okPayouts, scoring: { roundMultipliers: playoffScoring } } };
+assert.strictEqual(
+  playoffCreateInputSchema.parse({ ...playoffBase, lockDate: '' }).lockDate,
+  undefined,
+  'blank lockDate coerces to undefined',
+);
+assert.strictEqual(
+  playoffCreateInputSchema.parse({ ...playoffBase, lockDate: '2026-01-10T18:00' }).lockDate,
+  new Date('2026-01-10T18:00').getTime(),
+  'datetime-local lockDate string parses to millis',
+);
+assert.strictEqual(
+  playoffCreateInputSchema.parse({ ...playoffBase, lockDate: 1767034800000 }).lockDate,
+  1767034800000,
+  'already-millis lockDate passes through',
+);
+
 assert.doesNotThrow(
   () => propsCreateInputSchema.parse({
     type: 'PROPS', name: 'SB Props',
