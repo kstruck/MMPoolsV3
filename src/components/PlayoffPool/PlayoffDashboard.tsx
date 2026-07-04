@@ -111,12 +111,6 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        {isManager && (
-                            <button onClick={() => window.location.href = `/playoff-wizard/${pool.id}`} className="bg-slate-800 hover:bg-slate-700 text-indigo-400 border border-indigo-500/30 px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
-                                <Settings size={16} /> Manage Pool
-                            </button>
-                        )}
-
                         <button onClick={onBack} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-bold text-sm transition-colors">
                             Back
                         </button>

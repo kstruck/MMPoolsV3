@@ -37,12 +37,7 @@ const ContactPage = React.lazy(() => import('./components/ContactPage').then(m =
 const PoolRoute = React.lazy(() => import('./components/routes/PoolRoute').then(m => ({ default: m.PoolRoute })));
 const AdminRoute = React.lazy(() => import('./components/routes/AdminRoute').then(m => ({ default: m.AdminRoute })));
 
-// Lazy-loaded wizards
-const BracketWizard = React.lazy(() => import('./components/BracketWizard/BracketWizard').then(m => ({ default: m.BracketWizard })));
-const PlayoffWizard = React.lazy(() => import('./components/PlayoffPool/PlayoffWizard').then(m => ({ default: m.PlayoffWizard })));
-// TEMP: unified-wizard framework smoke test (delete before merge)
-const WizardPreview = React.lazy(() => import('./components/wizard/__preview__/WizardPreview').then(m => ({ default: m.WizardPreview })));
-// Unified create flow (Phase B) — Playoff migrated first
+// Lazy-loaded wizards (unified create flow)
 const CreatePlayoffPool = React.lazy(() => import('./components/wizard/create/CreatePlayoffPool').then(m => ({ default: m.CreatePlayoffPool })));
 const CreateNFLPickemPool = React.lazy(() => import('./components/wizard/create/CreateNFLPickemPool').then(m => ({ default: m.CreateNFLPickemPool })));
 const CreateNFLSurvivorPool = React.lazy(() => import('./components/wizard/create/CreateNFLSurvivorPool').then(m => ({ default: m.CreateNFLSurvivorPool })));
@@ -50,9 +45,6 @@ const CreateNFLMarginPool = React.lazy(() => import('./components/wizard/create/
 const CreateBracketPool = React.lazy(() => import('./components/wizard/create/CreateBracketPool').then(m => ({ default: m.CreateBracketPool })));
 const CreateSquaresPool = React.lazy(() => import('./components/wizard/create/CreateSquaresPool').then(m => ({ default: m.CreateSquaresPool })));
 const CreatePropsPool = React.lazy(() => import('./components/wizard/create/CreatePropsPool').then(m => ({ default: m.CreatePropsPool })));
-const PropsWizard = React.lazy(() => import('./components/PropsWizard/PropsWizard').then(m => ({ default: m.PropsWizard })));
-const SetupWizard = React.lazy(() => import('./components/SetupWizard').then(m => ({ default: m.SetupWizard })));
-const NFLPoolWizard = React.lazy(() => import('./components/NFLPoolWizard/NFLPoolWizard').then(m => ({ default: m.NFLPoolWizard })));
 const JoinPool = React.lazy(() => import('./components/JoinPool').then(m => ({ default: m.JoinPool })));
 
 // Lazy-loaded admin
@@ -109,11 +101,11 @@ const LegacyHashHandler = () => {
         targetPath = '/admin';
       }
 
-      // Wizards
-      else if (cleanHash === 'bracket-wizard') targetPath = '/bracket-wizard';
-      else if (cleanHash === 'props-wizard') targetPath = '/props-wizard';
-      else if (cleanHash === 'playoff-wizard') targetPath = '/playoff-wizard';
-      else if (cleanHash === 'grid-wizard' || cleanHash === 'wizard') targetPath = '/grid-wizard';
+      // Wizards (unified create flow)
+      else if (cleanHash === 'bracket-wizard') targetPath = '/create/bracket';
+      else if (cleanHash === 'props-wizard') targetPath = '/create/props';
+      else if (cleanHash === 'playoff-wizard') targetPath = '/create/playoff';
+      else if (cleanHash === 'grid-wizard' || cleanHash === 'wizard') targetPath = '/create/squares';
 
       // Navigate and clear the hash
       if (targetPath) {
@@ -200,7 +192,7 @@ const App: React.FC = () => {
 
   const handleSquaresPoolCreate = () => {
     if (!checkAccess()) return;
-    navigate('/grid-wizard');
+    navigate('/create/squares');
   };
 
   const isAdmin = isSuperAdmin(user);
@@ -273,17 +265,84 @@ const App: React.FC = () => {
           } />
           <Route path="/custom-sports" element={<Navigate to="/" replace />} />
 
-          {/* TEMP: unified-wizard framework smoke test (delete before merge) */}
-          <Route path="/__wizard_preview" element={<WizardPreview />} />
-
-          {/* Unified create flow (Phase B) */}
-          <Route path="/create/playoff" element={user ? <CreatePlayoffPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
-          <Route path="/create/pickem" element={user ? <CreateNFLPickemPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
-          <Route path="/create/survivor" element={user ? <CreateNFLSurvivorPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
-          <Route path="/create/margin" element={user ? <CreateNFLMarginPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
-          <Route path="/create/bracket" element={user ? <CreateBracketPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
-          <Route path="/create/squares" element={user ? <CreateSquaresPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
-          <Route path="/create/props" element={user ? <CreatePropsPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} /> : <Navigate to="/" replace />} />
+          {/* Unified create flow */}
+          <Route path="/create/playoff" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <PoolTypeGate type="NFL_PLAYOFFS">
+                  <CreatePlayoffPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
+                <Footer />
+              </div>
+            ) : <Navigate to="/" replace />
+          } />
+          <Route path="/create/pickem" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <PoolTypeGate type="NFL_PICKEM">
+                  <CreateNFLPickemPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
+                <Footer />
+              </div>
+            ) : <Navigate to="/" replace />
+          } />
+          <Route path="/create/survivor" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <PoolTypeGate type="NFL_SURVIVOR">
+                  <CreateNFLSurvivorPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
+                <Footer />
+              </div>
+            ) : <Navigate to="/" replace />
+          } />
+          <Route path="/create/margin" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <PoolTypeGate type="NFL_MARGIN">
+                  <CreateNFLMarginPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
+                <Footer />
+              </div>
+            ) : <Navigate to="/" replace />
+          } />
+          <Route path="/create/bracket" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <PoolTypeGate type="BRACKET">
+                  <CreateBracketPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
+                <Footer />
+              </div>
+            ) : <Navigate to="/" replace />
+          } />
+          <Route path="/create/squares" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <PoolTypeGate type="SQUARES">
+                  <CreateSquaresPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
+                <Footer />
+              </div>
+            ) : <Navigate to="/" replace />
+          } />
+          <Route path="/create/props" element={
+            user ? (
+              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
+                <PoolTypeGate type="PROPS">
+                  <CreatePropsPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
+                </PoolTypeGate>
+                <Footer />
+              </div>
+            ) : <Navigate to="/" replace />
+          } />
 
           {/* Global Pages */}
           <Route path="/pricing" element={<PricingPage user={user} isLoggedIn={!!user} onLogin={() => handleOpenAuth('login')} onSignup={() => handleOpenAuth('register')} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />} />
@@ -384,73 +443,15 @@ const App: React.FC = () => {
                 user={user}
                 isManager={false}
                 onSelectSquares={handleSquaresPoolCreate}
-                onSelectBracket={() => navigate('/bracket-wizard')}
-                onSelectPlayoff={() => navigate('/playoff-wizard')}
-                onSelectProps={() => navigate('/props-wizard')}
+                onSelectBracket={() => navigate('/create/bracket')}
+                onSelectPlayoff={() => navigate('/create/playoff')}
+                onSelectProps={() => navigate('/create/props')}
                 onOpenAuth={handleOpenAuth}
                 onLogout={handleLogout}
                 onCreatePool={handleCreatePoolClick}
               />
             ) : <Navigate to="/" replace />
           } />
-          <Route path="/bracket-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="BRACKET">
-                  <BracketWizard user={user} onSuccess={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
-                <Footer />
-              </div>
-            ) : <Navigate to="/" replace />
-          } />
-          <Route path="/playoff-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="NFL_PLAYOFFS">
-                  <PlayoffWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
-                <Footer />
-              </div>
-            ) : <Navigate to="/" replace />
-          } />
-          <Route path="/props-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="PROPS">
-                  <PropsWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
-                <Footer />
-              </div>
-            ) : <Navigate to="/" replace />
-          } />
-
-          <Route path="/grid-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate type="SQUARES">
-                  <SetupWizard user={user} onComplete={() => { }} onBack={() => navigate('/create-pool')} />
-                </PoolTypeGate>
-                <Footer />
-              </div>
-            ) : <Navigate to="/" replace />
-          } />
-
-          <Route path="/nfl-wizard" element={
-            user ? (
-              <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-                <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
-                <PoolTypeGate>
-                  <NFLPoolWizard user={user} onComplete={() => navigate('/participant')} onCancel={() => navigate('/create-pool')} />
-                </PoolTypeGate>
-                <Footer />
-              </div>
-            ) : <Navigate to="/" replace />
-          } />
-
           <Route path="/join/:poolId" element={
             <JoinPool
               user={user}

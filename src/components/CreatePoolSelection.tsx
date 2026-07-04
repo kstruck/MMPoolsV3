@@ -110,7 +110,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                             {/* WEEKLY PICK'EM CARD */}
                             <button
-                                onClick={pickemEnabled ? () => navigate('/nfl-wizard?type=NFL_PICKEM') : undefined}
+                                onClick={pickemEnabled ? () => navigate('/create/pickem') : undefined}
                                 disabled={!pickemEnabled}
                                 className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${pickemEnabled ? 'hover:bg-slate-700 hover:border-blue-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
@@ -131,7 +131,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                             {/* SURVIVOR CARD */}
                             <button
-                                onClick={survivorEnabled ? () => navigate('/nfl-wizard?type=NFL_SURVIVOR') : undefined}
+                                onClick={survivorEnabled ? () => navigate('/create/survivor') : undefined}
                                 disabled={!survivorEnabled}
                                 className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${survivorEnabled ? 'hover:bg-slate-700 hover:border-red-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
@@ -152,7 +152,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 
                             {/* MARGIN CARD */}
                             <button
-                                onClick={marginEnabled ? () => navigate('/nfl-wizard?type=NFL_MARGIN') : undefined}
+                                onClick={marginEnabled ? () => navigate('/create/margin') : undefined}
                                 disabled={!marginEnabled}
                                 className={`group relative bg-slate-800 border-2 border-slate-700 rounded-2xl p-6 text-left transition-all shadow-xl flex flex-col ${marginEnabled ? 'hover:bg-slate-700 hover:border-teal-500 hover:-translate-y-1' : 'opacity-50 grayscale cursor-not-allowed'}`}
                             >
