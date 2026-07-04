@@ -2,7 +2,7 @@
 import * as functions from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 // Fixed imports
-import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry, BracketPool, User, BracketEntry } from "./types";
+import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry, BracketPool, User, BracketEntry, NFLGame, NFLPickemPool, NFLSurvivorPool, NFLMarginPool, NFLPickemEntry, SurvivorEntry, MarginEntry } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { isOptedOut, buildUnsubUrl, getPrefs, EmailCategory } from "./emailPrefs";
@@ -136,6 +136,11 @@ export const runReminders = functions.scheduler.onSchedule("every 5 minutes", as
             // --- TYPE: BRACKET ---
             else if (pool.type === 'BRACKET') {
                 await checkBracketReminders(db, pool as BracketPool, now);
+            }
+
+            // --- TYPE: NFL SEASON POOLS (Pick'em / Survivor / Margin) ---
+            else if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
+                await checkNFLNonPickerReminders(db, pool as NFLSeasonPool, now);
             }
 
         } catch (poolError: unknown) {
@@ -669,5 +674,141 @@ async function checkBracketReminders(db: admin.firestore.Firestore, pool: Bracke
         }
 
         await logAudit(db, pool.id, `Sent ${trigger} bracket reminder (${emailsSentCount} emails, ${smsSentCount} SMS)`, 'NOTIFICATION_SENT', { dedupeKey: key });
+    }
+}
+
+// --- NFL SEASON POOL NON-PICKER REMINDERS ---
+
+type NFLSeasonPool = NFLPickemPool | NFLSurvivorPool | NFLMarginPool;
+
+/**
+ * Targeted reminders for members who haven't completed their picks for the
+ * upcoming NFL week. Two tiers: T-36h (30h-36h before the week lock) and
+ * T-4h (0-4h before). Unlike the generic lock reminders, this only emails
+ * the members who still have picks outstanding.
+ *
+ * Default ON: pools without a reminders config still get these; commissioners
+ * opt out via pool.reminders.lock.enabled === false.
+ */
+export async function checkNFLNonPickerReminders(db: admin.firestore.Firestore, pool: NFLSeasonPool, now: number) {
+    try {
+        // Off switch (default ON when the reminders config is absent — NFL pools
+        // predate per-pool reminder settings).
+        const reminders = (pool as unknown as { reminders?: { lock?: { enabled?: boolean } } }).reminders;
+        if (reminders?.lock?.enabled === false) return;
+        if (!pool.season || pool.status === 'archived') return;
+
+        // --- 1. Determine the current week (cheap bail-out path) ---
+        // One query on the existing (season, startTime) composite index.
+        // seasonType is filtered in memory: an equality filter on it would
+        // require a (season, seasonType, startTime) index that doesn't exist.
+        const seasonType = Number((pool as unknown as { seasonType?: string | number }).seasonType || 2);
+        const futureSnap = await db.collection('nfl_games')
+            .where('season', '==', pool.season)
+            .where('startTime', '>', now)
+            .get();
+
+        const futureGames = futureSnap.docs
+            .map(d => d.data() as NFLGame)
+            .filter(g => Number(g.seasonType) === seasonType);
+        if (futureGames.length === 0) return; // Season over (or not ingested yet)
+
+        const week = Math.min(...futureGames.map(g => g.week));
+
+        // Fetch the FULL week (equality-only query, mirrors nflPools.ts — no
+        // composite index needed) so the lock reflects the week's true earliest
+        // kickoff even after the first game has started, and so pick'em
+        // completeness covers every game of the week.
+        const weekSnap = await db.collection('nfl_games')
+            .where('season', '==', pool.season)
+            .where('seasonType', '==', seasonType)
+            .where('week', '==', week)
+            .get();
+        const weekGames = weekSnap.docs.map(d => d.data() as NFLGame);
+        if (weekGames.length === 0) return;
+
+        // --- 2. Effective week lock (mirrors nflPools.ts submitNFLPicks) ---
+        const settings = (pool.settings ?? {}) as { lockBufferMinutes?: number; weekLockOverrides?: Record<number, number> };
+        const lockBufferMs = (settings.lockBufferMinutes ?? 5) * 60 * 1000;
+        const weekLockOverride: number | undefined = settings.weekLockOverrides?.[week];
+        const computedLock = Math.min(...weekGames.map(g => g.startTime)) - lockBufferMs;
+        // Commissioner deadline extensions act as a floor on the computed lock
+        const effectiveLock = weekLockOverride !== undefined ? Math.max(weekLockOverride, computedLock) : computedLock;
+
+        // --- 3. Send windows: bail fast before touching entries ---
+        const hoursUntilLock = (effectiveLock - now) / (1000 * 60 * 60);
+        let tier: '36H' | '4H' | null = null;
+        if (hoursUntilLock <= 36 && hoursUntilLock > 30) tier = '36H';
+        else if (hoursUntilLock <= 4 && hoursUntilLock > 0) tier = '4H';
+        if (!tier) return;
+
+        // --- 4. Find non-pickers ---
+        const entriesSnap = await db.collection('pools').doc(pool.id).collection('entries').get();
+        if (entriesSnap.empty) return;
+
+        const weekGameIds = weekGames.map(g => g.id);
+        const nonPickerUids = new Set<string>();
+        for (const entryDoc of entriesSnap.docs) {
+            const entry = entryDoc.data() as NFLPickemEntry | SurvivorEntry | MarginEntry;
+            if (!entry.ownerUid) continue;
+
+            let hasPicked: boolean;
+            if (pool.type === 'NFL_PICKEM') {
+                const picks = (entry as NFLPickemEntry).picks || {};
+                hasPicked = weekGameIds.every(id => !!picks[id]);
+            } else {
+                if (pool.type === 'NFL_SURVIVOR' && (entry as SurvivorEntry).status === 'ELIMINATED') continue;
+                hasPicked = !!(entry as SurvivorEntry | MarginEntry).picks?.[week];
+            }
+            if (!hasPicked) nonPickerUids.add(entry.ownerUid);
+        }
+        if (nonPickerUids.size === 0) return;
+
+        const lockDateStr = new Date(effectiveLock).toLocaleString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
+        }) + ' ET';
+        const hoursLeft = Math.max(1, Math.round(hoursUntilLock));
+        const picksWord = pool.type === 'NFL_PICKEM' ? 'picks' : 'pick';
+
+        const subject = tier === '36H'
+            ? `You haven't picked yet — Week ${week} locks in ~${hoursLeft} hours`
+            : `Last call: Week ${week} locks soon — ${pool.name}`;
+        const title = tier === '36H' ? `Week ${week} Pick Reminder` : `Last Call: Week ${week}`;
+
+        let sentCount = 0;
+        for (const uid of nonPickerUids) {
+            // One send per tier per week per user
+            const key = `NFL_NONPICK_${tier}:${pool.id}:${uid}:${week}`;
+            const shouldSend = await createNotificationOnce(db, key, {
+                poolId: pool.id,
+                type: 'LOCK_COUNTDOWN',
+                recipient: uid,
+                sentAt: now,
+                status: 'SENT',
+                metadata: { tier, week, effectiveLock }
+            });
+            if (!shouldSend) continue;
+
+            const userSnap = await db.collection('users').doc(uid).get();
+            const email = userSnap.exists ? (userSnap.data() as User)?.email : undefined;
+            if (!email) continue;
+
+            const body = `
+                <p>You haven't made your Week ${week} ${picksWord} in <strong>${escapeHtml(pool.name)}</strong> yet.</p>
+                <p><strong>Week ${week} locks:</strong> ${lockDateStr}</p>
+                <p>Don't get caught with an empty slate — lock in your ${picksWord} now.</p>
+            `;
+            const html = renderEmailHtml(title, body, `${BASE_URL}/pool/${pool.id}`, 'Make Your Picks');
+            await sendEmail(db, email, subject, html, { poolId: pool.id, category: 'reminders' });
+            sentCount++;
+        }
+
+        if (sentCount > 0) {
+            await logAudit(db, pool.id, `Sent T-${tier} non-picker reminders for Week ${week} (${sentCount} emails)`, 'NOTIFICATION_SENT', { tier, week, sentCount });
+        }
+    } catch (e) {
+        // Tolerate transient/mocked db failures — never break the scheduler loop
+        console.error(`[NFLNonPickerReminders] Error for pool ${pool.id}:`, e);
     }
 }

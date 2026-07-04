@@ -6,8 +6,11 @@ import { auth } from '../firebase';
 import { authService } from '../services/authService';
 import { useToast } from './ui/Toast';
 import { getUserMessage } from '../utils/errorMessages';
+import { historyService } from '../services/historyService';
+import type { SeasonHistoryEntry } from '../services/historyService';
+import { formatDeadline } from '../utils/formatTime';
 
-import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon, Edit2, Mail, ShieldAlert } from 'lucide-react';
+import { Save, User as UserIcon, Phone, Twitter, Facebook, Linkedin, Globe, Instagram, Loader, Copy, Users, Link as LinkIcon, Edit2, Mail, ShieldAlert, Trophy, Medal, History } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -15,6 +18,26 @@ interface UserProfileProps {
     user: User;
     onUpdate: (updatedUser: User) => void;
 }
+
+/** 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th"... */
+const ordinal = (n: number): string => {
+    const rem100 = n % 100;
+    if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+    switch (n % 10) {
+        case 1: return `${n}st`;
+        case 2: return `${n}nd`;
+        case 3: return `${n}rd`;
+        default: return `${n}th`;
+    }
+};
+
+/** Tailwind classes for the rank badge — gold/silver/bronze for the podium. */
+const rankBadgeClasses = (rank: number): string => {
+    if (rank === 1) return 'bg-gold-foil text-navy-900 border-transparent';
+    if (rank === 2) return 'bg-navy-600/15 text-navy-700 dark:text-[#9FB0CC] border-line';
+    if (rank === 3) return 'bg-gold-700/15 text-gold-700 dark:text-gold-400 border-gold-700/30';
+    return 'bg-surface text-muted border-line';
+};
 
 export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
     const navigate = useNavigate();
@@ -46,6 +69,29 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
     const [currentPassword, setCurrentPassword] = useState('');
     const [emailUpdateLoading, setEmailUpdateLoading] = useState(false);
     const [passwordError, setPasswordError] = useState('');
+
+    // Season History (written by the backend on pool completion)
+    const [seasonHistory, setSeasonHistory] = useState<SeasonHistoryEntry[]>([]);
+    const [historyLoaded, setHistoryLoaded] = useState(false);
+
+    useEffect(() => {
+        if (!user.id) return;
+        const unsubscribe = historyService.subscribeToSeasonHistory(user.id, (entries) => {
+            setSeasonHistory(entries);
+            setHistoryLoaded(true);
+        });
+        return unsubscribe;
+    }, [user.id]);
+
+    // Summary metrics
+    const championships = seasonHistory.filter(e => e.isChampion).length;
+    const podiumFinishes = seasonHistory.filter(e => e.finalRank >= 1 && e.finalRank <= 3).length;
+    const bestFinish = seasonHistory.length > 0
+        ? Math.min(...seasonHistory.map(e => e.finalRank))
+        : null;
+    const podiumRate = seasonHistory.length > 0
+        ? Math.round((podiumFinishes / seasonHistory.length) * 100)
+        : null;
 
     useEffect(() => {
         // Reset form when user prop changes
@@ -267,6 +313,77 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                     <button onClick={() => navigate('/participant')} className="bg-navy-800 hover:bg-navy-700 text-white px-5 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-colors duration-150">
                         View Entries
                     </button>
+                </div>
+
+                {/* Season History */}
+                <div className="bg-card border border-line rounded-xl p-6">
+                    <h3 className="text-muted text-xs font-display font-bold uppercase mb-4 tracking-[0.08em] flex items-center gap-2">
+                        <History size={14} /> Season History
+                    </h3>
+
+                    {!historyLoaded ? (
+                        <div className="flex items-center gap-2 text-muted text-sm py-4">
+                            <Loader size={16} className="animate-spin" /> Loading your record...
+                        </div>
+                    ) : seasonHistory.length === 0 ? (
+                        <div className="text-center py-8">
+                            <Trophy size={32} className="mx-auto text-faint mb-3" />
+                            <p className="text-muted text-sm">
+                                Your completed pools will show up here — finish a season to start your record.
+                            </p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Summary strip */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                                <div className="bg-surface border border-line rounded-lg p-3 text-center">
+                                    <div className="text-2xl font-display font-bold text-[color:var(--text)] num">{seasonHistory.length}</div>
+                                    <div className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mt-1">Pools Completed</div>
+                                </div>
+                                <div className="bg-surface border border-line rounded-lg p-3 text-center">
+                                    <div className="text-2xl font-display font-bold text-gold-600 dark:text-gold-400 flex items-center justify-center gap-1 num">
+                                        {championships > 0 && <Trophy size={18} />}{championships}
+                                    </div>
+                                    <div className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mt-1">Championships</div>
+                                </div>
+                                <div className="bg-surface border border-line rounded-lg p-3 text-center">
+                                    <div className="text-2xl font-display font-bold text-[color:var(--text)] num">{bestFinish !== null ? ordinal(bestFinish) : '—'}</div>
+                                    <div className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mt-1">Best Finish</div>
+                                </div>
+                                <div className="bg-surface border border-line rounded-lg p-3 text-center">
+                                    <div className="text-2xl font-display font-bold text-[color:var(--text)] num">{podiumRate !== null ? `${podiumRate}%` : '—'}</div>
+                                    <div className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mt-1">Podium Rate</div>
+                                </div>
+                            </div>
+
+                            {/* Per-pool list */}
+                            <ul className="space-y-2">
+                                {seasonHistory.map((entry) => (
+                                    <li
+                                        key={entry.poolId}
+                                        className={`flex items-center justify-between gap-3 rounded-lg p-3 border ${entry.isChampion ? 'bg-gold-500/10 border-gold-500/30' : 'bg-surface border-line'}`}
+                                    >
+                                        <div className="min-w-0">
+                                            <div className="font-body font-bold text-[color:var(--text)] text-sm truncate flex items-center gap-2">
+                                                {entry.isChampion && <Trophy size={13} className="text-gold-600 dark:text-gold-400 shrink-0" aria-label="Champion" />}
+                                                <span className="truncate">{entry.poolName} · {entry.season}</span>
+                                            </div>
+                                            <div className="text-xs text-muted mt-0.5 truncate num">
+                                                {entry.entryName && <span className="text-faint">{entry.entryName} — </span>}
+                                                Finished {ordinal(entry.finalRank)} of {entry.totalEntries}
+                                                {typeof entry.points === 'number' && <span> · {entry.points} pts</span>}
+                                                <span className="text-faint"> · {formatDeadline(entry.completedAt)}</span>
+                                            </div>
+                                        </div>
+                                        <div className={`shrink-0 flex items-center gap-1 text-xs font-display font-bold uppercase px-2.5 py-1 rounded-full border num ${rankBadgeClasses(entry.finalRank)}`}>
+                                            {entry.finalRank <= 3 && <Medal size={12} />}
+                                            {ordinal(entry.finalRank)}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
                 </div>
 
                 {/* Email Preferences (informational — the control surface is the tokenized link in email footers) */}

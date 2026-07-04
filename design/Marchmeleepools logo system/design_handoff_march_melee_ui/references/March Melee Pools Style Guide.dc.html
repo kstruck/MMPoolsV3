@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  ::selection{background:#C4342E;color:#fff}
+</style>
+</helmet>
+
+<div style="--navy-950:#0B1526;--navy-900:#0E1C34;--navy-800:#142A4C;--navy-700:#1A3B62;--navy-600:#24507F;--gold-700:#8C6D33;--gold-600:#B78F4A;--gold-500:#C9A867;--gold-400:#D9BC80;--gold-300:#E6CE96;--red-700:#9E241F;--red-600:#C4342E;--red-500:#DA463F;--cream:#F7F4EE;--paper:#FFFFFF;--ink:#131B2B;--muted:#5C6678;--faint:#8B93A3;--line:#E7E3D9;--d-bg:#0B1526;--d-surface:#111F39;--d-elev:#17294A;--d-ink:#EDF1F8;--d-muted:#9FB0CC;--d-line:rgba(230,206,150,0.16);--gold-grad:linear-gradient(180deg,#EBD49B 0%,#C9A867 45%,#A98038 100%);font-family:'Barlow',system-ui,sans-serif;background:var(--cream);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased">
+
+  <!-- MASTHEAD -->
+  <div style="background:var(--navy-900);color:#fff;border-bottom:3px solid var(--gold-500);position:relative;overflow:hidden">
+    <div style="position:absolute;inset:0;background:radial-gradient(1000px 380px at 82% -30%,rgba(196,52,46,0.20),transparent 60%),radial-gradient(900px 400px at 12% 130%,rgba(36,80,127,0.5),transparent 60%)"></div>
+    <div style="max-width:1160px;margin:0 auto;padding:34px 40px;position:relative;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:20px">
+        <img src="assets/mmp-crest.png" alt="March Melee Pools crest" style="height:74px;width:auto;filter:drop-shadow(0 6px 14px rgba(0,0,0,0.4))">
+        <div>
+          <div style="font-family:'Saira Condensed';font-weight:800;font-size:15px;letter-spacing:0.32em;color:var(--gold-400);text-transform:uppercase">March Melee Pools</div>
+          <h1 style="font-family:'Saira Condensed';font-weight:700;font-size:40px;line-height:0.98;text-transform:uppercase;margin:4px 0 0;letter-spacing:0.005em">Brand &amp; Design System</h1>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:12px;letter-spacing:0.22em;text-transform:uppercase;color:var(--d-muted)">Version 3.0 · MMPoolsV3</div>
+        <a href="March Melee Pools Home.dc.html" style="display:inline-flex;align-items:center;gap:8px;margin-top:12px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.06em;font-size:14px;color:var(--navy-900);background:var(--gold-grad);padding:10px 18px;border-radius:8px;text-decoration:none;box-shadow:0 6px 18px rgba(0,0,0,0.35)">View Homepage →</a>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1160px;margin:0 auto;padding:64px 40px 96px;display:flex;flex-direction:column;gap:80px">
+
+    <!-- BRAND VOICE -->
+    <section>
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:40px;align-items:center">
+        <div>
+          <div style="font-family:'Saira Condensed';font-weight:700;font-size:13px;letter-spacing:0.2em;color:var(--gold-700);text-transform:uppercase">The Brand</div>
+          <p style="font-family:'Saira Condensed';font-weight:600;font-size:34px;line-height:1.08;margin:12px 0 0;color:var(--navy-800);text-wrap:balance">Sportsbook-grade polish meets gameday energy. Confident, fast, and fair — every pool, every sport.</p>
+          <p style="font-size:16px;line-height:1.6;color:var(--muted);margin:20px 0 0;max-width:52ch">March Melee Pools runs NCAA brackets, the full NFL season suite, Gameday Squares, and custom prop sheets in real time. The system below keeps that experience premium and unmistakably ours across every surface.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;gap:12px">
+            <div style="flex:1;background:var(--navy-800);color:#fff;border-radius:14px;padding:18px 18px 16px">
+              <div style="font-family:'Saira Condensed';font-weight:700;font-size:32px;color:var(--gold-400);font-variant-numeric:tabular-nums">$2.4M+</div>
+              <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--d-muted);margin-top:2px">Prizes paid</div>
+            </div>
+            <div style="flex:1;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px">
+              <div style="font-family:'Saira Condensed';font-weight:700;font-size:32px;color:var(--red-600);font-variant-numeric:tabular-nums">18K+</div>
+              <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-top:2px">Pools run</div>
+            </div>
+          </div>
+          <div style="background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px">
+            <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)">Design principles</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
+              <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.04em;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--navy-800);padding:6px 12px;border-radius:999px">Clarity first</span>
+              <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.04em;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--navy-800);padding:6px 12px;border-radius:999px">Real-time</span>
+              <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.04em;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--navy-800);padding:6px 12px;border-radius:999px">Provably fair</span>
+              <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.04em;font-size:13px;background:var(--cream);border:1px solid var(--line);color:var(--navy-800);padding:6px 12px;border-radius:999px">Premium</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 01 LOGO -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:36px">
+        <span style="font-family:'Saira Condensed';font-weight:700;font-size:14px;letter-spacing:0.18em;color:var(--gold-700)">01</span>
+        <h2 style="font-family:'Saira Condensed';font-weight:700;font-size:30px;letter-spacing:0.01em;text-transform:uppercase;margin:0;color:var(--navy-800)">Logo &amp; Mark</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:280px">
+          <img src="assets/mmp-logo-full.png" alt="Primary stacked logo" style="max-width:80%;max-height:230px;height:auto">
+          <div style="margin-top:20px;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted)">Primary · Full-Color Stacked (on light)</div>
+        </div>
+        <div style="background:var(--navy-900);border:1px solid var(--navy-700);border-radius:16px;padding:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:280px">
+          <img src="assets/mmp-crest.png" alt="Crest on navy" style="max-width:52%;max-height:150px;height:auto">
+          <div style="font-family:'Saira Condensed';font-weight:800;text-transform:uppercase;letter-spacing:0.03em;font-size:38px;line-height:0.9;color:#fff;text-align:center;margin-top:14px">March Melee<br><span style="font-size:20px;letter-spacing:0.42em;color:var(--gold-400)">Pools</span></div>
+          <div style="font-size:11px;letter-spacing:0.14em;color:var(--gold-300);margin-top:8px">WWW.MARCHMELEEPOOLS.COM</div>
+          <div style="margin-top:18px;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--d-muted)">On Navy · Reverse lockup</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px">
+        <div style="background:var(--cream);border:1px solid var(--line);border-radius:16px;padding:28px;display:flex;align-items:center;gap:26px">
+          <img src="assets/mmp-crest.png" alt="Crest mark" style="height:120px;width:auto">
+          <div>
+            <div style="font-family:'Saira Condensed';font-weight:700;font-size:20px;text-transform:uppercase;color:var(--navy-800)">The Crest</div>
+            <p style="font-size:14px;line-height:1.55;color:var(--muted);margin:8px 0 0;max-width:34ch">Mark-only lockup for avatars, app icons, and tight spaces. Trophy, laurel, and the tri-sport ball cluster carry the brand alone.</p>
+          </div>
+        </div>
+        <div style="background:var(--navy-800);border-radius:16px;padding:28px;display:flex;flex-direction:column;justify-content:center;gap:18px">
+          <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--d-muted)">App icon / Favicon</div>
+          <div style="display:flex;align-items:flex-end;gap:26px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold-400)">Large — crest</span>
+              <div style="display:flex;align-items:flex-end;gap:14px">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><div style="width:72px;height:72px;border-radius:16px;background:var(--navy-900);border:1px solid var(--navy-600);display:flex;align-items:center;justify-content:center"><img src="assets/mmp-crest.png" style="width:56px;height:auto"></div><span style="font-size:11px;color:var(--d-muted)">512</span></div>
+              </div>
+            </div>
+            <div style="width:1px;align-self:stretch;background:var(--navy-700)"></div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold-400)">Small — MM monogram</span>
+              <div style="display:flex;align-items:flex-end;gap:14px">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><div style="width:72px;height:72px;border-radius:16px;background:linear-gradient(155deg,#1A3B62,#0C1730);box-shadow:inset 0 0 0 2px rgba(201,168,103,0.35);display:flex;align-items:center;justify-content:center"><span style="font-family:'Saira Condensed';font-weight:800;font-size:38px;letter-spacing:-0.03em;line-height:1;background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent">MM</span></div><span style="font-size:11px;color:var(--d-muted)">96</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><div style="width:48px;height:48px;border-radius:11px;background:linear-gradient(155deg,#1A3B62,#0C1730);box-shadow:inset 0 0 0 1.5px rgba(201,168,103,0.35);display:flex;align-items:center;justify-content:center"><span style="font-family:'Saira Condensed';font-weight:800;font-size:25px;letter-spacing:-0.03em;line-height:1;background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent">MM</span></div><span style="font-size:11px;color:var(--d-muted)">48</span></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:7px"><div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(155deg,#1A3B62,#0C1730);box-shadow:inset 0 0 0 1px rgba(201,168,103,0.4);display:flex;align-items:center;justify-content:center"><span style="font-family:'Saira Condensed';font-weight:800;font-size:17px;letter-spacing:-0.03em;line-height:1;background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent">MM</span></div><span style="font-size:11px;color:var(--d-muted)">32</span></div>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:13px;color:var(--d-muted);line-height:1.5">The full crest carries too much detail below ~64px. For favicons and small app tiles, drop to the <strong style="color:#fff;font-weight:600">MM monogram</strong> — gold on navy, same Saira Condensed face. Keep clearspace ≥ the trophy-cup height around the crest; never recolor or skew the mark.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 COLOR -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:36px">
+        <span style="font-family:'Saira Condensed';font-weight:700;font-size:14px;letter-spacing:0.18em;color:var(--gold-700)">02</span>
+        <h2 style="font-family:'Saira Condensed';font-weight:700;font-size:30px;letter-spacing:0.01em;text-transform:uppercase;margin:0;color:var(--navy-800)">Color</h2>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:28px">
+        <div>
+          <div style="font-family:'Saira Condensed';font-weight:700;font-size:16px;letter-spacing:0.06em;text-transform:uppercase;color:var(--navy-700);margin-bottom:14px">Navy — Foundation</div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px">
+            <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:88px;background:var(--navy-950)"></div><div style="padding:10px 12px"><div style="font-weight:600;font-size:13px">Navy 950</div><div style="font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums">#0B1526 · App base</div></div></div>
+            <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:88px;background:var(--navy-900)"></div><div style="padding:10px 12px"><div style="font-weight:600;font-size:13px">Navy 900</div><div style="font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums">#0E1C34</div></div></div>
+            <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:88px;background:var(--navy-800)"></div><div style="padding:10px 12px"><div style="font-weight:600;font-size:13px">Navy 800</div><div style="font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums">#142A4C · Primary</div></div></div>
+            <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:88px;background:var(--navy-700)"></div><div style="padding:10px 12px"><div style="font-weight:600;font-size:13px">Navy 700</div><div style="font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums">#1A3B62</div></div></div>
+            <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:88px;background:var(--navy-600)"></div><div style="padding:10px 12px"><div style="font-weight:600;font-size:13px">Navy 600</div><div style="font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums">#24507F · Lines</div></div></div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:28px">
+          <div>
+            <div style="font-family:'Saira Condensed';font-weight:700;font-size:16px;letter-spacing:0.06em;text-transform:uppercase;color:var(--gold-700);margin-bottom:14px">Gold — Trophy / Premium</div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px">
+              <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:76px;background:var(--gold-700)"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:13px">Gold 700</div><div style="font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums">#8C6D33</div></div></div>
+              <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:76px;background:var(--gold-600)"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:13px">Gold 600</div><div style="font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums">#B78F4A</div></div></div>
+              <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:76px;background:var(--gold-500)"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:13px">Gold 500</div><div style="font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums">#C9A867</div></div></div>
+              <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:76px;background:var(--gold-400)"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:13px">Gold 400</div><div style="font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums">#D9BC80</div></div></div>
+              <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:76px;background:var(--gold-grad)"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:13px">Gold Grad</div><div style="font-size:11.5px;color:var(--muted)">Foil / CTA</div></div></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:'Saira Condensed';font-weight:700;font-size:16px;letter-spacing:0.06em;text-transform:uppercase;color:var(--red-600);margin-bottom:14px">Red — Live / Action</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+              <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:76px;background:var(--red-700)"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:13px">Red 700</div><div style="font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums">#9E241F</div></div></div>
+              <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:76px;background:var(--red-600)"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:13px">Red 600</div><div style="font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums">#C4342E</div></div></div>
+              <div style="border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--paper)"><div style="height:76px;background:var(--red-500)"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:13px">Red 500</div><div style="font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums">#DA463F</div></div></div>
+            </div>
+            <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:12px">Use red sparingly — live badges, primary CTAs, alerts, and eliminations only. Never as a background field.</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">
+          <div>
+            <div style="font-family:'Saira Condensed';font-weight:700;font-size:16px;letter-spacing:0.06em;text-transform:uppercase;color:var(--navy-700);margin-bottom:14px">Neutrals — Light theme</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+              <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line)"><div style="height:64px;background:var(--cream)"></div><div style="padding:8px 10px;background:var(--paper)"><div style="font-weight:600;font-size:12px">Cream</div><div style="font-size:11px;color:var(--muted)">#F7F4EE</div></div></div>
+              <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line)"><div style="height:64px;background:var(--paper)"></div><div style="padding:8px 10px;background:var(--paper)"><div style="font-weight:600;font-size:12px">Paper</div><div style="font-size:11px;color:var(--muted)">#FFFFFF</div></div></div>
+              <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line)"><div style="height:64px;background:var(--muted)"></div><div style="padding:8px 10px;background:var(--paper)"><div style="font-weight:600;font-size:12px">Muted</div><div style="font-size:11px;color:var(--muted)">#5C6678</div></div></div>
+              <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line)"><div style="height:64px;background:var(--ink)"></div><div style="padding:8px 10px;background:var(--paper)"><div style="font-weight:600;font-size:12px">Ink</div><div style="font-size:11px;color:var(--muted)">#131B2B</div></div></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:'Saira Condensed';font-weight:700;font-size:16px;letter-spacing:0.06em;text-transform:uppercase;color:var(--navy-700);margin-bottom:14px">Dark theme surfaces</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+              <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line)"><div style="height:64px;background:var(--d-bg)"></div><div style="padding:8px 10px;background:var(--paper)"><div style="font-weight:600;font-size:12px">BG</div><div style="font-size:11px;color:var(--muted)">#0B1526</div></div></div>
+              <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line)"><div style="height:64px;background:var(--d-surface)"></div><div style="padding:8px 10px;background:var(--paper)"><div style="font-weight:600;font-size:12px">Surface</div><div style="font-size:11px;color:var(--muted)">#111F39</div></div></div>
+              <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line)"><div style="height:64px;background:var(--d-elev)"></div><div style="padding:8px 10px;background:var(--paper)"><div style="font-weight:600;font-size:12px">Elevated</div><div style="font-size:11px;color:var(--muted)">#17294A</div></div></div>
+              <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line)"><div style="height:64px;background:var(--d-ink)"></div><div style="padding:8px 10px;background:var(--paper)"><div style="font-weight:600;font-size:12px">Ink</div><div style="font-size:11px;color:var(--muted)">#EDF1F8</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 TYPOGRAPHY -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:36px">
+        <span style="font-family:'Saira Condensed';font-weight:700;font-size:14px;letter-spacing:0.18em;color:var(--gold-700)">03</span>
+        <h2 style="font-family:'Saira Condensed';font-weight:700;font-size:30px;letter-spacing:0.01em;text-transform:uppercase;margin:0;color:var(--navy-800)">Typography</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px">
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:28px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold-700)">Display / Headlines</span><span style="font-size:12px;color:var(--muted)">500–800</span></div>
+          <div style="font-family:'Saira Condensed';font-weight:800;font-size:64px;line-height:0.95;text-transform:uppercase;color:var(--navy-800);margin-top:14px">Saira<br>Condensed</div>
+          <div style="font-size:14px;color:var(--muted);margin-top:14px;line-height:1.5">Condensed athletic block face for hero headlines, section titles, stat figures, and buttons. Always uppercase with tight leading.</div>
+        </div>
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:28px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold-700)">Text / UI</span><span style="font-size:12px;color:var(--muted)">400–700</span></div>
+          <div style="font-family:'Barlow';font-weight:600;font-size:58px;line-height:1;color:var(--navy-800);margin-top:14px">Barlow</div>
+          <div style="font-size:14px;color:var(--muted);margin-top:26px;line-height:1.5">Clean, slightly technical grotesque for body copy, labels, form fields, and tables. Tabular numerals for all scores, odds, and money.</div>
+        </div>
+      </div>
+      <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:32px;display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;align-items:baseline;gap:20px;border-bottom:1px dashed var(--line);padding-bottom:16px"><span style="width:130px;flex:none;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Display / 56</span><span style="font-family:'Saira Condensed';font-weight:700;font-size:48px;text-transform:uppercase;color:var(--navy-800);line-height:1">Rule the Season</span></div>
+        <div style="display:flex;align-items:baseline;gap:20px;border-bottom:1px dashed var(--line);padding-bottom:16px"><span style="width:130px;flex:none;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">H2 / 30</span><span style="font-family:'Saira Condensed';font-weight:700;font-size:30px;text-transform:uppercase;color:var(--navy-800)">Weekly Pick'em Pools</span></div>
+        <div style="display:flex;align-items:baseline;gap:20px;border-bottom:1px dashed var(--line);padding-bottom:16px"><span style="width:130px;flex:none;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Label / 13</span><span style="font-family:'Saira Condensed';font-weight:700;font-size:13px;letter-spacing:0.16em;text-transform:uppercase;color:var(--gold-700)">Selection Sunday · Live</span></div>
+        <div style="display:flex;align-items:baseline;gap:20px;border-bottom:1px dashed var(--line);padding-bottom:16px"><span style="width:130px;flex:none;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Body / 16</span><span style="font-size:16px;line-height:1.6;color:var(--ink);max-width:60ch">Pick every game, assign confidence weights, and watch the leaderboard update in real time as scores lock quarter by quarter.</span></div>
+        <div style="display:flex;align-items:center;gap:20px"><span style="width:130px;flex:none;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">Numerals</span><span style="font-family:'Saira Condensed';font-weight:700;font-size:34px;color:var(--navy-800);font-variant-numeric:tabular-nums">$1,240.00 · 27–13 · +14</span></div>
+      </div>
+    </section>
+
+    <!-- 04 BUTTONS -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:36px">
+        <span style="font-family:'Saira Condensed';font-weight:700;font-size:14px;letter-spacing:0.18em;color:var(--gold-700)">04</span>
+        <h2 style="font-family:'Saira Condensed';font-weight:700;font-size:30px;letter-spacing:0.01em;text-transform:uppercase;margin:0;color:var(--navy-800)">Buttons</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:28px">
+          <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:18px">On light</div>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:16px;color:#fff;background:var(--red-600);border:none;padding:13px 26px;border-radius:10px;cursor:pointer;box-shadow:0 6px 16px rgba(196,52,46,0.28);transition:all .15s" style-hover="background:var(--red-500);transform:translateY(-1px)">Start Free Trial</button>
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:16px;color:var(--navy-900);background:var(--gold-grad);border:none;padding:13px 26px;border-radius:10px;cursor:pointer;box-shadow:0 6px 16px rgba(140,109,51,0.28);transition:all .15s" style-hover="filter:brightness(1.05);transform:translateY(-1px)">Create Pool</button>
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:16px;color:#fff;background:var(--navy-800);border:none;padding:13px 26px;border-radius:10px;cursor:pointer;transition:all .15s" style-hover="background:var(--navy-700)">Join Pool</button>
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:16px;color:var(--navy-800);background:transparent;border:1.5px solid var(--navy-800);padding:11.5px 24px;border-radius:10px;cursor:pointer;transition:all .15s" style-hover="background:var(--navy-800);color:#fff">Learn More</button>
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:16px;color:var(--faint);background:var(--cream);border:1.5px solid var(--line);padding:11.5px 24px;border-radius:10px;cursor:not-allowed">Locked</button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:18px">
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:13px;color:#fff;background:var(--red-600);border:none;padding:8px 16px;border-radius:8px;cursor:pointer">Small</button>
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:18px;color:#fff;background:var(--red-600);border:none;padding:16px 34px;border-radius:12px;cursor:pointer">Large CTA</button>
+          </div>
+        </div>
+        <div style="background:var(--navy-900);border:1px solid var(--navy-700);border-radius:16px;padding:28px">
+          <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--d-muted);margin-bottom:18px">On dark</div>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:16px;color:#fff;background:var(--red-600);border:none;padding:13px 26px;border-radius:10px;cursor:pointer;box-shadow:0 6px 18px rgba(196,52,46,0.4)">Start Free Trial</button>
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:16px;color:var(--navy-900);background:var(--gold-grad);border:none;padding:13px 26px;border-radius:10px;cursor:pointer">Create Pool</button>
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:16px;color:var(--navy-900);background:#fff;border:none;padding:13px 26px;border-radius:10px;cursor:pointer">Join Pool</button>
+            <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:16px;color:#fff;background:transparent;border:1.5px solid var(--gold-500);padding:11.5px 24px;border-radius:10px;cursor:pointer">Learn More</button>
+          </div>
+          <div style="font-size:13px;color:var(--d-muted);line-height:1.55;margin-top:22px">Red drives the single most important action per view. Gold is reserve for commissioner / premium actions. Radius 10px default, 12px on large.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 BADGES -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:36px">
+        <span style="font-family:'Saira Condensed';font-weight:700;font-size:14px;letter-spacing:0.18em;color:var(--gold-700)">05</span>
+        <h2 style="font-family:'Saira Condensed';font-weight:700;font-size:30px;letter-spacing:0.01em;text-transform:uppercase;margin:0;color:var(--navy-800)">Badges &amp; Tags</h2>
+      </div>
+      <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:22px">
+        <div>
+          <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Status</div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+            <span style="display:inline-flex;align-items:center;gap:7px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:13px;color:#fff;background:var(--red-600);padding:5px 12px;border-radius:999px"><span style="width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,0.3)"></span>Live</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:13px;color:#0F7B4A;background:#E4F5EC;border:1px solid #BEE7D0;padding:5px 12px;border-radius:999px">Paid</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:13px;color:#B4530A;background:#FBEEDD;border:1px solid #F2D6B0;padding:5px 12px;border-radius:999px">Unpaid</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:13px;color:var(--navy-800);background:#E5EDF6;border:1px solid #CBDCEC;padding:5px 12px;border-radius:999px">Open</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:13px;color:var(--muted);background:var(--cream);border:1px solid var(--line);padding:5px 12px;border-radius:999px">Locked</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:13px;color:var(--gold-700);background:#FBF3E0;border:1px solid #EAD9A8;padding:5px 12px;border-radius:999px">Winner</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:13px;color:#fff;background:#5B2A86;padding:5px 12px;border-radius:999px">Every Score</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Sport &amp; pool type</div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.09em;font-size:12px;color:#fff;background:var(--navy-800);padding:5px 11px;border-radius:6px">NFL</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.09em;font-size:12px;color:var(--navy-900);background:var(--gold-400);padding:5px 11px;border-radius:6px">NCAA</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.09em;font-size:12px;color:#fff;background:var(--red-600);padding:5px 11px;border-radius:6px">Squares</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.09em;font-size:12px;color:var(--navy-800);background:#fff;border:1.5px solid var(--navy-800);padding:3.5px 11px;border-radius:6px">Survivor</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.09em;font-size:12px;color:var(--navy-800);background:#fff;border:1.5px solid var(--navy-800);padding:3.5px 11px;border-radius:6px">Margin</span>
+            <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.09em;font-size:12px;color:var(--navy-800);background:#fff;border:1.5px solid var(--navy-800);padding:3.5px 11px;border-radius:6px">Prop Sheet</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 06 FORMS -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:36px">
+        <span style="font-family:'Saira Condensed';font-weight:700;font-size:14px;letter-spacing:0.18em;color:var(--gold-700)">06</span>
+        <h2 style="font-family:'Saira Condensed';font-weight:700;font-size:30px;letter-spacing:0.01em;text-transform:uppercase;margin:0;color:var(--navy-800)">Forms &amp; Inputs</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:18px">
+          <div>
+            <label style="display:block;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--navy-700);margin-bottom:7px">Pool name</label>
+            <input value="Sunday Night Sharps" style="width:100%;font-family:'Barlow';font-size:15px;color:var(--ink);background:var(--cream);border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;outline:none" style-focus="border-color:var(--navy-600);background:#fff">
+          </div>
+          <div>
+            <label style="display:block;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--navy-700);margin-bottom:7px">Lock mode</label>
+            <select style="width:100%;font-family:'Barlow';font-size:15px;color:var(--ink);background:var(--cream);border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;outline:none;appearance:none">
+              <option>Per-game kickoff lock</option>
+              <option>Weekly lock (first kickoff)</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--red-700);margin-bottom:7px">Entry fee</label>
+            <input value="$" style="width:100%;font-family:'Barlow';font-size:15px;color:var(--ink);background:#FCEEED;border:1.5px solid var(--red-500);border-radius:10px;padding:12px 14px;outline:none">
+            <div style="font-size:12px;color:var(--red-600);margin-top:6px">Enter an amount greater than $0.</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="width:46px;height:26px;background:var(--navy-800);border-radius:999px;position:relative;flex:none"><span style="position:absolute;top:3px;right:3px;width:20px;height:20px;background:#fff;border-radius:50%"></span></span>
+            <span style="font-size:14px;color:var(--ink)">Enable Primetime bonuses (TNF / SNF / MNF)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="width:20px;height:20px;border-radius:6px;background:var(--navy-800);flex:none;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <span style="font-size:14px;color:var(--ink)">Allow rebuys through Week 4</span>
+          </div>
+        </div>
+        <div style="background:var(--navy-900);border:1px solid var(--navy-700);border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:18px">
+          <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--d-muted)">On dark</div>
+          <div>
+            <label style="display:block;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--gold-400);margin-bottom:7px">Email</label>
+            <input value="commissioner@marchmeleepools.com" style="width:100%;font-family:'Barlow';font-size:15px;color:#fff;background:var(--d-bg);border:1.5px solid var(--navy-600);border-radius:10px;padding:12px 14px;outline:none">
+          </div>
+          <div>
+            <label style="display:block;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--gold-400);margin-bottom:7px">Payout mode</label>
+            <select style="width:100%;font-family:'Barlow';font-size:15px;color:#fff;background:var(--d-bg);border:1.5px solid var(--navy-600);border-radius:10px;padding:12px 14px;outline:none;appearance:none">
+              <option>Hybrid (Season + Weekly)</option>
+              <option>Season-long standings</option>
+              <option>Weekly "Sharp" payouts</option>
+            </select>
+          </div>
+          <div style="margin-top:auto">
+            <div style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--gold-400);margin-bottom:10px">Confidence weight — 12</div>
+            <div style="height:6px;border-radius:999px;background:var(--navy-700);position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:72%;background:var(--gold-grad);border-radius:999px"></div><div style="position:absolute;left:72%;top:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.5)"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 07 STAT TILES -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:36px">
+        <span style="font-family:'Saira Condensed';font-weight:700;font-size:14px;letter-spacing:0.18em;color:var(--gold-700)">07</span>
+        <h2 style="font-family:'Saira Condensed';font-weight:700;font-size:30px;letter-spacing:0.01em;text-transform:uppercase;margin:0;color:var(--navy-800)">Stat Tiles</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+        <div style="background:var(--navy-800);border-radius:16px;padding:22px;color:#fff;position:relative;overflow:hidden"><div style="position:absolute;right:-14px;top:-14px;width:80px;height:80px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,103,0.35),transparent 70%)"></div><div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--d-muted)">Prize pot</div><div style="font-family:'Saira Condensed';font-weight:700;font-size:40px;color:var(--gold-400);font-variant-numeric:tabular-nums;line-height:1.1;margin-top:6px">$4,800</div><div style="font-size:12px;color:#8FE3B4;margin-top:4px">▲ 12 new entries</div></div>
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:22px"><div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)">Entries</div><div style="font-family:'Saira Condensed';font-weight:700;font-size:40px;color:var(--navy-800);font-variant-numeric:tabular-nums;line-height:1.1;margin-top:6px">96<span style="font-size:20px;color:var(--faint)">/100</span></div><div style="height:6px;border-radius:999px;background:var(--cream);margin-top:12px;overflow:hidden"><div style="width:96%;height:100%;background:var(--navy-700)"></div></div></div>
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:22px"><div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)">Your rank</div><div style="font-family:'Saira Condensed';font-weight:700;font-size:40px;color:var(--navy-800);font-variant-numeric:tabular-nums;line-height:1.1;margin-top:6px">3<span style="font-size:20px;color:var(--faint)">rd</span></div><div style="font-size:12px;color:#0F7B4A;margin-top:4px">▲ up 2 this week</div></div>
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:22px"><div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)">Margin total</div><div style="font-family:'Saira Condensed';font-weight:700;font-size:40px;color:var(--red-600);font-variant-numeric:tabular-nums;line-height:1.1;margin-top:6px">+41</div><div style="font-size:12px;color:var(--muted);margin-top:4px">7 of 9 weeks positive</div></div>
+      </div>
+    </section>
+
+    <!-- 08 CARDS -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:36px">
+        <span style="font-family:'Saira Condensed';font-weight:700;font-size:14px;letter-spacing:0.18em;color:var(--gold-700)">08</span>
+        <h2 style="font-family:'Saira Condensed';font-weight:700;font-size:30px;letter-spacing:0.01em;text-transform:uppercase;margin:0;color:var(--navy-800)">Pool Cards</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
+        <!-- card 1 -->
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 2px 4px rgba(19,27,43,0.04);transition:all .18s" style-hover="box-shadow:0 14px 34px rgba(19,27,43,0.14);transform:translateY(-3px)">
+          <div style="background:var(--navy-800);padding:16px 18px;display:flex;justify-content:space-between;align-items:center"><span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.09em;font-size:12px;color:#fff;background:rgba(255,255,255,0.12);padding:4px 10px;border-radius:6px">NFL · Pick'em</span><span style="display:inline-flex;align-items:center;gap:6px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:#fff;background:var(--red-600);padding:4px 10px;border-radius:999px"><span style="width:6px;height:6px;border-radius:50%;background:#fff"></span>Live</span></div>
+          <div style="padding:18px">
+            <div style="font-family:'Saira Condensed';font-weight:700;font-size:23px;text-transform:uppercase;color:var(--navy-800);line-height:1.05">Sunday Night Sharps</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:3px">Week 10 · Confidence mode · Hybrid payout</div>
+            <div style="display:flex;gap:22px;margin-top:18px">
+              <div><div style="font-family:'Saira Condensed';font-weight:700;font-size:26px;color:var(--gold-700);font-variant-numeric:tabular-nums">$1,940</div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Pot</div></div>
+              <div><div style="font-family:'Saira Condensed';font-weight:700;font-size:26px;color:var(--navy-800);font-variant-numeric:tabular-nums">48</div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Entries</div></div>
+            </div>
+            <button style="width:100%;margin-top:18px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:15px;color:#fff;background:var(--navy-800);border:none;padding:12px;border-radius:10px;cursor:pointer" style-hover="background:var(--navy-700)">View picks</button>
+          </div>
+        </div>
+        <!-- card 2 -->
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 2px 4px rgba(19,27,43,0.04);transition:all .18s" style-hover="box-shadow:0 14px 34px rgba(19,27,43,0.14);transform:translateY(-3px)">
+          <div style="background:var(--gold-grad);padding:16px 18px;display:flex;justify-content:space-between;align-items:center"><span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.09em;font-size:12px;color:var(--navy-900);background:rgba(11,21,38,0.14);padding:4px 10px;border-radius:6px">NCAA · Bracket</span><span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--navy-900);background:rgba(255,255,255,0.5);padding:4px 10px;border-radius:999px">Open</span></div>
+          <div style="padding:18px">
+            <div style="font-family:'Saira Condensed';font-weight:700;font-size:23px;text-transform:uppercase;color:var(--navy-800);line-height:1.05">March Madness Bracket</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:3px">6 rounds · Upset bonus · Smart Fill</div>
+            <div style="display:flex;gap:22px;margin-top:18px">
+              <div><div style="font-family:'Saira Condensed';font-weight:700;font-size:26px;color:var(--gold-700);font-variant-numeric:tabular-nums">$3,600</div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Pot</div></div>
+              <div><div style="font-family:'Saira Condensed';font-weight:700;font-size:26px;color:var(--navy-800);font-variant-numeric:tabular-nums">120</div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">Entries</div></div>
+            </div>
+            <button style="width:100%;margin-top:18px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:15px;color:#fff;background:var(--red-600);border:none;padding:12px;border-radius:10px;cursor:pointer" style-hover="background:var(--red-500)">Fill bracket</button>
+          </div>
+        </div>
+        <!-- card 3 -->
+        <div style="background:var(--navy-900);border:1px solid var(--navy-700);border-radius:18px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.2);transition:all .18s" style-hover="box-shadow:0 16px 38px rgba(0,0,0,0.4);transform:translateY(-3px)">
+          <div style="padding:16px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--navy-700)"><span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.09em;font-size:12px;color:#fff;background:var(--red-600);padding:4px 10px;border-radius:6px">Squares</span><span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--gold-400);background:rgba(201,168,103,0.14);padding:4px 10px;border-radius:999px">96/100</span></div>
+          <div style="padding:18px">
+            <div style="font-family:'Saira Condensed';font-weight:700;font-size:23px;text-transform:uppercase;color:#fff;line-height:1.05">Super Bowl Squares</div>
+            <div style="font-size:13px;color:var(--d-muted);margin-top:3px">4 sets · Off-the-top charity 5%</div>
+            <div style="display:flex;gap:22px;margin-top:18px">
+              <div><div style="font-family:'Saira Condensed';font-weight:700;font-size:26px;color:var(--gold-400);font-variant-numeric:tabular-nums">$5,000</div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--d-muted)">Pot</div></div>
+              <div><div style="font-family:'Saira Condensed';font-weight:700;font-size:26px;color:#fff;font-variant-numeric:tabular-nums">$50</div><div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--d-muted)">Per square</div></div>
+            </div>
+            <button style="width:100%;margin-top:18px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:15px;color:var(--navy-900);background:var(--gold-grad);border:none;padding:12px;border-radius:10px;cursor:pointer">Claim squares</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 09 NAV + LEADERBOARD -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:36px">
+        <span style="font-family:'Saira Condensed';font-weight:700;font-size:14px;letter-spacing:0.18em;color:var(--gold-700)">09</span>
+        <h2 style="font-family:'Saira Condensed';font-weight:700;font-size:30px;letter-spacing:0.01em;text-transform:uppercase;margin:0;color:var(--navy-800)">Navigation &amp; Leaderboard</h2>
+      </div>
+      <!-- nav -->
+      <div style="background:var(--navy-900);border-radius:14px;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:32px">
+          <div style="display:flex;align-items:center;gap:11px"><img src="assets/mmp-crest.png" style="height:38px"><span style="font-family:'Saira Condensed';font-weight:800;text-transform:uppercase;letter-spacing:0.04em;font-size:18px;color:#fff;line-height:1">March Melee<br><span style="font-size:11px;letter-spacing:0.28em;color:var(--gold-400)">Pools</span></span></div>
+          <div style="display:flex;gap:24px">
+            <span style="font-family:'Saira Condensed';font-weight:600;text-transform:uppercase;letter-spacing:0.04em;font-size:14px;color:#fff;border-bottom:2px solid var(--gold-500);padding-bottom:2px">Pools</span>
+            <span style="font-family:'Saira Condensed';font-weight:600;text-transform:uppercase;letter-spacing:0.04em;font-size:14px;color:var(--d-muted)">Features</span>
+            <span style="font-family:'Saira Condensed';font-weight:600;text-transform:uppercase;letter-spacing:0.04em;font-size:14px;color:var(--d-muted)">Winners</span>
+            <span style="font-family:'Saira Condensed';font-weight:600;text-transform:uppercase;letter-spacing:0.04em;font-size:14px;color:var(--d-muted)">Pricing</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px">
+          <span style="font-family:'Saira Condensed';font-weight:600;text-transform:uppercase;letter-spacing:0.04em;font-size:14px;color:#fff">Log in</span>
+          <button style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:14px;color:#fff;background:var(--red-600);border:none;padding:10px 20px;border-radius:9px;cursor:pointer">Start Free</button>
+        </div>
+      </div>
+      <!-- leaderboard -->
+      <div style="background:var(--paper);border:1px solid var(--line);border-radius:16px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 22px;background:var(--cream);border-bottom:1px solid var(--line)"><span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.06em;font-size:16px;color:var(--navy-800)">Live Leaderboard</span><span style="font-size:12px;color:var(--muted)">Week 10 · updated 2s ago</span></div>
+        <table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums">
+          <thead><tr style="text-align:left"><th style="padding:11px 22px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--muted)">Rank</th><th style="padding:11px 12px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--muted)">Player</th><th style="padding:11px 12px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--muted);text-align:right">Correct</th><th style="padding:11px 12px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--muted);text-align:right">Points</th><th style="padding:11px 22px;font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.08em;font-size:12px;color:var(--muted);text-align:right">Win %</th></tr></thead>
+          <tbody>
+            <tr style="border-top:1px solid var(--line);background:#FBF8F0"><td style="padding:13px 22px"><span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--gold-grad);color:var(--navy-900);font-family:'Saira Condensed';font-weight:700;font-size:14px">1</span></td><td style="padding:13px 12px;font-weight:600;color:var(--ink)">M. Rodriguez</td><td style="padding:13px 12px;text-align:right;color:var(--ink)">11/13</td><td style="padding:13px 12px;text-align:right;font-family:'Saira Condensed';font-weight:700;font-size:17px;color:var(--navy-800)">86</td><td style="padding:13px 22px;text-align:right;color:#0F7B4A;font-weight:600">42%</td></tr>
+            <tr style="border-top:1px solid var(--line)"><td style="padding:13px 22px"><span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#E5EDF6;color:var(--navy-800);font-family:'Saira Condensed';font-weight:700;font-size:14px">2</span></td><td style="padding:13px 12px;font-weight:600;color:var(--ink)">D. Chen</td><td style="padding:13px 12px;text-align:right;color:var(--ink)">10/13</td><td style="padding:13px 12px;text-align:right;font-family:'Saira Condensed';font-weight:700;font-size:17px;color:var(--navy-800)">81</td><td style="padding:13px 22px;text-align:right;color:var(--muted);font-weight:600">28%</td></tr>
+            <tr style="border-top:1px solid var(--line);background:#FBF8F0"><td style="padding:13px 22px"><span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--cream);border:1px solid var(--line);color:var(--navy-800);font-family:'Saira Condensed';font-weight:700;font-size:14px">3</span></td><td style="padding:13px 12px;font-weight:600;color:var(--ink)">You <span style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:0.08em;color:#fff;background:var(--red-600);padding:2px 7px;border-radius:999px;margin-left:6px">You</span></td><td style="padding:13px 12px;text-align:right;color:var(--ink)">10/13</td><td style="padding:13px 12px;text-align:right;font-family:'Saira Condensed';font-weight:700;font-size:17px;color:var(--navy-800)">79</td><td style="padding:13px 22px;text-align:right;color:var(--muted);font-weight:600">19%</td></tr>
+            <tr style="border-top:1px solid var(--line)"><td style="padding:13px 22px"><span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#E5EDF6;color:var(--navy-800);font-family:'Saira Condensed';font-weight:700;font-size:14px">4</span></td><td style="padding:13px 12px;font-weight:600;color:var(--ink)">A. Patel</td><td style="padding:13px 12px;text-align:right;color:var(--ink)">9/13</td><td style="padding:13px 12px;text-align:right;font-family:'Saira Condensed';font-weight:700;font-size:17px;color:var(--navy-800)">74</td><td style="padding:13px 22px;text-align:right;color:var(--muted);font-weight:600">8%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <div style="border-top:1px solid var(--line);padding-top:28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
+      <div style="display:flex;align-items:center;gap:12px"><img src="assets/mmp-crest.png" style="height:34px"><span style="font-size:13px;color:var(--muted)">March Melee Pools — Design System v3.0 · marchmeleepools.com</span></div>
+      <a href="March Melee Pools Home.dc.html" style="font-family:'Saira Condensed';font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:14px;color:var(--navy-800);text-decoration:none;border-bottom:2px solid var(--gold-500);padding-bottom:2px">See it applied — Homepage →</a>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

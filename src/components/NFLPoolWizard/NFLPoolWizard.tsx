@@ -85,6 +85,11 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
   const [hasCustomBranding, setHasCustomBranding] = useState(true);
   const [hasAiCommissioner, setHasAiCommissioner] = useState(false);
 
+  // Re-run support (?cloneFrom=<poolId>): seed the wizard from a prior pool the user owns
+  const cloneFromId = searchParams.get('cloneFrom');
+  const [cloneSourceName, setCloneSourceName] = useState<string | null>(null);
+  const [cloneRebuyCost, setCloneRebuyCost] = useState<number | null>(null);
+
   // Force Weekly Lock if Confidence Mode is enabled
   useEffect(() => {
     if (confidenceMode) {
@@ -96,6 +101,73 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
   useEffect(() => {
     setRebuyCost(entryFee);
   }, [entryFee]);
+
+  // Apply a cloned rebuy cost AFTER the entry-fee sync above so cloning the
+  // entry fee doesn't clobber a custom rebuy cost (both effects fire in the
+  // same commit; this one is declared later, so its setRebuyCost wins).
+  useEffect(() => {
+    if (cloneRebuyCost !== null) setRebuyCost(cloneRebuyCost);
+  }, [cloneRebuyCost]);
+
+  // Seed wizard state from the cloneFrom pool ("Re-run this pool").
+  // Season/dates intentionally NOT cloned — the wizard's normal season defaults apply.
+  useEffect(() => {
+    if (!cloneFromId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const source = await dbService.getPoolById(cloneFromId) as any;
+        if (cancelled || !source) return;
+        // Only the pool's own commissioner may re-run it, and only into the same pool type
+        const isOwner = source.ownerId === user.id || source.managerUid === user.id;
+        if (!isOwner || source.type !== poolType) return;
+
+        const s = source.settings || {};
+        const nextYear = new Date().getFullYear() + 1;
+        const baseName: string = source.name || '';
+        // Swap an embedded year for next year if present, otherwise append it
+        setName(/\b20\d{2}\b/.test(baseName)
+          ? baseName.replace(/\b20\d{2}\b/, String(nextYear))
+          : `${baseName} ${nextYear}`.trim());
+
+        if (typeof s.entryFee === 'number') setEntryFee(s.entryFee);
+        if (typeof s.paymentInstructions === 'string') setPaymentInstructions(s.paymentInstructions);
+        if (typeof s.isListedPublic === 'boolean') setIsListedPublic(s.isListedPublic);
+        if (typeof s.maxEntriesTotal === 'number' && s.maxEntriesTotal > 0) setEstimatedPlayers(s.maxEntriesTotal);
+
+        if (poolType === 'NFL_PICKEM') {
+          if (typeof s.confidenceMode === 'boolean') setConfidenceMode(s.confidenceMode);
+          if (s.lockMode === 'PER_GAME' || s.lockMode === 'WEEKLY') setPickemLockMode(s.lockMode);
+          if (typeof s.lockBufferMinutes === 'number') setLockBufferMinutes(s.lockBufferMinutes);
+          if (s.payoutMode === 'SEASON' || s.payoutMode === 'WEEKLY' || s.payoutMode === 'HYBRID') setPickemPayoutMode(s.payoutMode);
+          if (s.pickMode === 'STRAIGHT' || s.pickMode === 'ATS') setPickMode(s.pickMode);
+          if (typeof s.pointsPerPick === 'number') setPointsPerPick(s.pointsPerPick);
+          setThursdayBonus(s.primetimeBonus?.thursday ?? 0);
+          setSundayNightBonus(s.primetimeBonus?.sundayNight ?? 0);
+          setMondayBonus(s.primetimeBonus?.monday ?? 0);
+        } else if (poolType === 'NFL_SURVIVOR') {
+          if (typeof s.maxStrikes === 'number') setMaxStrikes(s.maxStrikes);
+          if (typeof s.maxRebuys === 'number') setMaxRebuys(s.maxRebuys);
+          if (typeof s.rebuyDeadlineWeek === 'number') setRebuyDeadlineWeek(s.rebuyDeadlineWeek);
+          if (typeof s.rebuyCost === 'number') setCloneRebuyCost(s.rebuyCost);
+          if (typeof s.pickLosersMode === 'boolean') setPickLosersMode(s.pickLosersMode);
+          if (typeof s.autoSurviveExemptionEnabled === 'boolean') setAutoSurviveExemptionEnabled(s.autoSurviveExemptionEnabled);
+        } else if (poolType === 'NFL_MARGIN') {
+          if (s.payoutMode === 'SEASON' || s.payoutMode === 'WEEKLY' || s.payoutMode === 'HYBRID') setMarginPayoutMode(s.payoutMode);
+        }
+
+        const b = source.branding || {};
+        if (typeof b.primaryColor === 'string' && b.primaryColor) setPrimaryColor(b.primaryColor);
+        if (typeof b.secondaryColor === 'string' && b.secondaryColor) setAccentColor(b.secondaryColor);
+
+        setCloneSourceName(baseName || 'previous pool');
+      } catch (err) {
+        // Silently ignore — the wizard just starts fresh
+        logger.warn('[NFLPoolWizard] cloneFrom seed failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [cloneFromId, poolType, user.id]);
 
   // Set default pool names
   useEffect(() => {
@@ -225,10 +297,13 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
 
       logger.log(`[NFLPoolWizard] Launching NFL pool:`, poolData);
       const poolId = await dbService.createNFLPool(poolData);
-      
+
       // Proactively import schedule for that season & preseason type
       // Our function creates the doc, backend job fetches schedule.
-      
+
+      if (cloneSourceName) {
+        toast.success("Pool created! Open Share → Invite by email to bring back last season's members.");
+      }
       navigate(`/pool/${poolId}`);
       onComplete();
     } catch (err: any) {
@@ -246,6 +321,16 @@ export const NFLPoolWizard: React.FC<NFLPoolWizardProps> = ({ user, onComplete, 
         <button onClick={onCancel} className="flex items-center gap-2 text-muted hover:text-[color:var(--text)] mb-6 transition-colors font-display font-bold uppercase text-[12px] tracking-[0.08em]">
           <ArrowLeft size={16} /> Cancel & Back
         </button>
+
+        {/* Re-run banner: wizard was seeded from a previous season's pool */}
+        {cloneSourceName && (
+          <div className="mb-6 bg-indigo-500/10 border border-indigo-500/30 rounded-xl px-4 py-3 flex items-start gap-2.5 text-xs text-indigo-200 font-semibold leading-relaxed">
+            <Sparkles size={14} className="text-indigo-400 shrink-0 mt-0.5" aria-hidden="true" />
+            <span>
+              Re-running &ldquo;{cloneSourceName}&rdquo; &mdash; settings copied, review and launch. You can invite last season&rsquo;s members from the share menu after creating.
+            </span>
+          </div>
+        )}
 
         {/* Dynamic header title depending on selection */}
         <div className="mb-8">

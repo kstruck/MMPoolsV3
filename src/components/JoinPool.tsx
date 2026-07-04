@@ -101,6 +101,21 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
             <div className="animate-spin text-gold-500 w-12 h-12 border-4 border-t-transparent rounded-full mx-auto mb-4"></div>
             <p className="text-muted font-display font-bold uppercase tracking-[0.05em]">Retrieving pool invitation details...</p>
           </div>
+        ) : castPool?.status === 'CANCELED' ? (
+          <div className="max-w-md w-full bg-slate-950 border border-slate-800 rounded-3xl p-8 text-center shadow-2xl">
+            <ShieldAlert className="text-amber-500 w-16 h-16 mx-auto mb-4" />
+            <h2 className="text-2xl font-black text-white mb-2">Pool Canceled</h2>
+            <p className="text-slate-400 text-sm mb-6">
+              This pool was canceled by the commissioner and is no longer accepting members.
+              {castPool.cancelReason ? ` Reason: ${castPool.cancelReason}` : ''} Contact {castPool?.managerName || 'the host'} with any questions about dues already paid.
+            </p>
+            <button
+              onClick={() => navigate('/')}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-all"
+            >
+              Back to Home
+            </button>
+          </div>
         ) : !pool ? (
           <div className="max-w-md w-full bg-card border border-line rounded-3xl p-8 text-center shadow-panel">
             <ShieldAlert className="text-brandred-600 w-16 h-16 mx-auto mb-4" />

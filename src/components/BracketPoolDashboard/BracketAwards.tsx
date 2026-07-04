@@ -24,6 +24,34 @@ export const BracketAwards: React.FC<BracketAwardsProps> = ({ entries, tournamen
 
         const results: AwardResult[] = [];
 
+        // 0. Grand Champion - 1st place entry, only once the tournament is decided
+        const allGames = Object.values(tournament.games);
+        const finalRound = allGames.reduce((max, g) => Math.max(max, g.round), 0);
+        const finalGames = allGames.filter(g => g.round === finalRound);
+        const tournamentDecided = tournament.isFinalized
+            || tournament.status === 'COMPLETED'
+            || (finalRound >= 1 && finalGames.length > 0 && finalGames.every(g => g.status === 'FINAL' && !!g.winnerTeamId));
+
+        if (tournamentDecided) {
+            const rankedChamps = entries.filter(e => e.rank === 1);
+            const topScore = entries.reduce((max, e) => Math.max(max, e.score || 0), 0);
+            const champs = rankedChamps.length > 0
+                ? rankedChamps
+                : entries.filter(e => (e.score || 0) === topScore && topScore > 0);
+
+            if (champs.length > 0) {
+                results.push({
+                    id: 'grand-champion',
+                    title: 'Grand Champion',
+                    description: 'Winner of the pool — highest final score',
+                    icon: Trophy,
+                    color: 'text-amber-300 bg-amber-500/15 border-amber-500/40',
+                    winners: champs.map(e => e.name),
+                    value: `${champs[0].score || 0} pts`
+                });
+            }
+        }
+
         // 1. Crystal Ball - Most correct Round 1 picks
         const r1Games = Object.values(tournament.games).filter(g => g.round === 1 && g.winnerTeamId);
         if (r1Games.length > 0) {
