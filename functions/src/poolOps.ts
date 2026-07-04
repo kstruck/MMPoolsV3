@@ -97,6 +97,7 @@ export const createPool = onCall(async (request) => {
 
         const newPool: any = {
             ...data,
+            type: poolType, // server-authoritative; never trust/omit the client's
             id: poolId,
             createdByUid: uid,
             ownerId: uid,

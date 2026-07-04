@@ -3,6 +3,7 @@
     "scripts": {
         "build": "node scripts/copy-shared.mjs && tsc",
         "test": "node scripts/copy-shared.mjs && vitest run",
+        "test:emulator": "node scripts/copy-shared.mjs && firebase emulators:exec --only firestore --project demo-mmp \"vitest run --config vitest.emulator.config.ts\"",
         "serve": "npm run build && firebase emulators:start --only functions",
         "shell": "npm run build && firebase functions:shell",
         "start": "npm run shell",
